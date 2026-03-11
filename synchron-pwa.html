@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '72';
+  if(el) el.textContent = '73';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4447,7 +4447,14 @@ function dokAnalyseDoc(d, key, cb){
         showToast('API: '+rawErr); if(cb) cb(); return;
       }
     try{
-      var txt = data.content[0].text.replace(/```json|```/g,'').trim();
+      var txt = data.content[0].text;
+      // Alles vor { und nach } entfernen, Markdown-Reste bereinigen
+      txt = txt.replace(/```json/gi,'').replace(/```/g,'');
+      // Ersten { bis letzten } extrahieren
+      var start = txt.indexOf('{');
+      var end = txt.lastIndexOf('}');
+      if(start<0||end<0){ d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return; }
+      txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
       d.typ     = j.typ || 'sonstig';
       d.beschr  = j.beschr || d.dateiname;
