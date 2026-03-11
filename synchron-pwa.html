@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '81';
+  if(el) el.textContent = '83';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4288,6 +4288,7 @@ function dokBestaetigen(){
     if(el && el.value!=='') d[f]=el.value;
   });
   d.bestaetigt=true;
+  d.awaitConfirm=false;
   d.dataURL=null; // Foto aus App löschen
   // Felder in Termin übertragen
   if(d.terminId){
@@ -4480,6 +4481,8 @@ function dokAnalyseDoc(d, key, cb){
       } else {
         d.gvl_takes_detail = null;
       }
+      // awaitConfirm: Foto noch zeigen, Felder prüfen lassen
+      d.awaitConfirm = true;
       // Auto-link to termin if dispo or abrechn
       if((d.typ==='dispo'||d.typ==='abrechn') && d.datum && d.studio){
         var match = dokFindTermin(d.datum, d.studio);
@@ -4687,8 +4690,22 @@ function dokOpenDetail(id){
     body+='<button type="button" onclick="dokAnalyseOne()" style="flex:1;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">🔍 KI-Analyse starten</button>';
     body+='</div>';
 
-  // ── STATE 2: ANALYSIERT, NOCH NICHT BESTÄTIGT ──
+  // ── STATE 2: ANALYSIERT, WARTET AUF BESTÄTIGUNG ──
   } else if(!d.bestaetigt){
+
+    // ── Große Vorschau zum Abgleichen ──
+    if(d.dataURL && d.mime!=='application/pdf'){
+      var previewDiv='<div style="margin-bottom:12px">';
+      previewDiv+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Vorschau zum Abgleichen</div>';
+      previewDiv+='<div onclick="dokShowFullImg(\''+d.id+'\')" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#111">';
+      previewDiv+='<img src="'+d.dataURL+'" style="width:100%;max-height:380px;object-fit:contain;display:block">';
+      previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">🔍 Tippen = Vollbild</div>';
+      previewDiv+='</div></div>';
+      body+=previewDiv;
+    } else if(d.mime==='application/pdf'){
+      body+='<div style="background:#f5f5f5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
+    }
+
 
     // ── ERKANNTE DATEN (editierbar — Korrekturen möglich) ──
     body+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
@@ -4963,6 +4980,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
   d.terminId = terminId;
   if(t) dokMergeIntoTermin(d, t);
   d.bestaetigt = true;
+  d.awaitConfirm = false;
   d.dataURL = null; // Foto löschen
   save(db);
   rDokumente();
