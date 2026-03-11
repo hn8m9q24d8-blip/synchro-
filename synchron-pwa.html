@@ -1618,7 +1618,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '63';
+  if(el) el.textContent = '64';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2358,7 +2358,10 @@ function icalSyncFromWorker(){
       (db.termine||[]).forEach(function(t){ if(t.calEventId) existing[t.calEventId]=true; });
       var neu=events.filter(function(e){ return e.calEventId&&!existing[e.calEventId]; });
       if(!db.termine) db.termine=[];
-      neu.forEach(function(e){ db.termine.push(e); });
+      neu.forEach(function(e){ 
+        if(!e.id) e.id=uid();
+        db.termine.push(e); 
+      });
       db.termine.sort(function(a,b){ return (a.datum||'').localeCompare(b.datum||''); });
       save(db); rTermine(); updateBadge();
       showToast('✓ '+neu.length+' neue Termine importiert'+(neu.length===0?' – alles aktuell':''));
@@ -3023,11 +3026,22 @@ function icsParse(text){
 
     // Nur Synchron-Arbeitstermine — erkennbar an Studiokürzeln im Titel/Location
     var STUDIO_KEYWORDS = [
+      // Studios
       'arena','ffs','tnt','vsi','sdi','iyuno','interopa','omni','dmt','oxygen',
       'transperfect','taunusfilm','neue tonfilm','blg','cls','eva','rc ','konterfei',
-      'hermes','euref','babelsberg',
+      'hermes','euref','babelsberg','berliner','scalamedia','cinephon','mixwerk',
+      'rotor','riverside','rekorder','wave','jammin','audiocue','studiofunk',
+      'stimmgerecht','zurstimme','sprecherdatei','voicebase','bodalgo',
+      'voicetalents','speakersearch','sprecherpool','rcproduction','tv+','tvplus',
+      // Berliner Stadtteile/Adressen
+      'adlershof','johannisthal','neukolln','neukölln','charlottenburg',
+      'schoneberg','schöneberg','tempelhof','kreuzberg',
+      // Strukturmerkmale
       'atl ','atl.','atelier','studio ',
-      'synchron','dispo','regie',
+      // Branchenbegriffe
+      'synchron','adr','voice','rec ','recording','aufnahme','ton ','regie',
+      'dialog','dispo','loft',
+      // Adressen
       'fredericiastr','sonnenallee','naglerstr','wikingerufer','harzer','stromstr'
     ];
     var isWork = STUDIO_KEYWORDS.some(function(kw){
