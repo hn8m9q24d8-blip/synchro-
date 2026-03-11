@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '73';
+  if(el) el.textContent = '74';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4424,7 +4424,7 @@ function dokAnalyseDoc(d, key, cb){
     
     var bodyStr;
     try {
-      bodyStr = JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,
+      bodyStr = JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,
         messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
     } catch(e) {
       showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
@@ -5005,12 +5005,10 @@ function dokAnalyseOne(){
   document.body.appendChild(overlay);
 
   dokAnalyseDoc(d, key, function(){
-    // Overlay entfernen
     var ol=document.getElementById('_analyse-overlay');
     if(ol) ol.parentNode.removeChild(ol);
     save(db);
     rDokumente();
-    // Panel sofort mit neuen Daten neu laden
     dokOpenDetail(d.id);
     showToast('✓ Analysiert: '+(d.titel||d.typ||'Dokument'));
   });
