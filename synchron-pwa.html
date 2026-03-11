@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '69';
+  if(el) el.textContent = '70';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3748,14 +3748,18 @@ function syncDokGotFiles(inp){
     var reader=new FileReader();
     reader.onload=function(e){
       var id='dok'+Date.now()+Math.random().toString(36).slice(2,6);
-      newIds.push(id);
-      db.dokumente.push({id:id,dateiname:file.name||'Dokument',mime:file.type||'image/jpeg',
-        dataURL:e.target.result,typ:null,addedAt:new Date().toISOString(),
-        beschr:null,datum:null,studio:null,terminId:null,ausgabeId:null});
-      loaded++;
-      if(lbl) lbl.textContent=loaded+'/'+files.length+' geladen...';
-      if(loaded===files.length){
-        save(db); rSyncDokList();
+      var rawDataURL=e.target.result;
+      var mime=file.type||'image/jpeg';
+      // Bild vor localStorage komprimieren — HEIC/Original kann mehrere MB sein
+      function afterResize(dataURL){
+        newIds.push(id);
+        db.dokumente.push({id:id,dateiname:file.name||'Dokument',mime:'image/jpeg',
+          dataURL:dataURL,typ:null,addedAt:new Date().toISOString(),
+          beschr:null,datum:null,studio:null,terminId:null,ausgabeId:null});
+        loaded++;
+        if(lbl) lbl.textContent=loaded+'/'+files.length+' geladen...';
+        if(loaded===files.length){
+          save(db); rSyncDokList();
         if(lbl) lbl.textContent='Analysiere '+loaded+' Dokumente...';
         if(sub) sub.textContent='KI erkennt Typ, Termin, Betrage...';
         syncAnalyseNew(newIds,function(results){
@@ -3770,6 +3774,12 @@ function syncDokGotFiles(inp){
             if(sub) sub.textContent='Album "Synchron Buchhaltung" offnen -> Fotos wahlen';
           },7000);
         });
+      }
+      }
+      if(mime==='application/pdf'){
+        afterResize(rawDataURL); // PDFs nicht komprimieren
+      } else {
+        resizeImageB64(rawDataURL, 800, 0.70, afterResize);
       }
     };
     reader.readAsDataURL(file);
