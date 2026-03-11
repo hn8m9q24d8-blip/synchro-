@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '75';
+  if(el) el.textContent = '76';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4839,10 +4839,47 @@ function dokOpenDetail(id){
         +'<div style="font-size:11px;color:#999">'+fd(termin.datum)+(termin.uhrzeit?' · '+termin.uhrzeit:'')+'</div>'
         +'</div>';
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
+      // Passende Termine suchen: Datum ±3 Tage + Studio-Match
+      var vorschlaege=[];
+      if(d.datum){
+        var dokDat=new Date(d.datum);
+        vorschlaege=(db.termine||[]).filter(function(t){
+          if(!t.datum) return false;
+          var diff=Math.abs(new Date(t.datum)-dokDat)/(1000*60*60*24);
+          if(diff>3) return false;
+          // Studio-Match wenn beide vorhanden
+          if(d.studio && t.studio){
+            var ds=d.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+            var ts=t.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+            return ts.indexOf(ds)>=0||ds.indexOf(ts)>=0||diff===0;
+          }
+          return diff<=1; // ohne Studio nur exaktes Datum ±1
+        }).sort(function(a,b){
+          var da=Math.abs(new Date(a.datum)-dokDat);
+          var db2=Math.abs(new Date(b.datum)-dokDat);
+          return da-db2;
+        }).slice(0,3);
+      }
+
       body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
-        +'<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:4px">⚠ Kein Termin gefunden</div>'
-        +'<div style="font-size:12px;color:#666;margin-bottom:8px">Kein passender Termin'+(d.datum?' für '+fd(d.datum):'')+(d.studio?' bei '+esc(d.studio):'')+'</div>'
-        +'<div style="display:flex;gap:6px;margin-bottom:8px">'
+        +'<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:6px">📅 TERMIN ZUORDNEN</div>';
+
+      if(vorschlaege.length){
+        body+='<div style="font-size:11px;color:#666;margin-bottom:8px">Mögliche Termine'+(d.datum?' für '+fd(d.datum):'')+':</div>';
+        vorschlaege.forEach(function(tv){
+          var diff=Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24);
+          var matchLabel=diff===0?'✓ Gleicher Tag':(diff<=1?'~1 Tag':'~'+Math.round(diff)+' Tage');
+          body+='<div onclick="dokAssignTermin(\''+d.id+'\',\''+tv.id+'\')" style="background:#fff;border:1.5px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
+            +'<div><div style="font-weight:700;font-size:13px">'+esc(tv.titel||tv.studio||'')+'</div>'
+            +'<div style="font-size:11px;color:#888">'+fd(tv.datum)+(tv.uhrzeit?' · '+tv.uhrzeit:'')+(tv.studio?' · '+esc(tv.studio):'')+'</div></div>'
+            +'<div style="font-size:10px;font-weight:700;color:#c2410c;white-space:nowrap;margin-left:8px">'+matchLabel+'</div>'
+            +'</div>';
+        });
+      } else {
+        body+='<div style="font-size:12px;color:#666;margin-bottom:8px">Kein passender Termin'+(d.datum?' für '+fd(d.datum):'')+(d.studio?' bei '+esc(d.studio):'')+'</div>';
+      }
+
+      body+='<div style="display:flex;gap:6px;margin-bottom:8px">'
         +'<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📅 Im Kalender suchen</button>'
         +'<button type="button" onclick="dokNewTerminAusDok(\''+d.id+'\')" style="flex:1;background:#fff;border:1.5px solid #c2410c;color:#c2410c;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
         +'</div>'
@@ -4924,6 +4961,19 @@ function dokLinkCancel(){
   if(banner) banner.style.display='none';
 }
 
+// One-Click Zuordnung aus Vorschlag in dokOpenDetail
+function dokAssignTermin(dokId, terminId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!d||!t) return;
+  d.terminId=terminId;
+  var changed=dokMergeIntoTermin(d,t);
+  save(db); rDokumente(); rTermine();
+  showToast('✓ Mit "'+esc(t.titel||t.studio||t.datum)+'" verknüpft');
+  if(changed.length) _showMergeSummary(t, changed, d);
+  dokOpenDetail(dokId); // Panel aktualisieren
+}
+
 function _checkPendingDokLink(terminId){
   if(!_pendingDokLink) return;
   var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
@@ -5001,7 +5051,9 @@ function dokAnalyseOne(){
     if(ol) ol.parentNode.removeChild(ol);
     save(db);
     rDokumente();
-    dokOpenDetail(d.id);
+    // Erst Dokumente-Tab öffnen, dann Detail zeigen
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(d.id); }, 100);
     showToast('✓ Analysiert: '+(d.titel||d.typ||'Dokument'));
   });
 }
