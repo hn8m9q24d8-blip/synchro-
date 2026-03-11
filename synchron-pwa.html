@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '78';
+  if(el) el.textContent = '80';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4675,39 +4675,33 @@ function dokOpenDetail(id){
 
   var body = '';
 
-  // ── STATE: NOCH NICHT BESTÄTIGT → Prüf-Workflow ──
-  if(d.typ && d.typ!=='offen' && d.typ!=='sonstig' && !d.bestaetigt){
-
-    // ── Kleines Thumbnail + KI-Analyse Button ──
-    var thumbSrc = d.thumb || (d.dataURL && d.mime!=='application/pdf' ? d.dataURL : null);
-    if(thumbSrc || d.mime==='application/pdf'){
-      body+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
-      if(thumbSrc){
-        body+='<img src="'+thumbSrc+'" style="width:72px;height:90px;object-fit:cover;border-radius:8px;border:1.5px solid #e5e7eb;flex-shrink:0" onclick="dokShowFullImg(\''+d.id+'\')">';
-      } else {
-        body+='<div style="width:72px;height:90px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">📄</div>';
-      }
-      body+='<button type="button" onclick="dokAnalyseOne()" id="dok-detail-analyse-btn" style="flex:1;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation">🔍 KI-Analyse starten</button>';
-      body+='</div>';
-    } else {
-      body+='<button type="button" onclick="dokAnalyseOne()" id="dok-detail-analyse-btn" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:12px;touch-action:manipulation">🔍 KI-Analyse starten</button>';
+  // ── STATE 1: NICHT ANALYSIERT → nur KI-Button ──
+  if(!d.typ || d.typ==='offen' || d.typ==='sonstig'){
+    var thumbSrc0 = d.thumb || null;
+    body+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">';
+    if(thumbSrc0){
+      body+='<img src="'+thumbSrc0+'" style="width:72px;height:90px;object-fit:cover;border-radius:8px;border:1.5px solid #e5e7eb;flex-shrink:0;cursor:pointer" onclick="dokShowFullImg(\''+d.id+'\')">';
+    } else if(d.mime==='application/pdf'){
+      body+='<div style="width:72px;height:90px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">📄</div>';
     }
+    body+='<button type="button" onclick="dokAnalyseOne()" style="flex:1;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">🔍 KI-Analyse starten</button>';
+    body+='</div>';
 
-    // ── ERKANNTE DATEN Box ──
+  // ── STATE 2: ANALYSIERT, NOCH NICHT BESTÄTIGT ──
+  } else if(!d.bestaetigt){
+
+    // ── ERKANNTE DATEN (read-only) ──
     body+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
       +'<div style="font-size:11px;font-weight:800;color:#15803d;letter-spacing:.5px;margin-bottom:8px">ERKANNTE DATEN</div>';
-
-    // Gemeinsame Felder
     body+=_dispRow('Studio', d.studio);
     if(d.typ==='dispo'){
       body+=_dispRow('Produktion', d.titel);
       body+=_dispRow('Datum', d.datum ? fd(d.datum) : null);
       body+=_dispRow('Regie', d.regie);
       body+=_dispRow('Rolle', d.rolle);
-      var zeitStr = d.uhrzeit ? (d.uhrzeit + (d.bis_uhrzeit ? ' – '+d.bis_uhrzeit : '')) : null;
+      var zeitStr = d.uhrzeit ? (d.uhrzeit+(d.bis_uhrzeit?' – '+d.bis_uhrzeit:'')) : null;
       body+=_dispRow('Aufnahme', zeitStr);
       body+=_dispRow('Takes', d.takes);
-      // GVL
       var staffelStr = d.gvl_staffel||d.gvl_staffel_header||null;
       body+=_dispRow('Staffel', staffelStr);
       if(d.gvl_takes_detail && d.gvl_takes_detail.length){
@@ -4715,18 +4709,12 @@ function dokOpenDetail(id){
           +'<div style="font-size:11px;color:#888;margin-bottom:6px">Takes GVL</div>'
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
         d.gvl_takes_detail.forEach(function(e){
-          var folgeNr=String(e.folge).slice(-2).replace(/^0/,'');
+          var fn=String(e.folge).slice(-2).replace(/^0/,'');
           body+='<div style="background:#fff;border:1.5px solid #86efac;border-radius:7px;padding:4px 9px;font-size:12px">'
-            +'<span style="color:#15803d;font-weight:700">F'+folgeNr+'</span>'
-            +' <span style="font-weight:800">'+e.takes+'</span><span style="color:#888;font-size:10px"> T</span>'
-            +'</div>';
+            +'<span style="color:#15803d;font-weight:700">F'+fn+'</span> '
+            +'<span style="font-weight:800">'+e.takes+'</span><span style="color:#888;font-size:10px"> T</span></div>';
         });
         body+='</div></div>';
-      } else {
-        var folgeStr = d.gvl_folge||d.gvl_episode_header||d.episode||null;
-        body+=_dispRow('Folge', folgeStr);
-        var gvlTakes = d.gvl_takes||(d.gvl_takes_detail&&d.gvl_takes_detail.reduce(function(s,e){return s+e.takes;},0))||d.takes||null;
-        body+=_dispRow('Takes GVL', gvlTakes);
       }
     }
     if(d.typ==='abrechn'){
@@ -4737,11 +4725,11 @@ function dokOpenDetail(id){
       body+=_dispRow('Take-Gage', d.take_gage ? '€ '+fmtEur(d.take_gage) : null);
       body+=_dispRow('Grundgage', d.grundgage ? '€ '+fmtEur(d.grundgage) : null);
       body+=_dispRow('Brutto', d.brutto ? '€ '+fmtEur(d.brutto) : null);
-      var kvSum = (parseFloat(d.kv_abzug||0)+parseFloat(d.rv_abzug||0)+parseFloat(d.pv_abzug||0));
+      var kvSum=(parseFloat(d.kv_abzug||0)+parseFloat(d.rv_abzug||0)+parseFloat(d.pv_abzug||0));
       if(kvSum) body+=_dispRow('KV+RV+PV', '€ '+fmtEur(-kvSum), '#c2410c');
       body+=_dispRow('Netto', d.netto ? '€ '+fmtEur(d.netto) : null);
-      var mwstProzent = d.ustSatz ? (d.ustSatz*100)+'%' : '7%';
-      body+=_dispRow('MwSt '+mwstProzent, d.mwst ? '€ '+fmtEur(d.mwst) : null);
+      var mwstP = d.ustSatz ? Math.round(d.ustSatz*100)+'%' : '7%';
+      body+=_dispRow('MwSt '+mwstP, d.mwst ? '€ '+fmtEur(d.mwst) : null);
       body+=_dispRow('Auszahlung', d.auszahlung ? '€ '+fmtEur(d.auszahlung) : null, '#15803d');
     }
     if(d.typ==='ausgabe'){
@@ -4750,137 +4738,95 @@ function dokOpenDetail(id){
     }
     body+='</div>';
 
-    // Editierbar-Bereich (aufklappbar)
-    body+='<details style="margin-bottom:10px"><summary style="font-size:11px;color:#888;cursor:pointer;padding:6px 0">✏️ Daten bearbeiten / korrigieren</summary>'
-      +'<div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-top:6px">';
-    body+=_editRow('studio','Studio',d.studio||'');
-    body+=_editRow('datum','Datum',d.datum||'');
-    if(d.typ==='dispo'){
-      body+=_editRow('titel','Titel',d.titel||'');
-      body+=_editRow('regie','Regie',d.regie||'');
-      body+=_editRow('rolle','Rolle(n)',d.rolle||'');
-      body+=_editRow('uhrzeit','Beginn',d.uhrzeit||'');
-      body+=_editRow('bis_uhrzeit','Ende',d.bis_uhrzeit||'');
-      body+=_editRow('takes','Takes gesamt',d.takes||'');
-      body+=_editRow('gvl_staffel','Staffel',d.gvl_staffel||'');
-      body+=_editRow('gvl_folge','Folge',d.gvl_folge||d.episode||'');
-    }
-    if(d.typ==='abrechn'){
-      body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
-      body+=_editRow('takes','Takes',d.takes||'');
-      body+=_editRow('take_gage','Take-Gage €',d.take_gage||'');
-      body+=_editRow('grundgage','Grundgage €',d.grundgage||'');
-      body+=_editRow('brutto','Brutto €',d.brutto||'');
-      body+=_editRow('netto','Netto €',d.netto||'');
-      body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
-    }
-    if(d.typ==='ausgabe'){
-      body+=_editRow('brutto','Betrag €',d.brutto||'');
-    }
-    body+='</div></details>';
-
-
-    // ★ Produktions-Info-Box
-    // ★ Produktions-Info-Box (wenn Recherche schon abgeschlossen) ★
-    var aktivTyp = d.produktion_typ_aktiv||d.produktion_typ||'';
-    var aktivPlatt = d.produktion_platt_aktiv||d.produktion_platt||'';
+    // ── Produktions-Info-Box ──
+    var aktivTyp=d.produktion_typ_aktiv||d.produktion_typ||'';
+    var aktivPlatt=d.produktion_platt_aktiv||d.produktion_platt||'';
     if(aktivTyp && aktivTyp!=='unbekannt'){
-      var ptIcon = aktivTyp==='streaming'?'📺':aktivTyp==='freetv'?'📡':aktivTyp==='kino'?'🎬':'📺';
-      var ptColor = aktivTyp==='streaming'?'#1d4ed8':'#15803d';
-      var ptBg = aktivTyp==='streaming'?'#eff6ff':'#f0fdf4';
-      var ptBorder = aktivTyp==='streaming'?'#bfdbfe':'#86efac';
-      var ptTypLabel = aktivTyp==='streaming'?'Streaming':aktivTyp==='freetv'?'Free TV':aktivTyp==='kino'?'Kino':'Pay TV';
-      var wahrsch = typeof d.produktion_wahrsch==='number'?d.produktion_wahrsch:null;
-      var wahrschColor = wahrsch>=80?ptColor:wahrsch>=50?'#d97706':'#dc2626';
-
+      var ptIcon=aktivTyp==='streaming'?'📺':aktivTyp==='freetv'?'📡':aktivTyp==='kino'?'🎬':'📺';
+      var ptColor=aktivTyp==='streaming'?'#1d4ed8':'#15803d';
+      var ptBg=aktivTyp==='streaming'?'#eff6ff':'#f0fdf4';
+      var ptBorder=aktivTyp==='streaming'?'#bfdbfe':'#86efac';
+      var ptTypLabel=aktivTyp==='streaming'?'Streaming':aktivTyp==='freetv'?'Free TV':aktivTyp==='kino'?'Kino':'Pay TV';
+      var wahrsch=typeof d.produktion_wahrsch==='number'?d.produktion_wahrsch:null;
+      var wahrschColor=wahrsch>=80?ptColor:wahrsch>=50?'#d97706':'#dc2626';
       body+='<div style="background:'+ptBg+';border:2px solid '+ptBorder+';border-radius:12px;padding:11px 14px;margin-bottom:10px">'
-
-        // Header-Zeile: Label + Quelle
         +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
-        +'<div style="font-size:10px;font-weight:800;color:'+ptColor+';text-transform:uppercase;letter-spacing:.6px">'+ptIcon+' Produktion erkannt</div>'
+        +'<div style="font-size:10px;font-weight:800;color:'+ptColor+'">'+ptIcon+' Produktion erkannt</div>'
         +(d.produktion_quelle?'<div style="font-size:9px;color:#888;background:#fff;border:1px solid #e5e7eb;border-radius:4px;padding:1px 6px">📚 '+esc(d.produktion_quelle)+'</div>':'')
         +'</div>'
-
-        // Hauptinfo: Typ + Plattform
         +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'
-        +'<div style="font-size:16px;font-weight:900;color:'+ptColor+'">'+ptIcon+' '+ptTypLabel+'</div>'
+        +'<div style="font-size:15px;font-weight:900;color:'+ptColor+'">'+ptIcon+' '+ptTypLabel+'</div>'
         +(aktivPlatt?'<div style="font-size:13px;color:#444;font-weight:600">'+esc(aktivPlatt)+'</div>':'')
-        +(d.produktion_land?'<div style="font-size:11px;color:#888">'+esc(d.produktion_land)+'</div>':'')
         +'</div>'
-
-        // Wahrscheinlichkeits-Bar
-        +(wahrsch!==null?
-          '<div style="margin:7px 0 5px">'
-          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
-          +'<div style="font-size:10px;color:#777">Treffsicherheit</div>'
-          +'<div style="font-size:12px;font-weight:800;color:'+wahrschColor+'">'+wahrsch+'%</div>'
-          +'</div>'
-          +'<div style="height:6px;background:#e5e7eb;border-radius:4px;overflow:hidden">'
-          +'<div style="height:100%;width:'+wahrsch+'%;background:'+wahrschColor+';border-radius:4px;transition:width .4s"></div>'
-          +'</div>'
-          +'</div>'
-        :'')
-
-        // Per-Staffel-Info (falls unterschiedlich je Staffel)
-        +(d.produktion_staffel_info&&d.produktion_staffel_info.length?
-          '<div style="margin-top:7px;padding-top:7px;border-top:1px solid '+ptBorder+'">'
-          +'<div style="font-size:9px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">📊 Je Staffel</div>'
-          +'<div style="display:flex;flex-wrap:wrap;gap:4px">'
-          +d.produktion_staffel_info.map(function(si){
-            var siAktiv=(d.gvl_staffel&&String(si.staffeln).replace('+','').split('-').some(function(){return true;}));
-            var siCol=si.plattform_typ==='streaming'?'#1d4ed8':'#15803d';
-            var siBg=si.plattform_typ==='streaming'?'#dbeafe':'#dcfce7';
-            return '<div style="background:'+siBg+';border:1px solid '+siCol+'44;border-radius:6px;padding:3px 7px;font-size:10px;font-weight:700;color:'+siCol+'">'
-              +'S'+esc(si.staffeln)+': '+esc(si.plattform||si.plattform_typ)+'</div>';
-          }).join('')
-          +'</div></div>'
-        :'')
-
-        // Notiz
-        +(d.produktion_notiz?'<div style="font-size:11px;color:#888;margin-top:5px;font-style:italic">'+esc(d.produktion_notiz)+'</div>':'')
-
-        // Gage-Vorschlag
+        +(wahrsch!==null?'<div style="height:6px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:'+wahrsch+'%;background:'+wahrschColor+';border-radius:4px"></div></div>':'')
         +(d.gage_vorschlag&&d.gage_vorschlag.kommgage?
-          '<div style="margin-top:9px;padding-top:8px;border-top:1px solid '+ptBorder+';display:flex;align-items:center;justify-content:space-between">'
+          '<div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">'
           +'<div style="font-size:11px;color:#555">💶 <b>'+d.gage_vorschlag.kommgage+'€</b> KG · <b>'+d.gage_vorschlag.rate+'€</b>/Take</div>'
-          +'<button type="button" onclick="dokUebernehmeGage(\''+d.id+'\')" style="background:'+ptColor+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation">Übernehmen →</button>'
-          +'</div>'
-          :(d.gage_vorschlag?'<div style="margin-top:6px;font-size:11px;color:#888">'+esc(d.gage_vorschlag.label||'')+'</div>':''))
-
+          +'<button type="button" onclick="dokUebernehmeGage(\''+d.id+'\')" style="background:'+ptColor+';color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation">Übernehmen →</button>'
+          +'</div>':'')
         +'</div>';
     } else if(d.titel && !d.produktion_typ){
       body+='<div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:11px;color:#9ca3af">🔍 Produktions-Recherche läuft im Hintergrund…</div>';
     }
-    // Termin-Vorschlag
+
+    // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
     if(termin){
-      var diff = d.typ==='abrechn' ? (parseFloat(d.auszahlung||0) - parseFloat(termin.abrechnungBrutto||0)) : 0;
-      var diffStr = d.typ==='abrechn' ? ' | Diff: '+fmtEur(diff) : '';
-      var diffColor = Math.abs(diff)>0.1 ? '#c2410c' : '#15803d';
-      body+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
-        +'<div style="font-size:10px;font-weight:700;color:'+diffColor+';text-transform:uppercase;margin-bottom:4px">'+(Math.abs(diff)>0.1?'⚠ Termin gefunden - Differenz!':'✓ Termin gefunden')+'</div>'
-        +'<div style="font-size:13px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
-        +'<div style="font-size:11px;color:#888">'+fd(termin.datum)+(termin.studio?' · '+esc(termin.studio):'')+(diffStr?'<span style="color:'+diffColor+'">'+esc(diffStr)+'</span>':'')+'</div>'
+      // Bereits zugeordnet → Merge-Vorschau anzeigen
+      body += _buildMergePreview(d, termin);
+      body+='<button type="button" onclick="dokBestaetigenMitTermin(\''+d.id+'\',\''+termin.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;margin-top:10px;touch-action:manipulation">✓ Alle Felder übernehmen</button>';
+    } else if(d.typ==='dispo'||d.typ==='abrechn'){
+      // Passende Termine suchen
+      var vorschlaege=[];
+      if(d.datum){
+        var dokDat=new Date(d.datum);
+        vorschlaege=(db.termine||[]).filter(function(tv){
+          if(!tv.datum) return false;
+          var diff2=Math.abs(new Date(tv.datum)-dokDat)/(1000*60*60*24);
+          if(diff2>3) return false;
+          if(d.studio && tv.studio){
+            var ds=d.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+            var ts=tv.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+            return ts.indexOf(ds)>=0||ds.indexOf(ts)>=0||diff2===0;
+          }
+          return diff2<=1;
+        }).sort(function(a,b){
+          return Math.abs(new Date(a.datum)-dokDat)-Math.abs(new Date(b.datum)-dokDat);
+        }).slice(0,3);
+      }
+
+      if(vorschlaege.length){
+        body+='<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:8px">📅 PASSENDE TERMINE</div>';
+        vorschlaege.forEach(function(tv){
+          var diff3=d.datum?Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24):99;
+          var ml=diff3===0?'✓ Gleicher Tag':(diff3<=1?'~1 Tag':'~'+Math.round(diff3)+' Tage');
+          // Zeige Merge-Vorschau für diesen Termin
+          var preview=_buildMergePreview(d, tv);
+          body+='<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:10px;margin-bottom:10px;overflow:hidden">'
+            +'<div style="background:#fff7ed;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
+            +'<div><div style="font-weight:800;font-size:13px">'+esc(tv.titel||tv.studio||'')+'</div>'
+            +'<div style="font-size:11px;color:#888">'+fd(tv.datum)+(tv.uhrzeit?' · '+tv.uhrzeit:'')+(tv.studio?' · '+esc(tv.studio):'')+'</div></div>'
+            +'<div style="font-size:10px;font-weight:700;color:#c2410c">'+ml+'</div>'
+            +'</div>'
+            +preview
+            +'<div style="padding:10px 12px">'
+            +'<button type="button" onclick="dokBestaetigenMitTermin(\''+d.id+'\',\''+tv.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation">✓ Alle Felder übernehmen</button>'
+            +'</div></div>';
+        });
+      } else {
+        body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+          +'<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:6px">📅 Kein passender Termin gefunden</div>'
+          +'<div style="font-size:12px;color:#666">Datum '+(d.datum?fd(d.datum):'?')+(d.studio?' · '+esc(d.studio):'')+'</div>'
+          +'</div>';
+      }
+
+      // Fallback: manuell oder neuer Termin
+      body+='<div style="display:flex;gap:8px;margin-bottom:8px">'
+        +'<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="flex:1;background:#e5e7eb;color:#374151;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📅 Im Kalender suchen</button>'
+        +'<button type="button" onclick="dokNewTerminAusDok(\''+d.id+'\')" style="flex:1;background:#e5e7eb;color:#374151;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
         +'</div>';
     }
 
-    // Original zum Abgleich
-    if(d.dataURL && d.mime!=='application/pdf'){
-      body+='<div style="margin-bottom:12px">'
-        +'<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📄 Original zum Abgleich</div>'
-        +'<img src="'+d.dataURL+'" style="width:100%;border-radius:10px;border:1.5px solid #e5e7eb;display:block" onclick="this.style.position=(this.style.position?\'\':\' fixed\');this.style.zIndex=\'999\';this.style.inset=\'0\';this.style.width=\'100vw\';this.style.height=\'100vh\';this.style.objectFit=\'contain\';this.style.background=\'#000\'">'
-        +'<div style="font-size:10px;color:#aaa;text-align:center;margin-top:4px">Antippen für Vollbild</div>'
-        +'</div>';
-    } else if(d.mime==='application/pdf'){
-      body+='<div style="background:#f5f5f5;border-radius:10px;padding:14px;text-align:center;margin-bottom:12px;font-size:13px;color:#555">'
-        +'<div style="font-size:28px;margin-bottom:6px">📄</div>'
-        +'<div style="font-weight:600">'+esc(d.dateiname||'PDF')+'</div>'
-        +'</div>';
-    }
 
-    body+='<button type="button" onclick="dokBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px;touch-action:manipulation">✓ Speichern & zuordnen</button>';
-
-  // ── STATE: BESTÄTIGT / ANALYSIERT / NICHT ANALYSIERT ──
-  } else {
     if(d.bestaetigt){
       body+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;font-weight:600;color:#15803d">✓ Bestätigt · Foto aus App gelöscht</div>';
     }
@@ -5030,39 +4976,213 @@ function dokLinkCancel(){
   if(banner) banner.style.display='none';
 }
 
+// Baut Merge-Vorschau HTML: zeigt GEÄNDERT/NEU Felder mit altem Wert durchgestrichen
+function _buildMergePreview(d, t){
+  var rows = [];
+  function check(label, tField, dVal){
+    if(!dVal && dVal!==0) return;
+    var tVal = t[tField]||'';
+    var dStr = String(dVal);
+    var tStr = String(tVal);
+    if(!tVal){
+      // NEU
+      rows.push({label:label, status:'NEU', alt:'', neu:dStr});
+    } else if(tStr.trim().toLowerCase()!==dStr.trim().toLowerCase()){
+      // GEÄNDERT
+      rows.push({label:label, status:'GEÄNDERT', alt:tStr, neu:dStr});
+    }
+    // gleich → nicht zeigen
+  }
+  check('Produktion', 'titel', d.titel);
+  check('Datum', 'datum', d.datum);
+  check('Beginn', 'uhrzeit', d.uhrzeit);
+  check('Ende', 'bis_uhrzeit', d.bis_uhrzeit);
+  check('Regie', 'regie', d.regie);
+  check('Rolle', 'rolle', d.rolle);
+  check('Takes', 'takes', d.takes);
+  check('Staffel', 'gvl_staffel', d.gvl_staffel||d.gvl_staffel_header);
+  check('Folge', 'gvl_folge', d.gvl_folge||d.gvl_episode_header);
+  if(d.typ==='abrechn') check('Notizen', 'notizen', d.auszahlung ? 'Abgerechnet: €'+fmtEur(d.auszahlung) : null);
+
+  if(!rows.length){
+    return '<div style="padding:8px 12px;font-size:11px;color:#888">✓ Alle Felder bereits vorhanden</div>';
+  }
+
+  var html='<div style="padding:0 12px">';
+  rows.forEach(function(r){
+    var isNeu = r.status==='NEU';
+    var badgeBg = isNeu ? '#d1fae5' : '#fef3c7';
+    var badgeColor = isNeu ? '#065f46' : '#92400e';
+    html+='<div style="padding:8px 0;border-bottom:1px solid #f5f5f5">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+      +'<span style="font-size:10px;color:#888;font-weight:600">'+r.label+'</span>'
+      +'<span style="background:'+badgeBg+';color:'+badgeColor+';font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px">'+r.status+'</span>'
+      +'</div>'
+      +(r.alt?'<div style="font-size:11px;color:#aaa;text-decoration:line-through">'+esc(r.alt)+'</div>':'')
+      +'<div style="font-size:13px;font-weight:700;color:#1a1a1a">'+esc(r.neu)+'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+// Bestätigen + Termin zuordnen + Termin öffnen
+function dokBestaetigenMitTermin(dokId, terminId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!d) return;
+  d.terminId = terminId;
+  if(t) dokMergeIntoTermin(d, t);
+  d.bestaetigt = true;
+  d.dataURL = null; // Foto löschen
+  save(db);
+  rDokumente();
+  rTermine();
+  showToast('✓ Zugeordnet & gespeichert');
+  // Direkt zum Termin springen
+  if(t){
+    dokDetailClose();
+    switchView('termine');
+    setTimeout(function(){ openDetail(terminId); }, 150);
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // DOKUMENT → TERMIN MERGE
 // ══════════════════════════════════════════════════════════════
 
 // Überträgt Felder aus Dokument in Termin — nur wenn Termin-Feld noch leer.
 // Gibt Array der geänderten Felder zurück: [{feld, alt, neu}]
-function dokMergeIntoTermin(d, t){
-  var changed = [];
-  function setIfEmpty(tField, val, label){
-    if(!val) return;
-    if(t[tField]) return; // Termin hat schon einen Wert → nicht überschreiben
-    t[tField] = val;
-    changed.push({feld: label, neu: val});
+function dokMergeIntoTermin(d, termin){
+  if(!d||!termin) return [];
+  var changed=[];
+
+  // fill: nur setzen wenn Zielfeld leer
+  function fill(tField, dVal, label){
+    if(dVal!==null&&dVal!==undefined&&dVal!==''&&(termin[tField]===null||termin[tField]===undefined||termin[tField]==='')) {
+      termin[tField]=dVal; changed.push(label);
+    }
   }
-  setIfEmpty('titel',   d.titel,   'Titel');
-  setIfEmpty('rolle',   d.rolle,   'Rolle');
-  setIfEmpty('regie',   d.regie,   'Regie');
-  setIfEmpty('studio',  d.studio,  'Studio');
-  setIfEmpty('uhrzeit', d.uhrzeit, 'Uhrzeit');
-  setIfEmpty('takes',   d.takes,   'Takes');
-  // GVL-Daten
-  setIfEmpty('gvl_staffel', d.gvl_staffel||d.gvl_staffel_header, 'Staffel');
-  setIfEmpty('gvl_folge',   d.gvl_folge||d.gvl_episode_header,   'Folge');
-  if(d.gvl_takes_detail && !t.gvl_takes_detail){
-    t.gvl_takes_detail = d.gvl_takes_detail;
-    changed.push({feld: 'Takes-Detail', neu: d.gvl_takes_detail.length+' Folgen'});
+  // overwrite: immer überschreiben (Abrechnung hat Vorrang über Schätzung)
+  function overwrite(tField, dVal, label){
+    if(dVal!==null&&dVal!==undefined&&dVal!=='') { termin[tField]=dVal; changed.push(label); }
   }
-  // Abrechnung
-  if(d.typ==='abrechn' && d.auszahlung){
-    t.abgerechnet = true;
-    t.abrechnungBrutto = parseFloat(d.auszahlung);
-    changed.push({feld: 'Abrechnung', neu: '€ '+fmtEur(d.auszahlung)});
+
+  // ── Gemeinsame Felder ──────────────────────────────────────────────
+  fill('studio',    d.studio,    'Studio');
+  fill('titel',     d.titel,     'Titel');
+  fill('regie',     d.regie,     'Regie');
+  fill('rolle',     d.rolle,     'Rolle');
+  fill('uhrzeit',   d.uhrzeit,   'Uhrzeit');
+  fill('bis_uhrzeit',d.bis_uhrzeit,'Bis-Uhrzeit');
+  fill('episode',   d.episode,   'Episode');
+  fill('gvl_staffel',d.gvl_staffel||d.gvl_staffel_header,'GVL Staffel');
+  fill('gvl_folge', d.gvl_folge||d.gvl_episode_header, 'GVL Folge');
+  fill('gvl_takes', d.gvl_takes, 'GVL Takes');
+  if(d.gvl_takes_detail&&!termin.gvl_takes_detail){
+    termin.gvl_takes_detail=d.gvl_takes_detail;
+    changed.push('Takes-Detail');
   }
+
+  // ── Dispo-spezifisch ──────────────────────────────────────────────
+  if(d.typ==='dispo'){
+    if(!termin.dispoDocId) termin.dispoDocId=d.id;
+    // Takes aus Dispo setzen (wenn Abrechnung noch nicht da)
+    if(d.takes&&!termin.abId) fill('takes', d.takes, 'Takes (aus Dispo)');
+  }
+
+  // ── Abrechnung — alles antizipieren ───────────────────────────────
+  if(d.typ==='abrechn'){
+    if(!db.abrechnungen) db.abrechnungen=[];
+    var existingAb=(db.abrechnungen||[]).find(function(a){return a.dokId===d.id;});
+
+    // ★ Fehlende Werte ableiten bevor Abrechnung angelegt wird ★
+    var brutto=parseFloat(d.brutto)||0;
+    var netto=parseFloat(d.netto)||0;
+    var grundgage=parseFloat(d.grundgage)||0;
+    var takeGage=parseFloat(d.take_gage)||0;
+    var takes=parseInt(d.takes)||0;
+    var auszahlung=parseFloat(d.auszahlung)||brutto||0;
+
+    // Grundgage aus Netto – Takes×TakeGage ableiten
+    if(!grundgage && netto>0 && takes>0 && takeGage>0){
+      grundgage=Math.round((netto - takes*takeGage)*100)/100;
+      if(grundgage>0){ d.grundgage=grundgage; changed.push('Komm.-Gage errechnet ('+fmtEur(grundgage)+')'); }
+    }
+    // Takes aus (Netto – Grundgage) / TakeGage ableiten
+    if(!takes && netto>0 && grundgage>0 && takeGage>0){
+      takes=Math.round((netto-grundgage)/takeGage);
+      if(takes>0){ d.takes=takes; changed.push('Takes errechnet ('+takes+')'); }
+    }
+    // TakeGage aus (Netto – Grundgage) / Takes ableiten
+    if(!takeGage && netto>0 && grundgage>0 && takes>0){
+      takeGage=Math.round((netto-grundgage)/takes*100)/100;
+      if(takeGage>0){ d.take_gage=takeGage; changed.push('Take-Gage errechnet ('+fmtEur(takeGage)+')'); }
+    }
+    // Netto aus Brutto und USt ableiten
+    var profUst=(db.profil&&db.profil.ust)||0.07;
+    if(!netto && brutto>0){ netto=Math.round(brutto/(1+profUst)*100)/100; d.netto=netto; }
+    // Pauschalgage: wenn keine Takes aber Auszahlung vorhanden
+    var isPausch=!takes&&!takeGage&&auszahlung>0;
+    if(isPausch&&!termin.pauschalgage){
+      termin.pauschalgage=auszahlung;
+      changed.push('Pauschalgage ('+fmtEur(auszahlung)+')');
+    }
+
+    if(!existingAb){
+      var abId='ab'+Date.now();
+      var newAb={
+        id:abId, dokId:d.id,
+        datum:d.datum||today(),
+        studio:d.studio||termin.studio||'',
+        produktion:d.titel||termin.titel||'',
+        gutschrift_nr:d.gutschrift_nr||'',
+        brutto:brutto, netto:netto,
+        mwst:parseFloat(d.mwst)||Math.round((brutto-netto)*100)/100,
+        auszahlung:auszahlung,
+        takes:takes, take_gage:takeGage, grundgage:grundgage,
+        kv:parseFloat(d.kv_abzug)||0,
+        rv:parseFloat(d.rv_abzug)||0,
+        pv:parseFloat(d.pv_abzug)||0,
+        terminId:termin.id, bezahlt:false,
+        erstelltAm:new Date().toISOString()
+      };
+      db.abrechnungen.push(newAb);
+      termin.abId=abId;
+      termin.status='abrechnung';
+      // Abrechnung hat Vorrang — immer überschreiben
+      if(takes)     overwrite('takes',   takes,    'Takes ('+takes+')');
+      if(takeGage)  overwrite('rate',    takeGage, 'Take-Gage ('+fmtEur(takeGage)+')');
+      if(grundgage) overwrite('kommgage',grundgage,'Komm.-Gage ('+fmtEur(grundgage)+')');
+      // USt aus Abrechnung erkennen
+      if(newAb.mwst&&netto>0){
+        var erkUst=Math.round((newAb.mwst/netto)*100)/100;
+        if(erkUst>0&&erkUst<=0.2&&(!db.profil||!db.profil.ust)){
+          if(!db.profil)db.profil={};
+          db.profil.ust=erkUst;
+          changed.push('USt-Satz erkannt ('+Math.round(erkUst*100)+'%)');
+        }
+      }
+      // Abgleich-Status
+      var erwartet=isPausch?auszahlung:(takes*takeGage+grundgage);
+      termin.abStatus=Math.abs(auszahlung-erwartet)<1.5?'ok':'differenz';
+      changed.push('Abrechnung angelegt ('+fmtEur(auszahlung)+')');
+    } else {
+      // Update bestehende Abrechnung
+      if(takes&&!existingAb.takes)        { existingAb.takes=takes;    overwrite('takes',takes,'Takes'); }
+      if(takeGage&&!existingAb.take_gage) { existingAb.take_gage=takeGage; overwrite('rate',takeGage,'Take-Gage'); }
+      if(grundgage&&!existingAb.grundgage){ existingAb.grundgage=grundgage; overwrite('kommgage',grundgage,'Komm.-Gage'); }
+      if(d.gutschrift_nr&&!existingAb.gutschrift_nr){ existingAb.gutschrift_nr=d.gutschrift_nr; changed.push('Gutschrift-Nr.'); }
+    }
+  }
+
+  // ── Ausgabe: Vorsteuer-Info ──────────────────────────────────────
+  if(d.typ==='ausgabe'&&d.ustSatz&&db.profil&&!db.profil.ust){
+    db.profil.ust=d.ustSatz;
+    changed.push('USt-Satz ('+Math.round(d.ustSatz*100)+'%)');
+  }
+
+  if(changed.length>0) save(db);
   return changed;
 }
 
