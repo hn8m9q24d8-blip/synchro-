@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '74';
+  if(el) el.textContent = '75';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4365,48 +4365,41 @@ function dokAnalyseDoc(d, key, cb){
   var confirmed=(db.dokumente||[]).filter(function(x){return x.bestaetigt&&x.typ==='dispo'&&x.studio;}).slice(-3);
   if(confirmed.length) lernEx='\n\nBekannte Studios in diesem Kontext: '+confirmed.map(function(x){return x.studio;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
 
-  var prompt='Analysiere dieses Dokument von Synchronsprecher Tim Knauer.\n'
-    +'Bestimme typ: "dispo" (Synchron-Dispoblatt), "abrechn" (Gagenabrechnung/Gutschrift), "ausgabe" (Quittung/Rechnung Betriebsausgabe), "sonstig"\n'
+  var prompt='Du analysierst ein Dokument von Synchronsprecher TIM KNAUER.\n'
+    +'Bestimme typ: "dispo" (Synchron-Dispoblatt), "abrechn" (Gagenabrechnung/Gutschrift), "ausgabe" (Quittung/Rechnung), "sonstig"\n'
     +'\n'
-    +'Bei "dispo": titel (Produktionstitel), datum (YYYY-MM-DD Aufnahmedatum), uhrzeit (HH:MM), studio (kurz: "VSI","Arena","TNT" etc.), regie, rolle, takes (Gesamtzahl).\n'
-    +'  Falls Staffel/Episode im KOPF der Dispo (nicht in Takes-Tabelle):\n'
-    +'  "S3E5" oder "S3 E5" oder "S3EP5" = Staffel 3 Episode 5 -> gvl_staffel_header="3", gvl_episode_header="5"\n'
-    +'  "Staffel 3" = gvl_staffel_header="3"\n'
-    +'  Diese Felder aus dem KOPF der Dispo extrahieren (nicht aus der Takes-Tabelle).\n'
+    +'Bei "dispo" — PFLICHTFELDER:\n'
+    +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
+    +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
+    +'  studio: Studioname kurz (z.B. "RC Production", "TaunusFilm", "Arena", "VSI", "TNT")\n'
+    +'  regie: Name des Regisseurs\n'
+    +'  rolle: TIM KNAUERs Rolle (suche die Zeile wo "Tim Knauer" in der Sprecher-Spalte steht!)\n'
+    +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
+    +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
+    +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
+    +'\n'
+    +'★ GVL-TAKES-DETAIL — suche NUR in TIM KNAUERs Zeile:\n'
+    +'  LAYOUT A: Takes-Spalte enthält "506:25, 507:19" → direkt auslesen\n'
+    +'  LAYOUT B: Takes-Spalte = Gesamtzahl, RECHTS daneben steht "106:37, 108:36" → auch auslesen!\n'
+    +'  Format: StaffelFolge:Takes → 106:37 = Staffel 1 Folge 06 37 Takes\n'
+    +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},...]\n'
     +'  Falls nicht vorhanden: null\n'
     +'\n'
-    +'★ GVL-TAKES-DETAIL (WICHTIG bei Dispo): Die Folgenaufschluesselung steht in zwei verschiedenen Layouts:\n'
+    +'  Staffel/Folge im KOPF der Dispo (nicht Tabelle):\n'
+    +'  "S3E5" → gvl_staffel_header="3", gvl_episode_header="5"\n'
+    +'  Falls nicht im Kopf: null\n'
     +'\n'
-    +'  LAYOUT A - Alles in der Takes-Spalte:\n'
-    +'  "506:25, 507:19" -> in der Takes-Spalte des Sprechers\n'
+    +'Bei "abrechn":\n'
+    +'  datum = AUFNAHMEDATUM (nicht Druckdatum!)\n'
+    +'  studio, brutto, netto, auszahlung, mwst, takes, take_gage, grundgage\n'
+    +'  kv_abzug, rv_abzug, pv_abzug falls vorhanden\n'
     +'\n'
-    +'  LAYOUT B - Takes-Spalte = Gesamtzahl, danach SEPARATE SPALTE mit Folgendetails:\n'
-    +'  Takes-Spalte: "73"  |  naechste Spalte: "106:37, 108:36"\n'
-    +'  -> Die separate Spalte rechts neben Takes enthaelt die Aufschluesselung!\n'
-    +'  -> Schaue IMMER auch in die Spalte(n) RECHTS von der Takes-Zahl!\n'
+    +'Bei "ausgabe": brutto, datum, beschr (was wurde gekauft)\n'
     +'\n'
-    +'  Format: StaffelFolge:Takes getrennt durch Komma\n'
-    +'  Beispiele:\n'
-    +'    106:37 = Staffel 1, Folge 6, 37 Takes\n'
-    +'    108:36 = Staffel 1, Folge 8, 36 Takes\n'
-    +'    506:25 = Staffel 5, Folge 6, 25 Takes\n'
-    +'    507:19 = Staffel 5, Folge 7, 19 Takes\n'
-    +'  Regel: Erste Ziffer(n) = Staffel, letzte 2 Ziffern = Folge, Zahl nach ":" = Takes\n'
-    +'\n'
-    +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},{"folge":108,"takes":36},...]\n'
-    +'  "folge" = KOMPLETTE Nummer (z.B. 106, nicht 6)\n'
-    +'  Falls gar kein solches Format vorhanden: gvl_takes_detail = null\n'
-    +'\n'
-    +'Bei "abrechn": datum = AUFNAHMEDATUM (nicht Druckdatum!), studio = Studioname,\n'
-    +'  brutto/netto/auszahlung/mwst, takes/take_gage/grundgage, kv_abzug/rv_abzug/pv_abzug\n'
-    +'\n'
-    +'Bei "ausgabe": brutto = Gesamtbetrag, datum, beschr = Beschreibung was gekauft wurde\n'
-    +'\n'
-    +'JSON-Schema (typ MUSS korrekt gesetzt sein, nicht zutreffende Felder = null):\n'
-    +'{"typ":"[dispo|abrechn|ausgabe|sonstig]","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
+    +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
+    +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
     +'"rolle":null,"uhrzeit":null,"bis_uhrzeit":null,"takes":null,"episode":null,'
-    +'"gvl_staffel_header":null,"gvl_episode_header":null,'
-    +'"gvl_takes_detail":null,'
+    +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
     +'"brutto":null,"netto":null,"mwst":null,"auszahlung":null,'
     +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null}'
@@ -4521,10 +4514,9 @@ function dokAnalyseDoc(d, key, cb){
   if(mime==='application/pdf'){
     _sendToAPI(d.dataURL);
   } else {
-    // Für OCR reichen 400px — Text bleibt lesbar, Dateigröße minimal
-    resizeImageB64(d.dataURL, 400, 0.50, function(resized){
-      var b64size = resized.length * 0.75;
-      showToast('⏳ Bild: '+Math.round(b64size/1024)+'KB → API…');
+    // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
+    resizeImageB64(d.dataURL, 1000, 0.82, function(resized){
+      showToast('⏳ Sende '+Math.round(resized.length*0.75/1024)+'KB…');
       _sendToAPI(resized);
     });
   }
