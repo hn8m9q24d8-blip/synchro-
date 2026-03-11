@@ -371,7 +371,6 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div style="font-size:9px;color:var(--ink4);margin-top:1px" id="app-version">Build <span id="app-build-nr">…</span></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <div class="icon-btn" id="ical-debug-btn" onclick="icalDebugOrganizer()" title="Debug Organizer" style="font-size:10px;color:#8a7560;font-weight:700">DBG</div>
       <div class="icon-btn" id="ical-sync-btn" onclick="icalSyncFromWorker()" title="Kalender sync">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a7560" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </div>
@@ -1619,7 +1618,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '61';
+  if(el) el.textContent = '63';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3015,26 +3014,22 @@ function icsParse(text){
     if(!datum) continue;
     var summary=get('SUMMARY');
     var location=get('LOCATION');
+    var summaryCheck = summary.toLowerCase();
+    var locationCheck = location.toLowerCase();
+    var combinedCheck = summaryCheck + ' ' + locationCheck;
 
     // Ausschluss: "Sperren" nie importieren
     if(summaryCheck.indexOf('sperren')>=0) continue;
 
     // Nur Synchron-Arbeitstermine — erkennbar an Studiokürzeln im Titel/Location
     var STUDIO_KEYWORDS = [
-      // Studios explizit
       'arena','ffs','tnt','vsi','sdi','iyuno','interopa','omni','dmt','oxygen',
       'transperfect','taunusfilm','neue tonfilm','blg','cls','eva','rc ','konterfei',
       'hermes','euref','babelsberg',
-      // Strukturmerkmale
       'atl ','atl.','atelier','studio ',
-      // Synchron-spezifisch
       'synchron','dispo','regie',
-      // Studioadressen typisch
       'fredericiastr','sonnenallee','naglerstr','wikingerufer','harzer','stromstr'
     ];
-    var summaryCheck = summary.toLowerCase();
-    var locationCheck = location.toLowerCase();
-    var combinedCheck = summaryCheck + ' ' + locationCheck;
     var isWork = STUDIO_KEYWORDS.some(function(kw){
       return combinedCheck.indexOf(kw) >= 0;
     });
