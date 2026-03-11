@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '68';
+  if(el) el.textContent = '69';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4477,15 +4477,11 @@ function dokAnalyseDoc(d, key, cb){
   if(mime==='application/pdf'){
     _sendToAPI(d.dataURL);
   } else {
-    // Zweistufige Komprimierung: erst 700px, dann prüfen ob noch zu groß
-    resizeImageB64(d.dataURL, 700, 0.65, function(resized){
-      // Base64 Größe prüfen: >1.5MB = nochmal verkleinern
-      var b64size = resized.length * 0.75; // bytes
-      if(b64size > 1500000){
-        resizeImageB64(resized, 500, 0.55, _sendToAPI);
-      } else {
-        _sendToAPI(resized);
-      }
+    // Für OCR reichen 400px — Text bleibt lesbar, Dateigröße minimal
+    resizeImageB64(d.dataURL, 400, 0.50, function(resized){
+      var b64size = resized.length * 0.75;
+      showToast('⏳ Bild: '+Math.round(b64size/1024)+'KB → API…');
+      _sendToAPI(resized);
     });
   }
 } // end dokAnalyseDoc
