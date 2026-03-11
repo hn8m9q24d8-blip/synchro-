@@ -1618,7 +1618,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '53';
+  if(el) el.textContent = '54';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3011,7 +3011,8 @@ function icsParse(text){
         if(dm[4]&&dm[5]) uhrzeit=dm[4]+':'+dm[5];
       }
     }
-    if(!datum) continue;
+    // Nur Termine ab Januar 2025 importieren
+    if(datum < '2025-01-01') continue;
     var summary=get('SUMMARY');
     var location=get('LOCATION');
     var uid=get('UID');
