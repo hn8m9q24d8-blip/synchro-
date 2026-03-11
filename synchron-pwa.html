@@ -1619,7 +1619,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '56';
+  if(el) el.textContent = '57';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2303,17 +2303,12 @@ function icalDebugOrganizer(){
   var url=(db.profil&&db.profil.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
   if(!url){ showToast('Keine iCal URL'); return; }
   fetch(url).then(function(r){ return r.text(); }).then(function(text){
-    var organizers=[];
     var blocks=text.split('BEGIN:VEVENT');
-    for(var i=1;i<Math.min(blocks.length,50);i++){
-      var m=blocks[i].match(/ORGANIZER[^:\r\n]*:([^\r\n]+)/);
-      if(m){
-        var o=m[1].trim();
-        if(organizers.indexOf(o)<0) organizers.push(o);
-        if(organizers.length>=5) break;
-      }
-    }
-    alert('Organizer-Felder im Feed:\n\n'+organizers.join('\n\n')||'Keine ORGANIZER gefunden');
+    if(blocks.length<2){ alert('Keine Events gefunden'); return; }
+    // Zeige alle Felder des ersten Events
+    var first=blocks[1].split('END:VEVENT')[0];
+    var lines=first.split(/\r?\n/).filter(function(l){ return l.trim() && !l.startsWith(' '); });
+    alert('Felder im 1. Event:\n\n'+lines.slice(0,20).join('\n'));
   });
 }
 
