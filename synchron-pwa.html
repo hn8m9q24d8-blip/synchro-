@@ -361,6 +361,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 .takes-drum-line::before{top:-18px;}
 .takes-drum-line::after{bottom:-18px;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="view-termine" class="view active">
@@ -790,8 +791,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div onclick="abHolviClose()" style="position:absolute;top:0;right:0;font-size:22px;cursor:pointer;color:#999">x</div>
   </div>
   <div style="background:#fef9ec;border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.6"><strong>Export aus Holvi:</strong><br>Holvi App - Konto - Transaktionen - Export - CSV</div>
-  <input id="ab-holvi-file" type="file" accept=".csv,text/csv" style="display:none" onchange="abHolviImport(this)">
+  <input id="ab-holvi-file" type="file" accept=".csv,.xls,.xlsx,text/csv" style="display:none" onchange="abHolviImport(this)">
   <div onclick="document.getElementById('ab-holvi-file').click()" style="border:2px dashed #86efac;border-radius:12px;padding:24px;text-align:center;cursor:pointer;background:#f0fdf4;margin-bottom:14px">
+    <div style="font-size:28px">📂</div>
+    <div style="font-size:13px;font-weight:700;color:#15803d;margin-top:6px">CSV oder XLS hochladen</div>
+    <div style="font-size:11px;color:#6b7280;margin-top:4px">Holvi Web → Transaktionen → Export</div>
+  </div>
     <div style="font-size:36px">Datei</div><div style="font-weight:700;color:#15803d;margin-top:6px">CSV-Datei auswaehlen</div>
   </div>
   <div id="ab-holvi-result"></div>
@@ -1618,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '64';
+  if(el) el.textContent = '67';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4399,12 +4404,13 @@ function dokAnalyseDoc(d, key, cb){
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:400,
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,
         messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]})
     }).then(function(r){return r.json();}).then(function(data){
+    // DEBUG: zeige rohe API-Antwort bei Fehler
     if(!data.content||!data.content[0]){
-      var apiErr = data.error&&data.error.message ? data.error.message : JSON.stringify(data);
-      showToast('API Fehler: '+apiErr);
+      var rawErr=JSON.stringify(data).slice(0,200);
+      showToast('API: '+rawErr);
       if(cb) cb(); return;
     }
     try{
@@ -4458,7 +4464,10 @@ function dokAnalyseDoc(d, key, cb){
           belegImg:(mime!=='application/pdf'?(d.thumb||null):null),erstelltAm:new Date().toISOString()});
         d.ausgabeId = agId;
       }
-    }catch(e){ d.typ='sonstig'; d.beschr=d.dateiname; }
+    }catch(e){ 
+      d.typ='sonstig'; d.beschr=d.dateiname; 
+      showToast('Parse-Fehler: '+e.message.slice(0,40));
+    }
     // Recherche nur auf Knopfdruck im Termin — nicht automatisch
     if(cb) cb();
     }).catch(function(err){ showToast('Verbindungsfehler: '+err.message); d.typ='sonstig'; if(cb) cb(); });
@@ -4494,6 +4503,15 @@ function terminGageRecherche(terminId){
       messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     if(btn){ btn.textContent='🔍 TV / Streaming recherchieren'; btn.style.opacity='1'; btn.disabled=false; }
+    if(data.error){
+      var errType=data.error.type||'';
+      var msg=errType==='rate_limit_error'?'⏱ API-Limit erreicht – kurz warten und nochmal versuchen'
+             :errType==='authentication_error'?'🔑 API-Key ungültig'
+             :data.error.message||'API Fehler';
+      showToast(msg);
+      if(res){ res.style.display='block'; res.innerHTML='<div style="color:#c2410c;font-size:12px">'+msg+'</div>'; }
+      return;
+    }
     try{
       var txt=(data.content&&data.content[0]&&data.content[0].text||'').replace(/```json|```/g,'').trim();
       var j=JSON.parse(txt);
@@ -6558,26 +6576,53 @@ function abSpeichern(){
 }
 
 function abHolviImport(inp){
-  var file=inp.files[0];if(!file)return;
+  var file=inp.files[0]; if(!file)return;
+  var isXLS=/\.(xlsx?|xls)$/i.test(file.name);
   var reader=new FileReader();
   reader.onload=function(e){
-    var text=e.target.result;
-    var lines=text.split('\n').filter(function(l){return l.trim();});
-    if(lines.length<2){document.getElementById('ab-holvi-result').innerHTML='<div style="color:red;padding:12px">CSV leer oder ungueltig</div>';return;}
-    var header=lines[0].split(',').map(function(h){return h.replace(/"/g,'').trim().toLowerCase();});
-    var amtIdx=header.findIndex(function(h){return h.includes('amount')||h.includes('betrag');});
-    var dateIdx=header.findIndex(function(h){return h.includes('date')||h.includes('datum')||h.includes('buchung');});
-    var descIdx=header.findIndex(function(h){return h.includes('desc')||h.includes('subject')||h.includes('betreff')||h.includes('verwendung');});
-    if(amtIdx<0){document.getElementById('ab-holvi-result').innerHTML='<div style="color:red;padding:12px">CSV-Format nicht erkannt.</div>';return;}
+    var rows=[];
+    if(isXLS){
+      // XLS/XLSX via SheetJS
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false});
+    } else {
+      // CSV
+      var text=e.target.result;
+      // Trennzeichen erkennen: Semikolon oder Komma
+      var sep=text.indexOf(';')>=0?';':',';
+      rows=text.split('\n').filter(function(l){return l.trim();})
+        .map(function(l){return l.split(sep).map(function(c){return c.replace(/"/g,'').trim();});});
+    }
+    if(rows.length<2){
+      document.getElementById('ab-holvi-result').innerHTML='<div style="color:red;padding:12px">Datei leer oder ungültig</div>'; return;
+    }
+    var header=rows[0].map(function(h){return (h||'').toLowerCase();});
+    var amtIdx=header.findIndex(function(h){return h.includes('amount')||h.includes('betrag')||h.includes('summe')||h.includes('credit');});
+    var dateIdx=header.findIndex(function(h){return h.includes('date')||h.includes('datum')||h.includes('buchung')||h.includes('value');});
+    var descIdx=header.findIndex(function(h){return h.includes('desc')||h.includes('subject')||h.includes('betreff')||h.includes('verwendung')||h.includes('reference')||h.includes('name');});
+    if(amtIdx<0){
+      // Debug: zeige erkannte Spalten
+      document.getElementById('ab-holvi-result').innerHTML='<div style="color:red;padding:12px">Betrag-Spalte nicht gefunden.<br><small>Gefundene Spalten: '+header.join(', ')+'</small></div>'; return;
+    }
     var eingaenge=[];
-    lines.slice(1).forEach(function(line){
-      var cols=line.split(',').map(function(c){return c.replace(/"/g,'').trim();});
-      var amt=parseFloat((cols[amtIdx]||'').replace(',','.'));
-      if(amt>0) eingaenge.push({datum:dateIdx>=0?cols[dateIdx]:'',beschreibung:descIdx>=0?cols[descIdx]:'',betrag:amt});
+    rows.slice(1).forEach(function(cols){
+      var rawAmt=(cols[amtIdx]||'').toString().replace(',','.').replace(/[^0-9.\-]/g,'');
+      var amt=parseFloat(rawAmt);
+      if(amt>0) eingaenge.push({
+        datum: dateIdx>=0?(cols[dateIdx]||''):'',
+        beschreibung: descIdx>=0?(cols[descIdx]||''):'',
+        betrag: amt
+      });
     });
+    if(!eingaenge.length){
+      document.getElementById('ab-holvi-result').innerHTML='<div style="color:orange;padding:12px">Keine positiven Eingänge gefunden.<br><small>'+rows.length+' Zeilen gelesen.</small></div>'; return;
+    }
     abHolviAbgleich(eingaenge);
   };
-  reader.readAsText(file);
+  if(isXLS) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file,'UTF-8');
 }
 
 function abHolviAbgleich(eingaenge){
