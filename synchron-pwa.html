@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '76';
+  if(el) el.textContent = '77';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4648,6 +4648,15 @@ function _editRow(field, label, val){
     +'</div>';
 }
 
+// Read-only Anzeigezeile (wie im Screenshot)
+function _dispRow(label, val, color){
+  if(!val && val!==0) return '';
+  return '<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #f0fdf4">'
+    +'<div style="font-size:12px;color:#888;flex:1">'+label+'</div>'
+    +'<div style="font-size:13px;font-weight:700;color:'+(color||'#1a1a1a')+'">'+esc(String(val))+'</div>'
+    +'</div>';
+}
+
 function dokOpenDetail(id){
   _dokCurrentId = id;
   var d = (db.dokumente||[]).find(function(x){return x.id===id;});
@@ -4668,12 +4677,84 @@ function dokOpenDetail(id){
 
   // ── STATE: NOCH NICHT BESTÄTIGT → Prüf-Workflow ──
   if(d.typ && d.typ!=='offen' && d.typ!=='sonstig' && !d.bestaetigt){
+
+    // ── Kleines Thumbnail + KI-Analyse Button ──
+    var thumbSrc = d.thumb || (d.dataURL && d.mime!=='application/pdf' ? d.dataURL : null);
+    if(thumbSrc || d.mime==='application/pdf'){
+      body+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
+      if(thumbSrc){
+        body+='<img src="'+thumbSrc+'" style="width:72px;height:90px;object-fit:cover;border-radius:8px;border:1.5px solid #e5e7eb;flex-shrink:0" onclick="dokShowFullImg(\''+d.id+'\')">';
+      } else {
+        body+='<div style="width:72px;height:90px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">📄</div>';
+      }
+      body+='<button type="button" onclick="dokAnalyseOne()" id="dok-detail-analyse-btn" style="flex:1;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation">🔍 KI-Analyse starten</button>';
+      body+='</div>';
+    } else {
+      body+='<button type="button" onclick="dokAnalyseOne()" id="dok-detail-analyse-btn" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:12px;touch-action:manipulation">🔍 KI-Analyse starten</button>';
+    }
+
+    // ── ERKANNTE DATEN Box ──
     body+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-      +'<div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:10px">ERKANNTE DATEN</div>'
-      +'<div style="font-size:11px;color:#555;margin-bottom:10px">Bitte prüfen. Nach Bestätigung wird das Foto aus der App gelöscht.</div>';
-    body+=_editRow('beschr','Beschreibung',d.beschr||'');
-    body+=_editRow('datum','Datum',d.datum||'');
+      +'<div style="font-size:11px;font-weight:800;color:#15803d;letter-spacing:.5px;margin-bottom:8px">ERKANNTE DATEN</div>';
+
+    // Gemeinsame Felder
+    body+=_dispRow('Studio', d.studio);
+    if(d.typ==='dispo'){
+      body+=_dispRow('Produktion', d.titel);
+      body+=_dispRow('Datum', d.datum ? fd(d.datum) : null);
+      body+=_dispRow('Regie', d.regie);
+      body+=_dispRow('Rolle', d.rolle);
+      var zeitStr = d.uhrzeit ? (d.uhrzeit + (d.bis_uhrzeit ? ' – '+d.bis_uhrzeit : '')) : null;
+      body+=_dispRow('Aufnahme', zeitStr);
+      body+=_dispRow('Takes', d.takes);
+      // GVL
+      var staffelStr = d.gvl_staffel||d.gvl_staffel_header||null;
+      body+=_dispRow('Staffel', staffelStr);
+      if(d.gvl_takes_detail && d.gvl_takes_detail.length){
+        body+='<div style="padding:8px 0;border-bottom:1px solid #f0fdf4">'
+          +'<div style="font-size:11px;color:#888;margin-bottom:6px">Takes GVL</div>'
+          +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
+        d.gvl_takes_detail.forEach(function(e){
+          var folgeNr=String(e.folge).slice(-2).replace(/^0/,'');
+          body+='<div style="background:#fff;border:1.5px solid #86efac;border-radius:7px;padding:4px 9px;font-size:12px">'
+            +'<span style="color:#15803d;font-weight:700">F'+folgeNr+'</span>'
+            +' <span style="font-weight:800">'+e.takes+'</span><span style="color:#888;font-size:10px"> T</span>'
+            +'</div>';
+        });
+        body+='</div></div>';
+      } else {
+        var folgeStr = d.gvl_folge||d.gvl_episode_header||d.episode||null;
+        body+=_dispRow('Folge', folgeStr);
+        var gvlTakes = d.gvl_takes||(d.gvl_takes_detail&&d.gvl_takes_detail.reduce(function(s,e){return s+e.takes;},0))||d.takes||null;
+        body+=_dispRow('Takes GVL', gvlTakes);
+      }
+    }
+    if(d.typ==='abrechn'){
+      body+=_dispRow('Produktion', d.titel||d.beschr);
+      body+=_dispRow('Datum', d.datum ? fd(d.datum) : null);
+      body+=_dispRow('Gutschrift-Nr.', d.gutschrift_nr);
+      body+=_dispRow('Takes', d.takes);
+      body+=_dispRow('Take-Gage', d.take_gage ? '€ '+fmtEur(d.take_gage) : null);
+      body+=_dispRow('Grundgage', d.grundgage ? '€ '+fmtEur(d.grundgage) : null);
+      body+=_dispRow('Brutto', d.brutto ? '€ '+fmtEur(d.brutto) : null);
+      var kvSum = (parseFloat(d.kv_abzug||0)+parseFloat(d.rv_abzug||0)+parseFloat(d.pv_abzug||0));
+      if(kvSum) body+=_dispRow('KV+RV+PV', '€ '+fmtEur(-kvSum), '#c2410c');
+      body+=_dispRow('Netto', d.netto ? '€ '+fmtEur(d.netto) : null);
+      var mwstProzent = d.ustSatz ? (d.ustSatz*100)+'%' : '7%';
+      body+=_dispRow('MwSt '+mwstProzent, d.mwst ? '€ '+fmtEur(d.mwst) : null);
+      body+=_dispRow('Auszahlung', d.auszahlung ? '€ '+fmtEur(d.auszahlung) : null, '#15803d');
+    }
+    if(d.typ==='ausgabe'){
+      body+=_dispRow('Datum', d.datum ? fd(d.datum) : null);
+      body+=_dispRow('Betrag', d.brutto ? '€ '+fmtEur(d.brutto) : null);
+    }
+    body+='</div>';
+
+    // Editierbar-Bereich (aufklappbar)
+    body+='<details style="margin-bottom:10px"><summary style="font-size:11px;color:#888;cursor:pointer;padding:6px 0">✏️ Daten bearbeiten / korrigieren</summary>'
+      +'<div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-top:6px">';
     body+=_editRow('studio','Studio',d.studio||'');
+    body+=_editRow('datum','Datum',d.datum||'');
     if(d.typ==='dispo'){
       body+=_editRow('titel','Titel',d.titel||'');
       body+=_editRow('regie','Regie',d.regie||'');
@@ -4682,27 +4763,7 @@ function dokOpenDetail(id){
       body+=_editRow('bis_uhrzeit','Ende',d.bis_uhrzeit||'');
       body+=_editRow('takes','Takes gesamt',d.takes||'');
       body+=_editRow('gvl_staffel','Staffel',d.gvl_staffel||'');
-      // ★ GVL Takes-Detail pro Folge ★
-      if(d.gvl_takes_detail && d.gvl_takes_detail.length){
-        body+='<div style="margin:6px 0;padding:8px 0;border-bottom:1px solid #fef3c7">'
-          +'<div style="font-size:10px;color:#888;margin-bottom:6px;font-weight:700">GVL TAKES PRO FOLGE</div>'
-          +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
-        d.gvl_takes_detail.forEach(function(e){
-          var folgeNr=String(e.folge).slice(-2).replace(/^0/,'');
-          body+='<div style="background:#fff;border:1.5px solid #86efac;border-radius:7px;padding:4px 8px;font-size:12px">'
-            +'<span style="color:#15803d;font-weight:700">F'+folgeNr+'</span>'
-            +' <span style="font-weight:800">'+e.takes+'</span><span style="color:#888;font-size:10px"> Takes</span>'
-            +'</div>';
-        });
-        body+='</div></div>';
-      } else {
-        body+=_editRow('gvl_folge','Folge',d.gvl_folge||d.episode||'');
-        var gvlTakes=d.gvl_takes||(d.gvl_takes_detail&&d.gvl_takes_detail.reduce(function(s,e){return s+e.takes;},0))||d.takes||'';
-        body+=_editRow('takes_gvl','Takes GVL',gvlTakes);
-      }
-      if(d.gvl_staffel_header){
-        body+='<div style="font-size:10px;color:#888;padding:2px 0 4px 88px">📋 Aus Kopfzeile: S'+d.gvl_staffel_header+(d.gvl_episode_header?' E'+d.gvl_episode_header:'')+'</div>';
-      }
+      body+=_editRow('gvl_folge','Folge',d.gvl_folge||d.episode||'');
     }
     if(d.typ==='abrechn'){
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
@@ -4712,12 +4773,11 @@ function dokOpenDetail(id){
       body+=_editRow('brutto','Brutto €',d.brutto||'');
       body+=_editRow('netto','Netto €',d.netto||'');
       body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
-      body+=_editRow('kv_abzug','KV-Abzug €',d.kv_abzug||'');
     }
     if(d.typ==='ausgabe'){
       body+=_editRow('brutto','Betrag €',d.brutto||'');
     }
-    body+='</div>';
+    body+='</div></details>';
 
 
     // ★ Produktions-Info-Box
@@ -4817,8 +4877,7 @@ function dokOpenDetail(id){
         +'</div>';
     }
 
-    body+='<button type="button" onclick="dokAnalyseOne()" id="dok-detail-analyse-btn" style="width:100%;background:#be185d;color:#fff;border:none;border-radius:12px;padding:13px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:8px;touch-action:manipulation">🔍 KI analysieren</button>';
-    body+='<button type="button" onclick="dokBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px;touch-action:manipulation">✓ Bestätigen & Foto löschen</button>';
+    body+='<button type="button" onclick="dokBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px;touch-action:manipulation">✓ Speichern & zuordnen</button>';
 
   // ── STATE: BESTÄTIGT / ANALYSIERT / NICHT ANALYSIERT ──
   } else {
@@ -4923,6 +4982,16 @@ function dokDetailClose(){
 
 // Pending-Link: Dok-ID das auf Termin wartet
 var _pendingDokLink=null;
+
+function dokShowFullImg(id){
+  var d=(db.dokumente||[]).find(function(x){return x.id===id;});
+  if(!d||!d.dataURL) return;
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:#000;display:flex;align-items:center;justify-content:center';
+  ov.onclick=function(){document.body.removeChild(ov);};
+  ov.innerHTML='<img src="'+d.dataURL+'" style="max-width:100%;max-height:100%;object-fit:contain">';
+  document.body.appendChild(ov);
+}
 
 function dokGotoKalender(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
