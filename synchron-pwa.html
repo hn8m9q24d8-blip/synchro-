@@ -371,6 +371,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div style="font-size:9px;color:var(--ink4);margin-top:1px" id="app-version">Build <span id="app-build-nr">…</span></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
+      <div class="icon-btn" id="ical-debug-btn" onclick="icalDebugOrganizer()" title="Debug Organizer" style="font-size:10px;color:#8a7560;font-weight:700">DBG</div>
       <div class="icon-btn" id="ical-sync-btn" onclick="icalSyncFromWorker()" title="Kalender sync">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a7560" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </div>
@@ -1618,7 +1619,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '55';
+  if(el) el.textContent = '56';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2298,7 +2299,25 @@ function saveApiKey(){
   showToast('✓ API-Key gespeichert');
 }
 
-// ── iCAL WORKER SYNC ────────────────────────────────────────────
+function icalDebugOrganizer(){
+  var url=(db.profil&&db.profil.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
+  if(!url){ showToast('Keine iCal URL'); return; }
+  fetch(url).then(function(r){ return r.text(); }).then(function(text){
+    var organizers=[];
+    var blocks=text.split('BEGIN:VEVENT');
+    for(var i=1;i<Math.min(blocks.length,50);i++){
+      var m=blocks[i].match(/ORGANIZER[^:\r\n]*:([^\r\n]+)/);
+      if(m){
+        var o=m[1].trim();
+        if(organizers.indexOf(o)<0) organizers.push(o);
+        if(organizers.length>=5) break;
+      }
+    }
+    alert('Organizer-Felder im Feed:\n\n'+organizers.join('\n\n')||'Keine ORGANIZER gefunden');
+  });
+}
+
+
 function openIcalWorkerSheet(){
   var url=(db.profil&&db.profil.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
   var inp=document.getElementById('ical-worker-input');
