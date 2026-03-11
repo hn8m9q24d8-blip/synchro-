@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '77';
+  if(el) el.textContent = '78';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5028,6 +5028,57 @@ function dokLinkCancel(){
   _pendingDokLink=null;
   var banner=document.getElementById('dok-link-banner');
   if(banner) banner.style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════════
+// DOKUMENT → TERMIN MERGE
+// ══════════════════════════════════════════════════════════════
+
+// Überträgt Felder aus Dokument in Termin — nur wenn Termin-Feld noch leer.
+// Gibt Array der geänderten Felder zurück: [{feld, alt, neu}]
+function dokMergeIntoTermin(d, t){
+  var changed = [];
+  function setIfEmpty(tField, val, label){
+    if(!val) return;
+    if(t[tField]) return; // Termin hat schon einen Wert → nicht überschreiben
+    t[tField] = val;
+    changed.push({feld: label, neu: val});
+  }
+  setIfEmpty('titel',   d.titel,   'Titel');
+  setIfEmpty('rolle',   d.rolle,   'Rolle');
+  setIfEmpty('regie',   d.regie,   'Regie');
+  setIfEmpty('studio',  d.studio,  'Studio');
+  setIfEmpty('uhrzeit', d.uhrzeit, 'Uhrzeit');
+  setIfEmpty('takes',   d.takes,   'Takes');
+  // GVL-Daten
+  setIfEmpty('gvl_staffel', d.gvl_staffel||d.gvl_staffel_header, 'Staffel');
+  setIfEmpty('gvl_folge',   d.gvl_folge||d.gvl_episode_header,   'Folge');
+  if(d.gvl_takes_detail && !t.gvl_takes_detail){
+    t.gvl_takes_detail = d.gvl_takes_detail;
+    changed.push({feld: 'Takes-Detail', neu: d.gvl_takes_detail.length+' Folgen'});
+  }
+  // Abrechnung
+  if(d.typ==='abrechn' && d.auszahlung){
+    t.abgerechnet = true;
+    t.abrechnungBrutto = parseFloat(d.auszahlung);
+    changed.push({feld: 'Abrechnung', neu: '€ '+fmtEur(d.auszahlung)});
+  }
+  return changed;
+}
+
+// Zeigt kurzen Toast + Detail-Sheet mit den übertragenen Feldern
+function _showMergeSummary(t, changed, d){
+  if(!changed.length) return;
+  var lines = changed.map(function(c){ return '  · '+c.feld+': '+esc(String(c.neu)); }).join('\n');
+  showToast('✓ '+changed.length+' Feld'+(changed.length>1?'er':'')
+    +' übertragen:\n'+changed.map(function(c){return c.feld;}).join(', '));
+}
+
+// "Zuordnen & Felder übertragen" — liest Termin aus dem <select>
+function dokManualAssign(dokId){
+  var sel = document.getElementById('dok-manual-termin');
+  if(!sel || !sel.value){ showToast('Bitte zuerst einen Termin auswählen'); return; }
+  dokAssignTermin(dokId, sel.value);
 }
 
 // One-Click Zuordnung aus Vorschlag in dokOpenDetail
