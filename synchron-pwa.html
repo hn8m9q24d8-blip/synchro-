@@ -1619,7 +1619,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '57';
+  if(el) el.textContent = '61';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2992,13 +2992,6 @@ function autoMatchPay(){
 // ICS IMPORT — liest .ics-Datei aus iPhone Kalender
 // ══════════════════════════════════════════════════
 function icsParse(text){
-  // Nur Termine von diesen Disponenten importieren
-  var ALLOWED_ORGANIZERS = [
-    'vd-nguyen@outlook.de',
-    'sandra.luebbering@me.com',
-    'sandraluebbering@online.de'
-  ];
-
   var events=[];
   var blocks=text.split('BEGIN:VEVENT');
   for(var i=1;i<blocks.length;i++){
@@ -3008,14 +3001,6 @@ function icsParse(text){
       var m=block.match(re);
       return m?m[1].replace(/\\n/g,'\n').replace(/\\,/g,',').trim():'';
     };
-
-    // Organizer prüfen — nur Termine von erlaubten Adressen
-    var organizerRaw = block.match(/ORGANIZER[^:\r\n]*:([^\r\n]+)/);
-    var organizerStr = organizerRaw ? organizerRaw[1].toLowerCase().replace('mailto:','') : '';
-    var allowed = ALLOWED_ORGANIZERS.some(function(email){
-      return organizerStr.indexOf(email.toLowerCase()) >= 0;
-    });
-    if(!allowed) continue;
 
     var dtstart=get('DTSTART');
     var datum=''; var uhrzeit='';
@@ -3027,6 +3012,37 @@ function icsParse(text){
         if(dm[4]&&dm[5]) uhrzeit=dm[4]+':'+dm[5];
       }
     }
+    if(!datum) continue;
+    var summary=get('SUMMARY');
+    var location=get('LOCATION');
+
+    // Ausschluss: "Sperren" nie importieren
+    if(summaryCheck.indexOf('sperren')>=0) continue;
+
+    // Nur Synchron-Arbeitstermine — erkennbar an Studiokürzeln im Titel/Location
+    var STUDIO_KEYWORDS = [
+      // Studios explizit
+      'arena','ffs','tnt','vsi','sdi','iyuno','interopa','omni','dmt','oxygen',
+      'transperfect','taunusfilm','neue tonfilm','blg','cls','eva','rc ','konterfei',
+      'hermes','euref','babelsberg',
+      // Strukturmerkmale
+      'atl ','atl.','atelier','studio ',
+      // Synchron-spezifisch
+      'synchron','dispo','regie',
+      // Studioadressen typisch
+      'fredericiastr','sonnenallee','naglerstr','wikingerufer','harzer','stromstr'
+    ];
+    var summaryCheck = summary.toLowerCase();
+    var locationCheck = location.toLowerCase();
+    var combinedCheck = summaryCheck + ' ' + locationCheck;
+    var isWork = STUDIO_KEYWORDS.some(function(kw){
+      return combinedCheck.indexOf(kw) >= 0;
+    });
+    // Regel 1: Titel + Location ausgefüllt → immer importieren
+    if(summary && location) isWork=true;
+    // Regel 2: Slash-Regel
+    if(!isWork && summary.indexOf('/')>=0 && uhrzeit) isWork=true;
+    if(!isWork) continue;
     // Nur Termine ab Januar 2025 importieren
     if(datum < '2025-01-01') continue;
     var summary=get('SUMMARY');
