@@ -1618,7 +1618,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '54';
+  if(el) el.textContent = '55';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2338,7 +2338,9 @@ function icalSyncFromWorker(){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
     .then(function(text){
       var events=icsParse(text);
-      if(!events||!events.length){ showToast('Keine Termine in der Datei'); return; }
+      // Debug: zeige wie viele Events vor und nach Filter
+      var totalBlocks = text.split('BEGIN:VEVENT').length - 1;
+      if(!events||!events.length){ showToast('Keine passenden Termine ('+totalBlocks+' Events im Feed, alle gefiltert)'); return; }
       var existing={};
       (db.termine||[]).forEach(function(t){ if(t.calEventId) existing[t.calEventId]=true; });
       var neu=events.filter(function(e){ return e.calEventId&&!existing[e.calEventId]; });
@@ -2995,7 +2997,7 @@ function icsParse(text){
 
     // Organizer prüfen — nur Termine von erlaubten Adressen
     var organizerRaw = block.match(/ORGANIZER[^:\r\n]*:([^\r\n]+)/);
-    var organizerStr = organizerRaw ? organizerRaw[1].toLowerCase() : '';
+    var organizerStr = organizerRaw ? organizerRaw[1].toLowerCase().replace('mailto:','') : '';
     var allowed = ALLOWED_ORGANIZERS.some(function(email){
       return organizerStr.indexOf(email.toLowerCase()) >= 0;
     });
