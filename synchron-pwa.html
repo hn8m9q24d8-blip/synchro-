@@ -4794,7 +4794,7 @@ function dokOpenDetail(id){
   var body = '';
 
   // ── STATE 1: NICHT ANALYSIERT → Vorschau + KI-Button ──
-  if(!d.typ || d.typ==='offen' || d.typ==='sonstig'){
+  if(!d.typ || d.typ==='offen'){
     if(d.mime==='application/pdf' && d.dataURL){
       body+='<div style="margin-bottom:12px">';
       body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">PDF-Dokument</div>';
@@ -4811,7 +4811,7 @@ function dokOpenDetail(id){
 
 
   // ── STATE 2: ANALYSIERT, WARTET AUF BESTÄTIGUNG ──
-  } else if(!d.bestaetigt){
+  } else if(!d.bestaetigt || d.awaitConfirm){
 
     // ── Große Vorschau zum Abgleichen ──
     if(d.dataURL && d.mime!=='application/pdf'){
@@ -5504,18 +5504,23 @@ function dokAnalyseOne(){
     st.textContent='@keyframes _spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(st);
   }
+  document.body.style.pointerEvents = 'none'; // verhindert Phantom-Klicks während Analyse
+  overlay.style.pointerEvents = 'auto'; // Overlay selbst bleibt interagierbar
   document.body.appendChild(overlay);
 
   var _analyseDocId = d.id;
   dokAnalyseDoc(d, key, function(){
-    var ol=document.getElementById('_analyse-overlay');
-    if(ol) ol.parentNode.removeChild(ol);
+    // Overlay GARANTIERT entfernen — alle möglichen Reste
+    document.querySelectorAll('#_analyse-overlay').forEach(function(el){ el.parentNode.removeChild(el); });
+    // Pointer-events-Sperre aufheben falls nötig
+    document.body.style.pointerEvents = '';
     save(db);
-    // ERST Panel sofort öffnen — DANN Liste im Hintergrund
-    // (rDokumente schreibt große Base64-Thumbnails → iOS blockt sonst das Panel-Rendering)
-    dokOpenDetail(_analyseDocId);
-    showToast('✓ Analysiert: '+(d.titel||d.typ||'Dokument'));
-    setTimeout(function(){ rDokumente(); }, 150);
+    // Panel nach Browser-Frame updaten — iOS Safari braucht Microtask-Pause
+    setTimeout(function(){
+      dokOpenDetail(_analyseDocId);
+      showToast('✓ Analysiert: '+(d.titel||d.typ||'Dokument'));
+      setTimeout(function(){ rDokumente(); }, 100);
+    }, 30);
   });
 }
 
