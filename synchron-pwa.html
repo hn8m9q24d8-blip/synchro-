@@ -1626,7 +1626,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '90';
+  if(el) el.textContent = '93';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4285,7 +4285,7 @@ function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
   // Übernehme editierte Werte
-  var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','takes','gutschrift_nr','take_gage','grundgage','brutto','auszahlung','kv_abzug'];
+  var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','takes','gutschrift_nr','take_gage','grundgage','brutto','kv_abzug','rv_abzug','pv_abzug','netto','mwst','auszahlung'];
   fields.forEach(function(f){
     var el=document.getElementById('dedit-'+f);
     if(el && el.value!=='') d[f]=el.value;
@@ -4370,7 +4370,7 @@ function dokAnalyseDoc(d, key, cb){
   if(confirmed.length) lernEx='\n\nBekannte Studios in diesem Kontext: '+confirmed.map(function(x){return x.studio;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
 
   var prompt='Du analysierst ein Dokument von Synchronsprecher TIM KNAUER.\n'
-    +'Bestimme typ: "dispo" (Synchron-Dispoblatt), "abrechn" (Gagenabrechnung/Gutschrift), "ausgabe" (Quittung/Rechnung), "sonstig"\n'
+    +'Bestimme typ: "dispo" (Synchron-Dispoblatt), "abrechn" (Einzel-Gagenabrechnung/Gutschrift), "monats_abrechn" (Monats-Gutschrift/Sammelabrechnung über MEHRERE Termine), "ausgabe" (Quittung/Rechnung), "sonstig"\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
@@ -4393,10 +4393,41 @@ function dokAnalyseDoc(d, key, cb){
     +'  "S3E5" → gvl_staffel_header="3", gvl_episode_header="5"\n'
     +'  Falls nicht im Kopf: null\n'
     +'\n'
-    +'Bei "abrechn":\n'
-    +'  datum = AUFNAHMEDATUM (nicht Druckdatum!)\n'
-    +'  studio, brutto, netto, auszahlung, mwst, takes, take_gage, grundgage\n'
-    +'  kv_abzug, rv_abzug, pv_abzug falls vorhanden\n'
+    +'Bei "abrechn" — SESAM Gagenabrechnung/Gutschrift:\n'
+    +'  datum = AUFNAHMEDATUM aus "von:"/"bis:" Zeile (NICHT Druckdatum oben rechts!)\n'
+    +'  studio = Auftraggeber/Produktionsfirma\n'
+    +'  titel = Produktionstitel aus den Zeilenpositionen (z.B. "They Will Kill You", "Dark")\n'
+    +'  rolle = gespielte Rolle aus den Zeilenpositionen (z.B. "Kevin", "Lukas")\n'
+    +'  gutschrift_nr = Gutschrifts-Nummer (z.B. "839/20260201")\n'
+    +'  takes = Gesamtzahl Takes (z.B. 45 bei "45 x 5,00")\n'
+    +'  take_gage = Preis pro Take in Euro (z.B. 5.00)\n'
+    +'  grundgage = Grundgage/Pauschale in Euro (z.B. 100.00)\n'
+    +'  brutto = BRUTTO GAGE gesamt\n'
+    +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12)\n'
+    +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
+    +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
+    +'  netto = NETTO GAGE (nach Abzügen, VOR MwSt)\n'
+    +'  mwst = Mehrwertsteuer-Betrag in Euro (z.B. 22.75)\n'
+    +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
+    +'  auszahlung = Auszahlungsbetrag (Netto + MwSt)\n'
+    +'  produktionstyp_kino = true wenn "Kino" in den Positionen steht\n'
+    +'\n'
+    +'Bei "monats_abrechn" — VSI/SESAM Monats-Gutschrift mit mehreren Terminen/Produktionen:\n'
+    +'  ERKENNBAR an: "Monats-Gutschrift", Tabelle mit Datum-Spalte, mehrere Zeilen verschiedene Tage\n'
+    +'  studio = Auftraggeber (z.B. "VSI Berlin")\n'
+    +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
+    +'  brutto = BRUTTO GAGE gesamt (z.B. 4687.60)\n'
+    +'  kv_abzug = Krankenversicherungs-Abzug\n'
+    +'  rv_abzug = Rentenversicherungs-Abzug\n'
+    +'  pv_abzug = Pflegeversicherungs-Abzug\n'
+    +'  mwst = MwSt-Betrag in Euro\n'
+    +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
+    +'  auszahlung = Auszahlungsbetrag\n'
+    +'  sessions = Array aller Einzeltermine aus der Tabelle:\n'
+    +'    Pro Termin(tag+film) eine Zeile: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0}\n'
+    +'    WICHTIG: Grundgage-Zeile ("1 x 85,00") und Takegage-Zeile ("80 x 4,20") zum SELBEN Datum+Film ZUSAMMENFASSEN\n'
+    +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
+    +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
     +'Bei "ausgabe": brutto, datum, beschr (was wurde gekauft)\n'
     +'\n'
@@ -4406,7 +4437,7 @@ function dokAnalyseDoc(d, key, cb){
     +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
     +'"brutto":null,"netto":null,"mwst":null,"auszahlung":null,'
-    +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null}'
+    +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null,"produktionstyp_kino":null,"sessions":null}'
     +lernEx;
 
   var mime = d.mime||'image/jpeg';
@@ -4473,6 +4504,12 @@ function dokAnalyseDoc(d, key, cb){
       d.rv_abzug = j.rv_abzug || null;
       d.pv_abzug = j.pv_abzug || null;
       d.ustSatz  = j.ust_satz || null;
+      // Abrechnung: Titel + Rolle aus Positionen
+      if(d.typ==='abrechn'){
+        if(j.titel && !d.titel) d.titel = j.titel;
+        if(j.rolle && !d.rolle) d.rolle = j.rolle;
+        if(j.produktionstyp_kino) d.produktion_typ='kino';
+      }
       d.gvl_staffel_header  = j.gvl_staffel_header || null;
       d.gvl_episode_header  = j.gvl_episode_header || null;
       // GVL-Takes-Detail
@@ -4483,6 +4520,21 @@ function dokAnalyseDoc(d, key, cb){
         if(firstFolge.length>2) d.gvl_staffel = String(parseInt(firstFolge.slice(0,-2)));
       } else {
         d.gvl_takes_detail = null;
+      }
+      // Sessions für Monats-Abrechnung
+      if(d.typ==='monats_abrechn' && j.sessions && Array.isArray(j.sessions)){
+        d.sessions = j.sessions;
+        // Auto-Link jede Session zu passendem Termin
+        d.sessions.forEach(function(s){
+          if(s.datum && d.studio){
+            var tm=dokFindTermin(s.datum, d.studio, s.titel);
+            if(tm) s.terminId=tm.id;
+          }
+        });
+        // datum = erstes Session-Datum
+        if(d.sessions.length && !d.datum) d.datum=d.sessions[0].datum;
+      } else {
+        d.sessions = null;
       }
       // awaitConfirm: Foto noch zeigen, Felder prüfen lassen
       d.awaitConfirm = true;
@@ -4629,17 +4681,32 @@ function _dokResearchProduktion(d, key, cb){
   }).catch(function(){ if(cb) cb(); });
 }
 
-function dokFindTermin(datum, studio){
+function dokFindTermin(datum, studio, titel){
   if(!datum||!studio) return null;
-  var studioLow = studio.toLowerCase();
+  var studioLow = studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+  function studioOk(t){
+    if(!t.studio) return false;
+    var ts=t.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+    return ts.indexOf(studioLow)>=0||studioLow.indexOf(ts)>=0;
+  }
   var candidates = (db.termine||[]).filter(function(t){
-    return t.datum===datum && t.studio && t.studio.toLowerCase().indexOf(studioLow)>=0;
+    return t.datum===datum && studioOk(t);
   });
+  // Bei mehreren Kandidaten: Titel-Match bevorzugen
+  if(candidates.length>1 && titel){
+    var tl=titel.toLowerCase().replace(/[^a-z0-9]/g,'');
+    var withTitel=candidates.filter(function(t){
+      if(!t.titel) return false;
+      var tt=t.titel.toLowerCase().replace(/[^a-z0-9]/g,'');
+      return tt.indexOf(tl)>=0||tl.indexOf(tt)>=0;
+    });
+    if(withTitel.length) return withTitel[0];
+  }
   if(!candidates.length){
     candidates = (db.termine||[]).filter(function(t){
       if(!t.datum) return false;
       var diff = Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
-      return diff<=3 && t.studio && t.studio.toLowerCase().indexOf(studioLow)>=0;
+      return diff<=3 && studioOk(t);
     });
   }
   return candidates[0]||null;
@@ -4760,17 +4827,31 @@ function dokOpenDetail(id){
       }
     }
     if(d.typ==='abrechn'){
+      body+=_editRow('titel','Titel/Produktion',d.titel||'');
+      body+=_editRow('rolle','Rolle',d.rolle||'');
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
       body+=_editRow('takes','Takes',d.takes||'');
-      body+=_editRow('take_gage','Take-Gage',d.take_gage||'');
-      body+=_editRow('grundgage','Grundgage',d.grundgage||'');
-      body+=_editRow('brutto','Brutto',d.brutto||'');
-      body+=_editRow('kv_abzug','KV+RV+PV',d.kv_abzug||'');
-      body+=_editRow('netto','Netto',d.netto||'');
-      body+=_editRow('auszahlung','Auszahlung',d.auszahlung||'');
+      body+=_editRow('take_gage','Take-Gage €',d.take_gage||'');
+      body+=_editRow('grundgage','Grundgage €',d.grundgage||'');
+      body+=_editRow('brutto','Brutto €',d.brutto||'');
+      body+=_editRow('kv_abzug','Krankenvers. (KV) €',d.kv_abzug||'');
+      body+=_editRow('rv_abzug','Rentenvers. (RV) €',d.rv_abzug||'');
+      body+=_editRow('pv_abzug','Pflegevers. (PV) €',d.pv_abzug||'');
+      body+=_editRow('netto','Netto €',d.netto||'');
+      body+=_editRow('mwst','MwSt €',d.mwst||'');
+      body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
     }
     if(d.typ==='ausgabe'){
       body+=_editRow('brutto','Betrag €',d.brutto||'');
+    }
+    if(d.typ==='monats_abrechn'){
+      body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
+      body+=_editRow('brutto','Brutto gesamt €',d.brutto||'');
+      body+=_editRow('kv_abzug','Krankenvers. (KV) €',d.kv_abzug||'');
+      body+=_editRow('rv_abzug','Rentenvers. (RV) €',d.rv_abzug||'');
+      body+=_editRow('pv_abzug','Pflegevers. (PV) €',d.pv_abzug||'');
+      body+=_editRow('mwst','MwSt €',d.mwst||'');
+      body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
     }
     body+='</div>';
 
@@ -4803,6 +4884,33 @@ function dokOpenDetail(id){
         +'</div>';
     }
 
+    // ── MONATS-ABRECHNUNG: Sessions-Block ──
+    if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length){
+      body+='<div style="margin-bottom:12px">';
+      body+='<div style="font-size:11px;font-weight:800;color:#1d6fa8;letter-spacing:.5px;margin-bottom:8px">📋 ERKANNTE TERMINE ('+d.sessions.length+')</div>';
+      d.sessions.forEach(function(s, si){
+        var tm=s.terminId?(db.termine||[]).find(function(t){return t.id===s.terminId;}):null;
+        var matchColor=tm?'#15803d':'#c2410c';
+        var matchBg=tm?'#f0fdf4':'#fff7ed';
+        var matchBorder=tm?'#86efac':'#fed7aa';
+        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px">';
+        body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+        body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
+        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden'):'⚠ Kein Termin')+'</div>';
+        body+='</div>';
+        body+='<div style="font-size:11px;color:#666">';
+        if(s.rolle) body+=esc(s.rolle)+' · ';
+        if(s.takes) body+='Takes: '+s.takes;
+        if(s.take_gage) body+=' · '+s.take_gage+'€/T';
+        if(s.grundgage) body+=' · GG: '+s.grundgage+'€';
+        if(s.brutto_termin) body+=' · <b>'+s.brutto_termin+'€</b>';
+        body+='</div>';
+        body+='</div>';
+      });
+      body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle Termine übernehmen & bestätigen</button>';
+      body+='</div>';
+    } else {
+
     // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
     if(termin){
       // Bereits zugeordnet → Merge-Vorschau anzeigen
@@ -4813,42 +4921,49 @@ function dokOpenDetail(id){
       var vorschlaege=[];
       if(d.datum){
         var dokDat=new Date(d.datum);
-        var alle=(db.termine||[]).filter(function(tv){
-          if(!tv.datum) return false;
-          var diff2=Math.abs(new Date(tv.datum)-dokDat)/(1000*60*60*24);
-          if(diff2>3) return false;
-          return true;
-        });
-        // Score-basiertes Matching: Datum + Titel + Studio
+        var dokStudio=d.studio?(d.studio.toLowerCase().replace(/[^a-z0-9]/g,'')):'';
+        var dokTitel=d.titel?(d.titel.toLowerCase().replace(/[^a-z0-9]/g,'')):'';
+        function studioMatch(tv){
+          if(!dokStudio||!tv.studio) return false;
+          var ts=tv.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+          // Enthält-Prüfung in beide Richtungen
+          if(ts.indexOf(dokStudio)>=0||dokStudio.indexOf(ts)>=0) return true;
+          // Wort-basiert: mindestens ein Wort ≥3 Zeichen stimmt überein
+          var dw=dokStudio.match(/[a-z0-9]{3,}/g)||[];
+          var tw=ts.match(/[a-z0-9]{3,}/g)||[];
+          return dw.some(function(w){ return tw.some(function(t){ return t.indexOf(w)>=0||w.indexOf(t)>=0; }); });
+        }
         function termScore(tv){
           var diff2=Math.abs(new Date(tv.datum)-dokDat)/(1000*60*60*24);
           var score=0;
           if(diff2===0) score+=10;
-          else if(diff2<=1) score+=5;
-          if(d.studio && tv.studio){
-            var ds=d.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
-            var ts=tv.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
-            if(ts.indexOf(ds)>=0||ds.indexOf(ts)>=0) score+=5;
+          else if(diff2<=1) score+=4;
+          else return 0; // >1 Tag → raus
+          // Studio: Pflicht wenn vorhanden — kein Studio-Match = 0
+          if(dokStudio){
+            if(!studioMatch(tv)) return 0;
+            score+=8;
           }
-          if(d.titel && tv.titel){
-            var dt=d.titel.toLowerCase().replace(/[^a-z0-9]/g,'');
+          // Titel
+          if(dokTitel && tv.titel){
             var tt=tv.titel.toLowerCase().replace(/[^a-z0-9]/g,'');
-            if(tt.indexOf(dt)>=0||dt.indexOf(tt)>=0) score+=8;
-            // Partielle Wort-Übereinstimmung
-            var dWords=dt.split(' ').filter(function(w){return w.length>3;});
-            dWords.forEach(function(w){ if(tt.indexOf(w)>=0) score+=2; });
+            if(tt.indexOf(dokTitel)>=0||dokTitel.indexOf(tt)>=0) score+=10;
+            else {
+              var dw=dokTitel.match(/[a-z0-9]{4,}/g)||[];
+              dw.forEach(function(w){ if(tt.indexOf(w)>=0) score+=3; });
+            }
           }
+          // Uhrzeit-Match
+          if(d.uhrzeit && tv.uhrzeit && d.uhrzeit===tv.uhrzeit) score+=5;
           return score;
         }
-        vorschlaege=alle.map(function(tv){ return {tv:tv, score:termScore(tv)}; })
-          .filter(function(x){ return x.score>=5; })
+        vorschlaege=(db.termine||[])
+          .filter(function(tv){ return tv.datum; })
+          .map(function(tv){ return {tv:tv, score:termScore(tv)}; })
+          .filter(function(x){ return x.score>0; })
           .sort(function(a,b){ return b.score-a.score; })
-          .map(function(x){ return x.tv; });
-        // Wenn Top-Treffer sehr sicher (Score≥15) → nur diesen einen zeigen
-        if(vorschlaege.length>0){
-          var topScore=termScore(vorschlaege[0]);
-          vorschlaege=topScore>=15 ? vorschlaege.slice(0,1) : vorschlaege.slice(0,2);
-        }
+          .map(function(x){ return x.tv; })
+          .slice(0,1); // immer nur 1 Vorschlag
       }
 
       if(vorschlaege.length){
@@ -4882,6 +4997,7 @@ function dokOpenDetail(id){
         +'<button type="button" onclick="dokNewTerminAusDok(\''+d.id+'\')" style="flex:1;background:#e5e7eb;color:#374151;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
         +'</div>';
     }
+    } // end else (nicht monats_abrechn)
 
 
     if(ausgabe){
@@ -5044,6 +5160,47 @@ function _buildMergePreview(d, t){
 }
 
 // Bestätigen + Termin zuordnen + Termin öffnen
+function dokBestaetigenMonat(dokId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d||!d.sessions) return;
+  var linked=0, notFound=[];
+  d.sessions.forEach(function(s){
+    var t=s.terminId?(db.termine||[]).find(function(x){return x.id===s.terminId;}):null;
+    if(t){
+      // Felder aus Session in Termin eintragen
+      if(s.takes && !t.takes) t.takes=s.takes;
+      if(s.rolle && !t.rolle) t.rolle=s.rolle;
+      if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
+      if(s.take_gage && !t.take_gage) t.take_gage=s.take_gage;
+      if(s.grundgage && !t.grundgage) t.grundgage=s.grundgage;
+      if(s.brutto_termin) t.kommgage=s.brutto_termin;
+      // Abrechnung verknüpfen
+      if(!t.dokIds) t.dokIds=[];
+      if(t.dokIds.indexOf(dokId)<0) t.dokIds.push(dokId);
+      t.abgerechnet=true;
+      linked++;
+    } else {
+      notFound.push(s.datum);
+    }
+  });
+  // Abrechnung als Ganzes bestätigen
+  d.bestaetigt=true;
+  d.awaitConfirm=false;
+  d.dataURL=null;
+  // KV/RV/PV/MwSt aus Eingabefeldern übernehmen
+  var mFields=['kv_abzug','rv_abzug','pv_abzug','mwst','brutto','auszahlung'];
+  mFields.forEach(function(f){
+    var el=document.getElementById('dedit-'+f);
+    if(el && el.value) d[f]=parseFloat(el.value)||el.value;
+  });
+  save(db);
+  var msg=linked+' Termin'+(linked!==1?'e':'')+' verknüpft';
+  if(notFound.length) msg+=' · '+notFound.length+' nicht gefunden';
+  showToast('✓ Monats-Abrechnung bestätigt · '+msg);
+  dokDetailClose();
+  rDokumente();
+}
+
 function dokBestaetigenMitTermin(dokId, terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
@@ -5304,14 +5461,16 @@ function dokAnalyseOne(){
   }
   document.body.appendChild(overlay);
 
+  var _analyseDocId = d.id;
   dokAnalyseDoc(d, key, function(){
     var ol=document.getElementById('_analyse-overlay');
     if(ol) ol.parentNode.removeChild(ol);
     save(db);
-    rDokumente();
-    // Panel direkt neu rendern — kein Tab-Wechsel, kein Timeout
-    dokOpenDetail(d.id);
+    // ERST Panel sofort öffnen — DANN Liste im Hintergrund
+    // (rDokumente schreibt große Base64-Thumbnails → iOS blockt sonst das Panel-Rendering)
+    dokOpenDetail(_analyseDocId);
     showToast('✓ Analysiert: '+(d.titel||d.typ||'Dokument'));
+    setTimeout(function(){ rDokumente(); }, 150);
   });
 }
 
