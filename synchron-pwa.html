@@ -1643,7 +1643,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '107';
+  if(el) el.textContent = '110';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2040,15 +2040,71 @@ function openDetail(id){
   // ── AKTIONEN ───────────────────────────────────────────────
   var aktionen='';
 
-  dpScroll.innerHTML=ampel+header+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
+  // ── PENDING MERGE BANNER ──────────────────────────────────
+  var mergeBanner='';
+  if(t._hasPendingMerge){
+    mergeBanner='<div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+      +'<div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:8px">📋 Dokument hat Felder eingetragen — bitte prüfen</div>'
+      +'<div style="font-size:11px;color:#78350f;margin-bottom:10px">Zurückgehen ohne Speichern verwirft alle Änderungen.</div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<button type="button" onclick="saveMergeChanges()" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Änderungen speichern</button>'
+      +'<button type="button" onclick="discardMergeChanges()" style="background:#fff;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✗ Verwerfen</button>'
+      +'</div>'
+      +'</div>';
+  }
+
+  dpScroll.innerHTML=mergeBanner+ampel+header+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
 
   var titleEl=document.getElementById('dp-title');
   if(titleEl)titleEl.textContent=t.titel;
 }
 function closeDetail(){
+  // Ungespeicherte Merge-Änderungen verwerfen
+  if(_mergeSnapshot && _mergeTerminId){
+    var t=(db.termine||[]).find(function(x){return x.id===_mergeTerminId;});
+    if(t && t._hasPendingMerge){
+      // Termin aus Snapshot wiederherstellen
+      var idx=db.termine.indexOf(t);
+      if(idx>=0){
+        db.termine[idx]=_mergeSnapshot;
+        save(db);
+        rTermine();
+      }
+    }
+    _mergeSnapshot=null;
+    _mergeTerminId=null;
+  }
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.remove('open');
   ctid=null;
+}
+
+function saveMergeChanges(){
+  if(!ctid) return;
+  var t=(db.termine||[]).find(function(x){return x.id===ctid;});
+  if(t) t._hasPendingMerge=false;
+  _mergeSnapshot=null;
+  _mergeTerminId=null;
+  save(db);
+  openDetail(ctid); // Neu rendern ohne Banner
+  showToast('✓ Änderungen gespeichert');
+}
+
+function discardMergeChanges(){
+  if(!_mergeSnapshot || !_mergeTerminId) return;
+  var t=(db.termine||[]).find(function(x){return x.id===_mergeTerminId;});
+  if(t){
+    var idx=db.termine.indexOf(t);
+    if(idx>=0){
+      db.termine[idx]=_mergeSnapshot;
+      save(db);
+      rTermine();
+    }
+  }
+  _mergeSnapshot=null;
+  _mergeTerminId=null;
+  openDetail(ctid);
+  showToast('Änderungen verworfen');
 }
 
 function incrementTake(){
@@ -4422,7 +4478,9 @@ function dokAnalyseDoc(d, key, cb){
     +'  Beispiel: 7 Takes auf 203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
     +'  Beispiel: 6 Takes auf 203,204,206 → [{"folge":203,"takes":2},{"folge":204,"takes":2},{"folge":206,"takes":2}]\n'
     +'  HANDSCHRIFTLICHE ERGÄNZUNGEN: Wenn neben gedruckten Takes handschriftlich weitere\n'
-    +'  Takes hinzugefügt wurden (z.B. "+3" oder "*3"), diese zur betreffenden Folge addieren!\n'
+    +'  Takes hinzugefügt wurden, diese zur Gesamt-Takes-Zahl addieren und auf Folgen verteilen!\n'
+    +'  Mögliche Formate: "+3" (vor der Zahl), "3+" (nach der Zahl), "*3", oder einfach eine\n'
+    +'  zusätzliche Zahl neben der gedruckten. Beispiel: "72 3+" bedeutet 72+3=75 Takes gesamt.\n'
     +'  MEHRERE TERMINE PRO FOLGE: Takes werden später pro Folge addiert (nicht ersetzen).\n'
     +'  Falls nicht vorhanden: null\n'
     +'\n'
@@ -5167,6 +5225,8 @@ function dokDetailClose(){
 
 // Pending-Link: Dok-ID das auf Termin wartet
 var _pendingDokLink=null;
+var _mergeSnapshot=null; // Snapshot des Termins vor Merge — zum Verwerfen
+var _mergeTerminId=null; // TerminId des pending Merge
 
 // PDF.js Worker konfigurieren
 if(typeof pdfjsLib!=="undefined"){
@@ -5350,15 +5410,20 @@ function dokBestaetigenMitTermin(dokId, terminId){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d) return;
   d.terminId = terminId;
-  if(t) dokMergeIntoTermin(d, t);
+  if(t){
+    // Snapshot vor Merge speichern — kann verworfen werden
+    _mergeSnapshot = JSON.parse(JSON.stringify(t));
+    _mergeTerminId = terminId;
+    dokMergeIntoTermin(d, t);
+    t._hasPendingMerge = true;
+  }
   d.bestaetigt = true;
   d.awaitConfirm = false;
   d.dataURL = null; // Foto löschen
-  save(db);
+  save(db); // Speichert Dok-Änderungen + in-memory Termin (inkl. Merge)
   rDokumente();
   rTermine();
-  showToast('✓ Zugeordnet & gespeichert');
-  // Direkt zum Termin springen
+  showToast('✓ Bitte Termin-Änderungen prüfen und speichern');
   if(t){
     dokDetailClose();
     switchView('termine');
@@ -5389,7 +5454,21 @@ function dokMergeIntoTermin(d, termin){
 
   // ── Gemeinsame Felder ──────────────────────────────────────────────
   fill('studio',    d.studio,    'Studio');
-  fill('titel',     d.titel,     'Titel');
+  // Titel: fill() reicht nicht — Termin-Titel ist oft nur der Studioname (aus iCal-Import).
+  // Wenn dok einen echten Produktionstitel hat UND der Termin-Titel gleich dem Studionamen ist
+  // (oder leer), dann überschreiben.
+  if(d.titel){
+    var terminTitelLower = (termin.titel||'').toLowerCase().trim();
+    var studioLower = (termin.studio||d.studio||'').toLowerCase().trim();
+    var titelIstNurStudio = terminTitelLower==='' ||
+      (studioLower && terminTitelLower===studioLower) ||
+      (studioLower && studioLower.length>=3 && terminTitelLower.startsWith(studioLower));
+    if(titelIstNurStudio){
+      termin.titel = d.titel; changed.push('Titel (ersetzt Studioname)');
+    } else {
+      fill('titel', d.titel, 'Titel');
+    }
+  }
   fill('regie',     d.regie,     'Regie');
   fill('rolle',     d.rolle,     'Rolle');
   fill('uhrzeit',   d.uhrzeit,   'Uhrzeit');
