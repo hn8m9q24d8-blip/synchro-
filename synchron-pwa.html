@@ -1623,7 +1623,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '83';
+  if(el) el.textContent = '85';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4678,17 +4678,22 @@ function dokOpenDetail(id){
 
   var body = '';
 
-  // ── STATE 1: NICHT ANALYSIERT → nur KI-Button ──
+  // ── STATE 1: NICHT ANALYSIERT → Vorschau + KI-Button ──
   if(!d.typ || d.typ==='offen' || d.typ==='sonstig'){
-    var thumbSrc0 = d.thumb || null;
-    body+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">';
-    if(thumbSrc0){
-      body+='<img src="'+thumbSrc0+'" style="width:72px;height:90px;object-fit:cover;border-radius:8px;border:1.5px solid #e5e7eb;flex-shrink:0;cursor:pointer" onclick="dokShowFullImg(\''+d.id+'\')">';
-    } else if(d.mime==='application/pdf'){
-      body+='<div style="width:72px;height:90px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">📄</div>';
+    if(d.mime==='application/pdf' && d.dataURL){
+      body+='<div style="margin-bottom:12px">';
+      body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">PDF-Dokument</div>';
+      var pdfBtn1='<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📄 PDF öffnen / ansehen</button>';
+      body+=pdfBtn1;
+      body+='</div>';
+    } else if(d.thumb){
+      body+='<div style="margin-bottom:12px;text-align:center">';
+      var thumbHtml='<img src="'+d.thumb+'" style="max-width:100%;max-height:200px;border-radius:8px;border:1.5px solid #e5e7eb;cursor:pointer" onclick="dokShowFullImg(\''+d.id+'\')">';
+      body+=thumbHtml;
+      body+='</div>';
     }
-    body+='<button type="button" onclick="dokAnalyseOne()" style="flex:1;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">🔍 KI-Analyse starten</button>';
-    body+='</div>';
+    body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔍 KI-Analyse starten</button>';
+
 
   // ── STATE 2: ANALYSIERT, WARTET AUF BESTÄTIGUNG ──
   } else if(!d.bestaetigt){
@@ -4703,9 +4708,20 @@ function dokOpenDetail(id){
       previewDiv+='</div></div>';
       body+=previewDiv;
     } else if(d.mime==='application/pdf'){
-      body+='<div style="background:#f5f5f5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
+      // PDF eingebettet anzeigen + Nochmal-analysieren
+      if(d.dataURL){
+        body+='<div style="margin-bottom:12px">';
+        body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">PDF-Vorschau</div>';
+        body+='<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">📄 PDF öffnen / ansehen</button>';
+        body+='</div>';
+      } else {
+        body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
+      }
     }
-
+    // Nochmal analysieren (immer sichtbar in State 2)
+    body+='<div style="margin-bottom:12px">';
+    body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:#f5f5f5;color:#374151;border:1.5px solid #d1d5db;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">🔄 Nochmal analysieren</button>';
+    body+='</div>';
 
     // ── ERKANNTE DATEN (editierbar — Korrekturen möglich) ──
     body+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
@@ -4875,6 +4891,12 @@ function dokDetailClose(){
 // Pending-Link: Dok-ID das auf Termin wartet
 var _pendingDokLink=null;
 
+function dokOpenPDF(id){
+  var d=(db.dokumente||[]).find(function(x){return x.id===id;});
+  if(!d||!d.dataURL) return;
+  var w=window.open();
+  if(w){ w.document.write('<html><body style="margin:0"><iframe src="'+d.dataURL+'" style="width:100%;height:100vh;border:none"></iframe></body></html>'); w.document.close(); }
+}
 function dokShowFullImg(id){
   var d=(db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d||!d.dataURL) return;
