@@ -1643,7 +1643,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '110';
+  if(el) el.textContent = '113';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1900,9 +1900,9 @@ function openDetail(id){
 
   // ── HEADER ─────────────────────────────────────────────────
   var header='<div class="big-date">'
-    +'<div class="bd-studio">'+esc(t.studio||'')+'</div>'
-    +'<div class="bd-titel">'+esc(t.titel||'')+'</div>'
-    +(t.rolle?'<div class="bd-rolle">🎭 '+esc(t.rolle)+'</div>':'')
+    +'<div class="bd-studio" style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'studio\',\'text\')">'+(t.studio?esc(t.studio):'<span style="color:#ccc">Studio ✎</span>')+'</div>'
+    +'<div class="bd-titel" style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'titel\',\'text\')">'+(t.titel?esc(t.titel):'<span style="color:#ccc">Produktionstitel ✎</span>')+'</div>'
+    +'<div class="bd-rolle" style="cursor:pointer;min-height:22px" onclick="inlineEditActivate(this,\''+id+'\',\'rolle\',\'text\')">'+(t.rolle?'🎭 '+esc(t.rolle):'<span style="color:#ccc;font-size:12px">Rolle eingeben ✎</span>')+'</div>'
     +'<div class="bd-dateline">'
     +'<div class="bd-day">'+d.getDate()+'</div>'
     +'<div class="bd-month">'+dayNames[d.getDay()]+', '+monthNames[d.getMonth()]+' '+d.getFullYear()+'</div>'
@@ -1912,11 +1912,11 @@ function openDetail(id){
 
   // ── STAMMDATEN ─────────────────────────────────────────────
   var stamm='<div class="info-card">'
-    +'<div class="info-card-header"><span>Stammdaten</span>'
-    +'<span class="ic-edit" onclick="openTerminSheet(\''+id+'\')">✏️ Bearbeiten</span></div>'
-    +(t.regie?'<div class="info-row"><div class="ir-key">Regie</div><div class="ir-val">'+esc(t.regie)+'</div></div>':'')
-    +(t.notizen?'<div class="info-row"><div class="ir-key">Atelier</div><div class="ir-val">'+esc(t.notizen)+'</div></div>':'')
-    +(t.episode?'<div class="info-row"><div class="ir-key">Episode</div><div class="ir-val">'+esc(t.episode)+'</div></div>':'')
+    +'<div class="info-card-header"><span>Stammdaten</span></div>'
+    +_inlineField(id,'regie','Regie',t.regie||'')
+    +_inlineField(id,'notizen','Atelier',t.notizen||'')
+    +_inlineField(id,'episode','Episode',t.episode||'')
+    +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time')
     +'<div class="info-row"><div class="ir-key">Status</div><div class="ir-val">'+tlabel(t.status)+'</div></div>'
     +'</div>';
 
@@ -2042,11 +2042,28 @@ function openDetail(id){
 
   // ── PENDING MERGE BANNER ──────────────────────────────────
   var mergeBanner='';
-  if(t._hasPendingMerge){
+  if(t._hasPendingMerge || (t._mergeSuggestions && Object.keys(t._mergeSuggestions).length)){
+    var suggHtml='';
+    if(t._mergeSuggestions){
+      var suggKeys=Object.keys(t._mergeSuggestions);
+      if(suggKeys.length){
+        suggHtml+='<div style="font-size:11px;color:#78350f;font-weight:700;margin-bottom:6px">Dokument schlägt vor (deine Werte haben Vorrang):</div>';
+        suggKeys.forEach(function(f){
+          var s=t._mergeSuggestions[f];
+          var fId='sugg-'+f;
+          suggHtml+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'
+            +'<div style="font-size:11px;color:#78350f;width:70px;flex-shrink:0">'+s.label+'</div>'
+            +'<div style="flex:1;font-size:12px;font-weight:700;background:#fff8e7;border:1px solid #f59e0b;border-radius:6px;padding:4px 8px">'+(s.val||'')+'</div>'
+            +'<button type="button" onclick="applyMergeSuggestion(\''+id+'\',\''+f+'\')" style="background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">↑ nehmen</button>'
+            +'</div>';
+        });
+      }
+    }
     mergeBanner='<div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-      +'<div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:8px">📋 Dokument hat Felder eingetragen — bitte prüfen</div>'
-      +'<div style="font-size:11px;color:#78350f;margin-bottom:10px">Zurückgehen ohne Speichern verwirft alle Änderungen.</div>'
-      +'<div style="display:flex;gap:8px">'
+      +'<div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:8px">📋 '+(t._hasPendingMerge?'Dokument hat Felder eingetragen — bitte prüfen':'Vorschläge aus Dokument')+'</div>'
+      +suggHtml
+      +(t._hasPendingMerge?'<div style="font-size:11px;color:#78350f;margin-bottom:10px">Zurückgehen ohne Speichern verwirft alle Änderungen.</div>':'')
+      +'<div style="display:flex;gap:8px;margin-top:8px">'
       +'<button type="button" onclick="saveMergeChanges()" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Änderungen speichern</button>'
       +'<button type="button" onclick="discardMergeChanges()" style="background:#fff;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✗ Verwerfen</button>'
       +'</div>'
@@ -2082,12 +2099,83 @@ function closeDetail(){
 function saveMergeChanges(){
   if(!ctid) return;
   var t=(db.termine||[]).find(function(x){return x.id===ctid;});
-  if(t) t._hasPendingMerge=false;
+  if(t){
+    t._hasPendingMerge=false;
+    t._mergeSuggestions=null; // Vorschläge verwerfen die nicht übernommen wurden
+  }
   _mergeSnapshot=null;
   _mergeTerminId=null;
   save(db);
-  openDetail(ctid); // Neu rendern ohne Banner
+  openDetail(ctid);
   showToast('✓ Änderungen gespeichert');
+}
+
+function _inlineField(terminId, field, label, val, inputType){
+  // Rendert ein tippbares Feld — beim Tippen wird es zum Input
+  inputType = inputType||'text';
+  var safeVal = (val||'').toString().replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  return '<div class="info-row" style="cursor:pointer" onclick="inlineEditActivate(this,\''+terminId+'\',\''+field+'\',\''+inputType+'\')">'
+    +'<div class="ir-key">'+label+'</div>'
+    +'<div class="ir-val" id="dp-inline-'+field+'">'+esc(val||'')+'<span style="font-size:10px;color:#ccc;margin-left:4px">✎</span></div>'
+    +'</div>';
+}
+
+function inlineEditActivate(row, terminId, field, inputType){
+  var valEl = row.querySelector('.ir-val') || row; // Fallback: row selbst (für bd-*)
+  if(valEl.querySelector('input')) return; // already editing
+  var curVal = (valEl.firstChild && valEl.firstChild.nodeType===3)
+    ? (valEl.firstChild.textContent||'').trim()
+    : valEl.textContent.replace('✎','').replace('🎭','').trim();
+  var inp = document.createElement('input');
+  inp.type = inputType||'text';
+  inp.value = curVal.trim();
+  inp.style.cssText = 'flex:1;border:none;border-bottom:2px solid #be185d;background:transparent;font-size:14px;font-weight:700;text-align:right;color:#1a1a1a;outline:none;padding:2px 4px;min-width:80px';
+  inp.setAttribute('data-field', field);
+  inp.setAttribute('data-termin', terminId);
+  valEl.innerHTML = '';
+  valEl.appendChild(inp);
+  inp.focus();
+  inp.select();
+  inp.onblur = function(){ inlineEditCommit(inp, terminId, field); };
+  inp.onkeydown = function(e){ if(e.key==='Enter'){ inp.blur(); } if(e.key==='Escape'){ openDetail(terminId); } };
+  row.onclick = null;
+}
+
+function inlineEditCommit(inp, terminId, field){
+  var t = (db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  var newVal = inp.value.trim();
+  if(newVal === (t[field]||'').toString()) { openDetail(terminId); return; } // keine Änderung
+  // Snapshot nur wenn noch kein Merge ausstehend
+  if(!_mergeSnapshot){
+    _mergeSnapshot = JSON.parse(JSON.stringify(t));
+    _mergeTerminId = terminId;
+    t._hasPendingMerge = true;
+  }
+  t[field] = newVal;
+  // Feld als manuell markieren — hat höchste Priorität beim Merge
+  if(!t._manualFields) t._manualFields = [];
+  if(t._manualFields.indexOf(field) < 0) t._manualFields.push(field);
+  save(db);
+  rTermine();
+  openDetail(terminId);
+}
+
+function applyMergeSuggestion(terminId, field){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t||!t._mergeSuggestions||!t._mergeSuggestions[field]) return;
+  t[field] = t._mergeSuggestions[field].val;
+  // Feld ist jetzt bewusst übernommen → nicht mehr als manuell schützen
+  if(t._manualFields){
+    t._manualFields = t._manualFields.filter(function(f){return f!==field;});
+  }
+  delete t._mergeSuggestions[field];
+  if(!t._hasPendingMerge) t._hasPendingMerge = true;
+  _mergeTerminId = terminId;
+  if(!_mergeSnapshot) _mergeSnapshot = JSON.parse(JSON.stringify(t));
+  save(db);
+  rTermine();
+  openDetail(terminId);
 }
 
 function discardMergeChanges(){
@@ -5453,30 +5541,41 @@ function dokMergeIntoTermin(d, termin){
   }
 
   // ── Gemeinsame Felder ──────────────────────────────────────────────
-  fill('studio',    d.studio,    'Studio');
-  // Titel: fill() reicht nicht — Termin-Titel ist oft nur der Studioname (aus iCal-Import).
-  // Wenn dok einen echten Produktionstitel hat UND der Termin-Titel gleich dem Studionamen ist
-  // (oder leer), dann überschreiben.
-  if(d.titel){
-    var terminTitelLower = (termin.titel||'').toLowerCase().trim();
-    var studioLower = (termin.studio||d.studio||'').toLowerCase().trim();
-    var titelIstNurStudio = terminTitelLower==='' ||
-      (studioLower && terminTitelLower===studioLower) ||
-      (studioLower && studioLower.length>=3 && terminTitelLower.startsWith(studioLower));
-    if(titelIstNurStudio){
-      termin.titel = d.titel; changed.push('Titel (ersetzt Studioname)');
+  // REGEL: Dispo-Daten sind genauer als iCal-Import → overwrite
+  // AUSNAHME: Manuell bearbeitete Felder (_manualFields) haben höchste Priorität
+  // → diese werden NICHT überschrieben, sondern nur als Vorschlag angeboten
+  var manual = termin._manualFields || [];
+  function mergeField(tField, dVal, label){
+    if(!dVal && dVal !== 0) return;
+    if(manual.indexOf(tField) >= 0){
+      // Manuell gesetzt — nicht überschreiben, aber als Vorschlag markieren
+      if((termin[tField]||'').toString() !== dVal.toString()){
+        if(!termin._mergeSuggestions) termin._mergeSuggestions = {};
+        termin._mergeSuggestions[tField] = {val: dVal, label: label};
+      }
     } else {
-      fill('titel', d.titel, 'Titel');
+      overwrite(tField, dVal, label);
     }
   }
-  fill('regie',     d.regie,     'Regie');
-  fill('rolle',     d.rolle,     'Rolle');
-  fill('uhrzeit',   d.uhrzeit,   'Uhrzeit');
-  fill('bis_uhrzeit',d.bis_uhrzeit,'Bis-Uhrzeit');
+  mergeField('titel',       d.titel,       'Titel');
+  mergeField('regie',       d.regie,       'Regie');
+  mergeField('rolle',       d.rolle,       'Rolle');
+  mergeField('uhrzeit',     d.uhrzeit,     'Uhrzeit');
+  mergeField('bis_uhrzeit', d.bis_uhrzeit, 'Bis-Uhrzeit');
+  // Studio: nur überschreiben wenn Dispo-Studio spezifischer ist
+  // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat)
+  if(d.studio){
+    var curStudio = (termin.studio||'').toLowerCase().trim();
+    var newStudio = d.studio.toLowerCase().trim();
+    // Überschreiben wenn: leer, oder neues Studio enthält mehr Info als altes
+    if(!curStudio || newStudio.length > curStudio.length || newStudio.indexOf(curStudio) >= 0) {
+      overwrite('studio', d.studio, 'Studio');
+    }
+  }
   fill('episode',   d.episode,   'Episode');
-  fill('gvl_staffel',d.gvl_staffel||d.gvl_staffel_header,'GVL Staffel');
-  fill('gvl_folge', d.gvl_folge||d.gvl_episode_header, 'GVL Folge');
-  fill('gvl_takes', d.gvl_takes, 'GVL Takes');
+  overwrite('gvl_staffel', d.gvl_staffel||d.gvl_staffel_header, 'GVL Staffel');
+  overwrite('gvl_folge',   d.gvl_folge||d.gvl_episode_header,   'GVL Folge');
+  overwrite('gvl_takes',   d.gvl_takes, 'GVL Takes');
   if(d.gvl_takes_detail && d.gvl_takes_detail.length){
     if(!termin.gvl_takes_detail || !termin.gvl_takes_detail.length){
       // Erster Eintrag — direkt übernehmen
