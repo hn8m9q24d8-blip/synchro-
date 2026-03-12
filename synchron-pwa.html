@@ -4538,9 +4538,9 @@ function dokAnalyseDoc(d, key, cb){
       }
       // awaitConfirm: Foto noch zeigen, Felder prüfen lassen
       d.awaitConfirm = true;
-      // Auto-link to termin if dispo or abrechn
-      if((d.typ==='dispo'||d.typ==='abrechn') && d.datum && d.studio){
-        var match = dokFindTermin(d.datum, d.studio);
+      // Auto-link to termin if dispo or abrechn — alle Felder übergeben für bestes Matching
+      if((d.typ==='dispo'||d.typ==='abrechn') && d.datum){
+        var match = dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'');
         if(match) d.terminId = match.id;
       }
       // Auto-create ausgabe if ausgabe type
@@ -4681,35 +4681,75 @@ function _dokResearchProduktion(d, key, cb){
   }).catch(function(){ if(cb) cb(); });
 }
 
-function dokFindTermin(datum, studio, titel){
-  if(!datum||!studio) return null;
-  var studioLow = studio.toLowerCase().replace(/[^a-z0-9]/g,'');
-  function studioOk(t){
-    if(!t.studio) return false;
-    var ts=t.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
-    return ts.indexOf(studioLow)>=0||studioLow.indexOf(ts)>=0;
+function _studioScore(a,b){
+  // Studio-Ähnlichkeit 0-1: exact, contains, first-word, word-overlap, trigram
+  if(!a||!b) return 0;
+  a=a.toLowerCase().replace(/[^a-z0-9äöüß]/g,' ').replace(/\s+/g,' ').trim();
+  b=b.toLowerCase().replace(/[^a-z0-9äöüß]/g,' ').replace(/\s+/g,' ').trim();
+  if(!a||!b) return 0;
+  if(a===b) return 1;
+  if(a.indexOf(b)>=0||b.indexOf(a)>=0) return 0.9;
+  var aW=a.split(' '),bW=b.split(' ');
+  if(aW[0]===bW[0]) return 0.85;
+  var aInB=bW.filter(function(w){return w.length>3&&a.indexOf(w)>=0;}).length;
+  var bInA=aW.filter(function(w){return w.length>3&&b.indexOf(w)>=0;}).length;
+  var ws=Math.max(aInB/Math.max(bW.length,1),bInA/Math.max(aW.length,1));
+  if(ws>0.5) return ws*0.8;
+  var shorter=a.length<b.length?a:b,longer=a.length<b.length?b:a,overlap=0;
+  for(var i=0;i<shorter.length-2;i++){if(longer.indexOf(shorter.slice(i,i+3))>=0) overlap++;}
+  return shorter.length>3?Math.min(overlap/(shorter.length-2)*0.7,0.7):0;
+}
+function _uhrzeitTrifft(terminUhr, dokVon, dokBis){
+  if(!terminUhr||!dokVon) return false;
+  function toMin(t){var p=t.split(':');return parseInt(p[0])*60+(parseInt(p[1])||0);}
+  var tMin=toMin(terminUhr),vonMin=toMin(dokVon);
+  var bisMin=dokBis?toMin(dokBis):vonMin+60;
+  return tMin>=vonMin-15 && tMin<=bisMin+15;
+}
+function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit){
+  if(!datum) return null;
+  // Alle Termin-Felder als Suchraum
+  function terminSearchText(t){
+    return [t.studio||'',t.titel||'',t.regie||'',t.beschr||''].join(' ');
   }
-  var candidates = (db.termine||[]).filter(function(t){
-    return t.datum===datum && studioOk(t);
-  });
-  // Bei mehreren Kandidaten: Titel-Match bevorzugen
-  if(candidates.length>1 && titel){
-    var tl=titel.toLowerCase().replace(/[^a-z0-9]/g,'');
-    var withTitel=candidates.filter(function(t){
-      if(!t.titel) return false;
-      var tt=t.titel.toLowerCase().replace(/[^a-z0-9]/g,'');
-      return tt.indexOf(tl)>=0||tl.indexOf(tt)>=0;
-    });
-    if(withTitel.length) return withTitel[0];
+  function bestStudioScore(t){
+    var txt=terminSearchText(t);
+    // Score gegen Studio-Feld + Titel-Feld des Termins einzeln nehmen → Maximum
+    var s1=_studioScore(studio,t.studio||'');
+    var s2=_studioScore(studio,t.titel||'');
+    // Auch Studio-Begriff im Gesamt-Text als Wort suchen
+    var s3=0;
+    if(studio){
+      var sw=studio.toLowerCase().replace(/[^a-z0-9]/g,' ').split(' ').filter(function(w){return w.length>3;});
+      var txtLow=txt.toLowerCase();
+      var hits=sw.filter(function(w){return txtLow.indexOf(w)>=0;}).length;
+      if(sw.length>0) s3=hits/sw.length*0.75;
+    }
+    return Math.max(s1,s2,s3);
   }
-  if(!candidates.length){
-    candidates = (db.termine||[]).filter(function(t){
-      if(!t.datum) return false;
-      var diff = Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
-      return diff<=3 && studioOk(t);
-    });
+  function score(t){
+    if(!t.datum) return -1;
+    var diff=Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
+    if(diff>1) return -1; // max 1 Tag Abstand
+    var sc=diff===0?20:8;
+    // Studio/Firma
+    var ss=studio?bestStudioScore(t):0;
+    if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
+    else sc+=Math.round(ss*15);
+    // Titel/Produktion-Überlapp
+    if(titel && t.titel){
+      var ov=_studioScore(titel,t.titel);
+      sc+=Math.round(ov*10);
+    }
+    // Uhrzeit im Von-Bis-Fenster
+    if(uhrzeit && _uhrzeitTrifft(t.uhrzeit,uhrzeit,bis_uhrzeit)) sc+=6;
+    return sc;
   }
-  return candidates[0]||null;
+  var best=(db.termine||[])
+    .map(function(t){return {t:t,sc:score(t)};})
+    .filter(function(x){return x.sc>=8;})
+    .sort(function(a,b){return b.sc-a.sc;});
+  return best.length?best[0].t:null;
 }
 
 // ── DETAIL VIEW ──────────────────────────────────────────────
@@ -4743,6 +4783,11 @@ function dokOpenDetail(id){
     img.src=d.dataURL; img.style.display='block';
   } else { img.style.display='none'; }
 
+  // Termin holen — falls noch nicht verknüpft, jetzt noch versuchen
+  if(!d.terminId && (d.typ==='dispo'||d.typ==='abrechn') && d.datum){
+    var _m=dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'');
+    if(_m){ d.terminId=_m.id; save(db); }
+  }
   var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
   var ausgabe = d.ausgabeId ? (db.ausgaben||[]).find(function(x){return x.id===d.ausgabeId;}) : null;
 
@@ -4923,44 +4968,44 @@ function dokOpenDetail(id){
         var dokDat=new Date(d.datum);
         var dokStudio=d.studio?(d.studio.toLowerCase().replace(/[^a-z0-9]/g,'')):'';
         var dokTitel=d.titel?(d.titel.toLowerCase().replace(/[^a-z0-9]/g,'')):'';
-        function studioMatch(tv){
-          if(!dokStudio||!tv.studio) return false;
-          var ts=tv.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
-          // Enthält-Prüfung in beide Richtungen
-          if(ts.indexOf(dokStudio)>=0||dokStudio.indexOf(ts)>=0) return true;
-          // Wort-basiert: mindestens ein Wort ≥3 Zeichen stimmt überein
-          var dw=dokStudio.match(/[a-z0-9]{3,}/g)||[];
-          var tw=ts.match(/[a-z0-9]{3,}/g)||[];
-          return dw.some(function(w){ return tw.some(function(t){ return t.indexOf(w)>=0||w.indexOf(t)>=0; }); });
-        }
         function termScore(tv){
+          // ── 1. DATUM ──
           var diff2=Math.abs(new Date(tv.datum)-dokDat)/(1000*60*60*24);
           var score=0;
-          if(diff2===0) score+=10;
-          else if(diff2<=1) score+=4;
-          else return 0; // >1 Tag → raus
-          // Studio: Pflicht wenn vorhanden — kein Studio-Match = 0
+          if(diff2===0) score+=20;
+          else if(diff2<=1) score+=8;
+          else return 0;
+
+          // ── 2. STUDIO/FIRMA (benutzt denselben studioScore wie dokFindTermin) ──
           if(dokStudio){
-            if(!studioMatch(tv)) return 0;
-            score+=8;
+            var ss=Math.max(
+              _studioScore(dokStudio, tv.studio||''),
+              _studioScore(dokStudio, tv.titel||'')
+            );
+            if(ss<0.15) score-=8;
+            else score+=Math.round(ss*15);
           }
-          // Titel
-          if(dokTitel && tv.titel){
-            var tt=tv.titel.toLowerCase().replace(/[^a-z0-9]/g,'');
-            if(tt.indexOf(dokTitel)>=0||dokTitel.indexOf(tt)>=0) score+=10;
-            else {
-              var dw=dokTitel.match(/[a-z0-9]{4,}/g)||[];
-              dw.forEach(function(w){ if(tt.indexOf(w)>=0) score+=3; });
-            }
+
+          // ── 3. TITEL/PRODUKTION ──
+          if(dokTitel){
+            var ts=_studioScore(dokTitel, tv.titel||'');
+            score+=Math.round(ts*10);
           }
-          // Uhrzeit-Match
-          if(d.uhrzeit && tv.uhrzeit && d.uhrzeit===tv.uhrzeit) score+=5;
+
+          // ── 4. REGIE ──
+          if(d.regie && tv.regie){
+            if(_studioScore(d.regie, tv.regie)>0.3) score+=8;
+          }
+
+          // ── 5. UHRZEIT (mit ±15min Toleranz) ──
+          if(d.uhrzeit && _uhrzeitTrifft(tv.uhrzeit, d.uhrzeit, d.bis_uhrzeit)) score+=6;
+
           return score;
         }
         vorschlaege=(db.termine||[])
           .filter(function(tv){ return tv.datum; })
           .map(function(tv){ return {tv:tv, score:termScore(tv)}; })
-          .filter(function(x){ return x.score>0; })
+          .filter(function(x){ return x.score>=8; }) // mind. Datum-Match
           .sort(function(a,b){ return b.score-a.score; })
           .map(function(x){ return x.tv; })
           .slice(0,1); // immer nur 1 Vorschlag
