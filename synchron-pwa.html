@@ -273,7 +273,7 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .back-btn{width:36px;height:36px;border-radius:var(--r);background:var(--card);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--ink2);box-shadow:0 2px 0 var(--border);transition:all .12s;flex-shrink:0;user-select:none}
 .back-btn:active{transform:translateY(2px);box-shadow:none}
 .dp-title{font-size:18px;font-weight:900;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.3px}
-.dp-scroll{flex:1;overflow-y:auto;padding:0 16px 16px;-webkit-overflow-scrolling:touch}
+.dp-scroll{flex:1;overflow-y:auto;padding:0 16px 32px;-webkit-overflow-scrolling:touch}
 .dp-scroll::-webkit-scrollbar{display:none}
 .big-date{background:var(--card);border-radius:var(--r);border:2px solid var(--border);padding:16px 20px 14px;margin-bottom:12px;box-shadow:0 3px 0 var(--border)}
 .bd-studio{font-size:12px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
@@ -1180,10 +1180,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <img id="dok-detail-img" style="width:100%;display:none;border-radius:0 0 12px 12px;max-height:40vh;object-fit:contain;background:#f5f5f5">
     <div id="dok-detail-body" style="padding:12px 16px 16px"></div>
   </div>
-  <!-- Bestätigen-Footer: außerhalb Scroll, immer erreichbar -->
-  <div id="dok-footer-confirm" style="display:none;padding:12px 16px;padding-bottom:max(16px,env(safe-area-inset-bottom));background:var(--cream);border-top:2px solid #e5e7eb;flex-shrink:0">
-    <button type="button" id="dok-btn-bestaetigen" onclick="dokFooterBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:14px;padding:16px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent">✓ Bestätigen</button>
-  </div>
+
 </div>
 
 <!-- SHEETS -->
@@ -1630,7 +1627,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '99';
+  if(el) el.textContent = '101';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5080,21 +5077,20 @@ function dokOpenDetail(id){
     }
     if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:#f5f5f5;border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
 
-    // Bestätigen-Button ist im fixen Footer (dok-footer-confirm)
+    // ── BESTÄTIGEN-BUTTON direkt im Body (kein separater Footer!) ──
+    var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
+    var btnAction = termin
+      ? 'dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')'
+      : 'dokBestaetigen()';
+    body += '<div style="padding:8px 0 20px">'
+      + '<button type="button" onclick="' + btnAction + '" '
+      + 'style="width:100%;background:#15803d;color:#fff;border:none;border-radius:14px;'
+      + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
+      + '-webkit-tap-highlight-color:transparent;display:block">'
+      + btnLabel + '</button></div>';
   }
 
   document.getElementById('dok-detail-body').innerHTML = body;
-
-  // Footer: Bestätigen-Button nur bei State 2
-  var footer = document.getElementById('dok-footer-confirm');
-  if(footer){
-    var showFooter = !d.bestaetigt && d.awaitConfirm && d.typ && d.typ!=='offen';
-    footer.style.display = showFooter ? 'block' : 'none';
-    var btn = document.getElementById('dok-btn-bestaetigen');
-    if(btn){
-      btn.textContent = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
-    }
-  }
 
   // PDF-Canvas rendern falls vorhanden
   if(d && d.mime==='application/pdf' && d.dataURL && document.getElementById('pdf-canvas-'+d.id)){
@@ -5544,15 +5540,18 @@ function dokAnalyseOne(){
 
   var _analyseDocId = d.id;
   dokAnalyseDoc(d, key, function(){
-    // Overlay entfernen — ALLE (falls doppelt)
-    document.querySelectorAll('[id="_analyse-overlay"]').forEach(function(el){ el.remove(); });
+    // Overlay entfernen
     var ol = document.getElementById('_analyse-overlay');
-    if(ol) ol.remove();
+    if(ol && ol.parentNode) ol.parentNode.removeChild(ol);
     save(db);
-    // Panel ZUERST aktualisieren — dann Liste im Hintergrund
-    dokOpenDetail(_analyseDocId);
-    showToast('✓ Analysiert – bitte prüfen & bestätigen');
-    setTimeout(function(){ rDokumente(); }, 200);
+    rDokumente();
+    // Panel kurz schließen + neu öffnen → zwingt iOS zu frischem Render
+    // (behebt: leerer Body nach Analyse + Button nicht tippbar)
+    dokDetailClose();
+    setTimeout(function(){
+      dokOpenDetail(_analyseDocId);
+      showToast('✓ Analysiert – bitte prüfen & bestätigen');
+    }, 80);
   });
 }
 
