@@ -1181,8 +1181,8 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div id="dok-detail-body" style="padding:12px 16px 16px"></div>
   </div>
   <!-- Bestätigen-Footer: außerhalb Scroll, immer erreichbar -->
-  <div id="dok-footer-confirm" style="display:none;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:var(--cream);border-top:1.5px solid #e5e7eb;flex-shrink:0">
-    <button type="button" id="dok-btn-bestaetigen" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:15px;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">✓ Bestätigen</button>
+  <div id="dok-footer-confirm" style="display:none;padding:12px 16px;padding-bottom:max(16px,env(safe-area-inset-bottom));background:var(--cream);border-top:2px solid #e5e7eb;flex-shrink:0">
+    <button type="button" id="dok-btn-bestaetigen" onclick="dokFooterBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:14px;padding:16px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent">✓ Bestätigen</button>
   </div>
 </div>
 
@@ -1630,7 +1630,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '98';
+  if(el) el.textContent = '99';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4285,6 +4285,19 @@ function dokSetKat(kat){
   dokOpenDetail(d.id);
 }
 
+// ── FOOTER BESTÄTIGEN-BUTTON (fester onclick, liest _dokCurrentId) ──────────
+function dokFooterBestaetigen(){
+  var d = (db.dokumente||[]).find(function(x){ return x.id===_dokCurrentId; });
+  if(!d){ showToast('Kein Dokument ausgewählt'); return; }
+  var termin = d.terminId ? (db.termine||[]).find(function(x){ return x.id===d.terminId; }) : null;
+  if(termin){
+    dokBestaetigenMitTermin(d.id, termin.id);
+  } else {
+    dokBestaetigen();
+  }
+}
+
+
 function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
@@ -5072,22 +5085,14 @@ function dokOpenDetail(id){
 
   document.getElementById('dok-detail-body').innerHTML = body;
 
-  // Footer: Bestätigen-Button nur bei State 2 (analysiert, nicht bestätigt)
+  // Footer: Bestätigen-Button nur bei State 2
   var footer = document.getElementById('dok-footer-confirm');
   if(footer){
     var showFooter = !d.bestaetigt && d.awaitConfirm && d.typ && d.typ!=='offen';
-    footer.style.display = showFooter ? 'flex' : 'none';
-    footer.style.flexDirection = 'column';
-    // Button-Text je nach Termin
+    footer.style.display = showFooter ? 'block' : 'none';
     var btn = document.getElementById('dok-btn-bestaetigen');
     if(btn){
-      if(termin){
-        btn.textContent = '✓ Alle Felder übernehmen & bestätigen';
-        btn.onclick = function(){ dokBestaetigenMitTermin(d.id, termin.id); };
-      } else {
-        btn.textContent = '✓ Daten bestätigen & Foto löschen';
-        btn.onclick = function(){ dokBestaetigen(); };
-      }
+      btn.textContent = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
     }
   }
 
@@ -5539,12 +5544,15 @@ function dokAnalyseOne(){
 
   var _analyseDocId = d.id;
   dokAnalyseDoc(d, key, function(){
-    var sp = document.getElementById('_analyse-overlay');
-    if(sp && sp.parentNode) sp.parentNode.removeChild(sp);
+    // Overlay entfernen — ALLE (falls doppelt)
+    document.querySelectorAll('[id="_analyse-overlay"]').forEach(function(el){ el.remove(); });
+    var ol = document.getElementById('_analyse-overlay');
+    if(ol) ol.remove();
     save(db);
-    rDokumente();
+    // Panel ZUERST aktualisieren — dann Liste im Hintergrund
     dokOpenDetail(_analyseDocId);
     showToast('✓ Analysiert – bitte prüfen & bestätigen');
+    setTimeout(function(){ rDokumente(); }, 200);
   });
 }
 
