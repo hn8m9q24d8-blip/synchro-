@@ -1182,7 +1182,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <!-- Bestätigen-Footer: außerhalb Scroll, immer erreichbar -->
   <div id="dok-footer-confirm" style="display:none;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:var(--cream);border-top:1.5px solid #e5e7eb;flex-shrink:0">
-    <button type="button" id="dok-btn-bestaetigen" onclick="dokBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:15px;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">✓ Daten bestätigen & Foto löschen</button>
+    <button type="button" id="dok-btn-bestaetigen" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:15px;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">✓ Bestätigen</button>
   </div>
 </div>
 
@@ -1630,7 +1630,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '97';
+  if(el) el.textContent = '98';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4962,9 +4962,17 @@ function dokOpenDetail(id){
 
     // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
     if(termin){
-      // Bereits zugeordnet → Merge-Vorschau anzeigen
+      // Zugeordneter Termin — Name prominent anzeigen
+      body += '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">'
+        + '<div>'
+        + '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:2px">📅 TERMIN GEFUNDEN</div>'
+        + '<div style="font-size:14px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
+        + '<div style="font-size:11px;color:#555">'+fd(termin.datum)+(termin.uhrzeit?' · '+termin.uhrzeit:'')+(termin.studio?' · '+esc(termin.studio):'')+'</div>'
+        + '</div>'
+        + '<button type="button" onclick="dokDetailClose();openDetail(\''+termin.id+'\')" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
+        + '</div>';
       body += _buildMergePreview(d, termin);
-      body+='<button type="button" onclick="dokBestaetigenMitTermin(\''+d.id+'\',\''+termin.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;margin-top:10px;touch-action:manipulation">✓ Alle Felder übernehmen</button>';
+      // Button ist im fixen Footer (dok-footer-confirm)
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
       // Passende Termine suchen
       var vorschlaege=[];
@@ -5016,7 +5024,9 @@ function dokOpenDetail(id){
       }
 
       if(vorschlaege.length){
-        body+='<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:8px">📅 PASSENDE TERMINE</div>';
+        // Besten Vorschlag direkt zuordnen (wie dokFindTermin-Fallback)
+        if(!d.terminId){ d.terminId=vorschlaege[0].id; save(db); }
+        body+='<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:8px">📅 PASSENDER TERMIN GEFUNDEN</div>';
         vorschlaege.forEach(function(tv){
           var diff3=d.datum?Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24):99;
           var ml=diff3===0?'✓ Gleicher Tag':(diff3<=1?'~1 Tag':'~'+Math.round(diff3)+' Tage');
@@ -5030,7 +5040,7 @@ function dokOpenDetail(id){
             +'</div>'
             +preview
             +'<div style="padding:10px 12px">'
-            +'<button type="button" onclick="dokBestaetigenMitTermin(\''+d.id+'\',\''+tv.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation">✓ Alle Felder übernehmen</button>'
+            +''/* Button im fixen Footer */
             +'</div></div>';
         });
       } else {
