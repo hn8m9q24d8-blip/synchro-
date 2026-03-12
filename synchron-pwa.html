@@ -1178,7 +1178,11 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <div class="dp-scroll" id="dok-detail-scroll">
     <img id="dok-detail-img" style="width:100%;display:none;border-radius:0 0 12px 12px;max-height:40vh;object-fit:contain;background:#f5f5f5">
-    <div id="dok-detail-body" style="padding:12px 16px 100px"></div>
+    <div id="dok-detail-body" style="padding:12px 16px 16px"></div>
+  </div>
+  <!-- Bestätigen-Footer: außerhalb Scroll, immer erreichbar -->
+  <div id="dok-footer-confirm" style="display:none;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:var(--cream);border-top:1.5px solid #e5e7eb;flex-shrink:0">
+    <button type="button" id="dok-btn-bestaetigen" onclick="dokBestaetigen()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:15px;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation">✓ Daten bestätigen & Foto löschen</button>
   </div>
 </div>
 
@@ -1626,7 +1630,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '93';
+  if(el) el.textContent = '97';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5053,13 +5057,30 @@ function dokOpenDetail(id){
     }
     if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:#f5f5f5;border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
 
-    // Bestätigen-Button (wenn kein Termin zugeordnet)
-    if(!termin){
-      body+='<button type="button" onclick="dokBestaetigen()" style="width:100%;margin-top:8px;background:#15803d;color:#fff;border:none;border-radius:12px;padding:13px;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation">✓ Daten bestätigen & Foto löschen</button>';
-    }
+    // Bestätigen-Button ist im fixen Footer (dok-footer-confirm)
   }
 
   document.getElementById('dok-detail-body').innerHTML = body;
+
+  // Footer: Bestätigen-Button nur bei State 2 (analysiert, nicht bestätigt)
+  var footer = document.getElementById('dok-footer-confirm');
+  if(footer){
+    var showFooter = !d.bestaetigt && d.awaitConfirm && d.typ && d.typ!=='offen';
+    footer.style.display = showFooter ? 'flex' : 'none';
+    footer.style.flexDirection = 'column';
+    // Button-Text je nach Termin
+    var btn = document.getElementById('dok-btn-bestaetigen');
+    if(btn){
+      if(termin){
+        btn.textContent = '✓ Alle Felder übernehmen & bestätigen';
+        btn.onclick = function(){ dokBestaetigenMitTermin(d.id, termin.id); };
+      } else {
+        btn.textContent = '✓ Daten bestätigen & Foto löschen';
+        btn.onclick = function(){ dokBestaetigen(); };
+      }
+    }
+  }
+
   // PDF-Canvas rendern falls vorhanden
   if(d && d.mime==='application/pdf' && d.dataURL && document.getElementById('pdf-canvas-'+d.id)){
     setTimeout(function(){ renderPDFCanvas('pdf-canvas-'+d.id, d.dataURL); }, 50);
@@ -5508,14 +5529,12 @@ function dokAnalyseOne(){
 
   var _analyseDocId = d.id;
   dokAnalyseDoc(d, key, function(){
-    // Overlay entfernen
-    var ol = document.getElementById('_analyse-overlay');
-    if(ol && ol.parentNode) ol.parentNode.removeChild(ol);
+    var sp = document.getElementById('_analyse-overlay');
+    if(sp && sp.parentNode) sp.parentNode.removeChild(sp);
     save(db);
-    // Panel sofort neu rendern
+    rDokumente();
     dokOpenDetail(_analyseDocId);
-    showToast('✓ Analysiert: '+(d.titel||d.typ||'Dokument'));
-    setTimeout(function(){ rDokumente(); }, 80);
+    showToast('✓ Analysiert – bitte prüfen & bestätigen');
   });
 }
 
