@@ -1643,7 +1643,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '113';
+  if(el) el.textContent = '118';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1928,6 +1928,7 @@ function openDetail(id){
     +'onblur="saveMemoFromDetail(\''+id+'\')" '
     +'style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none">'
     +esc(t.memo||'')+'</textarea>'
+    +'<button type="button" onclick="saveMemoFromDetail(\''+id+'\')" style="margin-top:6px;width:100%;background:#374151;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📝 Notiz speichern</button>'
     +'</div>'
     +'</div>';
 
@@ -2094,6 +2095,13 @@ function closeDetail(){
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.remove('open');
   ctid=null;
+  // Rücknavigation: wenn aus Dok-Peek gekommen → Dokument wieder öffnen
+  if(_returnToDokId){
+    var returnId=_returnToDokId;
+    _returnToDokId=null;
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(returnId); }, 150);
+  }
 }
 
 function saveMergeChanges(){
@@ -2159,6 +2167,30 @@ function inlineEditCommit(inp, terminId, field){
   save(db);
   rTermine();
   openDetail(terminId);
+}
+
+function dokPeekTermin(terminId){
+  // Nur anschauen — kein Bestätigen, kein Foto löschen
+  // Rücknavigation merken: zurück = wieder Dokument öffnen
+  _returnToDokId = _dokCurrentId;
+  dokDetailClose();
+  switchView('termine');
+  setTimeout(function(){ openDetail(terminId); }, 150);
+}
+
+function saveMemoFromDetail(terminId){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  var el=document.getElementById('dp-memo-field');
+  if(!el) return;
+  var newVal = el.value;
+  if(newVal === (t.memo||'')) return; // keine Änderung
+  t.memo = newVal;
+  // Memo als manuell markieren
+  if(!t._manualFields) t._manualFields=[];
+  if(t._manualFields.indexOf('memo')<0) t._manualFields.push('memo');
+  save(db);
+  showToast('📝 Notiz gespeichert');
 }
 
 function applyMergeSuggestion(terminId, field){
@@ -4458,12 +4490,8 @@ function dokFooterBestaetigen(){
 function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
-  // Übernehme editierte Werte
-  var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','takes','gutschrift_nr','take_gage','grundgage','brutto','kv_abzug','rv_abzug','pv_abzug','netto','mwst','auszahlung'];
-  fields.forEach(function(f){
-    var el=document.getElementById('dedit-'+f);
-    if(el && el.value!=='') d[f]=el.value;
-  });
+  // Editierte Felder aus den Inputs übernehmen
+  _applyEditedFields(d);
   d.bestaetigt=true;
   d.awaitConfirm=false;
   d.dataURL=null; // Foto aus App löschen
@@ -4566,9 +4594,12 @@ function dokAnalyseDoc(d, key, cb){
     +'  Beispiel: 7 Takes auf 203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
     +'  Beispiel: 6 Takes auf 203,204,206 → [{"folge":203,"takes":2},{"folge":204,"takes":2},{"folge":206,"takes":2}]\n'
     +'  HANDSCHRIFTLICHE ERGÄNZUNGEN: Wenn neben gedruckten Takes handschriftlich weitere\n'
-    +'  Takes hinzugefügt wurden, diese zur Gesamt-Takes-Zahl addieren und auf Folgen verteilen!\n'
-    +'  Mögliche Formate: "+3" (vor der Zahl), "3+" (nach der Zahl), "*3", oder einfach eine\n'
-    +'  zusätzliche Zahl neben der gedruckten. Beispiel: "72 3+" bedeutet 72+3=75 Takes gesamt.\n'
+    +'  Takes hinzugefügt wurden (Formate: "+3", "3+", "*3", oder Zahl daneben):\n'
+    +'  → Gesamt-Takes erhöhen: "72 3+" bedeutet takes=75\n'
+    +'  → Bei LAYOUT A (Folgen mit eigenen Counts): Extra-Takes zur LETZTEN Folge addieren!\n'
+    +'    Beispiel: 506:25, 507:19, 508:14, 509:14 und +3 handschriftlich\n'
+    +'    → [{folge:506,takes:25},{folge:507,takes:19},{folge:508,takes:14},{folge:509,takes:17}]\n'
+    +'  → Bei LAYOUT B/C (nur Gesamtzahl): Extra-Takes in Gesamtzahl einrechnen, dann gleichmäßig verteilen.\n'
     +'  MEHRERE TERMINE PRO FOLGE: Takes werden später pro Folge addiert (nicht ersetzen).\n'
     +'  Falls nicht vorhanden: null\n'
     +'\n'
@@ -4772,22 +4803,15 @@ function terminGageRecherche(terminId){
   if(!t){ showToast('Termin nicht gefunden'); return; }
   var key=(db.profil&&db.profil.apiKey)||localStorage.getItem('anthropic_api_key')||'';
   if(!key){ showToast('Kein API-Key gesetzt'); return; }
-  var titel=t.titel||t.studio||'';
-  if(!titel){ showToast('Kein Produktionstitel vorhanden'); return; }
-
-  // Studio-Name aus Titel entfernen (z.B. "Arena · My Hero" → "My Hero")
-  // Oft kommt der Studio-Name aus dem iCal-Import als Prefix oder Suffix
-  var studio = (t.studio||'').toLowerCase().trim();
-  if(studio){
-    // Entferne Studio-Name + Trennzeichen am Anfang oder Ende
-    var patterns = [
-      new RegExp('^' + studio.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\s*[·\\-|:]\\s*', 'i'),
-      new RegExp('\\s*[·\\-|:]\\s*' + studio.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$', 'i'),
-    ];
-    patterns.forEach(function(p){ titel = titel.replace(p, '').trim(); });
-  }
-  // Staffel/Season-Suffix entfernen (wie bei Dispo-Parsing)
+  // Immer nur t.titel verwenden — NIEMALS t.studio als Suchbegriff
+  // Studio (RC Production, Arena...) ist die Synchronfirma, kein Produktionstitel
+  var titel = (t.titel||'').trim();
+  // Staffel/Season-Suffix entfernen
   titel = titel.replace(/\s+(S\d+|Season\s*\d+|Staffel\s*\d+|S\d+\s*EP\d+)\s*$/i, '').trim();
+  if(!titel){
+    showToast('Kein Produktionstitel — bitte zuerst Titel eintragen');
+    return;
+  }
 
   var btn=document.getElementById('gage-recherche-btn');
   var res=document.getElementById('gage-recherche-result');
@@ -5179,7 +5203,7 @@ function dokOpenDetail(id){
         + '<div style="font-size:14px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
         + '<div style="font-size:11px;color:#555">'+fd(termin.datum)+(termin.uhrzeit?' · '+termin.uhrzeit:'')+(termin.studio?' · '+esc(termin.studio):'')+'</div>'
         + '</div>'
-        + '<button type="button" onclick="dokDetailClose();openDetail(\''+termin.id+'\')" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
+        + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
         + '</div>';
       body += _buildMergePreview(d, termin);
       // Button ist im fixen Footer (dok-footer-confirm)
@@ -5313,6 +5337,7 @@ function dokDetailClose(){
 
 // Pending-Link: Dok-ID das auf Termin wartet
 var _pendingDokLink=null;
+var _returnToDokId=null; // Dok-ID für Rücknavigation aus Termin-Peek
 var _mergeSnapshot=null; // Snapshot des Termins vor Merge — zum Verwerfen
 var _mergeTerminId=null; // TerminId des pending Merge
 
@@ -5493,10 +5518,25 @@ function dokBestaetigenMonat(dokId){
   rDokumente();
 }
 
+// Liest alle dedit-* Eingabefelder zurück ins Dokument-Objekt
+// Muss vor jedem Bestätigen aufgerufen werden
+function _applyEditedFields(d){
+  var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','bis_uhrzeit',
+    'takes','gvl_staffel','gvl_folge','gvl_takes',
+    'gutschrift_nr','take_gage','grundgage','brutto',
+    'kv_abzug','rv_abzug','pv_abzug','netto','mwst','auszahlung'];
+  fields.forEach(function(f){
+    var el=document.getElementById('dedit-'+f);
+    if(el && el.value!=='') d[f]=el.value;
+  });
+}
+
 function dokBestaetigenMitTermin(dokId, terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d) return;
+  // Editierte Felder aus den Inputs übernehmen BEVOR gemerged wird
+  _applyEditedFields(d);
   d.terminId = terminId;
   if(t){
     // Snapshot vor Merge speichern — kann verworfen werden
