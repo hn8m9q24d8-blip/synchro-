@@ -387,9 +387,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div style="flex-shrink:0;padding:0 12px 6px">
     <div style="position:relative">
       <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="#9ca3af" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="termine-search" type="search" placeholder="Produktion, Studio, Rolle suchen…"
+      <input id="termine-search" type="text" placeholder="Produktion, Studio, Rolle suchen…"
         oninput="termineSuche(this.value)"
-        style="width:100%;box-sizing:border-box;padding:9px 10px 9px 32px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none">
+        style="width:100%;box-sizing:border-box;padding:9px 32px 9px 32px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none">
+      <div id="termine-search-clear" onclick="termineSearchClear()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;background:#9ca3af;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
     </div>
   </div>
   <!-- Apple-style Month Calendar -->
@@ -1666,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '127';
+  if(el) el.textContent = '128';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1695,18 +1698,30 @@ function calSelectDay(iso){
   calSelectedDate=(calSelectedDate===iso)?null:iso;
   rWeekStrip();rTermine();
 }
+var _lastSucheQuery = '';
+
+function termineSearchClear(){
+  var inp = document.getElementById('termine-search');
+  var clr = document.getElementById('termine-search-clear');
+  if(inp){ inp.value=''; inp.focus(); }
+  if(clr) clr.style.display='none';
+  _lastSucheQuery = '';
+  rTermine();
+}
+
 function termineSuche(q){
   q = (q||'').trim().toLowerCase();
+  _lastSucheQuery = q;
+  var clr = document.getElementById('termine-search-clear');
+  if(clr) clr.style.display = q ? 'flex' : 'none';
   var list   = document.getElementById('termine-list');
   var header = document.getElementById('termine-header-sub');
 
   if(!q){
-    // Suche leer → normale Tagesansicht
     rTermine();
     return;
   }
 
-  // Kalender bleibt sichtbar — nur Liste unten wird gefiltert
   var results = (db.termine||[]).filter(function(t){
     return (t.titel||'').toLowerCase().indexOf(q)>=0
         || (t.studio||'').toLowerCase().indexOf(q)>=0
@@ -1724,7 +1739,10 @@ function termineSuche(q){
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
     return;
   }
+  // _showMonth=true damit Monat in der Karte angezeigt wird
+  results.forEach(function(t){ t._showMonth = true; });
   list.innerHTML = results.map(function(t){ return tCard(t); }).join('');
+  results.forEach(function(t){ delete t._showMonth; }); // Flag wieder entfernen
 }
 
 function rWeekStrip(){
@@ -1874,9 +1892,11 @@ function tCard(t){
     extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(ab.auszahlung)+(diffOk?' ✓':' ⚠')+'</div>';
   }
 
+  var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  var monthShort=d?monthNames2[d.getMonth()]:'';
   return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')">'
     +'<div class="t-status-bar" style="background:'+sc+'"></div>'
-    +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div></div>'
+    +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div>':'')+'</div>'
     +'<div class="t-body">'
     +'<div class="t-title">'+esc(t.titel)+'</div>'
     +(t.studio?'<div class="t-studio">'+esc(t.studio)+'</div>':'')
@@ -2150,6 +2170,10 @@ function closeDetail(){
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.remove('open');
   ctid=null;
+  // Suche wiederherstellen wenn aktiv
+  if(_lastSucheQuery){
+    termineSuche(_lastSucheQuery);
+  }
 }
 
 function saveMergeChanges(){
@@ -3767,7 +3791,7 @@ function switchView(v){
   var navBtn = document.getElementById('nav-'+(navMap[v]||v));
   if(navBtn) navBtn.classList.add('active');
   // render
-  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}var si=document.getElementById('termine-search');if(si)si.value='';rTermine();updateBadge();}
+  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}var si=document.getElementById('termine-search');if(si)si.value='';var clr2=document.getElementById('termine-search-clear');if(clr2)clr2.style.display='none';_lastSucheQuery='';rTermine();updateBadge();}
   else if(v==='sync'){initSyncView();}
   else if(v==='dispos'){rDispos();}
   else if(v==='gvl'){rGVL();}
