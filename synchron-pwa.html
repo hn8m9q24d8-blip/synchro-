@@ -681,7 +681,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Ausgaben</div>
     <div id="dok-tab-offen" onclick="dokSetTab('offen')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Offen</div>
   </div>
-  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+120px)"></div>
+  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+180px)"></div>
 </div>
 
 <!-- ══════ UST-VORANMELDUNG VIEW ════════════════════════════ -->
@@ -1157,7 +1157,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- TERMIN DETAIL -->
 <div class="detail-panel" id="detail-panel">
   <div class="dp-header">
-    <div class="back-btn" onclick="closeDetail()">‹</div>
+    <div class="back-btn" onclick="terminBackBtn()">‹</div>
     <div class="dp-title" id="dp-title">Termin</div>
     <div class="icon-btn" onclick="deleteCurrentTermin()">
       <svg width="14" height="16" fill="none" viewBox="0 0 14 16"><path d="M1 3.5h12M4 3.5V2.5a1 1 0 011-1h4a1 1 0 011 1v1M5.5 7v5M8.5 7v5M2.5 3.5l.8 9a1 1 0 001 .9h5.4a1 1 0 001-.9l.8-9" stroke="#e8392a" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -1622,6 +1622,20 @@ function save(d){
 }
 var db=load();
 
+// ── MIGRATION: bereits bestätigte Dokumente ins importedFiles-Archiv ────────
+(function(){
+  if(!db._importedFilesMigrated && db.dokumente){
+    if(!db.importedFiles) db.importedFiles = [];
+    db.dokumente.forEach(function(d){
+      if(d.bestaetigt && d.dateiname){
+        if(db.importedFiles.indexOf(d.dateiname) < 0) db.importedFiles.push(d.dateiname);
+      }
+    });
+    db._importedFilesMigrated = true;
+    try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
+  }
+})();
+
 // ── API-KEY SYNC: db.profil.apiKey ↔ localStorage ────────────────
 (function(){
   var fromStorage = localStorage.getItem('anthropic_api_key')||'';
@@ -1643,7 +1657,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '118';
+  if(el) el.textContent = '125';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2095,13 +2109,6 @@ function closeDetail(){
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.remove('open');
   ctid=null;
-  // Rücknavigation: wenn aus Dok-Peek gekommen → Dokument wieder öffnen
-  if(_returnToDokId){
-    var returnId=_returnToDokId;
-    _returnToDokId=null;
-    switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(returnId); }, 150);
-  }
 }
 
 function saveMergeChanges(){
@@ -2169,13 +2176,44 @@ function inlineEditCommit(inp, terminId, field){
   openDetail(terminId);
 }
 
+function terminBackBtn(){
+  // Zurück-Button im Termin-Panel
+  // Wenn aus Dok-Peek: zurück zum Dokument ohne etwas zu speichern
+  if(_returnToDokId){
+    var returnId = _returnToDokId;
+    _returnToDokId = null;
+    // Termin-Panel schließen (ohne Merge-Revert — war nur Peek)
+    var dp = document.getElementById('detail-panel');
+    if(dp) dp.classList.remove('open');
+    ctid = null;
+    // Direkt Dok-Panel öffnen — kein switchView nötig falls schon auf dok-view
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+  } else {
+    // Normaler Zurück — mit Merge-Revert wenn nötig
+    closeDetail();
+  }
+}
+
 function dokPeekTermin(terminId){
   // Nur anschauen — kein Bestätigen, kein Foto löschen
   // Rücknavigation merken: zurück = wieder Dokument öffnen
   _returnToDokId = _dokCurrentId;
+  // Dok-Panel schließen
   dokDetailClose();
+  // Termin-Panel explizit schließen + ctid löschen (kein closeDetail wegen Merge-Revert)
+  var dp = document.getElementById('detail-panel');
+  if(dp) dp.classList.remove('open');
+  ctid = null;
+  // Zur Termine-View wechseln
   switchView('termine');
-  setTimeout(function(){ openDetail(terminId); }, 150);
+  // Dann den richtigen Termin öffnen — direkt, ohne Verzögerung
+  // (detail-panel ist jetzt definitiv zu, kein falscher alter Termin sichtbar)
+  setTimeout(function(){
+    var t = (db.termine||[]).find(function(x){ return x.id===terminId; });
+    if(!t){ showToast('Termin nicht gefunden'); return; }
+    openDetail(terminId);
+  }, 80);
 }
 
 function saveMemoFromDetail(terminId){
@@ -2614,9 +2652,10 @@ function confirmReset(){
   if(!confirm('Alle Daten unwiderruflich löschen?'))return;
   localStorage.removeItem(DBK);
   db=ddb();
+  save(db);
   rTermine();updateBadge();rProfil();rDispos();rGVL();
   closeProfilSheet();
-  showToast('✓ Daten gelöscht');
+  showToast('✓ Alle Daten gelöscht');
 }
 
 // ── DISPOS ────────────────────────────────────────────────────
@@ -4319,9 +4358,11 @@ function dokGotFilesFolder(inp){
     return null;
   }
 
-  // Duplikate filtern
+  // Duplikate filtern — aus aktiven Dokumenten UND importiertem Archiv
   var existingNames={};
   (db.dokumente||[]).forEach(function(d){ existingNames[d.dateiname]=true; });
+  // db.importedFiles: dauerhaftes Gedächtnis — überlebt Dok-Bereinigungen
+  (db.importedFiles||[]).forEach(function(name){ existingNames[name]=true; });
   var neu=files.filter(function(f){ return !existingNames[f.name]; });
   var skipped=files.length-neu.length;
 
@@ -4495,6 +4536,7 @@ function dokBestaetigen(){
   d.bestaetigt=true;
   d.awaitConfirm=false;
   d.dataURL=null; // Foto aus App löschen
+  _archiveDateiname(d.dateiname||d.beschr);
   // Felder in Termin übertragen
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
@@ -4578,7 +4620,9 @@ function dokAnalyseDoc(d, key, cb){
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
     +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
     +'  studio: Studioname kurz (z.B. "RC Production", "TaunusFilm", "Arena", "VSI", "TNT")\n'
-    +'  regie: Name des Regisseurs\n'
+    +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
+    +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
+    +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
     +'  rolle: TIM KNAUERs Rolle (suche die Zeile wo "Tim Knauer" in der Sprecher-Spalte steht!)\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
@@ -5504,6 +5548,7 @@ function dokBestaetigenMonat(dokId){
   d.bestaetigt=true;
   d.awaitConfirm=false;
   d.dataURL=null;
+  _archiveDateiname(d.dateiname||d.beschr);
   // KV/RV/PV/MwSt aus Eingabefeldern übernehmen
   var mFields=['kv_abzug','rv_abzug','pv_abzug','mwst','brutto','auszahlung'];
   mFields.forEach(function(f){
@@ -5520,6 +5565,17 @@ function dokBestaetigenMonat(dokId){
 
 // Liest alle dedit-* Eingabefelder zurück ins Dokument-Objekt
 // Muss vor jedem Bestätigen aufgerufen werden
+// Dateiname dauerhaft als "bereits importiert" markieren
+function _archiveDateiname(dateiname){
+  if(!dateiname) return;
+  if(!db.importedFiles) db.importedFiles = [];
+  if(db.importedFiles.indexOf(dateiname) < 0){
+    db.importedFiles.push(dateiname);
+    // Archiv auf max. 2000 Einträge begrenzen (älteste raus)
+    if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
+  }
+}
+
 function _applyEditedFields(d){
   var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','bis_uhrzeit',
     'takes','gvl_staffel','gvl_folge','gvl_takes',
@@ -5548,6 +5604,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
   d.bestaetigt = true;
   d.awaitConfirm = false;
   d.dataURL = null; // Foto löschen
+  _archiveDateiname(d.dateiname||d.beschr);
   save(db); // Speichert Dok-Änderungen + in-memory Termin (inkl. Merge)
   rDokumente();
   rTermine();
