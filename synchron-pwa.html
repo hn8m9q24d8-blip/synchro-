@@ -383,8 +383,17 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       </div>
     </div>
   </div>
+  <!-- Suchfeld -->
+  <div style="flex-shrink:0;padding:0 12px 6px">
+    <div style="position:relative">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="#9ca3af" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="termine-search" type="search" placeholder="Produktion, Studio, Rolle suchen…"
+        oninput="termineSuche(this.value)"
+        style="width:100%;box-sizing:border-box;padding:9px 10px 9px 32px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none">
+    </div>
+  </div>
   <!-- Apple-style Month Calendar -->
-  <div style="flex-shrink:0;padding:0 16px 6px;display:flex;align-items:center;justify-content:space-between">
+  <div id="cal-block" style="flex-shrink:0;padding:0 16px 6px;display:flex;align-items:center;justify-content:space-between">
     <div onclick="calNavMonth(-1)" class="arrow-btn">‹</div>
     <div style="display:flex;align-items:center;gap:10px">
       <div id="cal-month-label" onclick="calNavToday()" style="font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.3px;cursor:pointer;-webkit-tap-highlight-color:transparent"></div>
@@ -393,7 +402,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div onclick="calNavMonth(1)" class="arrow-btn">›</div>
   </div>
   <!-- Weekday headers -->
-  <div style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px;margin-bottom:2px">
+  <div id="cal-weekdays" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px;margin-bottom:2px">
     <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">M</div>
     <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">D</div>
     <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">M</div>
@@ -1657,7 +1666,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '125';
+  if(el) el.textContent = '127';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1686,6 +1695,38 @@ function calSelectDay(iso){
   calSelectedDate=(calSelectedDate===iso)?null:iso;
   rWeekStrip();rTermine();
 }
+function termineSuche(q){
+  q = (q||'').trim().toLowerCase();
+  var list   = document.getElementById('termine-list');
+  var header = document.getElementById('termine-header-sub');
+
+  if(!q){
+    // Suche leer → normale Tagesansicht
+    rTermine();
+    return;
+  }
+
+  // Kalender bleibt sichtbar — nur Liste unten wird gefiltert
+  var results = (db.termine||[]).filter(function(t){
+    return (t.titel||'').toLowerCase().indexOf(q)>=0
+        || (t.studio||'').toLowerCase().indexOf(q)>=0
+        || (t.rolle||'').toLowerCase().indexOf(q)>=0
+        || (t.regie||'').toLowerCase().indexOf(q)>=0
+        || (t.notizen||'').toLowerCase().indexOf(q)>=0
+        || (t.memo||'').toLowerCase().indexOf(q)>=0;
+  });
+
+  results.sort(function(a,b){ return (a.datum||'') > (b.datum||'') ? 1 : -1; });
+
+  if(header) header.textContent = results.length + ' Ergebnis' + (results.length!==1?'se':'');
+
+  if(!results.length){
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
+    return;
+  }
+  list.innerHTML = results.map(function(t){ return tCard(t); }).join('');
+}
+
 function rWeekStrip(){
   var s=document.getElementById('week-strip');
   var lbl=document.getElementById('cal-month-label');
@@ -3726,7 +3767,7 @@ function switchView(v){
   var navBtn = document.getElementById('nav-'+(navMap[v]||v));
   if(navBtn) navBtn.classList.add('active');
   // render
-  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}rTermine();updateBadge();}
+  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}var si=document.getElementById('termine-search');if(si)si.value='';rTermine();updateBadge();}
   else if(v==='sync'){initSyncView();}
   else if(v==='dispos'){rDispos();}
   else if(v==='gvl'){rGVL();}
