@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '128';
+  if(el) el.textContent = '130';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1731,7 +1731,7 @@ function termineSuche(q){
         || (t.memo||'').toLowerCase().indexOf(q)>=0;
   });
 
-  results.sort(function(a,b){ return (a.datum||'') > (b.datum||'') ? 1 : -1; });
+  results.sort(function(a,b){ return (a.datum||'') > (b.datum||'') ? -1 : 1; }); // neu nach alt
 
   if(header) header.textContent = results.length + ' Ergebnis' + (results.length!==1?'se':'');
 
@@ -1896,7 +1896,7 @@ function tCard(t){
   var monthShort=d?monthNames2[d.getMonth()]:'';
   return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')">'
     +'<div class="t-status-bar" style="background:'+sc+'"></div>'
-    +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div>':'')+'</div>'
+    +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div><div style="font-size:9px;color:#aaa;line-height:1">'+( d?d.getFullYear():'' )+'</div>':'')+'</div>'
     +'<div class="t-body">'
     +'<div class="t-title">'+esc(t.titel)+'</div>'
     +(t.studio?'<div class="t-studio">'+esc(t.studio)+'</div>':'')
@@ -2258,6 +2258,49 @@ function terminBackBtn(){
     // Normaler Zurück — mit Merge-Revert wenn nötig
     closeDetail();
   }
+}
+
+function dokSessionPeek(dokId, sessionIdx){
+  // Öffnet den zugeordneten Termin einer Monats-Session im Kalenderabgleich
+  // Genau wie einzelnes Dokument — Merge-Preview, Speichern/Verwerfen
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d || !d.sessions || !d.sessions[sessionIdx]) return;
+  var s = d.sessions[sessionIdx];
+  var t = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
+  if(!t){ showToast('Termin nicht gefunden'); return; }
+
+  // Temporäres Pseudo-Dok aus der Session bauen für Merge-Preview
+  var pseudoDok = {
+    id: dokId,
+    typ: 'abrechn',
+    titel: s.titel||d.titel||'',
+    studio: d.studio||'',
+    datum: s.datum||'',
+    rolle: s.rolle||'',
+    takes: s.takes||0,
+    take_gage: s.take_gage||0,
+    grundgage: s.grundgage||0,
+    brutto: s.brutto_termin||0,
+    _sessionIdx: sessionIdx
+  };
+
+  // Snapshot + Merge
+  _mergeSnapshot = JSON.parse(JSON.stringify(t));
+  _mergeTerminId = t.id;
+  dokMergeIntoTermin(pseudoDok, t);
+  t._hasPendingMerge = true;
+  save(db);
+
+  // Rücknavigation zum Dok
+  _returnToDokId = _dokCurrentId;
+  var dp2 = document.getElementById('detail-panel');
+  if(dp2) dp2.classList.remove('open');
+  ctid = null;
+  switchView('termine');
+  setTimeout(function(){
+    var tx = (db.termine||[]).find(function(x){ return x.id===s.terminId; });
+    if(tx) openDetail(s.terminId);
+  }, 80);
 }
 
 function dokPeekTermin(terminId){
@@ -5285,10 +5328,13 @@ function dokOpenDetail(id){
         var matchColor=tm?'#15803d':'#c2410c';
         var matchBg=tm?'#f0fdf4':'#fff7ed';
         var matchBorder=tm?'#86efac':'#fed7aa';
-        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px">';
+        // Klickbar wenn Termin gefunden — öffnet Kalenderabgleich für diese Session
+        var clickable=!!tm;
+        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(clickable?'cursor:pointer;':'')+'"
+          '+(clickable?'onclick="dokSessionPeek(\''+d.id+'\','+si+')"':'')+'>';
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
-        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden'):'⚠ Kein Termin')+'</div>';
+        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Kein Termin')+'</div>';
         body+='</div>';
         body+='<div style="font-size:11px;color:#666">';
         if(s.rolle) body+=esc(s.rolle)+' · ';
