@@ -383,20 +383,8 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       </div>
     </div>
   </div>
-  <!-- Suchfeld -->
-  <div style="flex-shrink:0;padding:0 12px 6px">
-    <div style="position:relative">
-      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="#9ca3af" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="termine-search" type="text" placeholder="Produktion, Studio, Rolle suchen…"
-        oninput="termineSuche(this.value)"
-        style="width:100%;box-sizing:border-box;padding:9px 32px 9px 32px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none">
-      <div id="termine-search-clear" onclick="termineSearchClear()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;background:#9ca3af;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
-      </div>
-    </div>
-  </div>
   <!-- Apple-style Month Calendar -->
-  <div id="cal-block" style="flex-shrink:0;padding:0 16px 6px;display:flex;align-items:center;justify-content:space-between">
+  <div style="flex-shrink:0;padding:0 16px 6px;display:flex;align-items:center;justify-content:space-between">
     <div onclick="calNavMonth(-1)" class="arrow-btn">‹</div>
     <div style="display:flex;align-items:center;gap:10px">
       <div id="cal-month-label" onclick="calNavToday()" style="font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.3px;cursor:pointer;-webkit-tap-highlight-color:transparent"></div>
@@ -405,7 +393,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div onclick="calNavMonth(1)" class="arrow-btn">›</div>
   </div>
   <!-- Weekday headers -->
-  <div id="cal-weekdays" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px;margin-bottom:2px">
+  <div style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px;margin-bottom:2px">
     <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">M</div>
     <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">D</div>
     <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">M</div>
@@ -1669,7 +1657,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '130';
+  if(el) el.textContent = '125';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1698,53 +1686,6 @@ function calSelectDay(iso){
   calSelectedDate=(calSelectedDate===iso)?null:iso;
   rWeekStrip();rTermine();
 }
-var _lastSucheQuery = '';
-
-function termineSearchClear(){
-  var inp = document.getElementById('termine-search');
-  var clr = document.getElementById('termine-search-clear');
-  if(inp){ inp.value=''; inp.focus(); }
-  if(clr) clr.style.display='none';
-  _lastSucheQuery = '';
-  rTermine();
-}
-
-function termineSuche(q){
-  q = (q||'').trim().toLowerCase();
-  _lastSucheQuery = q;
-  var clr = document.getElementById('termine-search-clear');
-  if(clr) clr.style.display = q ? 'flex' : 'none';
-  var list   = document.getElementById('termine-list');
-  var header = document.getElementById('termine-header-sub');
-
-  if(!q){
-    rTermine();
-    return;
-  }
-
-  var results = (db.termine||[]).filter(function(t){
-    return (t.titel||'').toLowerCase().indexOf(q)>=0
-        || (t.studio||'').toLowerCase().indexOf(q)>=0
-        || (t.rolle||'').toLowerCase().indexOf(q)>=0
-        || (t.regie||'').toLowerCase().indexOf(q)>=0
-        || (t.notizen||'').toLowerCase().indexOf(q)>=0
-        || (t.memo||'').toLowerCase().indexOf(q)>=0;
-  });
-
-  results.sort(function(a,b){ return (a.datum||'') > (b.datum||'') ? -1 : 1; }); // neu nach alt
-
-  if(header) header.textContent = results.length + ' Ergebnis' + (results.length!==1?'se':'');
-
-  if(!results.length){
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
-    return;
-  }
-  // _showMonth=true damit Monat in der Karte angezeigt wird
-  results.forEach(function(t){ t._showMonth = true; });
-  list.innerHTML = results.map(function(t){ return tCard(t); }).join('');
-  results.forEach(function(t){ delete t._showMonth; }); // Flag wieder entfernen
-}
-
 function rWeekStrip(){
   var s=document.getElementById('week-strip');
   var lbl=document.getElementById('cal-month-label');
@@ -1892,11 +1833,9 @@ function tCard(t){
     extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(ab.auszahlung)+(diffOk?' ✓':' ⚠')+'</div>';
   }
 
-  var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-  var monthShort=d?monthNames2[d.getMonth()]:'';
   return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')">'
     +'<div class="t-status-bar" style="background:'+sc+'"></div>'
-    +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div><div style="font-size:9px;color:#aaa;line-height:1">'+( d?d.getFullYear():'' )+'</div>':'')+'</div>'
+    +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div></div>'
     +'<div class="t-body">'
     +'<div class="t-title">'+esc(t.titel)+'</div>'
     +(t.studio?'<div class="t-studio">'+esc(t.studio)+'</div>':'')
@@ -2170,10 +2109,6 @@ function closeDetail(){
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.remove('open');
   ctid=null;
-  // Suche wiederherstellen wenn aktiv
-  if(_lastSucheQuery){
-    termineSuche(_lastSucheQuery);
-  }
 }
 
 function saveMergeChanges(){
@@ -2258,49 +2193,6 @@ function terminBackBtn(){
     // Normaler Zurück — mit Merge-Revert wenn nötig
     closeDetail();
   }
-}
-
-function dokSessionPeek(dokId, sessionIdx){
-  // Öffnet den zugeordneten Termin einer Monats-Session im Kalenderabgleich
-  // Genau wie einzelnes Dokument — Merge-Preview, Speichern/Verwerfen
-  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
-  if(!d || !d.sessions || !d.sessions[sessionIdx]) return;
-  var s = d.sessions[sessionIdx];
-  var t = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
-  if(!t){ showToast('Termin nicht gefunden'); return; }
-
-  // Temporäres Pseudo-Dok aus der Session bauen für Merge-Preview
-  var pseudoDok = {
-    id: dokId,
-    typ: 'abrechn',
-    titel: s.titel||d.titel||'',
-    studio: d.studio||'',
-    datum: s.datum||'',
-    rolle: s.rolle||'',
-    takes: s.takes||0,
-    take_gage: s.take_gage||0,
-    grundgage: s.grundgage||0,
-    brutto: s.brutto_termin||0,
-    _sessionIdx: sessionIdx
-  };
-
-  // Snapshot + Merge
-  _mergeSnapshot = JSON.parse(JSON.stringify(t));
-  _mergeTerminId = t.id;
-  dokMergeIntoTermin(pseudoDok, t);
-  t._hasPendingMerge = true;
-  save(db);
-
-  // Rücknavigation zum Dok
-  _returnToDokId = _dokCurrentId;
-  var dp2 = document.getElementById('detail-panel');
-  if(dp2) dp2.classList.remove('open');
-  ctid = null;
-  switchView('termine');
-  setTimeout(function(){
-    var tx = (db.termine||[]).find(function(x){ return x.id===s.terminId; });
-    if(tx) openDetail(s.terminId);
-  }, 80);
 }
 
 function dokPeekTermin(terminId){
@@ -3834,7 +3726,7 @@ function switchView(v){
   var navBtn = document.getElementById('nav-'+(navMap[v]||v));
   if(navBtn) navBtn.classList.add('active');
   // render
-  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}var si=document.getElementById('termine-search');if(si)si.value='';var clr2=document.getElementById('termine-search-clear');if(clr2)clr2.style.display='none';_lastSucheQuery='';rTermine();updateBadge();}
+  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}rTermine();updateBadge();}
   else if(v==='sync'){initSyncView();}
   else if(v==='dispos'){rDispos();}
   else if(v==='gvl'){rGVL();}
@@ -5328,13 +5220,10 @@ function dokOpenDetail(id){
         var matchColor=tm?'#15803d':'#c2410c';
         var matchBg=tm?'#f0fdf4':'#fff7ed';
         var matchBorder=tm?'#86efac':'#fed7aa';
-        // Klickbar wenn Termin gefunden — öffnet Kalenderabgleich für diese Session
-        var clickable=!!tm;
-        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(clickable?'cursor:pointer;':'')+'"
-          '+(clickable?'onclick="dokSessionPeek(\''+d.id+'\','+si+')"':'')+'>';
+        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px">';
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
-        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Kein Termin')+'</div>';
+        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden'):'⚠ Kein Termin')+'</div>';
         body+='</div>';
         body+='<div style="font-size:11px;color:#666">';
         if(s.rolle) body+=esc(s.rolle)+' · ';
