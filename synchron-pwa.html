@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '142';
+  if(el) el.textContent = '143';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2271,10 +2271,9 @@ function terminBackBtn(){
 }
 
 function dokSessionPeek(dokId, sessionIdx){
-  // Öffnet den zugeordneten Termin einer Monats-Session im Kalenderabgleich
-  // Genau wie einzelnes Dokument — Merge-Preview, Speichern/Verwerfen
+  sessionIdx = parseInt(sessionIdx)||0; // Sicherstellen dass es eine Zahl ist
   var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
-  if(!d || !d.sessions || !d.sessions[sessionIdx]) return;
+  if(!d || !d.sessions || !d.sessions[sessionIdx]){ showToast('Session nicht gefunden'); return; }
   var s = d.sessions[sessionIdx];
   var t = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
   if(!t){ showToast('Termin nicht gefunden'); return; }
@@ -4751,7 +4750,13 @@ function dokAnalyseDoc(d, key, cb){
   if(confirmed.length) lernEx='\n\nBekannte Studios in diesem Kontext: '+confirmed.map(function(x){return x.studio;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
 
   var prompt='Du analysierst ein Dokument von Synchronsprecher TIM KNAUER.\n'
-    +'Bestimme typ: "dispo" (Synchron-Dispoblatt), "abrechn" (Einzel-Gagenabrechnung/Gutschrift), "monats_abrechn" (Monats-Gutschrift/Sammelabrechnung über MEHRERE Termine), "ausgabe" (Quittung/Rechnung), "sonstig"\n'
+    +'Bestimme typ:\n'
+    +'  "dispo" = Synchron-Dispoblatt\n'
+    +'  "abrechn" = EINZEL-Gagenabrechnung/Gutschrift für GENAU EINEN Aufnahmetag\n'
+    +'  "monats_abrechn" = Monats-Sammelabrechnung mit TABELLE die MEHRERE VERSCHIEDENE Aufnahmedaten auflistet\n'
+    +'  WICHTIG: Eine Abrechnung mit NUR EINEM Aufnahmedatum ("von:/bis:" gleich) ist IMMER "abrechn", NIEMALS "monats_abrechn"!\n'
+    +'  "Bisherige Jahressummen" unten auf der Seite = KUMULATIVWERTE, IGNORIEREN für Typerkennung und Beträge!\n'
+    +'  "ausgabe" = Quittung/Rechnung, "sonstig" = sonstiges\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
@@ -4795,6 +4800,9 @@ function dokAnalyseDoc(d, key, cb){
     +'  Der Titel soll NUR den Produktionsnamen enthalten, keine Staffel/Episode-Info!\n'
     +'\n'
     +'Bei "abrechn" — SESAM/Arena Einzelabrechnung/Gutschrift:\n'
+    +'  ⚠ ACHTUNG ZAHLEN: Lies NUR die Beträge der aktuellen Abrechnung (BRUTTO GAGE, NETTO GAGE, AUSZAHLUNG Blöcke)\n'
+    +'  IGNORIERE komplett: "Bisherige Jahressummen"-Tabelle ganz unten — das sind aufgelaufene Jahreswerte, KEINE Abrechnungsbeträge!\n'
+    +'  IGNORIERE: jede Tabelle mit mehreren Monats-Zeilen — nur die aktuelle Periode zählt\n'
     +'  LAYOUT dieser Abrechnungsart:\n'
     +'    - Positions-Zeile: "+ Grundgage TV [Datum] 1x[Betrag] = [Betrag]  [ROLLE links]  [PRODUKTION rechts]"\n'
     +'    - ROLLE steht LINKS in der Positions-Zeile\n'
@@ -4824,8 +4832,8 @@ function dokAnalyseDoc(d, key, cb){
     +'  auszahlung = Auszahlungsbetrag (Netto + MwSt)\n'
     +'  produktionstyp_kino = true wenn "Kino" in den Positionen steht\n'
     +'\n'
-    +'Bei "monats_abrechn" — VSI/SESAM Monats-Gutschrift mit mehreren Terminen/Produktionen:\n'
-    +'  ERKENNBAR an: "Monats-Gutschrift", Tabelle mit Datum-Spalte, mehrere Zeilen verschiedene Tage\n'
+    +'Bei "monats_abrechn" — NUR wenn: Titel enthält "Monats-Gutschrift" ODER Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten:\n'
+    +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum, oder "Bisherige Jahressummen" am Ende (das sind Jahres-Kumulativwerte!)\n'
     +'  studio = Auftraggeber (z.B. "VSI Berlin")\n'
     +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
     +'  brutto = BRUTTO GAGE gesamt (z.B. 4687.60)\n'
