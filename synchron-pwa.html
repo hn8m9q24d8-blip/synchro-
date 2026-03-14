@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '132';
+  if(el) el.textContent = '139';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1920,7 +1920,10 @@ function updateBadge(){
 
 
 // ── TERMIN DETAIL ─────────────────────────────────────────────
+var _openDetailLock = false; // Verhindert Ghost-Taps auf iOS
+
 function openDetail(id){
+  if(_openDetailLock) return; // Ghost-Tap verhindern
   var t=db.termine.find(function(x){return x.id===id;});
   if(!t)return;
   // ★ Pending Dok-Verknüpfung: wenn Nutzer aus Dok-Sheet hierher navigiert ist ★
@@ -2007,33 +2010,7 @@ function openDetail(id){
     +'</div>'
     +'</div>';
 
-  // ── DOKUMENTE GALERIE ──────────────────────────────────────
-  var dokGalerie='';
-  if(allDoks.length||t.dispoImg||(ab&&ab.abImg)){
-    dokGalerie='<div class="info-card"><div class="info-card-header"><span>📎 Dokumente ('+allDoks.length+')</span>'
-      +'<span class="ic-edit" onclick="switchView(\'dokumente\')">Alle →</span></div>'
-      +'<div style="display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
-    var dokIcons={dispo:'📋',abrechn:'🧾',ausgabe:'🧾',sonstig:'📄'};
-    var dokColors={dispo:'#1a6ea8',abrechn:'#c2410c',ausgabe:'#15803d',sonstig:'#555'};
-    var dokBg={dispo:'#e8f4fd',abrechn:'#fff7ed',ausgabe:'#f0fdf4',sonstig:'#f5f5f5'};
-    if(t.dispoImg&&!dispoDoks.length){
-      dokGalerie+='<div onclick="viewImgFull(\''+escAttr(t.dispoImg)+'\')" style="flex-shrink:0;width:72px;cursor:pointer">'
-        +'<div style="width:72px;height:72px;border-radius:8px;overflow:hidden;border:1.5px solid #b3d7f0;background:#e8f4fd">'
-        +'<img src="'+escAttr(t.dispoImg)+'" style="width:100%;height:100%;object-fit:cover"></div>'
-        +'<div style="font-size:9px;font-weight:700;color:#1a6ea8;text-align:center;margin-top:3px">DISPO</div></div>';
-    }
-    allDoks.forEach(function(dok){
-      var typ=dok.typ||'sonstig';
-      var src=dok.thumb||dok.dataURL;
-      dokGalerie+='<div onclick="switchView(\'dokumente\')" style="flex-shrink:0;width:72px;cursor:pointer">'
-        +'<div style="width:72px;height:72px;border-radius:8px;overflow:hidden;border:1.5px solid #ddd;background:'+dokBg[typ]+';display:flex;align-items:center;justify-content:center">'
-        +(src&&dok.mime!=='application/pdf'?'<img src="'+escAttr(src)+'" style="width:100%;height:100%;object-fit:cover">':'<div style="font-size:28px">'+dokIcons[typ]+'</div>')
-        +'</div>'
-        +'<div style="font-size:9px;font-weight:700;color:'+dokColors[typ]+';text-align:center;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(typ==='dispo'?'DISPO':typ==='abrechn'?'ABRECHN.':'DOK.')+'</div>'
-        +'</div>';
-    });
-    dokGalerie+='</div></div>';
-  }
+  var dokGalerie=''; // Dokumente-Galerie entfernt — Dokumente-Tab ist dafür zuständig
 
   // ── GVL ÜBERSICHT ──────────────────────────────────────────
   var gvlHtml='';
@@ -2084,6 +2061,7 @@ function openDetail(id){
     +'<div style="padding:0 16px 10px">'
     +'<button type="button" id="gage-recherche-btn" onclick="terminGageRecherche(\''+id+'\')" style="width:100%;background:#f5f0e8;border:1.5px solid #d4b896;color:#7a5c3a;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">🔍 TV / Streaming recherchieren</button>'
     +'<div id="gage-recherche-result" style="margin-top:8px;display:none"></div>'
+    +'<div id="gage-mapping-hint"></div>'
     +'</div>'
     +'<div class="info-card">'
     +'<div class="info-card-header"><span>Gage</span><span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span></div>'
@@ -2147,6 +2125,19 @@ function openDetail(id){
   }
 
   dpScroll.innerHTML=mergeBanner+ampel+header+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
+
+  // Gage-Mapping Vorschlag befüllen
+  var gmHintEl = document.getElementById('gage-mapping-hint');
+  if(gmHintEl){
+    var tk=(t.titel||t.studio||'').trim().toLowerCase();
+    var gm=tk&&db.gageMappings&&db.gageMappings[tk];
+    if(gm && (gm.kommgage!==t.kommgage || gm.rate!==t.rate)){
+      gmHintEl.innerHTML='<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:8px 12px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+        +'<div style="font-size:11px;color:#92400e">💡 Zuletzt: <b>'+gm.kommgage+'€ KG · '+parseFloat(gm.rate).toFixed(2).replace('.',',')+'€/Take</b></div>'
+        +'<button type="button" onclick="setGagePreset(\''+id+'\','+gm.kommgage+','+gm.rate+')" style="background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
+        +'</div>';
+    }
+  }
 
   var titleEl=document.getElementById('dp-title');
   if(titleEl)titleEl.textContent=t.titel;
@@ -2317,11 +2308,14 @@ function dokPeekTermin(terminId){
   switchView('termine');
   // Dann den richtigen Termin öffnen — direkt, ohne Verzögerung
   // (detail-panel ist jetzt definitiv zu, kein falscher alter Termin sichtbar)
+  // Lock setzen: verhindert Ghost-Tap auf alten Termin während Transition
+  _openDetailLock = true;
   setTimeout(function(){
+    _openDetailLock = false;
     var t = (db.termine||[]).find(function(x){ return x.id===terminId; });
     if(!t){ showToast('Termin nicht gefunden'); return; }
     openDetail(terminId);
-  }, 80);
+  }, 350); // 350ms reicht um iOS Touch-Buffer zu leeren
 }
 
 function saveMemoFromDetail(terminId){
@@ -2373,14 +2367,25 @@ function discardMergeChanges(){
   showToast('Änderungen verworfen');
 }
 
+function _adjustGvlLastFolge(t, delta){
+  // Differenz auf letzte GVL-Folge anrechnen
+  if(!t.gvl_takes_detail || !t.gvl_takes_detail.length) return;
+  var last = t.gvl_takes_detail[t.gvl_takes_detail.length-1];
+  var neu = (parseInt(last.takes)||0) + delta;
+  if(neu < 0) neu = 0;
+  last.takes = neu;
+  // Gesamtsumme GVL-Takes aktualisieren
+  t.gvl_takes = t.gvl_takes_detail.reduce(function(s,e){ return s+(parseInt(e.takes)||0); }, 0);
+}
+
 function incrementTake(){
   if(!ctid)return;
   var t=db.termine.find(function(x){return x.id===ctid;});
   if(!t)return;
   t.takes=(parseInt(t.takes)||0)+1;
+  _adjustGvlLastFolge(t, 1);
   save(db);
-  var el=document.getElementById('takes-count');
-  if(el)el.textContent=t.takes;
+  openDetail(ctid);
   rTermine();updateBadge();
 }
 
@@ -2388,10 +2393,11 @@ function decrementTake(){
   if(!ctid)return;
   var t=db.termine.find(function(x){return x.id===ctid;});
   if(!t)return;
+  if((parseInt(t.takes)||0)<=0) return;
   t.takes=Math.max(0,(parseInt(t.takes)||0)-1);
+  _adjustGvlLastFolge(t, -1);
   save(db);
-  var el=document.getElementById('takes-count');
-  if(el)el.textContent=t.takes;
+  openDetail(ctid);
   rTermine();updateBadge();
 }
 
@@ -4765,10 +4771,22 @@ function dokAnalyseDoc(d, key, cb){
     +'  "Bridgerton Season 3" → titel="Bridgerton", gvl_staffel_header="3"\n'
     +'  Der Titel soll NUR den Produktionsnamen enthalten, keine Staffel/Episode-Info!\n'
     +'\n'
-    +'Bei "abrechn" — SESAM Gagenabrechnung/Gutschrift:\n'
-    +'  datum = AUFNAHMEDATUM aus "von:"/"bis:" Zeile (NICHT Druckdatum oben rechts!)\n'
-    +'  studio = Auftraggeber/Produktionsfirma\n'
-    +'  titel = Produktionstitel aus den Positionen — NUR der Serienname, OHNE Staffelbezeichnung!\n'    +'    Schema: "+ Grundgage TV [Datum] 1x80 = [Betrag] [Rollenname] [Serientitel]"\n'    +'    Beispiel: "Grundgage TV ... Overhaul My Hero Final Season" → titel="My Hero", rolle="Overhaul"\n'    +'    "Final Season", "Season X", "S1", "Staffel X" IMMER aus Titel entfernen → nur Kernname!\n'    +'  rolle = steht LINKS vor dem Serientitel in der Grundgage/Takegage-Zeile (z.B. "Overhaul", "Kevin")\n'    +'    NICHT mit dem Serientitel verwechseln — Rolle ist ein Eigenname, Serientitel kommt danach\n'
+    +'Bei "abrechn" — SESAM/Arena Einzelabrechnung/Gutschrift:\n'
+    +'  LAYOUT dieser Abrechnungsart:\n'
+    +'    - Positions-Zeile: "+ Grundgage TV [Datum] 1x[Betrag] = [Betrag]  [ROLLE links]  [PRODUKTION rechts]"\n'
+    +'    - ROLLE steht LINKS in der Positions-Zeile\n'
+    +'    - PRODUKTION/TITEL steht RECHTS in der Positions-Zeile (oder in der Zeile darunter)\n'
+    +'    - Darunter folgt oft eine weitere Zeile NUR mit dem Produktionstitel/Staffelinfo\n'
+    +'    - Beispiel: Zeile 1: "+ Dokumentation 1. Stunde  19.12.2025  1x120 = 120"  →  ganz rechts: "Penta"\n'
+    +'                Zeile 2 (darunter):  "WWE Follow Doc: S1: Batch 1 (5x45)"\n'
+    +'      → rolle="Penta", titel="WWE Follow Doc"\n'
+    +'    - Beispiel: "Grundgage TV ... Overhaul My Hero Final Season" → rolle="Overhaul", titel="My Hero"\n'
+    +'    - Beispiel: "Grundgage TV ... Kevin Dark S2" → rolle="Kevin", titel="Dark"\n'
+    +'  datum = AUFNAHMEDATUM aus der Positions-Zeile (NICHT Druckdatum oben rechts!)\n'
+    +'  studio = Auftraggeber/Produktionsfirma (oben links im Briefkopf)\n'
+    +'  titel = NUR der Kernname der Produktion, OHNE: Staffel, Season, Batch, Follow Doc, S1, S2\n'
+    +'  rolle = der Rollenname — LINKS in der Positions-Zeile, RECHTS vom Betragsblock\n'
+    +'    Typisch: ein Eigenname wie "Penta", "Overhaul", "Kevin", "Bruno", "Nick"\n'
     +'  gutschrift_nr = Gutschrifts-Nummer (z.B. "839/20260201")\n'
     +'  takes = Gesamtzahl Takes (z.B. 45 bei "45 x 5,00")\n'
     +'  take_gage = Preis pro Take in Euro (z.B. 5.00)\n'
@@ -5227,6 +5245,16 @@ function dokOpenDetail(id){
     body+=_editRow('studio','Studio',d.studio||'');
     if(d.typ==='dispo'){
       body+=_editRow('titel','Titel',d.titel||'');
+      // Titel-Mapping Vorschlag
+      if(d.titel && db.titelMappings){
+        var mappedTitel = db.titelMappings[(d.titel||'').trim().toLowerCase()];
+        if(mappedTitel && mappedTitel !== (d.titel||'').trim()){
+          body+='<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:7px 10px;margin:4px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+            +'<div style="font-size:11px;color:#92400e">💡 Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
+            +'<button type="button" onclick="dokTitelMapping(\''+esc(mappedTitel)+'\')" style="background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
+            +'</div>';
+        }
+      }
       body+=_editRow('regie','Regie',d.regie||'');
       body+=_editRow('rolle','Rolle(n)',d.rolle||'');
       body+=_editRow('uhrzeit','Beginn',d.uhrzeit||'');
@@ -5263,6 +5291,16 @@ function dokOpenDetail(id){
     }
     if(d.typ==='abrechn'){
       body+=_editRow('titel','Titel/Produktion',d.titel||'');
+      // Titel-Mapping Vorschlag
+      if(d.titel && db.titelMappings){
+        var mappedTitel = db.titelMappings[(d.titel||'').trim().toLowerCase()];
+        if(mappedTitel && mappedTitel !== (d.titel||'').trim()){
+          body+='<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:7px 10px;margin:4px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+            +'<div style="font-size:11px;color:#92400e">💡 Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
+            +'<button type="button" onclick="dokTitelMapping(\''+esc(mappedTitel)+'\')" style="background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
+            +'</div>';
+        }
+      }
       body+=_editRow('rolle','Rolle',d.rolle||'');
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
       body+=_editRow('takes','Takes',d.takes||'');
@@ -5696,7 +5734,18 @@ function _archiveDateiname(dateiname){
   }
 }
 
+function dokTitelMapping(titel){
+  var el = document.getElementById('dedit-titel');
+  if(el){
+    el.value = titel;
+    el.style.fontWeight = '700';
+    el.style.color = '#15803d';
+    showToast('✓ Titel übernommen: '+titel);
+  }
+}
+
 function _applyEditedFields(d){
+  var originalTitel = d.titel||'';
   var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','bis_uhrzeit',
     'takes','gvl_staffel','gvl_folge','gvl_takes',
     'gutschrift_nr','take_gage','grundgage','brutto',
@@ -5705,6 +5754,13 @@ function _applyEditedFields(d){
     var el=document.getElementById('dedit-'+f);
     if(el && el.value!=='') d[f]=el.value;
   });
+  // Titel-Mapping speichern wenn geändert
+  var newTitel = (d.titel||'').trim();
+  var origTrim = originalTitel.trim();
+  if(origTrim && newTitel && origTrim !== newTitel){
+    if(!db.titelMappings) db.titelMappings = {};
+    db.titelMappings[origTrim.toLowerCase()] = newTitel;
+  }
 }
 
 function dokBestaetigenMitTermin(dokId, terminId){
@@ -7758,6 +7814,12 @@ function setGagePreset(id, komm, take){
   if(!t) return;
   t.kommgage=komm;
   t.rate=take;
+  // Gage-Mapping für diesen Titel speichern
+  var titelKey = (t.titel||t.studio||'').trim().toLowerCase();
+  if(titelKey){
+    if(!db.gageMappings) db.gageMappings={};
+    db.gageMappings[titelKey]={kommgage:komm, rate:take};
+  }
   // Recalculate abStatus if linked to abrechnung
   if(t.abId){
     var ab=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
