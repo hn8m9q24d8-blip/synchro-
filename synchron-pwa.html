@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '145';
+  if(el) el.textContent = '146';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2304,11 +2304,20 @@ function terminBackBtn(){
   }
 }
 
-function dokSessionPeek(dokId, sessionIdx){
-  sessionIdx = parseInt(sessionIdx)||0; // Sicherstellen dass es eine Zahl ist
+function dokSessionPeek(elOrId, sessionIdx){
+  // Aufruf via Element (data-attribute) oder direkt via IDs
+  var dokId, si;
+  if(typeof elOrId === 'object' && elOrId && elOrId.getAttribute){
+    dokId = elOrId.getAttribute('data-dokid');
+    si    = parseInt(elOrId.getAttribute('data-si'))||0;
+  } else {
+    dokId = elOrId;
+    si    = parseInt(sessionIdx)||0;
+  }
   var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
-  if(!d || !d.sessions || !d.sessions[sessionIdx]){ showToast('Session nicht gefunden'); return; }
-  var s = d.sessions[sessionIdx];
+  if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden ('+dokId+'/'+si+')'); return; }
+  var sessionIdx = si; // ab hier sessionIdx = si
+  var s = d.sessions[si];
   var t = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
   if(!t){ showToast('Termin nicht gefunden'); return; }
 
@@ -5453,7 +5462,10 @@ function dokOpenDetail(id){
         var matchBorder=tm?'#86efac':'#fed7aa';
         // Klickbar wenn Termin gefunden — öffnet Kalenderabgleich für diese Session
         var clickable=!!tm;
-        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(clickable?'cursor:pointer;':'')+'"'+(clickable?' onclick="dokSessionPeek(\''+d.id+'\','+si+')"':'')+'>'; 
+        var sessionOnclick = clickable
+          ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
+          : '';
+        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(clickable?'cursor:pointer;touch-action:manipulation;':'')+'"'+sessionOnclick+'>'; 
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
         body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Kein Termin')+'</div>';
