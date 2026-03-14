@@ -437,6 +437,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div class="sr-icon" style="background:#dbeafe">👤</div><div class="sr-label">Stammdaten</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🔒</div><div class="sr-label">PDF-Passwörter (Studios)</div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
 
     </div>
     <div class="settings-group">
@@ -1669,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '148';
+  if(el) el.textContent = '149';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3882,6 +3883,7 @@ function rProfil(){
   var nameEl=document.getElementById('profil-name-display');
   if(nameEl)nameEl.textContent=p.name||'Mein Profil';
   updateApiNotice();
+  rStudioPwStatus();
 }
 
 
@@ -4923,6 +4925,31 @@ function dokAnalyseDoc(d, key, cb){
   var mime = d.mime||'image/jpeg';
   if(!d.dataURL){ if(cb) cb(); return; }
 
+  // Passwortgeschütztes PDF: mit PDF.js entschlüsseln → als Bild-Screenshot an KI
+  function _renderPdfPageAsImage(dataURL, password, onDone, onPwNeeded){
+    if(typeof pdfjsLib==='undefined'){ onDone(dataURL); return; }
+    var b64 = dataURL.split(',')[1];
+    var bin = atob(b64);
+    var arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var params = {data: arr};
+    if(password) params.password = password;
+    pdfjsLib.getDocument(params).promise.then(function(pdf){
+      return pdf.getPage(1);
+    }).then(function(page){
+      var vp = page.getViewport({scale:2.0});
+      var cv = document.createElement('canvas');
+      cv.width = vp.width; cv.height = vp.height;
+      var ctx = cv.getContext('2d');
+      return page.render({canvasContext:ctx, viewport:vp}).promise.then(function(){
+        onDone(cv.toDataURL('image/jpeg', 0.92));
+      });
+    }).catch(function(e){
+      if(e && e.name==='PasswordException') onPwNeeded();
+      else onDone(dataURL); // Fallback: Original senden
+    });
+  }
+
   function _sendToAPI(dataURL){
     var b64 = dataURL.split(',')[1];
     if(!b64){ showToast('Bild konnte nicht gelesen werden'); if(cb) cb(); return; }
@@ -5060,9 +5087,26 @@ function dokAnalyseDoc(d, key, cb){
     try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
   } // end _sendToAPI
 
-  // PDF direkt senden, Bilder erst verkleinern
+  // PDF: zuerst bekanntes Passwort versuchen; falls geschützt → entschlüsseln + als Bild senden
   if(mime==='application/pdf'){
-    _sendToAPI(d.dataURL);
+    var autoPw = _findPdfPassword(d.studio||'');
+    if(autoPw){
+      // Bekanntes Passwort → als Bild-Screenshot an KI
+      _renderPdfPageAsImage(d.dataURL, autoPw, function(imgDataURL){
+        // mime temporär auf Bild setzen damit KI es als Bild empfängt
+        var origMime = mime;
+        mime = 'image/jpeg';
+        _sendToAPI(imgDataURL);
+        mime = origMime;
+      }, function(){
+        // Passwort falsch → direkt senden (API-Fehler zeigen)
+        _sendToAPI(d.dataURL);
+      });
+    } else {
+      // Kein Passwort gespeichert — direkt versuchen
+      // Falls geschützt: API gibt Fehler → User sieht Meldung
+      _sendToAPI(d.dataURL);
+    }
   } else {
     // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
     resizeImageB64(d.dataURL, 1000, 0.82, function(resized){
@@ -5638,7 +5682,11 @@ function dokOpenDetail(id){
 
   // PDF-Canvas rendern falls vorhanden
   if(d && d.mime==='application/pdf' && d.dataURL && document.getElementById('pdf-canvas-'+d.id)){
-    setTimeout(function(){ renderPDFCanvas('pdf-canvas-'+d.id, d.dataURL); }, 50);
+    setTimeout(function(){
+      // Bekanntes Passwort automatisch versuchen
+      var autoPw = _findPdfPassword(d.studio||'');
+      renderPDFCanvas('pdf-canvas-'+d.id, d.dataURL, autoPw||undefined);
+    }, 50);
   }
   var panel=document.getElementById('dok-detail-panel');
   if(panel) panel.classList.add('open');
@@ -5665,11 +5713,94 @@ var _mergeTerminId=null; // TerminId des pending Merge
 if(typeof pdfjsLib!=="undefined"){
   pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 }
-function renderPDFCanvas(canvasId, dataURL){
+function removeStudioPwOverlay(){
+  var o=document.querySelector('[data-studio-pw-overlay]');
+  if(o) o.remove();
+}
+
+function openStudioPwSheet(){
+  var pws = _getStudioPasswords();
+  var entries = Object.keys(pws).map(function(k){ return k+'::'+pws[k]; }).join('\n');
+  var ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">🔒 PDF-Passwörter</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::Passwort</b> — je Zeile ein Studio<br>Beispiel: Studio Hamburg::0911810834</div>'
+    +'<textarea id="studio-pw-input" rows="5" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:13px;font-family:monospace;resize:vertical">'+entries+'</textarea>'
+    +'<button type="button" onclick="saveStudioPws()" style="margin-top:10px;width:100%;background:#15803d;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
+    +'<button type="button" onclick="removeStudioPwOverlay()" style="margin-top:8px;width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  ov.setAttribute('data-studio-pw-overlay','1');
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  // Studio Hamburg vorausfüllen wenn noch nicht vorhanden
+  var inp = document.getElementById('studio-pw-input');
+  if(inp && !inp.value.toLowerCase().includes('hamburg')){
+    inp.value = (inp.value ? inp.value+'\n' : '') + 'Studio Hamburg::';
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+  }
+}
+
+function saveStudioPws(){
+  var inp = document.getElementById('studio-pw-input');
+  if(!inp) return;
+  var pws = {};
+  inp.value.split('\n').forEach(function(line){
+    line = line.trim();
+    if(!line) return;
+    var sep = line.indexOf('::');
+    if(sep>0){
+      var studio = line.slice(0,sep).trim();
+      var pw     = line.slice(sep+2).trim();
+      if(studio && pw) pws[studio] = pw;
+    }
+  });
+  if(!db.profil) db.profil={};
+  db.profil.studioPasswords = pws;
+  save(db);
+  // Overlay schließen
+  var inp2 = document.getElementById('studio-pw-input');
+  if(inp2) inp2.closest('div').parentNode.remove();
+  // Status aktualisieren
+  var statusEl = document.getElementById('studio-pw-status');
+  var count = Object.keys(pws).length;
+  if(statusEl) statusEl.textContent = count ? count+' Studio'+(count>1?'s':'') : 'Nicht gesetzt';
+  showToast('✓ PDF-Passwörter gespeichert ('+count+' Studio'+(count>1?'s':'')+')');
+}
+
+function rStudioPwStatus(){
+  var pws = _getStudioPasswords();
+  var count = Object.keys(pws).length;
+  var el = document.getElementById('studio-pw-status');
+  if(el) el.textContent = count ? count+' Studio'+(count>1?'s':'') : 'Nicht gesetzt';
+}
+
+function _getStudioPasswords(){
+  // Studio-Passwörter aus Profil holen
+  return (db.profil && db.profil.studioPasswords) || {};
+}
+
+function _findPdfPassword(studio){
+  // Passwort für Studio suchen (fuzzy: Studio Hamburg → hamburg)
+  var pws = _getStudioPasswords();
+  var studioLow = (studio||'').toLowerCase();
+  var keys = Object.keys(pws);
+  for(var i=0; i<keys.length; i++){
+    if(studioLow.indexOf(keys[i].toLowerCase())>=0 || keys[i].toLowerCase().indexOf(studioLow)>=0){
+      return pws[keys[i]];
+    }
+  }
+  return null;
+}
+
+function renderPDFCanvas(canvasId, dataURL, password){
   if(typeof pdfjsLib==="undefined") return;
   var canvas=document.getElementById(canvasId);
   if(!canvas) return;
-  pdfjsLib.getDocument({url:dataURL}).promise.then(function(pdf){
+  var params = {url: dataURL};
+  if(password) params.password = password;
+  pdfjsLib.getDocument(params).promise.then(function(pdf){
     return pdf.getPage(1);
   }).then(function(page){
     var viewport=page.getViewport({scale:1.5});
@@ -5677,7 +5808,32 @@ function renderPDFCanvas(canvasId, dataURL){
     canvas.width=viewport.width;
     canvas.height=viewport.height;
     page.render({canvasContext:ctx, viewport:viewport});
-  }).catch(function(e){ console.warn("PDF render:",e); });
+  }).catch(function(e){
+    if(e && e.name==='PasswordException'){
+      // Passwortgeschützt — Eingabefeld anzeigen
+      canvas.style.display='none';
+      var wrap = canvas.parentNode;
+      if(wrap && !wrap.querySelector('.pdf-pw-prompt')){
+        var prompt = document.createElement('div');
+        prompt.className = 'pdf-pw-prompt';
+        prompt.style.cssText='padding:16px;text-align:center';
+        prompt.innerHTML='<div style="font-size:13px;color:#555;margin-bottom:8px">🔒 PDF ist passwortgeschützt</div>'
+          +'<input type="password" placeholder="Passwort eingeben" style="width:100%;padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px">'
+          +'<button type="button" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Entsperren</button>';
+        var btn = prompt.querySelector('button');
+        var inp = prompt.querySelector('input');
+        btn.onclick = function(){
+          var pw = inp.value.trim();
+          if(!pw) return;
+          prompt.remove();
+          canvas.style.display='';
+          renderPDFCanvas(canvasId, dataURL, pw);
+        };
+        inp.onkeydown = function(e){ if(e.key==='Enter') btn.click(); };
+        wrap.appendChild(prompt);
+      }
+    } else { console.warn('PDF render:', e); }
+  });
 }
 
 function dokOpenPDF(id){
