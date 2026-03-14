@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '139';
+  if(el) el.textContent = '142';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2091,6 +2091,25 @@ function openDetail(id){
       +'</div></div>';
   }
 
+  // ── MONATS-ABRECH. TERMIN-ANTEIL ──────────────────────────
+  // Wenn dieser Termin Teil einer Monats-Abrechnung ist, MwSt-Anteil + Gutschrift-Nr. zeigen
+  if(t.mwst_anteil!=null || t.gutschrift_nr){
+    var ustProzent = t.ust_satz ? Math.round(t.ust_satz*100)+'%' : '7%';
+    if(!abHtml){
+      abHtml = '<div class="info-card" style="border-left:4px solid #22c55e">'
+        +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
+        +'<div style="padding:0 16px 14px">';
+      if(t.gutschrift_nr) abHtml+='<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(t.gutschrift_nr)+'</div></div>';
+      if(t.kommgage) abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(t.kommgage)+'</div></div>';
+      if(t.mwst_anteil!=null) abHtml+='<div class="info-row"><div class="ir-key">MwSt '+ustProzent+' Anteil</div><div class="ir-val">'+fmtEur(t.mwst_anteil)+'</div></div>';
+      if(t.mwst_anteil!=null && t.kommgage){
+        var netto = Math.round((t.kommgage - t.mwst_anteil)*100)/100;
+        abHtml+='<div class="info-row" style="font-weight:800"><div class="ir-key">Auszahlung</div><div class="ir-val" style="color:#15803d">'+fmtEur(netto + t.mwst_anteil)+'</div></div>';
+      }
+      abHtml+='</div></div>';
+    }
+  }
+
   // ── AKTIONEN ───────────────────────────────────────────────
   var aktionen='';
 
@@ -2288,10 +2307,14 @@ function dokSessionPeek(dokId, sessionIdx){
   if(dp2) dp2.classList.remove('open');
   ctid = null;
   switchView('termine');
+  // Lock setzen — verhindert Ghost-Tap auf alten Termin
+  _openDetailLock = true;
+  var _sessionTerminId = s.terminId;
   setTimeout(function(){
-    var tx = (db.termine||[]).find(function(x){ return x.id===s.terminId; });
-    if(tx) openDetail(s.terminId);
-  }, 80);
+    _openDetailLock = false;
+    var tx = (db.termine||[]).find(function(x){ return x.id===_sessionTerminId; });
+    if(tx) openDetail(_sessionTerminId);
+  }, 350);
 }
 
 function dokPeekTermin(terminId){
@@ -5214,8 +5237,8 @@ function dokOpenDetail(id){
     if(d.dataURL && d.mime!=='application/pdf'){
       var previewDiv='<div style="margin-bottom:12px">';
       previewDiv+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Vorschau zum Abgleichen</div>';
-      previewDiv+='<div onclick="dokShowFullImg(\''+d.id+'\')" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#111">';
-      previewDiv+='<img src="'+d.dataURL+'" style="width:100%;max-height:380px;object-fit:contain;display:block">';
+      previewDiv+='<div id="dok-preview-'+d.id+'" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#111" ontouchstart="_previewTouchStart(event)" ontouchend="_previewTouchEnd(event,\''+d.id+'\')">'
+      previewDiv+='<img src="'+d.dataURL+'" style="width:100%;max-height:380px;object-fit:contain;display:block;pointer-events:none">';
       previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">🔍 Tippen = Vollbild</div>';
       previewDiv+='</div></div>';
       body+=previewDiv;
@@ -5568,13 +5591,29 @@ function dokOpenPDF(id){
   var w=window.open();
   if(w){ w.document.write('<html><body style="margin:0"><iframe src="'+d.dataURL+'" style="width:100%;height:100vh;border:none"></iframe></body></html>'); w.document.close(); }
 }
+var _previewTouchCount=0;
+function _previewTouchStart(e){ _previewTouchCount=e.touches.length; }
+function _previewTouchEnd(e, id){
+  // Nur bei Single-Tap (kein Pinch) Vollbild öffnen
+  if(_previewTouchCount===1 && e.changedTouches.length===1){
+    dokShowFullImg(id);
+  }
+  _previewTouchCount=0;
+}
+
 function dokShowFullImg(id){
   var d=(db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d||!d.dataURL) return;
   var ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;touch-action:manipulation';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;touch-action:pinch-zoom';
+  var _ovTouchCount=0;
   function close(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }
-  ov.onclick=close;
+  ov.addEventListener('touchstart',function(e){ _ovTouchCount=e.touches.length; },{passive:true});
+  ov.addEventListener('touchend',function(e){
+    // Nur Single-Tap auf Hintergrund schließt — kein Pinch
+    if(_ovTouchCount===1 && e.target===ov) close();
+    _ovTouchCount=0;
+  });
   // × Button oben rechts — explizit für iOS
   var btn=document.createElement('button');
   btn.type='button';
@@ -5585,8 +5624,10 @@ function dokShowFullImg(id){
   // Bild
   var img=document.createElement('img');
   img.src=d.dataURL;
-  img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;touch-action:manipulation';
-  img.onclick=function(e){ e.stopPropagation(); close(); };
+  img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom';
+  img.addEventListener('touchend',function(e){
+    if(_ovTouchCount===1) close();
+  });
   ov.appendChild(img);
   document.body.appendChild(ov);
 }
@@ -5682,6 +5723,42 @@ function _buildMergePreview(d, t){
 function dokBestaetigenMonat(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions) return;
+
+  // KV/RV/PV/MwSt aus Eingabefeldern übernehmen (vor Berechnung!)
+  var mFields=['kv_abzug','rv_abzug','pv_abzug','mwst','brutto','auszahlung'];
+  mFields.forEach(function(f){
+    var el=document.getElementById('dedit-'+f);
+    if(el && el.value) d[f]=parseFloat(el.value)||el.value;
+  });
+
+  // MwSt proportional auf Einzeltermine verteilen
+  var gesamtBrutto = parseFloat(d.brutto)||0;
+  var gesamtMwst   = parseFloat(d.mwst)||0;
+  var ustSatz      = d.ustSatz || (gesamtBrutto>0&&gesamtMwst>0 ? Math.round((gesamtMwst/(gesamtBrutto-gesamtMwst))*100)/100 : 0.07);
+  var gutschriftNr = d.gutschrift_nr||'';
+
+  // Sessions mit Termin + Brutto sammeln
+  var sessionsMitTermin = d.sessions.filter(function(s){
+    return s.terminId && (db.termine||[]).find(function(t){return t.id===s.terminId;});
+  });
+
+  // MwSt pro Session berechnen (proportional nach Brutto)
+  var mwstSumme = 0;
+  sessionsMitTermin.forEach(function(s, idx){
+    var brutto = parseFloat(s.brutto_termin)||0;
+    var mwst;
+    if(idx < sessionsMitTermin.length-1){
+      // proportional: Brutto * Satz / (1 + Satz) = MwSt-Anteil
+      mwst = Math.round((brutto * ustSatz / (1 + ustSatz)) * 100) / 100;
+      mwstSumme += mwst;
+    } else {
+      // Letzter Termin: Restbetrag für Cent-Ausgleich
+      mwst = Math.round((gesamtMwst - mwstSumme) * 100) / 100;
+    }
+    s._mwst_anteil = mwst;
+    s._ust_satz    = ustSatz;
+  });
+
   var linked=0, notFound=[];
   d.sessions.forEach(function(s){
     var t=s.terminId?(db.termine||[]).find(function(x){return x.id===s.terminId;}):null;
@@ -5692,7 +5769,12 @@ function dokBestaetigenMonat(dokId){
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
       if(s.take_gage && !t.take_gage) t.take_gage=s.take_gage;
       if(s.grundgage && !t.grundgage) t.grundgage=s.grundgage;
-      if(s.brutto_termin) t.kommgage=s.brutto_termin;
+      if(s.brutto_termin) t.kommgage=parseFloat(s.brutto_termin)||0;
+      // MwSt-Anteil + USt-Satz am Termin speichern
+      if(s._mwst_anteil!=null) t.mwst_anteil = s._mwst_anteil;
+      if(s._ust_satz!=null)    t.ust_satz     = s._ust_satz;
+      // Gutschrift-Nr. — alle Termine derselben Monats-Abrechnung teilen sie
+      if(gutschriftNr) t.gutschrift_nr = gutschriftNr;
       // Abrechnung verknüpfen
       if(!t.dokIds) t.dokIds=[];
       if(t.dokIds.indexOf(dokId)<0) t.dokIds.push(dokId);
@@ -5702,17 +5784,12 @@ function dokBestaetigenMonat(dokId){
       notFound.push(s.datum);
     }
   });
+
   // Abrechnung als Ganzes bestätigen
   d.bestaetigt=true;
   d.awaitConfirm=false;
   d.dataURL=null;
   _archiveDateiname(d.dateiname||d.beschr);
-  // KV/RV/PV/MwSt aus Eingabefeldern übernehmen
-  var mFields=['kv_abzug','rv_abzug','pv_abzug','mwst','brutto','auszahlung'];
-  mFields.forEach(function(f){
-    var el=document.getElementById('dedit-'+f);
-    if(el && el.value) d[f]=parseFloat(el.value)||el.value;
-  });
   save(db);
   var msg=linked+' Termin'+(linked!==1?'e':'')+' verknüpft';
   if(notFound.length) msg+=' · '+notFound.length+' nicht gefunden';
