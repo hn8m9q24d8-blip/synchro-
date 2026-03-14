@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '146';
+  if(el) el.textContent = '148';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4518,18 +4518,25 @@ function dokGotFilesFolder(inp){
   if(!files.length) return;
 
   // NUR Unterordner "Dispofotos" und "Gagenabrechnungen" — alle anderen ignorieren
-  var ALLOWED_FOLDERS = ['dispofotos', 'gagenabrechnungen'];
-  files = files.filter(function(f){
+  var ALLOWED_FOLDERS = ['dispofotos', 'gagenabrechnungen', 'ausgaben', 'belege', 'quittungen'];
+  var allInFolder = files.filter(function(f){
     var path = (f.webkitRelativePath || f.name).toLowerCase();
     var parts = path.split('/');
-    // parts[0] = Hauptordner, parts[1] = Unterordner (falls vorhanden)
     var subfolder = parts.length >= 3 ? parts[1] : (parts.length === 2 ? parts[0] : '');
-    var inAllowedFolder = ALLOWED_FOLDERS.some(function(allowed){
-      return subfolder.indexOf(allowed) >= 0;
-    });
-    return inAllowedFolder && !f.name.startsWith('.') && (f.type.startsWith('image/') || f.type==='application/pdf');
+    return ALLOWED_FOLDERS.some(function(allowed){ return subfolder.indexOf(allowed) >= 0; })
+      && !f.name.startsWith('.');
   });
-
+  var skippedFormat = allInFolder.filter(function(f){
+    return !f.type.startsWith('image/') && f.type !== 'application/pdf';
+  });
+  files = allInFolder.filter(function(f){
+    return f.type.startsWith('image/') || f.type === 'application/pdf';
+  });
+  if(skippedFormat.length){
+    var extList = skippedFormat.map(function(f){ return f.name.split('.').pop().toUpperCase(); })
+      .filter(function(v,i,a){ return a.indexOf(v)===i; }).join(', ');
+    showToast('⚠ '+skippedFormat.length+' Datei'+(skippedFormat.length>1?'en':'')+' übersprungen — Format nicht unterstützt: '+extList);
+  }
   if(!files.length){
     showToast('Keine Dateien in "Dispofotos" oder "Gagenabrechnungen" gefunden');
     inp.value=''; return;
@@ -4540,7 +4547,7 @@ function dokGotFilesFolder(inp){
     var path=(file.webkitRelativePath||file.name).toLowerCase();
     if(/abrechn|gutschrift|gage|payment|gagenabrechnungen/.test(path)) return 'abrechn';
     if(/dispo|dispatch|sheet|aufnahme|dispofotos/.test(path)) return 'dispo';
-    if(/rechnung|ausgabe|quittung|beleg|invoice|receipt/.test(path)) return 'ausgabe';
+    if(/ausgaben|belege|quittungen|rechnung|ausgabe|quittung|beleg|invoice|receipt/.test(path)) return 'ausgabe';
     var n=file.name.toLowerCase();
     if(/abrechn|gutschrift/.test(n)) return 'abrechn';
     if(/dispo/.test(n)) return 'dispo';
@@ -4902,7 +4909,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
-    +'Bei "ausgabe": brutto, datum, beschr (was wurde gekauft)\n'
+    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = kurze Beschreibung (z.B. "Mikrofon", "Zugticket Berlin", "Steuerbüro Honorar")\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
@@ -4910,7 +4917,7 @@ function dokAnalyseDoc(d, key, cb){
     +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
     +'"brutto":null,"netto":null,"mwst":null,"auszahlung":null,'
-    +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null,"produktionstyp_kino":null,"sessions":null}'
+    +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null,"ausgabe_kat":null,"produktionstyp_kino":null,"sessions":null}'
     +lernEx;
 
   var mime = d.mime||'image/jpeg';
@@ -5018,14 +5025,26 @@ function dokAnalyseDoc(d, key, cb){
       }
       // Auto-create ausgabe if ausgabe type
       if(d.typ==='ausgabe' && d.brutto && d.datum){
-        var netto = d.brutto/(1+(d.ustSatz||0.19));
-        var vst = d.brutto - netto;
+        // Netto und Vorsteuer berechnen
+        var ustSatzAg = d.ustSatz!=null ? d.ustSatz : 0.19;
+        var bruttoAg  = parseFloat(d.brutto)||0;
+        var mwstAg    = d.mwst ? parseFloat(d.mwst) : Math.round(bruttoAg - bruttoAg/(1+ustSatzAg)*100)/100;
+        var nettoAg   = d.netto ? parseFloat(d.netto) : Math.round((bruttoAg - mwstAg)*100)/100;
         if(!db.ausgaben) db.ausgaben=[];
         var agId = 'ag'+Date.now();
-        db.ausgaben.push({id:agId,beschr:d.beschr,datum:d.datum,brutto:d.brutto,
-          netto:Math.round(netto*100)/100,ustSatz:d.ustSatz||0.19,
-          vorsteuer:Math.round(vst*100)/100,kat:'Sonstiges',
-          belegImg:(mime!=='application/pdf'?(d.thumb||null):null),erstelltAm:new Date().toISOString()});
+        var katMap = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
+          buero:'Büro',weiterbildung:'Weiterbildung',marketing:'Marketing',
+          steuer_recht:'Steuer/Recht',versicherung:'Versicherung',
+          kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
+        var kat = (d.ausgabe_kat && katMap[d.ausgabe_kat]) || 'Sonstiges';
+        db.ausgaben.push({
+          id:agId, beschr:d.beschr, datum:d.datum,
+          brutto:bruttoAg, netto:nettoAg,
+          ustSatz:ustSatzAg, vorsteuer:mwstAg,
+          kat:kat, ausgabe_kat_raw:d.ausgabe_kat||'sonstiges',
+          belegImg:(mime!=='application/pdf'?(d.thumb||null):null),
+          erstelltAm:new Date().toISOString()
+        });
         d.ausgabeId = agId;
       }
     }catch(e){ 
@@ -5402,7 +5421,19 @@ function dokOpenDetail(id){
       body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
     }
     if(d.typ==='ausgabe'){
-      body+=_editRow('brutto','Betrag €',d.brutto||'');
+      var katMap2={equipment:'🔧 Technik/Equipment',software:'💻 Software/Abos',
+        fahrt:'🚂 Fahrtkosten',buero:'📎 Büro',weiterbildung:'📚 Weiterbildung',
+        marketing:'📣 Marketing',steuer_recht:'⚖️ Steuer/Recht',
+        versicherung:'🛡️ Versicherung',kommunikation:'📱 Kommunikation',sonstiges:'📦 Sonstiges'};
+      var katLabel = (d.ausgabe_kat&&katMap2[d.ausgabe_kat])||'📦 Sonstiges';
+      var ustSatzAg2 = d.ustSatz!=null?d.ustSatz:0.19;
+      var bruttoAg2  = parseFloat(d.brutto)||0;
+      var mwstAg2    = d.mwst?parseFloat(d.mwst):Math.round(bruttoAg2-bruttoAg2/(1+ustSatzAg2)*100)/100;
+      var nettoAg2   = Math.round((bruttoAg2-mwstAg2)*100)/100;
+      body+='<div class="info-row"><div class="ir-key">Kategorie</div><div class="ir-val" style="font-weight:700">'+katLabel+'</div></div>';
+      body+=_editRow('brutto','Brutto €',d.brutto||'');
+      body+='<div class="info-row"><div class="ir-key">Netto €</div><div class="ir-val">'+fmtEur(nettoAg2)+'</div></div>';
+      body+='<div class="info-row" style="background:#f0fdf4;border-radius:6px;padding:6px 8px"><div class="ir-key" style="color:#15803d;font-weight:700">Vorsteuer '+Math.round(ustSatzAg2*100)+'%</div><div class="ir-val" style="color:#15803d;font-weight:800">'+fmtEur(mwstAg2)+'</div></div>';
     }
     if(d.typ==='monats_abrechn'){
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
@@ -6409,7 +6440,7 @@ function rUstVoranmeldung(){
         +(a.belegImg?'<div style="width:36px;height:36px;border-radius:6px;background:#f3f4f6;margin-right:8px;flex-shrink:0;overflow:hidden"><img src="'+a.belegImg+'" style="width:100%;height:100%;object-fit:cover"></div>':'<div style="width:36px;height:36px;border-radius:6px;background:#f3f4f6;margin-right:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">🧾</div>')
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:12px;font-weight:700">'+esc(a.beschr||'')+'</div>'
-        +'<div style="font-size:10px;color:#999">'+fd(a.datum)+'  ·  '+esc(a.kat||'')+'  ·  Brutto '+fmtEur(a.brutto)+'  ·  VSt '+Math.round((a.ustSatz||0)*100)+'%</div>'
+        +'<div style="font-size:10px;color:#999">'+fd(a.datum)+'  ·  <span style="background:#f3f4f6;padding:1px 5px;border-radius:4px;font-weight:600">'+esc(a.kat||'Sonstiges')+'</span>  ·  Brutto '+fmtEur(a.brutto)+'  ·  VSt '+Math.round((a.ustSatz||0)*100)+'%</div>'
         +'</div>'
         +'<div style="font-size:13px;font-weight:800;color:#15803d;flex-shrink:0;margin-left:8px">−'+fmtEur(a.vorsteuer)+'</div>'
         +'<div onclick="ustAusgabeDelete(\''+a.id+'\',event)" style="margin-left:8px;font-size:16px;color:#ccc;cursor:pointer">🗑</div>'
