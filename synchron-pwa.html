@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '143';
+  if(el) el.textContent = '145';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2091,6 +2091,40 @@ function openDetail(id){
       +'</div></div>';
   }
 
+  // ── DIFFERENZ-WARNUNG: Dispo vs. Abrechnung ─────────────────
+  var diffWarnHtml = '';
+  var hasDiff = (t.takes_differenz && t.takes_differenz !== 0)
+             || (t.rate_differenz && t.rate_differenz !== 0)
+             || (t.kommgage_differenz && t.kommgage_differenz !== 0);
+  if(hasDiff && !t.differenz_geklaert){
+    var diffLines = '';
+    if(t.takes_differenz && t.takes_differenz !== 0){
+      var takeDiff = t.takes_differenz;
+      var rateVal  = parseFloat(t.rate)||parseFloat(t.rate_abgerechnet)||0;
+      var euroAust = takeDiff > 0 ? Math.round(takeDiff*rateVal*100)/100 : 0;
+      diffLines += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<div style="font-size:12px;color:#92400e"><b>'+(takeDiff>0?'+':'')+takeDiff+' Takes</b> nicht abgerechnet</div>'
+        +(euroAust>0?'<div style="font-size:13px;font-weight:900;color:#c2410c">'+fmtEur(euroAust)+' ausstehend</div>':'')
+        +'</div>';
+    }
+    if(t.rate_differenz && t.rate_differenz !== 0){
+      diffLines += '<div style="font-size:11px;color:#92400e;margin-bottom:4px">'
+        +'Take-Gage: <b>'+(t.rate_abgerechnet||'?')+'€ abgerechnet</b> statt '+(t.rate||'?')+'€</div>';
+    }
+    if(t.kommgage_differenz && t.kommgage_differenz !== 0){
+      diffLines += '<div style="font-size:11px;color:#92400e;margin-bottom:4px">'
+        +'Komm.-Gage: <b>'+(t.kommgage_abgerechnet||'?')+'€ abgerechnet</b> statt '+(t.kommgage||'?')+'€</div>';
+    }
+    diffWarnHtml = '<div style="background:#fff7ed;border:2px solid #f97316;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<div style="font-size:12px;font-weight:900;color:#c2410c">⚠ Abrechnungs-Differenz</div>'
+      +'<button type="button" onclick="terminDifferenzKlaeren(\''+id+'\')" style="background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;touch-action:manipulation">✓ Geklärt</button>'
+      +'</div>'
+      +diffLines
+      +'<div style="font-size:10px;color:#b45309;margin-top:4px">Grundlage für Mahnung falls nicht beglichen</div>'
+      +'</div>';
+  }
+
   // ── MONATS-ABRECH. TERMIN-ANTEIL ──────────────────────────
   // Wenn dieser Termin Teil einer Monats-Abrechnung ist, MwSt-Anteil + Gutschrift-Nr. zeigen
   if(t.mwst_anteil!=null || t.gutschrift_nr){
@@ -2143,7 +2177,7 @@ function openDetail(id){
       +'</div>';
   }
 
-  dpScroll.innerHTML=mergeBanner+ampel+header+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
+  dpScroll.innerHTML=mergeBanner+diffWarnHtml+ampel+header+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
 
   // Gage-Mapping Vorschlag befüllen
   var gmHintEl = document.getElementById('gage-mapping-hint');
@@ -2353,6 +2387,16 @@ function saveMemoFromDetail(terminId){
   if(t._manualFields.indexOf('memo')<0) t._manualFields.push('memo');
   save(db);
   showToast('📝 Notiz gespeichert');
+}
+
+function terminDifferenzKlaeren(terminId){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  t.differenz_geklaert = true;
+  t.differenz_geklaert_am = new Date().toISOString();
+  save(db);
+  openDetail(terminId);
+  showToast('✓ Differenz als geklärt markiert');
 }
 
 function applyMergeSuggestion(terminId, field){
@@ -5705,11 +5749,50 @@ function _buildMergePreview(d, t){
   check('Folge', 'gvl_folge', d.gvl_folge||d.gvl_episode_header);
   if(d.typ==='abrechn') check('Notizen', 'notizen', d.auszahlung ? 'Abgerechnet: €'+fmtEur(d.auszahlung) : null);
 
-  if(!rows.length){
+  // ── GAGE-ABGLEICH: Kommgage, Take-Gage, Takes gegen Kalender-Termin ──
+  // Nur wenn Abrechnung (nicht Dispo) und Termin hat bereits Werte
+  var gageWarnungen = [];
+  if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
+    // Brutto aus Dok vs. Kommgage am Termin
+    var dokBrutto = parseFloat(d.brutto||d.grundgage||0);
+    var tBrutto   = parseFloat(t.kommgage||0);
+    if(dokBrutto && tBrutto && Math.abs(dokBrutto - tBrutto) > 0.5){
+      gageWarnungen.push({label:'Brutto/Kommgage', termin: tBrutto+'€', dok: dokBrutto+'€'});
+    }
+    // Take-Gage
+    var dokTakeGage = parseFloat(d.take_gage||0);
+    var tTakeGage   = parseFloat(t.rate||0);
+    if(dokTakeGage && tTakeGage && Math.abs(dokTakeGage - tTakeGage) > 0.01){
+      gageWarnungen.push({label:'Take-Gage', termin: tTakeGage+'€', dok: dokTakeGage+'€'});
+    }
+    // Takes
+    var dokTakes = parseInt(d.takes||0);
+    var tTakes   = parseInt(t.takes||0);
+    if(dokTakes && tTakes && dokTakes !== tTakes){
+      gageWarnungen.push({label:'Takes', termin: String(tTakes), dok: String(dokTakes)});
+    }
+  }
+
+  if(!rows.length && !gageWarnungen.length){
     return '<div style="padding:8px 12px;font-size:11px;color:#888">✓ Alle Felder bereits vorhanden</div>';
   }
 
   var html='<div style="padding:0 12px">';
+
+  // Gage-Warnungen oben — prominent
+  if(gageWarnungen.length){
+    html+='<div style="background:#fff7ed;border:2px solid #f97316;border-radius:10px;padding:10px 12px;margin-bottom:10px">';
+    html+='<div style="font-size:11px;font-weight:800;color:#c2410c;margin-bottom:6px">⚠ Abweichung zur Kalender-Gage</div>';
+    gageWarnungen.forEach(function(w){
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+        +'<div style="font-size:11px;color:#92400e;width:90px;flex-shrink:0;font-weight:600">'+w.label+'</div>'
+        +'<div style="font-size:11px;color:#aaa;text-decoration:line-through;flex-shrink:0">'+esc(w.termin)+'</div>'
+        +'<div style="font-size:13px;font-weight:800;color:#c2410c">→ '+esc(w.dok)+'</div>'
+        +'</div>';
+    });
+    html+='</div>';
+  }
+
   rows.forEach(function(r){
     var isNeu = r.status==='NEU';
     var badgeBg = isNeu ? '#d1fae5' : '#fef3c7';
@@ -6021,10 +6104,39 @@ function dokMergeIntoTermin(d, termin){
       db.abrechnungen.push(newAb);
       termin.abId=abId;
       termin.status='abrechnung';
-      // Abrechnung hat Vorrang — immer überschreiben
-      if(takes)     overwrite('takes',   takes,    'Takes ('+takes+')');
-      if(takeGage)  overwrite('rate',    takeGage, 'Take-Gage ('+fmtEur(takeGage)+')');
-      if(grundgage) overwrite('kommgage',grundgage,'Komm.-Gage ('+fmtEur(grundgage)+')');
+      // ── DIFFERENZ-TRACKING: Dispo-Werte vs. Abrechnung ──────────
+      var dispTakes = parseInt(termin.takes)||0;
+      var dispRate  = parseFloat(termin.rate)||0;
+      var dispKomm  = parseFloat(termin.kommgage)||0;
+
+      if(takes) termin.takes_abgerechnet = takes;
+      if(takeGage) termin.rate_abgerechnet = takeGage;
+      if(grundgage) termin.kommgage_abgerechnet = grundgage;
+
+      // Takes: Dispo hatte Wert → Differenz speichern, NICHT überschreiben
+      if(dispTakes > 0 && takes > 0 && dispTakes !== takes){
+        termin.takes_differenz = dispTakes - takes;
+        changed.push('Differenz Takes: '+dispTakes+' vs '+takes);
+      } else {
+        if(takes) overwrite('takes', takes, 'Takes ('+takes+')');
+        termin.takes_differenz = 0;
+      }
+      // Take-Gage: Differenz
+      if(dispRate > 0 && takeGage > 0 && Math.abs(dispRate-takeGage)>0.01){
+        termin.rate_differenz = Math.round((dispRate-takeGage)*100)/100;
+        changed.push('Differenz Take-Gage: '+dispRate+'€ vs '+takeGage+'€');
+      } else {
+        if(takeGage) overwrite('rate', takeGage, 'Take-Gage ('+fmtEur(takeGage)+')');
+        termin.rate_differenz = 0;
+      }
+      // Komm.-Gage: Differenz
+      if(dispKomm > 0 && grundgage > 0 && Math.abs(dispKomm-grundgage)>0.5){
+        termin.kommgage_differenz = Math.round((dispKomm-grundgage)*100)/100;
+        changed.push('Differenz Komm.-Gage: '+dispKomm+'€ vs '+grundgage+'€');
+      } else {
+        if(grundgage) overwrite('kommgage', grundgage, 'Komm.-Gage ('+fmtEur(grundgage)+')');
+        termin.kommgage_differenz = 0;
+      }
       // USt aus Abrechnung erkennen
       if(newAb.mwst&&netto>0){
         var erkUst=Math.round((newAb.mwst/netto)*100)/100;
