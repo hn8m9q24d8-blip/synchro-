@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '158';
+  if(el) el.textContent = '160';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4834,18 +4834,23 @@ function dokAnalyseDoc(d, key, cb){
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
     +'\n'
-    +'★ GVL-TAKES-DETAIL — suche NUR in TIM KNAUERs Zeile:\n'
-    +'  LAYOUT A: Takes-Spalte enthält "506:25, 507:19" → direkt auslesen\n'
-    +'  LAYOUT B: Takes-Spalte = Gesamtzahl, RECHTS daneben steht "106:37, 108:36" → auch auslesen!\n'
-    +'  Format: StaffelFolge:Takes → 106:37 = Staffel 1 Folge 06, 37 Takes\n'
-    +'  ACHTUNG dreistellige Nummern: 203 = Staffel 2 Folge 03, 204 = Staffel 2 Folge 04 (NICHT Folge 203!)\n'
-    +'  Vierstellige Nummern: 1067 = Staffel 10 Folge 67\n'
-    +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},...]\n'
-    +'  LAYOUT C: EPS-Spalte enthält mehrere Folgen z.B. "203, 204" aber Takes-Spalte nur Gesamtzahl z.B. 13\n'
-    +'    Diese Nummern (203, 204) sind StaffelFolge-Codes: 203 = Staffel 2 Folge 03, 204 = Staffel 2 Folge 04\n'
-    +'  → Takes GLEICHMÄSSIG verteilen: 6 auf 2 Folgen = 3+3. Rest (ungerade) auf erste Folge.\n'
-    +'  Beispiel: 7 Takes auf 203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
-    +'  Beispiel: 6 Takes auf 203,204,206 → [{"folge":203,"takes":2},{"folge":204,"takes":2},{"folge":206,"takes":2}]\n'
+    +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus TIM KNAUERs eigener Tabellenzeile:\n'
+    +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen (Ariana, Buck, Karen etc.) übernehmen!\n'
+    +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile mit "Tim Knauer" als Sprecher.\n'
+    +'\n'
+    +'  LAYOUT A: Takes-Spalte von Tim = "506:25, 507:19" → direkt auslesen\n'
+    +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
+    +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
+    +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
+    +'  106:37 → {"folge":106,"takes":37} | 108:36 → {"folge":108,"takes":36} | 506:25 → {"folge":506,"takes":25}\n'
+    +'  Folgennummer-Codes: 106 = Staffel 1 Folge 06, 203 = Staffel 2 Folge 03, 506 = Staffel 5 Folge 06\n'
+    +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},{"folge":108,"takes":36}]\n'
+    +'\n'
+    +'  LAYOUT C: EPS-Spalte von Tim = mehrere Folgen ("203, 204"), Takes-Spalte = nur Gesamtzahl\n'
+    +'  → GLEICHMÄSSIG verteilen: Tims takes ÷ Anzahl Folgen (Rest auf erste Folge)\n'
+    +'  ⚠ WICHTIG: Nimm TIMS takes-Wert, NICHT den takes-Wert einer anderen Zeile!\n'
+    +'  Beispiel: Tim hat takes=6, EPS=203,204 → [{"folge":203,"takes":3},{"folge":204,"takes":3}]\n'
+    +'  Beispiel: Tim hat takes=7, EPS=203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
     +'  HANDSCHRIFTLICHE ERGÄNZUNGEN: Wenn neben gedruckten Takes handschriftlich weitere\n'
     +'  Takes hinzugefügt wurden (Formate: "+3", "3+", "*3", oder Zahl daneben):\n'
     +'  → Gesamt-Takes erhöhen: "72 3+" bedeutet takes=75\n'
