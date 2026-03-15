@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '168';
+  if(el) el.textContent = '169';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5606,7 +5606,7 @@ function dokOpenDetail(id){
     // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
     if(termin){
       // Zugeordneter Termin — Name prominent anzeigen
-      body += '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">'
+      body += '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
         + '<div>'
         + '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:2px">📅 TERMIN GEFUNDEN</div>'
         + '<div style="font-size:14px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
@@ -5614,6 +5614,7 @@ function dokOpenDetail(id){
         + '</div>'
         + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
         + '</div>';
+      body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:#f8fafc;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
       body += _buildMergePreview(d, termin);
       // Button ist im fixen Footer (dok-footer-confirm)
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
