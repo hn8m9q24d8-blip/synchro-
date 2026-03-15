@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '149';
+  if(el) el.textContent = '150';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3926,7 +3926,7 @@ function switchView(v){
   else if(v==='suche'){var sv=document.getElementById('view-suche');if(sv)sv.classList.add('active');setTimeout(function(){var inp=document.getElementById('suche-input');if(inp){inp.focus();}},300);}
   else if(v==='buchhaltung'){rBuchQuick();}
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
-  else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');rDokumente();}
+  else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
   else if(v==='abrechnungen'){var avw=document.getElementById('view-abrechnungen');if(avw)avw.style.display='flex';rAbrechnungen();}
   else if(v==='rechnungen'){rRechnungen();}
@@ -5852,32 +5852,55 @@ function _previewTouchEnd(e, id){
   _previewTouchCount=0;
 }
 
+// Seiten-Zoom sperren/freigeben für Vollbild
+function _lockPageZoom(){
+  var vp=document.querySelector('meta[name=viewport]');
+  if(vp) vp._origContent=vp.content;
+  if(vp) vp.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+}
+function _unlockPageZoom(){
+  var vp=document.querySelector('meta[name=viewport]');
+  if(vp && vp._origContent) vp.content=vp._origContent;
+  else if(vp) vp.content='width=device-width,initial-scale=1,viewport-fit=cover';
+}
+
 function dokShowFullImg(id){
   var d=(db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d||!d.dataURL) return;
+
+  _lockPageZoom(); // Seiten-Zoom sperren — verhindert dass Overlay wegdriftet
+
   var ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;touch-action:pinch-zoom';
+  ov.id='dok-fullimg-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;overflow:hidden';
+
   var _ovTouchCount=0;
-  function close(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }
+  function close(){
+    _unlockPageZoom();
+    if(ov.parentNode) ov.parentNode.removeChild(ov);
+  }
+
   ov.addEventListener('touchstart',function(e){ _ovTouchCount=e.touches.length; },{passive:true});
   ov.addEventListener('touchend',function(e){
-    // Nur Single-Tap auf Hintergrund schließt — kein Pinch
     if(_ovTouchCount===1 && e.target===ov) close();
     _ovTouchCount=0;
   });
-  // × Button oben rechts — explizit für iOS
+
+  // × Button — immer erreichbar
   var btn=document.createElement('button');
   btn.type='button';
   btn.textContent='×';
-  btn.style.cssText='position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:28px;line-height:1;border:none;cursor:pointer;z-index:10001;touch-action:manipulation;display:flex;align-items:center;justify-content:center';
+  btn.style.cssText='position:fixed;top:16px;right:16px;width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.25);color:#fff;font-size:32px;line-height:1;border:2px solid rgba(255,255,255,.4);cursor:pointer;z-index:10001;touch-action:manipulation';
+  btn.addEventListener('touchend',function(e){ e.stopPropagation(); close(); },{passive:false});
   btn.onclick=function(e){ e.stopPropagation(); close(); };
   ov.appendChild(btn);
-  // Bild
+
+  // Bild — kein pinch-zoom damit Seite nicht wegdriftet
   var img=document.createElement('img');
   img.src=d.dataURL;
-  img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom';
+  img.style.cssText='max-width:100%;max-height:90vh;object-fit:contain;touch-action:manipulation';
   img.addEventListener('touchend',function(e){
-    if(_ovTouchCount===1) close();
+    if(_ovTouchCount===1){ e.stopPropagation(); close(); }
   });
   ov.appendChild(img);
   document.body.appendChild(ov);
