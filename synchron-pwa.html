@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '169';
+  if(el) el.textContent = '175';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4569,6 +4569,28 @@ function dokGotFilesFolder(inp){
     inp.value=''; return;
   }
 
+  // Zu viele Dateien → Warnung + in Chargen aufteilen
+  var MAX_BATCH = 20;
+  if(neu.length > MAX_BATCH){
+    var ov = document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+    var box = document.createElement('div');
+    box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:8px">⚠️ Zu viele Dateien</div>'      +'<div style="font-size:13px;color:#555;margin-bottom:16px">'+neu.length+' neue Dateien — iOS kann maximal <b>'+MAX_BATCH+' auf einmal</b> verarbeiten. Bitte in kleineren Gruppen importieren.<br><br>Empfehlung: z.B. erst alle Dispos eines Monats, dann alle Abrechnungen.</div>'      +'<div style="font-size:12px;color:#888;margin-bottom:16px">Die ersten '+MAX_BATCH+' Dateien werden trotzdem geladen:</div>'      +'<button type="button" id="batch-ok-btn" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Erste '+MAX_BATCH+' laden</button>'      +'<button type="button" id="batch-cancel-btn" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    var katFnCopy = kategorieAusOrdner;
+    var neuCopy = neu;
+    var skippedCopy = skipped;
+    document.getElementById('batch-ok-btn').onclick = function(){
+      ov.remove();
+      _dokOrdnerVorschau(neuCopy.slice(0, MAX_BATCH), skippedCopy + (neuCopy.length - MAX_BATCH), katFnCopy);
+    };
+    document.getElementById('batch-cancel-btn').onclick = function(){ ov.remove(); };
+    inp.value='';
+    return;
+  }
+
   // Vorschau-Sheet anzeigen BEVOR importiert wird
   _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner);
   inp.value='';
@@ -4834,6 +4856,8 @@ function dokAnalyseDoc(d, key, cb){
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
+    +'    Wenn "Trailer", "TR", "Trailer-Aufnahme" o.ä. im Titel oder in der Zeile steht:\n'
+    +'    → produktionstyp_kino=false, takes=0, take_gage=0 (Trailer werden pauschal abgerechnet)\n'
     +'    ⚠ HANDSCHRIFTLICHE ERGÄNZUNG: Wenn neben der gedruckten Zahl noch eine handschriftliche Zahl steht\n'
     +'    (z.B. "72" gedruckt + "3+" handschriftlich), diese ADDIEREN: takes = 72+3 = 75\n'
     +'    Formate: "+3" vor der Zahl, "3+" nach der Zahl, "*3" → immer addieren!\n'
@@ -4849,7 +4873,10 @@ function dokAnalyseDoc(d, key, cb){
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
     +'  106:37 → {"folge":106,"takes":37} | 108:36 → {"folge":108,"takes":36} | 506:25 → {"folge":506,"takes":25}\n'
-    +'  Folgennummer-Codes: 106 = Staffel 1 Folge 06, 203 = Staffel 2 Folge 03, 506 = Staffel 5 Folge 06\n'
+    +'  Folgennummer-Codes (IMMER: erste Ziffer(n) = Staffel, letzte 2 Ziffern = Folge):\n'
+    +'    106 = Staffel 1, Folge 06 | 203 = Staffel 2, Folge 03 | 209 = Staffel 2, Folge 09\n'
+    +'    210 = Staffel 2, Folge 10 | 506 = Staffel 5, Folge 06 | 1012 = Staffel 10, Folge 12\n'
+    +'    WICHTIG: 210 ist NICHT Staffel 21 Folge 0 — es ist Staffel 2 Folge 10!\n'
     +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},{"folge":108,"takes":36}]\n'
     +'\n'
     +'  LAYOUT C: EPS-Spalte von Tim = mehrere Folgen ("203, 204"), Takes-Spalte = nur Gesamtzahl\n'
@@ -4909,6 +4936,7 @@ function dokAnalyseDoc(d, key, cb){
     +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
     +'  auszahlung = Auszahlungsbetrag (Netto + MwSt)\n'
     +'  produktionstyp_kino = true wenn "Kino" in den Positionen steht\n'
+    +'  Wenn "Trailer", "TR" oder "Trailer-Aufnahme" im Titel/Positionen: grundgage = Pauschalgage, takes=0\n'
     +'\n'
     +'Bei "monats_abrechn" — NUR wenn: Titel enthält "Monats-Gutschrift" ODER Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten:\n'
     +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum, oder "Bisherige Jahressummen" am Ende (das sind Jahres-Kumulativwerte!)\n'
@@ -5446,7 +5474,8 @@ function dokOpenDetail(id){
         var gesamtTakes = parseInt(d.gvl_takes||d.takes||0);
         var summeFehler = gesamtTakes > 0 && detailSumme !== gesamtTakes;
         body+='<div style="padding:8px 0;border-bottom:1px solid #f5f5f5">'
-          +'<div style="font-size:10px;color:#888;margin-bottom:6px;font-weight:700">GVL TAKES PRO FOLGE</div>'
+          +'<div style="font-size:10px;color:#888;margin-bottom:4px;font-weight:700">GVL TAKES PRO FOLGE</div>'
+          +_editRow('gvl_staffel','Staffel',d.gvl_staffel||d.gvl_staffel_header||'')
           +(summeFehler
             ? '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#c2410c;font-weight:700">'
               +'⚠ Summe Einzelfolgen ('+detailSumme+') ≠ Gesamt-Takes ('+gesamtTakes+')<br>'
@@ -5461,9 +5490,9 @@ function dokOpenDetail(id){
           else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
           else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
           else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
-          body+='<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px;cursor:pointer;touch-action:manipulation">'
-            +'<div style="font-size:9px;font-weight:700;color:#888">S'+staffelNr+' F'+folgeNr+'</div>'
-            +'<div style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+'">'+e.takes+'</div>'
+          body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
+            +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed #e5e7eb;margin-bottom:2px;padding-bottom:2px">S'+staffelNr+' F'+folgeNr+' ✎</div>'
+            +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
             +'</div>';
         });
         body+='</div><div style="font-size:10px;color:#888;margin-top:5px">Gesamt: <b>'+(d.gvl_takes||'')+'</b> Takes</div></div>';
@@ -5978,12 +6007,25 @@ function dokGotoKalender(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
   _pendingDokLink=dokId;
-  dokDetailClose();
+  _returnToDokId=null; // Keine Rücknavigation zum Dok-Panel
+  // Dok-Panel direkt schließen ohne switchView-Nebenwirkungen
+  var panel=document.getElementById('dok-detail-panel');
+  if(panel) panel.classList.remove('open');
+  _dokCurrentId=null;
+  _unlockPageZoom();
   if(d.datum){
-    _selectedDate=d.datum;
-    calJumpToDate(d.datum);
+    calSelectedDate=d.datum;
+    calViewDate=new Date(d.datum+'T00:00:00');
+    calViewDate=new Date(calViewDate.getFullYear(),calViewDate.getMonth(),1);
   }
-  switchView('termine');
+  // Direkt zur Termine-View — alle anderen Views deaktivieren
+  document.querySelectorAll('.view').forEach(function(el){ el.classList.remove('active'); });
+  var tv=document.getElementById('view-termine');
+  if(tv) tv.classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(function(el){ el.classList.remove('active'); });
+  var nb=document.getElementById('nav-termine');
+  if(nb) nb.classList.add('active');
+  rTermine(); updateBadge();
   setTimeout(function(){
     var banner=document.getElementById('dok-link-banner');
     if(!banner){
@@ -6190,6 +6232,28 @@ function _archiveDateiname(dateiname){
     // Archiv auf max. 2000 Einträge begrenzen (älteste raus)
     if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
   }
+}
+
+function gvlFolgeEdit(label, dokId, idx){
+  // Folge-Nummer im Chip editieren
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d || !d.gvl_takes_detail || !d.gvl_takes_detail[idx]) return;
+  var e = d.gvl_takes_detail[idx];
+  if(label.querySelector('input')) return;
+  var inp = document.createElement('input');
+  inp.type='number'; inp.min='1'; inp.max='9999';
+  inp.value = String(e.folge);
+  inp.style.cssText='width:44px;border:none;border-bottom:2px solid #6d28d9;background:transparent;font-size:9px;font-weight:700;text-align:center;color:#555;outline:none';
+  label.innerHTML='';
+  label.appendChild(inp);
+  inp.focus(); inp.select();
+  function save(){
+    var v = parseInt(inp.value);
+    if(!isNaN(v) && v > 0) e.folge = v;
+    dokOpenDetail(dokId);
+  }
+  inp.onblur = save;
+  inp.onkeydown = function(ev){ if(ev.key==='Enter') inp.blur(); if(ev.key==='Escape') dokOpenDetail(dokId); };
 }
 
 function gvlChipEdit(chip, dokId, idx){
