@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '150';
+  if(el) el.textContent = '151';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4911,7 +4911,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
-    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = kurze Beschreibung (z.B. "Mikrofon", "Zugticket Berlin", "Steuerbüro Honorar")\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'
+    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = kurze Beschreibung (z.B. "Mikrofon", "Zugticket Berlin", "Steuerbüro Honorar")\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "bewirtung" = Restaurant, Café, Essen/Trinken, Bewirtungsbeleg (auch wenn geteilt!)\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'    +'  GEMISCHTE STEUERSÄTZE (z.B. Restaurantbeleg mit A=19% und B=7%):\n'    +'    brutto = Gesamtbetrag\n'    +'    mwst = SUMME aller Steuerbeträge (z.B. 5,19 + 4,06 = 9,25)\n'    +'    ust_satz = dominanter Satz ODER null bei gemischt\n'    +'    ust_details = Array mit allen Steuersätzen: [{"satz":0.19,"netto":27.31,"ust":5.19},{"satz":0.07,"netto":57.94,"ust":4.06}]\n'
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
@@ -4919,7 +4919,7 @@ function dokAnalyseDoc(d, key, cb){
     +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
     +'"brutto":null,"netto":null,"mwst":null,"auszahlung":null,'
-    +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null,"ausgabe_kat":null,"produktionstyp_kino":null,"sessions":null}'
+    +'"kv_abzug":null,"rv_abzug":null,"pv_abzug":null,"ust_satz":null,"ust_details":null,"ausgabe_kat":null,"produktionstyp_kino":null,"sessions":null}'
     +lernEx;
 
   var mime = d.mime||'image/jpeg';
@@ -5010,7 +5010,17 @@ function dokAnalyseDoc(d, key, cb){
       d.kv_abzug = j.kv_abzug || null;
       d.rv_abzug = j.rv_abzug || null;
       d.pv_abzug = j.pv_abzug || null;
-      d.ustSatz  = j.ust_satz || null;
+      d.ustSatz    = j.ust_satz || null;
+      d.ust_details = j.ust_details || null;
+      d.ausgabe_kat = j.ausgabe_kat || null;
+      // Gemischte Steuersätze: mwst + netto aus ust_details summieren
+      if(d.ust_details && Array.isArray(d.ust_details) && d.ust_details.length > 0){
+        var _mwstSum = d.ust_details.reduce(function(s,e){ return s+(parseFloat(e.ust)||0); },0);
+        var _nettoSum = d.ust_details.reduce(function(s,e){ return s+(parseFloat(e.netto)||0); },0);
+        if(_mwstSum > 0) d.mwst = Math.round(_mwstSum*100)/100;
+        if(_nettoSum > 0) d.netto = Math.round(_nettoSum*100)/100;
+        if(d.ust_details.length > 1) d.ustSatz = null; // gemischt → kein Einzel-Satz
+      }
       // Abrechnung: Titel + Rolle aus Positionen
       if(d.typ==='abrechn'){
         if(j.titel && !d.titel) d.titel = j.titel;
@@ -5060,7 +5070,7 @@ function dokAnalyseDoc(d, key, cb){
         if(!db.ausgaben) db.ausgaben=[];
         var agId = 'ag'+Date.now();
         var katMap = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
-          buero:'Büro',weiterbildung:'Weiterbildung',marketing:'Marketing',
+          bewirtung:'Bewirtung',buero:'Büro',weiterbildung:'Weiterbildung',marketing:'Marketing',
           steuer_recht:'Steuer/Recht',versicherung:'Versicherung',
           kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
         var kat = (d.ausgabe_kat && katMap[d.ausgabe_kat]) || 'Sonstiges';
@@ -5466,7 +5476,7 @@ function dokOpenDetail(id){
     }
     if(d.typ==='ausgabe'){
       var katMap2={equipment:'🔧 Technik/Equipment',software:'💻 Software/Abos',
-        fahrt:'🚂 Fahrtkosten',buero:'📎 Büro',weiterbildung:'📚 Weiterbildung',
+        fahrt:'🚂 Fahrtkosten',bewirtung:'🍽️ Bewirtung',buero:'📎 Büro',weiterbildung:'📚 Weiterbildung',
         marketing:'📣 Marketing',steuer_recht:'⚖️ Steuer/Recht',
         versicherung:'🛡️ Versicherung',kommunikation:'📱 Kommunikation',sonstiges:'📦 Sonstiges'};
       var katLabel = (d.ausgabe_kat&&katMap2[d.ausgabe_kat])||'📦 Sonstiges';
@@ -5477,7 +5487,15 @@ function dokOpenDetail(id){
       body+='<div class="info-row"><div class="ir-key">Kategorie</div><div class="ir-val" style="font-weight:700">'+katLabel+'</div></div>';
       body+=_editRow('brutto','Brutto €',d.brutto||'');
       body+='<div class="info-row"><div class="ir-key">Netto €</div><div class="ir-val">'+fmtEur(nettoAg2)+'</div></div>';
-      body+='<div class="info-row" style="background:#f0fdf4;border-radius:6px;padding:6px 8px"><div class="ir-key" style="color:#15803d;font-weight:700">Vorsteuer '+Math.round(ustSatzAg2*100)+'%</div><div class="ir-val" style="color:#15803d;font-weight:800">'+fmtEur(mwstAg2)+'</div></div>';
+      if(d.ust_details && d.ust_details.length > 1){
+        // Gemischte Steuersätze aufschlüsseln
+        d.ust_details.forEach(function(ud){
+          body+='<div class="info-row" style="background:#f0fdf4;border-radius:6px;padding:4px 8px;margin-bottom:2px">'            +'<div class="ir-key" style="color:#15803d;font-weight:700">Vorsteuer '+Math.round((ud.satz||0)*100)+'%</div>'            +'<div class"ir-val" style="color:#15803d;font-weight:700">'+fmtEur(ud.ust)+'</div></div>';
+        });
+        body+='<div class="info-row" style="background:#dcfce7;border-radius:6px;padding:6px 8px">'          +'<div class="ir-key" style="color:#15803d;font-weight:800">Vorsteuer gesamt</div>'          +'<div class="ir-val" style="color:#15803d;font-weight:900">'+fmtEur(mwstAg2)+'</div></div>';
+      } else {
+        body+='<div class="info-row" style="background:#f0fdf4;border-radius:6px;padding:6px 8px"><div class="ir-key" style="color:#15803d;font-weight:700">Vorsteuer '+Math.round(ustSatzAg2*100)+'%</div><div class="ir-val" style="color:#15803d;font-weight:800">'+fmtEur(mwstAg2)+'</div></div>';
+      }
     }
     if(d.typ==='monats_abrechn'){
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
