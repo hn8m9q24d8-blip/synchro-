@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '156';
+  if(el) el.textContent = '157';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4827,7 +4827,9 @@ function dokAnalyseDoc(d, key, cb){
     +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
-    +'  rolle: TIM KNAUERs Rolle (suche die Zeile wo "Tim Knauer" in der Sprecher-Spalte steht!)\n'
+    +'  rolle: TIM KNAUERs Rolle — suche die Zeile wo "Tim Knauer" in der Sprecher/Sprecher*in-Spalte steht!\n'\
+    +'    WICHTIG: Lies NUR die Werte aus TIM KNAUERs Zeile — NICHT die Werte von anderen Sprechern!\n'\
+    +'    Andere Sprecher (z.B. Gundi Eberhard, Johannes Raspe, Ann Vielhaben) haben eigene Takes — diese IGNORIEREN!\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
@@ -4835,9 +4837,12 @@ function dokAnalyseDoc(d, key, cb){
     +'★ GVL-TAKES-DETAIL — suche NUR in TIM KNAUERs Zeile:\n'
     +'  LAYOUT A: Takes-Spalte enthält "506:25, 507:19" → direkt auslesen\n'
     +'  LAYOUT B: Takes-Spalte = Gesamtzahl, RECHTS daneben steht "106:37, 108:36" → auch auslesen!\n'
-    +'  Format: StaffelFolge:Takes → 106:37 = Staffel 1 Folge 06 37 Takes\n'
+    +'  Format: StaffelFolge:Takes → 106:37 = Staffel 1 Folge 06, 37 Takes\n'\
+    +'  ACHTUNG dreistellige Nummern: 203 = Staffel 2 Folge 03, 204 = Staffel 2 Folge 04 (NICHT Folge 203!)\n'\
+    +'  Vierstellige Nummern: 1067 = Staffel 10 Folge 67\n'
     +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},...]\n'
-    +'  LAYOUT C: EPS-Spalte enthält mehrere Folgen z.B. "203, 204" aber Takes-Spalte nur Gesamtzahl z.B. 6\n'
+    +'  LAYOUT C: EPS-Spalte enthält mehrere Folgen z.B. "203, 204" aber Takes-Spalte nur Gesamtzahl z.B. 13\n'\
+    +'    Diese Nummern (203, 204) sind StaffelFolge-Codes: 203 = Staffel 2 Folge 03, 204 = Staffel 2 Folge 04\n'
     +'  → Takes GLEICHMÄSSIG verteilen: 6 auf 2 Folgen = 3+3. Rest (ungerade) auf erste Folge.\n'
     +'  Beispiel: 7 Takes auf 203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
     +'  Beispiel: 6 Takes auf 203,204,206 → [{"folge":203,"takes":2},{"folge":204,"takes":2},{"folge":206,"takes":2}]\n'
@@ -5436,8 +5441,12 @@ function dokOpenDetail(id){
             : '')
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
         d.gvl_takes_detail.forEach(function(e){
-          var folgeNr=String(e.folge).slice(-2).replace(/^0/,'');
-          var staffelNr=String(e.folge).length>2?String(parseInt(String(e.folge).slice(0,-2))):'1';
+          var folgeStr=String(e.folge);
+          var staffelNr, folgeNr;
+          if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
+          else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
+          else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
+          else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
           body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
             +'<div style="font-size:9px;font-weight:700;color:#888">S'+staffelNr+' F'+folgeNr+'</div>'
             +'<div style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+'">'+e.takes+'</div>'
