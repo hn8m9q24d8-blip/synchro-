@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '151';
+  if(el) el.textContent = '153';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4911,7 +4911,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
-    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = kurze Beschreibung (z.B. "Mikrofon", "Zugticket Berlin", "Steuerbüro Honorar")\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "bewirtung" = Restaurant, Café, Essen/Trinken, Bewirtungsbeleg (auch wenn geteilt!)\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'    +'  GEMISCHTE STEUERSÄTZE (z.B. Restaurantbeleg mit A=19% und B=7%):\n'    +'    brutto = Gesamtbetrag\n'    +'    mwst = SUMME aller Steuerbeträge (z.B. 5,19 + 4,06 = 9,25)\n'    +'    ust_satz = dominanter Satz ODER null bei gemischt\n'    +'    ust_details = Array mit allen Steuersätzen: [{"satz":0.19,"netto":27.31,"ust":5.19},{"satz":0.07,"netto":57.94,"ust":4.06}]\n'
+    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = kurze Beschreibung — bei Bewirtung: IMMER der Restaurantname (z.B. "Pastarium", "Papaya am Südstern")\n'    +'    Bei anderen Ausgaben: was wurde gekauft (z.B. "Mikrofon", "Zugticket Berlin")\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "bewirtung" = Restaurant, Café, Essen/Trinken, Bewirtungsbeleg (auch wenn geteilt!)\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'    +'  GEMISCHTE STEUERSÄTZE (z.B. Restaurantbeleg mit A=7% und B=19%):\n'    +'    ⚠ USt-Beträge DIREKT aus der USt-Tabelle lesen — NIEMALS selbst berechnen!\n'    +'    Tabelle zeigt z.B.: A 7%: 1,67€ | B 19%: 0,69€ | Total: 2,36€\n'    +'    brutto = Rechnungssumme OHNE Trinkgeld (Trinkgeld ist nicht absetzbar)\n'    +'    netto = Netto-Gesamtsumme aus Tabelle (z.B. 27,44)\n'    +'    mwst = USt-Gesamtsumme aus Tabelle (z.B. 2,36) — NICHT neu berechnen!\n'    +'    ust_satz = null bei gemischten Sätzen\n'    +'    ust_details = [{"satz":0.07,"netto":23.83,"ust":1.67},{"satz":0.19,"netto":3.61,"ust":0.69}]\n'
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
@@ -5062,11 +5062,15 @@ function dokAnalyseDoc(d, key, cb){
       }
       // Auto-create ausgabe if ausgabe type
       if(d.typ==='ausgabe' && d.brutto && d.datum){
-        // Netto und Vorsteuer berechnen
         var ustSatzAg = d.ustSatz!=null ? d.ustSatz : 0.19;
         var bruttoAg  = parseFloat(d.brutto)||0;
-        var mwstAg    = d.mwst ? parseFloat(d.mwst) : Math.round(bruttoAg - bruttoAg/(1+ustSatzAg)*100)/100;
-        var nettoAg   = d.netto ? parseFloat(d.netto) : Math.round((bruttoAg - mwstAg)*100)/100;
+        // Vorsteuer: IMMER direkt aus KI-Ergebnis nehmen, nie selbst berechnen
+        // (KI hat die Werte aus der USt-Tabelle gelesen)
+        var mwstAg, nettoAg;
+        if(d.mwst){ mwstAg = parseFloat(d.mwst); } 
+        else { mwstAg = Math.round(bruttoAg - bruttoAg/(1+ustSatzAg)*100)/100; }
+        if(d.netto){ nettoAg = parseFloat(d.netto); }
+        else { nettoAg = Math.round((bruttoAg - mwstAg)*100)/100; }
         if(!db.ausgaben) db.ausgaben=[];
         var agId = 'ag'+Date.now();
         var katMap = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
