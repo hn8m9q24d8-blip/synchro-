@@ -694,7 +694,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Ausgaben</div>
     <div id="dok-tab-offen" onclick="dokSetTab('offen')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Offen</div>
   </div>
-  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+180px)"></div>
+  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+220px)"></div>
 </div>
 
 <!-- ══════ UST-VORANMELDUNG VIEW ════════════════════════════ -->
@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '160';
+  if(el) el.textContent = '168';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4827,18 +4827,24 @@ function dokAnalyseDoc(d, key, cb){
     +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
-    +'  rolle: TIM KNAUERs Rolle — suche die Zeile wo "Tim Knauer" in der Sprecher-Spalte steht!\n'
-    +'    WICHTIG: Lies NUR die Werte aus TIM KNAUERs Zeile — NICHT die Werte von anderen Sprechern!\n'
-    +'    Andere Sprecher haben eigene Takes — diese IGNORIEREN!\n'
+    +'  rolle + takes + EPS: NUR aus der Zeile mit "Tim Knauer" als Sprecher!\n'
+    +'    ABLAUF: 1) Suche die Zeile wo "Tim Knauer" steht → 2) Lies NUR die Werte DIESER Zeile\n'
+    +'    Jede andere Zeile (andere Sprecher) komplett IGNORIEREN — egal wie ähnlich die Werte aussehen!\n'
+    +'    Tim Knauers Zeile erkennst du daran dass "Tim Knauer" in der Sprecher-Spalte steht\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
+    +'    ⚠ HANDSCHRIFTLICHE ERGÄNZUNG: Wenn neben der gedruckten Zahl noch eine handschriftliche Zahl steht\n'
+    +'    (z.B. "72" gedruckt + "3+" handschriftlich), diese ADDIEREN: takes = 72+3 = 75\n'
+    +'    Formate: "+3" vor der Zahl, "3+" nach der Zahl, "*3" → immer addieren!\n'
     +'\n'
     +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus TIM KNAUERs eigener Tabellenzeile:\n'
     +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen (Ariana, Buck, Karen etc.) übernehmen!\n'
     +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile mit "Tim Knauer" als Sprecher.\n'
     +'\n'
-    +'  LAYOUT A: Takes-Spalte von Tim = "506:25, 507:19" → direkt auslesen\n'
+    +'  LAYOUT A: Takes-Spalte von Tim enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
+    +'    → IMMER als gvl_takes_detail auslesen, auch wenn nur eine Folge und nur 1 Take!\n'
+    +'    "809:1" → [{"folge":809,"takes":1}] — 809 = Staffel 8 Folge 09, 1 Take\n'
     +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
@@ -4921,7 +4927,10 @@ function dokAnalyseDoc(d, key, cb){
     +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
-    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = kurze Beschreibung — bei Bewirtung: IMMER der Restaurantname (z.B. "Pastarium", "Papaya am Südstern")\n'    +'    Bei anderen Ausgaben: was wurde gekauft (z.B. "Mikrofon", "Zugticket Berlin")\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "bewirtung" = Restaurant, Café, Essen/Trinken, Bewirtungsbeleg (auch wenn geteilt!)\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'    +'  GEMISCHTE STEUERSÄTZE (z.B. Restaurantbeleg mit A=7% und B=19%):\n'    +'    ⚠ USt-Beträge DIREKT aus der USt-Tabelle lesen — NIEMALS selbst berechnen!\n'    +'    Tabelle zeigt z.B.: A 7%: 1,67€ | B 19%: 0,69€ | Total: 2,36€\n'    +'    brutto = Rechnungssumme OHNE Trinkgeld (Trinkgeld ist nicht absetzbar)\n'    +'    netto = Netto-Gesamtsumme aus Tabelle (z.B. 27,44)\n'    +'    mwst = USt-Gesamtsumme aus Tabelle (z.B. 2,36) — NICHT neu berechnen!\n'    +'    ust_satz = null bei gemischten Sätzen\n'    +'    ust_details = [{"satz":0.07,"netto":23.83,"ust":1.67},{"satz":0.19,"netto":3.61,"ust":0.69}]\n'
+    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = RESTAURANTNAME bei Bewirtung: Name aus Briefkopf/Logo oben auf dem Beleg (z.B. "Ishin", "Pastarium")\n'    +'    NICHT Tischbezeichnung ("To Go", "Tisch 23") oder Rechnungsnummer!\n'    +'    Bei anderen Ausgaben: was wurde gekauft\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'
+    +'    ⚠ IMMER den auf dem Beleg ausgewiesenen Betrag nehmen — NIEMALS selbst berechnen!\n'
+    +'    Steht oft als "MwSt. 7% auf 30,84: € 2,16" → mwst=2.16, ust_satz=0.07, netto=30.84\n'
+    +'    Wenn der Beleg keinen USt-Betrag ausweist (z.B. Kleinbetragsrechnung) → mwst aus brutto berechnen\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "bewirtung" = Restaurant, Café, Essen/Trinken, Bewirtungsbeleg (auch wenn geteilt!)\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'    +'  GEMISCHTE STEUERSÄTZE (Restaurantbeleg mit USt-Tabelle):\n'    +'    ⚠ NIEMALS selbst berechnen (nicht Brutto×Satz)! Immer die gedruckte USt-Tabelle ablesen!\n'    +'    Beispiel Pastarium: A=19%: Brutto 32,50 Netto 27,31 USt 5,19 | B=7%: Brutto 62,00 Netto 57,94 USt 4,06\n'    +'    → ust_details=[{"satz":0.19,"netto":27.31,"ust":5.19},{"satz":0.07,"netto":57.94,"ust":4.06}]\n'    +'    → mwst = 5,19+4,06 = 9,25 (SUMME der USt-Spalte aus der Tabelle)\n'    +'    → netto = 27,31+57,94 = 85,25 (SUMME der Netto-Spalte aus der Tabelle)\n'    +'    brutto = Gesamtsumme OHNE Trinkgeld | ust_satz = null bei gemischten Sätzen\n'
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
@@ -5133,7 +5142,7 @@ function dokAnalyseDoc(d, key, cb){
     }
   } else {
     // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
-    resizeImageB64(d.dataURL, 1000, 0.82, function(resized){
+    resizeImageB64(d.dataURL, 1500, 0.85, function(resized){
       showToast('⏳ Sende '+Math.round(resized.length*0.75/1024)+'KB…');
       _sendToAPI(resized);
     });
@@ -5445,14 +5454,14 @@ function dokOpenDetail(id){
               +'</div>'
             : '')
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
-        d.gvl_takes_detail.forEach(function(e){
+        d.gvl_takes_detail.forEach(function(e, ei){
           var folgeStr=String(e.folge);
           var staffelNr, folgeNr;
           if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
           else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
           else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
           else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
-          body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
+          body+='<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px;cursor:pointer;touch-action:manipulation">'
             +'<div style="font-size:9px;font-weight:700;color:#888">S'+staffelNr+' F'+folgeNr+'</div>'
             +'<div style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+'">'+e.takes+'</div>'
             +'</div>';
@@ -5877,8 +5886,28 @@ function renderPDFCanvas(canvasId, dataURL, password){
 function dokOpenPDF(id){
   var d=(db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d||!d.dataURL) return;
-  var w=window.open();
-  if(w){ w.document.write('<html><body style="margin:0"><iframe src="'+d.dataURL+'" style="width:100%;height:100vh;border:none"></iframe></body></html>'); w.document.close(); }
+  // Sicheres Overlay statt window.open — schließbar mit × oder Tap
+  _lockPageZoom();
+  var ov=document.createElement('div');
+  ov.id='pdf-fullscreen-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:#111;display:flex;flex-direction:column';
+  // Header mit Schließen-Button
+  var hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(0,0,0,.8);flex-shrink:0';
+  hdr.innerHTML='<div style="color:#fff;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%">'+esc(d.beschr||d.dateiname||'PDF')+'</div>';
+  var btn=document.createElement('button');
+  btn.type='button'; btn.textContent='✕ Schließen';
+  btn.style.cssText='background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;touch-action:manipulation';
+  btn.addEventListener('touchend',function(e){ e.stopPropagation(); _unlockPageZoom(); ov.remove(); },{passive:false});
+  btn.onclick=function(){ _unlockPageZoom(); ov.remove(); };
+  hdr.appendChild(btn);
+  ov.appendChild(hdr);
+  // PDF iframe
+  var iframe=document.createElement('iframe');
+  iframe.src=d.dataURL;
+  iframe.style.cssText='flex:1;border:none;width:100%;background:#fff';
+  ov.appendChild(iframe);
+  document.body.appendChild(ov);
 }
 var _previewTouchCount=0;
 function _previewTouchStart(e){ _previewTouchCount=e.touches.length; }
@@ -6160,6 +6189,89 @@ function _archiveDateiname(dateiname){
     // Archiv auf max. 2000 Einträge begrenzen (älteste raus)
     if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
   }
+}
+
+function gvlChipEdit(chip, dokId, idx){
+  // Chip antippen → Takes-Wert editierbar machen
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d || !d.gvl_takes_detail || !d.gvl_takes_detail[idx]) return;
+  var e = d.gvl_takes_detail[idx];
+  var takeDiv = chip.querySelectorAll('div')[1];
+  if(!takeDiv || takeDiv.querySelector('input')) return;
+  var inp = document.createElement('input');
+  inp.type='number'; inp.min='0'; inp.max='999';
+  inp.value = String(e.takes);
+  inp.style.cssText='width:44px;border:none;border-bottom:2px solid #be185d;background:transparent;font-size:16px;font-weight:900;text-align:center;color:#1a1a1a;outline:none';
+  takeDiv.innerHTML='';
+  takeDiv.appendChild(inp);
+  inp.focus(); inp.select();
+  function save(){
+    var v = parseInt(inp.value);
+    if(!isNaN(v) && v >= 0){
+      e.takes = v;
+      // gvl_takes neu summieren
+      d.gvl_takes = d.gvl_takes_detail.reduce(function(s,x){ return s+(parseInt(x.takes)||0); },0);
+      // Auch dedit-takes aktualisieren falls vorhanden
+      var takesEl = document.getElementById('dedit-takes');
+      if(takesEl) takesEl.value = d.gvl_takes;
+    }
+    dokOpenDetail(dokId);
+  }
+  inp.onblur = save;
+  inp.onkeydown = function(ev){ if(ev.key==='Enter') inp.blur(); if(ev.key==='Escape') dokOpenDetail(dokId); };
+}
+
+function gvlDetailReset(dokId){
+  // Sheet öffnen um GVL-Einträge komplett neu einzugeben
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d) return;
+  var ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto';
+  var current = (d.gvl_takes_detail||[]).map(function(e){ return e.folge+':'+e.takes; }).join(', ');
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">✎ GVL Takes bearbeiten</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Folge:Takes</b> — kommagetrennt<br>Beispiel: 203:3, 204:3</div>'
+    +'<input id="gvl-edit-input" type="text" value="'+current+'" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:14px;font-family:monospace">'
+    +'<button type="button" data-gvlsave="'+dokId+'" onclick="gvlDetailSave(this.getAttribute(\'data-gvlsave\'))" style="margin-top:10px;width:100%;background:#15803d;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
+    +'<button type="button" onclick="removeGvlOverlay()" style="margin-top:8px;width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>'
+  ov.setAttribute('data-gvl-ov','1');
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  setTimeout(function(){ var inp=document.getElementById('gvl-edit-input'); if(inp){inp.focus();inp.select();} },100);
+}
+
+function removeGvlOverlay(){
+  var ov = document.querySelector('[data-gvl-ov]');
+  if(ov) ov.remove();
+}
+
+function gvlDetailSave(dokId){
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d) return;
+  var inp = document.getElementById('gvl-edit-input');
+  if(!inp) return;
+  var parts = inp.value.split(',');
+  var detail = [];
+  parts.forEach(function(p){
+    p = p.trim();
+    var sep = p.indexOf(':');
+    if(sep>0){
+      var folge = parseInt(p.slice(0,sep));
+      var takes = parseInt(p.slice(sep+1));
+      if(!isNaN(folge) && !isNaN(takes)) detail.push({folge:folge, takes:takes});
+    }
+  });
+  if(detail.length > 0){
+    d.gvl_takes_detail = detail;
+    d.gvl_takes = detail.reduce(function(s,e){ return s+(parseInt(e.takes)||0); },0);
+    var takesEl = document.getElementById('dedit-takes');
+    if(takesEl) takesEl.value = d.gvl_takes;
+  }
+  var ov = document.querySelector('[data-gvl-ov]');
+  if(ov) ov.remove();
+  dokOpenDetail(dokId);
+  showToast('✓ GVL Takes aktualisiert');
 }
 
 function dokTitelMapping(titel){
