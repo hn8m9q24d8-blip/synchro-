@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '175';
+  if(el) el.textContent = '178';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1951,6 +1951,8 @@ function openDetail(id){
 
   // Verknüpfte Dokumente
   var allDoks=(db.dokumente||[]).filter(function(x){return x.terminId===id;});
+  var dispoDateinamen=(db.dokumente||[]).filter(function(x){return x.terminId===id&&x.typ==='dispo';}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
+  var abDateinamen=(db.dokumente||[]).filter(function(x){return x.terminId===id&&(x.typ==='abrechn'||x.typ==='monats_abrechn');}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
   var dispoDoks=allDoks.filter(function(x){return x.typ==='dispo';});
   var abDoks=allDoks.filter(function(x){return x.typ==='abrechn';});
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
@@ -1963,18 +1965,19 @@ function openDetail(id){
   if(!dpScroll)return;
 
   // ── AMPEL (kompakt) ────────────────────────────────────────
-  function ampelDot(label, ok, farbe){
+  function ampelDot(label, ok, farbe, dateinamen){
     var bg=ok?farbe:'#e5e7eb';
     var tc=ok?farbe:'#9ca3af';
-    return '<div style="display:flex;align-items:center;gap:4px">'
+    var clkAttr='';
+    if(ok&&dateinamen&&dateinamen.length) clkAttr=' onclick="showDateinamen(this)" data-namen="'+dateinamen.join('|')+'" data-label="'+label+'"';
       +'<div style="width:10px;height:10px;border-radius:50%;background:'+bg+'"></div>'
       +'<div style="font-size:11px;color:'+tc+';font-weight:'+(ok?'700':'400')+'">'+label+'</div>'
       +'</div>';
   }
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
-    +ampelDot('Dispo',hasDispo,'#1a6ea8')
-    +ampelDot('Abrechnung',hasAbrechn,'#f97316')
-    +ampelDot('Zahlung',hasZahlung,'#22c55e')
+    +ampelDot('Dispo',hasDispo,'#1a6ea8',dispoDateinamen)
+    +ampelDot('Abrechnung',hasAbrechn,'#f97316',abDateinamen)
+    +ampelDot('Zahlung',hasZahlung,'#22c55e',[])
     +'</div>';
 
   // ── HEADER ─────────────────────────────────────────────────
@@ -2055,9 +2058,11 @@ function openDetail(id){
     +'<div style="font-size:11px;font-weight:700;color:#1a6ea8">TV</div><div style="font-size:11px;color:#555;margin-top:1px">80€ / 4,00€</div></div>'
     +'<div onclick="setGagePreset(\''+id+'\',85,4.2)" style="flex:1;background:#f0fdf4;border:2px solid '+(parseFloat(t.kommgage)===85&&parseFloat(t.rate)===4.2?'#15803d':'#86efac')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
     +'<div style="font-size:11px;font-weight:700;color:#15803d">Streaming</div><div style="font-size:11px;color:#555;margin-top:1px">85€ / 4,20€</div></div>'
-    +'<div onclick="openSonderGageSheet(\''+id+'\')" style="flex:1;background:#fef9ec;border:1.5px solid '+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85?'#92400e':'#fcd34d')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
+    +'<div onclick="setGagePreset(\''+id+'\',100,5)" style="flex:1;background:#fdf4ff;border:1.5px solid '+(parseFloat(t.kommgage)===100&&parseFloat(t.rate)===5?'#7c3aed':'#d8b4fe')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
+    +'<div style="font-size:11px;font-weight:700;color:#7c3aed">Kino</div><div style="font-size:11px;color:#555;margin-top:1px">100€ / 5,00€</div></div>'
+    +'<div onclick="openSonderGageSheet(\''+id+'\')" style="flex:1;background:#fef9ec;border:1.5px solid '+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?'#92400e':'#fcd34d')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
     +'<div style="font-size:11px;font-weight:700;color:#92400e">Sonder</div>'
-    +'<div style="font-size:11px;color:#555;margin-top:1px">'+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85?(t.kommgage+'€'):'individuell')+'</div></div>'
+    +'<div style="font-size:11px;color:#555;margin-top:1px">'+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?(t.kommgage+'€'):'individuell')+'</div></div>'
     +'</div>'
     +'<div style="padding:0 16px 10px">'
     +'<button type="button" id="gage-recherche-btn" onclick="terminGageRecherche(\''+id+'\')" style="width:100%;background:#f5f0e8;border:1.5px solid #d4b896;color:#7a5c3a;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">🔍 TV / Streaming recherchieren</button>'
@@ -2284,6 +2289,48 @@ function inlineEditCommit(inp, terminId, field){
   save(db);
   rTermine();
   openDetail(terminId);
+}
+
+function removeNamenOv(){
+  var ov=document.querySelector('[data-namen-ov]');
+  if(ov) ov.remove();
+}
+
+function copyDateiname(btn){
+  var name = btn.getAttribute('data-copy')||'';
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(name).then(function(){ showToast('✓ Kopiert: '+name); });
+  } else {
+    var ta=document.createElement('textarea');
+    ta.value=name; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('✓ Kopiert: '+name);
+  }
+}
+
+function showDateinamen(el){
+  var namen = (el.getAttribute('data-namen')||'').split('|').filter(Boolean);
+  var label = el.getAttribute('data-label')||'Dokument';
+  if(!namen.length) return;
+  // Toast mit Dateinamen + Kopier-Sheet
+  var ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 40px;width:100%;max-width:480px';
+  var html='<div style="font-size:15px;font-weight:800;margin-bottom:12px">📎 '+label+' — Datei'+(namen.length>1?'en':'')+'</div>';
+  namen.forEach(function(name){
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="font-size:13px;font-weight:600;color:#374151;word-break:break-all" id="dname-'+i+'">'+esc(name)+'</div>'
+      +'<button type="button" data-copy="'+name.replace(/"/g,'&quot;')+'" onclick="copyDateiname(this)" style="flex-shrink:0;margin-left:8px;background:#1d6fa8;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Kopieren</button>'
+      +'</div>';
+  });
+  html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Dateiname kopieren → in Dateien-App suchen</div>';
+  html+='<button type="button" onclick="removeNamenOv()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
+  box.innerHTML=html;
+  ov.setAttribute('data-namen-ov','1');
+  ov.appendChild(box);
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
 }
 
 function terminBackBtn(){
@@ -4873,6 +4920,8 @@ function dokAnalyseDoc(d, key, cb){
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
     +'  106:37 → {"folge":106,"takes":37} | 108:36 → {"folge":108,"takes":36} | 506:25 → {"folge":506,"takes":25}\n'
+    +'  202:4 → {"folge":202,"takes":4} | 205:22 → {"folge":205,"takes":22}\n'
+    +'  Mehrere durch Komma getrennt: "202:4, 205:22" → [{"folge":202,"takes":4},{"folge":205,"takes":22}]\n'
     +'  Folgennummer-Codes (IMMER: erste Ziffer(n) = Staffel, letzte 2 Ziffern = Folge):\n'
     +'    106 = Staffel 1, Folge 06 | 203 = Staffel 2, Folge 03 | 209 = Staffel 2, Folge 09\n'
     +'    210 = Staffel 2, Folge 10 | 506 = Staffel 5, Folge 06 | 1012 = Staffel 10, Folge 12\n'
