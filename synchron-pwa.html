@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '204';
+  if(el) el.textContent = '207';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2480,6 +2480,98 @@ function gvlTerminSave(btn){
   if(ov) ov.remove();
   openDetail(tid);
   showToast('✓ GVL Folgen gespeichert');
+}
+
+function gvlDokBearbeiten(dokId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+
+  function staffelAus(f){ f=String(f||''); if(f.length===3)return parseInt(f[0]); if(f.length===4)return parseInt(f.slice(0,2)); if(f.length>2)return parseInt(f.slice(0,-2)); return 1; }
+  function folgeAus(f){ f=String(f||''); if(f.length===3)return parseInt(f.slice(1)); if(f.length>=4)return parseInt(f.slice(-2)); return parseInt(f)||0; }
+
+  var detail = d.gvl_takes_detail && d.gvl_takes_detail.length
+    ? d.gvl_takes_detail.map(function(e){ return {staffel:staffelAus(e.folge),folge:folgeAus(e.folge),takes:e.takes}; })
+    : [{staffel:parseInt(d.gvl_staffel||d.gvl_staffel_header)||1, folge:parseInt(d.gvl_folge||d.gvl_episode_header)||1, takes:parseInt(d.gvl_takes||d.takes)||0}];
+
+  function buildRows(){
+    var h='';
+    detail.forEach(function(row,i){
+      h+='<div id="gvldok-row-'+i+'" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px">'
+        +'<div style="flex:1"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">STAFFEL</div>'
+        +'<input type="number" id="gvldok-s-'+i+'" value="'+row.staffel+'" min="1" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
+        +'<div style="flex:1"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">FOLGE</div>'
+        +'<input type="number" id="gvldok-f-'+i+'" value="'+row.folge+'" min="1" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
+        +'<div style="flex:1.5"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">TAKES</div>'
+        +'<input type="number" id="gvldok-t-'+i+'" value="'+row.takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:900;color:#1d6fa8;box-sizing:border-box"></div>'
+        +(detail.length>1?'<button type="button" onclick="gvlDokRemoveRow('+i+')" style="flex-shrink:0;background:#fee2e2;color:#c2410c;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;touch-action:manipulation;align-self:flex-end;margin-bottom:2px">✕</button>':'')
+        +'</div>';
+    });
+    return h;
+  }
+
+  var ov=document.createElement('div');
+  ov.id='gvldok-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  window._gvlDokDetail=detail;
+  window._gvlDokRender=function(){
+    var r=document.getElementById('gvldok-rows');
+    if(r) r.innerHTML=buildRows();
+  };
+
+  function render(){
+    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">GVL Folgen & Takes</div>'
+      +'<div style="font-size:12px;color:#888;margin-bottom:12px">'+esc(d.beschr||d.dateiname||'')+'</div>'
+      +'<div id="gvldok-rows">'+buildRows()+'</div>'
+      +'<button type="button" onclick="gvlDokAddRow()" style="width:100%;background:#f3f4f6;color:#6d28d9;border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>'
+      +'<button type="button" data-did="'+dokId+'" onclick="gvlDokSave(this)" style="width:100%;background:#6d28d9;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Speichern</button>'
+      +'<button type="button" onclick="document.getElementById(\'gvldok-ov\').remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  }
+  render();
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
+function gvlDokAddRow(){
+  var d=window._gvlDokDetail; if(!d)return;
+  var last=d[d.length-1]||{staffel:1,folge:1,takes:0};
+  d.push({staffel:last.staffel,folge:last.folge+1,takes:0});
+  window._gvlDokRender&&window._gvlDokRender();
+}
+function gvlDokRemoveRow(i){
+  var d=window._gvlDokDetail; if(!d||d.length<=1)return;
+  d.splice(i,1); window._gvlDokRender&&window._gvlDokRender();
+}
+function gvlDokSave(btn){
+  var did=btn.getAttribute('data-did');
+  var d=(db.dokumente||[]).find(function(x){return x.id===did;});
+  if(!d)return;
+  var rows=window._gvlDokDetail||[];
+  var detail=[];
+  rows.forEach(function(row,i){
+    var s=document.getElementById('gvldok-s-'+i);
+    var f=document.getElementById('gvldok-f-'+i);
+    var t=document.getElementById('gvldok-t-'+i);
+    var staffel=s?parseInt(s.value)||1:row.staffel;
+    var folge=f?parseInt(f.value)||1:row.folge;
+    var takes=t?parseInt(t.value)||0:row.takes;
+    detail.push({folge:staffel*100+folge, takes:takes});
+  });
+  if(detail.length){
+    d.gvl_takes_detail=detail;
+    d.gvl_takes=detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+    d.takes=d.gvl_takes;
+    var firstF=String(detail[0].folge);
+    d.gvl_staffel=firstF.length>=3?firstF.slice(0,-2):firstF;
+  }
+  save(db);
+  window._gvlDokDetail=null;
+  var ov=document.getElementById('gvldok-ov');
+  if(ov)ov.remove();
+  dokOpenDetail(did);
+  showToast('✓ GVL gespeichert');
 }
 
 function removeNamenOv(){
@@ -5191,7 +5283,10 @@ function dokAnalyseDoc(d, key, cb){
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
     +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
-    +'  studio: Studioname kurz (z.B. "RC Production", "TaunusFilm", "Arena", "VSI", "TNT")\n'
+    +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
+    +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
+    +'    NICHT der Aufnahmeraum/Atelier (NICHT "BLN Studio E", NICHT "Atelier 4", NICHT "Studio 3", NICHT "Harzer Str.")\n'
+    +'    Der Atelierraum steht separat als Kommentar/Notiz — dieser gehört NICHT ins studio-Feld!\n'
     +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
@@ -5227,11 +5322,13 @@ function dokAnalyseDoc(d, key, cb){
     +'    WICHTIG: 210 ist NICHT Staffel 21 Folge 0 — es ist Staffel 2 Folge 10!\n'
     +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},{"folge":108,"takes":36}]\n'
     +'\n'
-    +'  LAYOUT C: EPS-Spalte von Tim = mehrere Folgen ("203, 204"), Takes-Spalte = nur Gesamtzahl\n'
-    +'  → GLEICHMÄSSIG verteilen: Tims takes ÷ Anzahl Folgen (Rest auf erste Folge)\n'
+    +'  LAYOUT C: EPS-Spalte von Tim = mehrere Folgen ("203, 204" oder "301, 302, 303"), Takes-Spalte = nur Gesamtzahl\n'
+    +'  → GLEICHMÄSSIG verteilen: Tims takes ÷ Anzahl Folgen (Rest auf ERSTE Folge)\n'
     +'  ⚠ WICHTIG: Nimm TIMS takes-Wert, NICHT den takes-Wert einer anderen Zeile!\n'
     +'  Beispiel: Tim hat takes=6, EPS=203,204 → [{"folge":203,"takes":3},{"folge":204,"takes":3}]\n'
     +'  Beispiel: Tim hat takes=7, EPS=203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
+    +'  Beispiel: Tim hat takes=80, EPS=301,302,303 → 80÷3=26 Rest 2 → [{"folge":301,"takes":28},{"folge":302,"takes":26},{"folge":303,"takes":26}]\n'
+    +'  Beispiel: Tim hat takes=37, EPS=301,302,303 → 37÷3=12 Rest 1 → [{"folge":301,"takes":13},{"folge":302,"takes":12},{"folge":303,"takes":12}]\n'
     +'  HANDSCHRIFTLICHE ERGÄNZUNGEN: Wenn neben gedruckten Takes handschriftlich weitere\n'
     +'  Takes hinzugefügt wurden (Formate: "+3", "3+", "*3", oder Zahl daneben):\n'
     +'  → Gesamt-Takes erhöhen: "72 3+" bedeutet takes=75\n'
@@ -5267,7 +5364,9 @@ function dokAnalyseDoc(d, key, cb){
     +'    - Beispiel: "Grundgage TV ... Overhaul My Hero Final Season" → rolle="Overhaul", titel="My Hero"\n'
     +'    - Beispiel: "Grundgage TV ... Kevin Dark S2" → rolle="Kevin", titel="Dark"\n'
     +'  datum = AUFNAHMEDATUM aus der Positions-Zeile (NICHT Druckdatum oben rechts!)\n'
-    +'  studio = Auftraggeber/Produktionsfirma (oben links im Briefkopf)\n'
+    +'  studio = der KURZNAME des Synchronstudios/der Produktionsfirma — z.B. "FFS", "VSI", "Arena", "TNT", "Interopa", "RC", "Taunus"\n'
+    +'    NICHT der Atelierraum/Studioraum (z.B. NICHT "BLN Studio E (-65)", NICHT "Atelier 4", NICHT "Studio Hamburg")\n'
+    +'    Der Studioname steht oft als Logo/Firmenname ganz oben auf dem Dokument (Briefkopf), z.B. "Film & Fernseh Synchron GmbH" → "FFS"\n'
     +'  titel = NUR der Kernname der Produktion, OHNE: Staffel, Season, Batch, Follow Doc, S1, S2\n'
     +'  rolle = der Rollenname — LINKS in der Positions-Zeile, RECHTS vom Betragsblock\n'
     +'    Typisch: ein Eigenname wie "Penta", "Overhaul", "Kevin", "Bruno", "Nick"\n'
@@ -5288,7 +5387,7 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'Bei "monats_abrechn" — NUR wenn: Titel enthält "Monats-Gutschrift" ODER Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten:\n'
     +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum, oder "Bisherige Jahressummen" am Ende (das sind Jahres-Kumulativwerte!)\n'
-    +'  studio = Auftraggeber (z.B. "VSI Berlin")\n'
+    +'  studio = der KURZNAME des Synchronstudios (z.B. "FFS", "VSI", "Arena", "TNT", "Interopa") — NICHT der Atelierraum\n'
     +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
     +'  brutto = BRUTTO GAGE gesamt (z.B. 4687.60)\n'
     +'  kv_abzug = Krankenversicherungs-Abzug\n'
@@ -5389,7 +5488,14 @@ function dokAnalyseDoc(d, key, cb){
       d.typ     = j.typ || 'sonstig';
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
-      d.studio  = j.studio || null;
+      d.studio  = (function(s){
+        if(!s) return null;
+        // Bekannte Kürzel immer uppercase
+        var upper=['ffs','vsi','tnt','sdi','adr','rc','blg','cls','eva','dmt','gvl'];
+        var low = s.toLowerCase().trim();
+        if(upper.indexOf(low)>=0) return s.toUpperCase();
+        return s;
+      })(j.studio);
       d.titel   = j.titel || j.produktion || null;
       d.regie   = j.regie || null;
       d.rolle   = j.rolle || null;
@@ -5930,11 +6036,14 @@ function dokOpenDetail(id){
             +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
             +'</div>';
         });
-        body+='</div><div style="font-size:10px;color:#888;margin-top:5px">Gesamt: <b>'+(d.gvl_takes||'')+'</b> Takes</div></div>';
+        body+='</div><div style="font-size:10px;color:#888;margin-top:5px">Gesamt: <b>'+(d.gvl_takes||'')+'</b> Takes</div>'
+          +'<button type="button" onclick="gvlDokBearbeiten(\''+d.id+'\')" style="margin-top:8px;width:100%;background:#ede9fe;color:#6d28d9;border:1.5px solid #c4b5fd;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✎ GVL Folgen & Takes bearbeiten</button>'
+          +'</div>';
       } else {
         body+=_editRow('gvl_staffel','Staffel',d.gvl_staffel||d.gvl_staffel_header||'');
         body+=_editRow('gvl_folge','Folge',d.gvl_folge||d.gvl_episode_header||'');
         body+=_editRow('gvl_takes','Takes GVL',d.gvl_takes||d.takes||'');
+        body+='<button type="button" onclick="gvlDokBearbeiten(\''+d.id+'\')" style="margin-top:4px;width:100%;background:#ede9fe;color:#6d28d9;border:1.5px solid #c4b5fd;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✎ GVL Folgen & Takes bearbeiten</button>';
       }
     }
     if(d.typ==='abrechn'){
@@ -6202,9 +6311,12 @@ function dokOpenDetail(id){
   }
   var panel=document.getElementById('dok-detail-panel');
   if(panel) panel.classList.add('open');
+  // Warteschlange-Banner verstecken — darf ‹-Button nicht überlagern
+  var qb=document.getElementById('dok-queue-banner');
+  if(qb) qb.style.display='none';
   var scroll=document.getElementById('dok-detail-scroll');
   if(scroll) scroll.scrollTop=0;
-  _lockPageZoom(); // Zoom sperren solange Dok-Detail offen
+  _lockPageZoom();
 }
 function dokDetailClose(){
   if(_dokCurrentId){
@@ -6214,7 +6326,12 @@ function dokDetailClose(){
   var panel=document.getElementById('dok-detail-panel');
   if(panel) panel.classList.remove('open');
   _dokCurrentId=null;
-  _unlockPageZoom(); // Zoom freigeben
+  _unlockPageZoom();
+  // Warteschlange-Banner wieder zeigen wenn noch Dokumente warten
+  if(_dokQueue && _dokQueue.length){
+    var qb=document.getElementById('dok-queue-banner');
+    if(qb) qb.style.display='flex';
+  }
 }
 
 // Pending-Link: Dok-ID das auf Termin wartet
