@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '207';
+  if(el) el.textContent = '208';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5310,6 +5310,11 @@ function dokAnalyseDoc(d, key, cb){
     +'  LAYOUT A: Takes-Spalte von Tim enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
     +'    → IMMER als gvl_takes_detail auslesen, auch wenn nur eine Folge und nur 1 Take!\n'
     +'    "809:1" → [{"folge":809,"takes":1}] — 809 = Staffel 8 Folge 09, 1 Take\n'
+    +'  LAYOUT D: Separate Spalte "Episode:Takes" oder "EPS:Takes" oder "Folge:Takes" — z.B. "304:10"\n'
+    +'    Diese Spalte enthält direkt Folgennummer DOPPELPUNKT Takes — genau wie Layout A behandeln!\n'
+    +'    Beispiel: Tim Zeile hat Takes=10, Episode:Takes="304:10" → gvl_takes_detail=[{"folge":304,"takes":10}]\n'
+    +'    Mehrere: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
+    +'    ⚠ WICHTIG: Diese Spalte hat VORRANG vor der normalen Takes-Spalte für gvl_takes_detail!\n'
     +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
