@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '197';
+  if(el) el.textContent = '199';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1931,6 +1931,9 @@ function openDetail(id){
   if(!t)return;
   // ★ Pending Dok-Verknüpfung: wenn Nutzer aus Dok-Sheet hierher navigiert ist ★
   if(_pendingDokLink){ _checkPendingDokLink(id); return; }
+  // Warteschlange-Banner verstecken — darf Termin nicht überlagern
+  var qb=document.getElementById('dok-queue-banner');
+  if(qb) qb.style.display='none';
   ctid=id;
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.add('open');
@@ -4082,6 +4085,11 @@ function switchView(v){
   document.querySelectorAll('.nav-btn').forEach(function(el){el.classList.remove('active');});
   var view = document.getElementById('view-'+v);
   if(view) view.classList.add('active');
+  // Warteschlange-Banner nur in Dokumente-View sichtbar
+  var qb = document.getElementById('dok-queue-banner');
+  if(qb) qb.style.display = (v==='dokumente') ? 'flex' : 'none';
+  var view = document.getElementById('view-'+v);
+  if(view) view.classList.add('active');
   // bottom nav highlight
   var navMap = {
     'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
@@ -5253,7 +5261,7 @@ function dokAnalyseDoc(d, key, cb){
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
       d.studio  = j.studio || null;
-      d.titel   = j.titel || null;
+      d.titel   = j.titel || j.produktion || null;
       d.regie   = j.regie || null;
       d.rolle   = j.rolle || null;
       d.uhrzeit = j.uhrzeit || null;
@@ -8521,7 +8529,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
