@@ -694,7 +694,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Ausgaben</div>
     <div id="dok-tab-offen" onclick="dokSetTab('offen')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Offen</div>
   </div>
-  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+220px)"></div>
+  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+340px)"></div>
 </div>
 
 <!-- ══════ UST-VORANMELDUNG VIEW ════════════════════════════ -->
@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '178';
+  if(el) el.textContent = '182';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1887,9 +1887,11 @@ function tCard(t){
     if(folge) extraLines+=esc(folge);
     extraLines+='</div>';
   }
-  if(ab&&ab.auszahlung){
-    var diffVal=ab.auszahlung-(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-    var diffOk=Math.abs(diffVal)<1;
+  if(ab&&ab.brutto){
+    var rawT=parseInt(t.takes)||0;
+    var billT=rawT>0&&rawT<10?10:rawT;
+    var cardNet=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
+    var diffOk=Math.abs(cardNet-(parseFloat(ab.brutto)||0))<0.02;
     extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(ab.auszahlung)+(diffOk?' ✓':' ⚠')+'</div>';
   }
 
@@ -1970,6 +1972,7 @@ function openDetail(id){
     var tc=ok?farbe:'#9ca3af';
     var clkAttr='';
     if(ok&&dateinamen&&dateinamen.length) clkAttr=' onclick="showDateinamen(this)" data-namen="'+dateinamen.join('|')+'" data-label="'+label+'"';
+    return '<div style="display:flex;align-items:center;gap:5px;cursor:'+(ok&&dateinamen&&dateinamen.length?'pointer':'default')+'"'+clkAttr+'>'
       +'<div style="width:10px;height:10px;border-radius:50%;background:'+bg+'"></div>'
       +'<div style="font-size:11px;color:'+tc+';font-weight:'+(ok?'700':'400')+'">'+label+'</div>'
       +'</div>';
@@ -2019,10 +2022,10 @@ function openDetail(id){
   // ── GVL ÜBERSICHT ──────────────────────────────────────────
   var gvlHtml='';
   var gvlDispo=dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
-  if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes){
+  if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
     gvlHtml='<div class="info-card" style="border-left:4px solid #6d28d9">'
       +'<div class="info-card-header"><span>🎬 GVL-Übersicht</span>'
-      +'<span class="ic-edit" onclick="switchView(\'gvl\')">GVL →</span></div>'
+      +'<span class="ic-edit" onclick="gvlTerminBearbeiten(\''+id+'\')" style="color:#6d28d9">✎ Bearbeiten</span></div>'
       +'<div style="padding:0 16px 14px">';
     if(gvlDispo){
       if(gvlDispo.gvl_staffel_header) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(gvlDispo.gvl_staffel_header)+'</div></div>';
@@ -2036,10 +2039,22 @@ function openDetail(id){
         var ptCol=gvlDispo.gvl_excluded?'#c2410c':'#15803d';
         gvlHtml+='<div class="info-row"><div class="ir-key">Plattform</div><div class="ir-val" style="color:'+ptCol+';font-weight:700">'+esc(gvlDispo.produktion_typ_aktiv)+(gvlDispo.gvl_excluded?' ❌ nicht GVL-pflichtig':' ✓ GVL-pflichtig')+'</div></div>';
       }
+    } else if(t.gvl_takes_detail && t.gvl_takes_detail.length){
+      // Chips aus Termin-eigenen gvl_takes_detail
+      gvlHtml+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';
+      t.gvl_takes_detail.forEach(function(td, ei){
+        var fs=String(td.folge);
+        var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
+        var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
+        gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'          +'<div style="font-size:9px;font-weight:700;color:#7c3aed">S'+sNr+' F'+fNr+'</div>'          +'<div style="font-size:14px;font-weight:900;color:#6d28d9">'+td.takes+'</div>'          +'</div>';
+      });
+      gvlHtml+='</div>';
+      gvlHtml+='<div style="font-size:10px;color:#888">Gesamt: <b>'+(t.gvl_takes||'')+'</b> Takes</div>';
     } else {
       if(t.gvl_staffel) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(t.gvl_staffel)+'</div></div>';
       if(t.gvl_folge)   gvlHtml+='<div class="info-row"><div class="ir-key">Folge</div><div class="ir-val">'+esc(t.gvl_folge)+'</div></div>';
       if(t.gvl_takes)   gvlHtml+='<div class="info-row"><div class="ir-key">Takes</div><div class="ir-val">'+esc(String(t.gvl_takes))+'</div></div>';
+      gvlHtml+='<div style="margin-top:6px"><button type="button" onclick="gvlTerminBearbeiten(\''+id+'\')" style="width:100%;background:#f5f3ff;color:#6d28d9;border:1.5px solid #c4b5fd;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Folgen & Takes nachtragen</button></div>';
     }
     gvlHtml+='</div></div>';
   }
@@ -2073,27 +2088,60 @@ function openDetail(id){
     +'<div class="info-card-header"><span>Gage</span><span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span></div>'
     +'<div class="gage-row"><span>Komm. Gage</span><span>'+((t.kommgage||0).toFixed(2).replace('.',','))+' €</span></div>'
     +(t.rate?'<div class="gage-row"><span>'+totalLabel+' Takes × '+parseFloat(t.rate||0).toFixed(2).replace('.',',')+' €</span><span>'+(t.rate||0)+' €</span></div>':'')
-    +'<div class="gage-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><span>Netto</span><span>'+net.toFixed(2).replace('.',',')+' €</span></div>'
+    +(function(){
+      var netBruttoOk=!ab||Math.abs(net-(parseFloat(ab.brutto)||0))<0.02;
+      var col=ab?(netBruttoOk?'#15803d':'#c2410c'):'inherit';
+      var fw=ab?'800':'inherit';
+      return '<div class="gage-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">'
+        +'<span style="color:'+col+';font-weight:'+fw+'">Netto'+(ab?' = Studio-Brutto':'')+'</span>'
+        +'<span style="color:'+col+';font-weight:'+fw+'">'+net.toFixed(2).replace('.',',')+' €</span>'
+        +'</div>';
+    })()
     +'<div class="gage-row"><span>USt ('+Math.round(ur*100)+'%)</span><span>'+ust.toFixed(2).replace('.',',')+' €</span></div>'
     +'<div class="gage-row gage-total" style="margin-top:6px;padding-top:6px;border-top:1.5px solid #ccc"><span style="font-weight:800">Brutto</span><span style="font-weight:900;font-size:16px">'+brut.toFixed(2).replace('.',',')+' €</span></div>'
     +'</div>';
 
   // ── ABRECHNUNG ─────────────────────────────────────────────
+  // Kernvergleich: App-Netto muss Studio-Brutto entsprechen (gleiche Zahl, verschiedene Bezeichnung).
+  // Nur Takes-Zahl und Grundgage sind relevante Differenzquellen.
   var abHtml='';
   if(ab){
-    var diffVal=ab.auszahlung-(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-    var diffOk=Math.abs(diffVal)<1;
-    abHtml='<div class="info-card" style="border-left:4px solid '+(diffOk?'#22c55e':'#f97316')+'">'
+    var abBrutto=parseFloat(ab.brutto)||0;
+    var netBruttoOk=Math.abs(net-abBrutto)<0.02;
+    var takesDiff=ab.takes&&(parseInt(ab.takes)!==parseInt(t.takes));
+    var gageDiff=ab.grundgage&&(Math.abs(parseFloat(ab.grundgage)-(parseFloat(t.kommgage)||0))>0.02);
+    var matchCol=netBruttoOk?'#15803d':'#c2410c';
+    abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
       +'<div class="info-card-header"><span>💶 Abrechnung</span>'
-      +'<span style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';font-weight:700">'+(diffOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
+      +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
-      +(ab.takes?'<div class="info-row"><div class="ir-key">Takes (abgr.)</div><div class="ir-val">'+ab.takes+'</div></div>':'')
-      +(ab.grundgage?'<div class="info-row"><div class="ir-key">Grundgage</div><div class="ir-val">'+fmtEur(ab.grundgage)+'</div></div>':'')
-      +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px"><div class="ir-key">Brutto</div><div class="ir-val">'+fmtEur(ab.brutto)+'</div></div>'
-      +(ab.netto?'<div class="info-row"><div class="ir-key">Netto</div><div class="ir-val">'+fmtEur(ab.netto)+'</div></div>':'')
-      +'<div class="info-row" style="font-weight:800;font-size:15px"><div class="ir-key">Auszahlung</div><div class="ir-val" style="color:'+(diffOk?'#15803d':'#c2410c')+'">'+fmtEur(ab.auszahlung)+'</div></div>'
-      +(!diffOk?'<div style="font-size:12px;color:#c2410c;padding-top:4px">Differenz: '+fmtEur(Math.abs(diffVal))+'</div>':'')
+      // Takes: rot + Vergleich wenn abweichend
+      +(ab.takes?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
+        '<div class="ir-key" style="'+(takesDiff?'color:#c2410c;font-weight:700':'')+'">Takes (abgr.)</div>'+
+        '<div class="ir-val" style="'+(takesDiff?'color:#c2410c;font-weight:900':netBruttoOk?'color:#15803d;font-weight:700':'')+'">'+
+        ab.takes+(takesDiff?' <span style="font-size:10px;font-weight:700;color:#c2410c">≠ Dispo: '+t.takes+'</span>':'')+'</div></div>':'')
+      // Grundgage: rot + Vergleich wenn abweichend
+      +(ab.grundgage?'<div class="info-row"'+(gageDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
+        '<div class="ir-key" style="'+(gageDiff?'color:#c2410c;font-weight:700':'')+'">Grundgage</div>'+
+        '<div class="ir-val" style="'+(gageDiff?'color:#c2410c;font-weight:900':netBruttoOk?'color:#15803d;font-weight:700':'')+'">'+
+        fmtEur(ab.grundgage)+(gageDiff?' <span style="font-size:10px;font-weight:700;color:#c2410c">≠ Dispo: '+fmtEur(t.kommgage)+'</span>':'')+'</div></div>':'')
+      // Take-Gage
+      +(ab.take_gage?'<div class="info-row"><div class="ir-key" style="color:#888">Take-Gage</div><div class="ir-val" style="color:#888">'+fmtEur(ab.take_gage)+' / Take</div></div>':'')
+      // Brutto (Studio) = Netto (App) — Kernzeile
+      +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
+        '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto = App-Netto</div>'+
+        '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+fmtEur(ab.brutto)+'</div></div>'
+      // SV-Abzüge: KV, RV, PV — nur wenn vorhanden
+      +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
+        (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
+      // Netto nach SV-Abzug
+      +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
+      // MwSt
+      +(ab.mwst?'<div class="info-row"><div class="ir-key" style="color:#888">MwSt ('+Math.round(ur*100)+'%)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.mwst)+'</div></div>':'')
+      // Auszahlung — Endergebnis
+      +'<div class="info-row" style="font-weight:800;font-size:15px;border-top:1px solid #eee;padding-top:8px;margin-top:4px"><div class="ir-key">Auszahlung</div><div class="ir-val">'+fmtEur(ab.auszahlung)+'</div></div>'
+      +(!netBruttoOk?'<div style="font-size:12px;color:#c2410c;padding-top:6px;font-weight:700;border-top:1px solid #fecaca;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+'</div>':'')
       +'</div></div>';
   }
 
@@ -2231,10 +2279,20 @@ function saveMergeChanges(){
   var t=(db.termine||[]).find(function(x){return x.id===ctid;});
   if(t){
     t._hasPendingMerge=false;
-    t._mergeSuggestions=null; // Vorschläge verwerfen die nicht übernommen wurden
+    t._mergeSuggestions=null;
   }
+  // Jetzt Foto löschen — Termin wurde gespeichert
+  if(t && t.dispoDocId){
+    var dok=(db.dokumente||[]).find(function(x){return x.id===t.dispoDocId;});
+    if(dok && dok._pendingDelete){ dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false; }
+  }
+  // Auch alle verknüpften Dokumente mit _pendingDelete aufräumen
+  (db.dokumente||[]).forEach(function(dok){
+    if(dok._pendingDelete && dok.terminId===ctid){ dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false; }
+  });
   _mergeSnapshot=null;
   _mergeTerminId=null;
+  _returnToDokId=null; // Rücknavigation aufräumen
   save(db);
   openDetail(ctid);
   showToast('✓ Änderungen gespeichert');
@@ -2289,6 +2347,57 @@ function inlineEditCommit(inp, terminId, field){
   save(db);
   rTermine();
   openDetail(terminId);
+}
+
+function gvlTerminBearbeiten(terminId){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  var current=(t.gvl_takes_detail||[]).map(function(e){return e.folge+':'+e.takes;}).join(', ');
+  var staffel=t.gvl_staffel||t.gvl_staffel_header||'';
+  var ov=document.createElement('div');
+  ov.setAttribute('data-gvlt-ov','1');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">GVL Folgen & Takes</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Staffel: <input id="gvlt-staffel" type="number" value="'+staffel+'" style="width:50px;border:1.5px solid #e5e7eb;border-radius:6px;padding:4px 6px;font-size:12px"> &nbsp; Format: Folge:Takes kommagetrennt</div>'
+    +'<input id="gvlt-input" type="text" placeholder="z.B. 203:3, 204:3" value="'+current+'" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:14px;font-family:monospace;margin-bottom:12px">'
+    +'<button type="button" data-tid="'+terminId+'" onclick="gvlTerminSave(this)" style="width:100%;background:#6d28d9;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Speichern</button>'
+    +'<button type="button" onclick="var o=document.querySelector(String.fromCharCode(91)+\'data-gvlt-ov\'+String.fromCharCode(93));if(o)o.remove();" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  setTimeout(function(){ var inp=document.getElementById('gvlt-input'); if(inp){inp.focus();} },100);
+}
+
+function gvlTerminSave(btn){
+  var tid=btn.getAttribute('data-tid');
+  var t=(db.termine||[]).find(function(x){return x.id===tid;});
+  if(!t) return;
+  var staffelEl=document.getElementById('gvlt-staffel');
+  var inp=document.getElementById('gvlt-input');
+  if(staffelEl&&staffelEl.value) t.gvl_staffel=staffelEl.value.trim();
+  if(inp){
+    var detail=[];
+    inp.value.split(',').forEach(function(p){
+      p=p.trim();
+      var sep=p.indexOf(':');
+      if(sep>0){
+        var folge=parseInt(p.slice(0,sep));
+        var takes=parseInt(p.slice(sep+1));
+        if(!isNaN(folge)&&!isNaN(takes)) detail.push({folge:folge,takes:takes});
+      }
+    });
+    if(detail.length){
+      t.gvl_takes_detail=detail;
+      t.gvl_takes=detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+      t.takes=t.gvl_takes;
+    }
+  }
+  save(db);
+  var ov=document.querySelector('[data-gvlt-ov]');
+  if(ov) ov.remove();
+  openDetail(tid);
+  showToast('✓ GVL Folgen gespeichert');
 }
 
 function removeNamenOv(){
@@ -2484,10 +2593,24 @@ function discardMergeChanges(){
       rTermine();
     }
   }
+  // Foto-Löschung abbrechen — _pendingDelete zurücksetzen
+  (db.dokumente||[]).forEach(function(dok){
+    if(dok._pendingDelete){ dok._pendingDelete=false; }
+  });
+  var returnId=_returnToDokId;
   _mergeSnapshot=null;
   _mergeTerminId=null;
-  openDetail(ctid);
-  showToast('Änderungen verworfen');
+  _returnToDokId=null;
+  if(returnId){
+    // Zurück zum Dispoblatt
+    closeDetail();
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(returnId); }, 100);
+    showToast('Verworfen — zurück zum Dispoblatt');
+  } else {
+    openDetail(ctid);
+    showToast('Änderungen verworfen');
+  }
 }
 
 function _adjustGvlLastFolge(t, delta){
@@ -6448,16 +6571,25 @@ function dokBestaetigenMitTermin(dokId, terminId){
   }
   d.bestaetigt = true;
   d.awaitConfirm = false;
-  d.dataURL = null; // Foto löschen
+  // Foto NOCH NICHT löschen — erst wenn Kalendertermin gespeichert wird
+  // d._pendingDelete = true markiert es zum Löschen beim nächsten saveMergeChanges
+  d._pendingDelete = true;
   _archiveDateiname(d.dateiname||d.beschr);
-  save(db); // Speichert Dok-Änderungen + in-memory Termin (inkl. Merge)
+  save(db);
   rDokumente();
   rTermine();
   showToast('✓ Bitte Termin-Änderungen prüfen und speichern');
   if(t){
+    // Dok-ID merken für Rücknavigation
+    _returnToDokId = _dokCurrentId;
     dokDetailClose();
+    // Lock + View-Wechsel
+    _openDetailLock = true;
     switchView('termine');
-    setTimeout(function(){ openDetail(terminId); }, 150);
+    setTimeout(function(){
+      _openDetailLock = false;
+      openDetail(terminId);
+    }, 350);
   }
 }
 
@@ -8387,6 +8519,7 @@ function abSpeichern(){
     auszahlung:_abData.auszahlung||0,
     takes:_abData.takes||0,
     take_gage:_abData.take_gage||0,
+    grundgage:_abData.grundgage||0,
     kv:_abData.kv_abzug||0,
     rv:_abData.rv_abzug||0,
     pv:_abData.pv_abzug||0,
