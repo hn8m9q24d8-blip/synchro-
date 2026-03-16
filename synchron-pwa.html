@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '202';
+  if(el) el.textContent = '204';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2360,49 +2360,123 @@ function inlineEditCommit(inp, terminId, field){
 function gvlTerminBearbeiten(terminId){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!t) return;
-  var current=(t.gvl_takes_detail||[]).map(function(e){return e.folge+':'+e.takes;}).join(', ');
-  var staffel=t.gvl_staffel||t.gvl_staffel_header||'';
+
+  // Staffel aus gvl_takes_detail ableiten (korrekt: erste 1-2 Ziffern der kombinierten Folgen-Nr)
+  function staffelAusFolge(folgeStr){
+    folgeStr = String(folgeStr||'');
+    if(folgeStr.length===3) return parseInt(folgeStr[0]);
+    if(folgeStr.length===4) return parseInt(folgeStr.slice(0,2));
+    if(folgeStr.length>2)   return parseInt(folgeStr.slice(0,-2));
+    return 1;
+  }
+  function folgeAusFolge(folgeStr){
+    folgeStr = String(folgeStr||'');
+    if(folgeStr.length===3) return parseInt(folgeStr.slice(1));
+    if(folgeStr.length>=4)  return parseInt(folgeStr.slice(-2));
+    return parseInt(folgeStr)||0;
+  }
+
+  var detail = t.gvl_takes_detail && t.gvl_takes_detail.length
+    ? t.gvl_takes_detail.map(function(e){ return {staffel:staffelAusFolge(e.folge), folge:folgeAusFolge(e.folge), takes:e.takes}; })
+    : [{staffel:parseInt(t.gvl_staffel)||1, folge:parseInt(t.gvl_folge)||1, takes:parseInt(t.takes)||0}];
+
+  function buildRows(){
+    var h='';
+    detail.forEach(function(row,i){
+      h+='<div id="gvlt-row-'+i+'" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px">'
+        +'<div style="flex:1">'
+        +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">STAFFEL</div>'
+        +'<input type="number" id="gvlt-s-'+i+'" value="'+row.staffel+'" min="1" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box">'
+        +'</div>'
+        +'<div style="flex:1">'
+        +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">FOLGE</div>'
+        +'<input type="number" id="gvlt-f-'+i+'" value="'+row.folge+'" min="1" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box">'
+        +'</div>'
+        +'<div style="flex:1.5">'
+        +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">TAKES</div>'
+        +'<input type="number" id="gvlt-t-'+i+'" value="'+row.takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:900;color:#1d6fa8;box-sizing:border-box">'
+        +'</div>'
+        +(detail.length>1
+          ? '<button type="button" onclick="gvltRemoveRow('+i+')" style="flex-shrink:0;background:#fee2e2;color:#c2410c;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;touch-action:manipulation;align-self:flex-end;margin-bottom:2px">✕</button>'
+          : '')
+        +'</div>';
+    });
+    return h;
+  }
+
   var ov=document.createElement('div');
+  ov.id='gvlt-ov';
   ov.setAttribute('data-gvlt-ov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
   var box=document.createElement('div');
-  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
-  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">GVL Folgen & Takes</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Staffel: <input id="gvlt-staffel" type="number" value="'+staffel+'" style="width:50px;border:1.5px solid #e5e7eb;border-radius:6px;padding:4px 6px;font-size:12px"> &nbsp; Format: Folge:Takes kommagetrennt</div>'
-    +'<input id="gvlt-input" type="text" placeholder="z.B. 203:3, 204:3" value="'+current+'" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:14px;font-family:monospace;margin-bottom:12px">'
-    +'<button type="button" data-tid="'+terminId+'" onclick="gvlTerminSave(this)" style="width:100%;background:#6d28d9;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Speichern</button>'
-    +'<button type="button" onclick="var o=document.querySelector(String.fromCharCode(91)+\'data-gvlt-ov\'+String.fromCharCode(93));if(o)o.remove();" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  box.id='gvlt-box';
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  function render(){
+    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">GVL Folgen & Takes</div>'
+      +'<div style="font-size:12px;color:#888;margin-bottom:12px">'+esc(t.titel||t.studio||'')+'</div>'
+      +'<div id="gvlt-rows">'+buildRows()+'</div>'
+      +'<button type="button" onclick="gvltAddRow()" style="width:100%;background:#f3f4f6;color:#6d28d9;border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>'
+      +'<button type="button" id="gvlt-save-btn" data-tid="'+terminId+'" onclick="gvlTerminSave(this)" style="width:100%;background:#6d28d9;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Speichern</button>'
+      +'<button type="button" onclick="document.getElementById(\'gvlt-ov\').remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  }
+  render();
   ov.appendChild(box);
   document.body.appendChild(ov);
-  setTimeout(function(){ var inp=document.getElementById('gvlt-input'); if(inp){inp.focus();} },100);
+
+  // Globale Hilfsfunktionen für Inline-onclick
+  window._gvltDetail = detail;
+  window._gvltRender = function(){
+    var rows=document.getElementById('gvlt-rows');
+    if(rows) rows.innerHTML=buildRows();
+  };
+}
+
+function gvltAddRow(){
+  var d=window._gvltDetail;
+  if(!d) return;
+  var last=d[d.length-1]||{staffel:1,folge:1,takes:0};
+  d.push({staffel:last.staffel, folge:last.folge+1, takes:0});
+  window._gvltRender && window._gvltRender();
+}
+
+function gvltRemoveRow(i){
+  var d=window._gvltDetail;
+  if(!d||d.length<=1) return;
+  d.splice(i,1);
+  window._gvltRender && window._gvltRender();
 }
 
 function gvlTerminSave(btn){
   var tid=btn.getAttribute('data-tid');
   var t=(db.termine||[]).find(function(x){return x.id===tid;});
   if(!t) return;
-  var staffelEl=document.getElementById('gvlt-staffel');
-  var inp=document.getElementById('gvlt-input');
-  if(staffelEl&&staffelEl.value) t.gvl_staffel=staffelEl.value.trim();
-  if(inp){
-    var detail=[];
-    inp.value.split(',').forEach(function(p){
-      p=p.trim();
-      var sep=p.indexOf(':');
-      if(sep>0){
-        var folge=parseInt(p.slice(0,sep));
-        var takes=parseInt(p.slice(sep+1));
-        if(!isNaN(folge)&&!isNaN(takes)) detail.push({folge:folge,takes:takes});
-      }
-    });
-    if(detail.length){
-      t.gvl_takes_detail=detail;
-      t.gvl_takes=detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
-      t.takes=t.gvl_takes;
-    }
+  var d=window._gvltDetail||[];
+  // Aktuelle Werte aus Inputs lesen
+  var detail=[];
+  d.forEach(function(row,i){
+    var sEl=document.getElementById('gvlt-s-'+i);
+    var fEl=document.getElementById('gvlt-f-'+i);
+    var tEl=document.getElementById('gvlt-t-'+i);
+    var staffel=sEl?parseInt(sEl.value)||1:row.staffel;
+    var folge=fEl?parseInt(fEl.value)||1:row.folge;
+    var takes=tEl?parseInt(tEl.value)||0:row.takes;
+    // Kombinierte Folgen-Nr: Staffel*100+Folge (z.B. S2F8 → 208)
+    var kombiniert=staffel*100+folge;
+    detail.push({folge:kombiniert, takes:takes});
+  });
+  if(detail.length){
+    t.gvl_takes_detail=detail;
+    t.gvl_takes=detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+    t.takes=t.gvl_takes;
+    // Staffel aus erstem Eintrag ableiten
+    var firstFolge=String(detail[0].folge);
+    if(firstFolge.length===3) t.gvl_staffel=firstFolge[0];
+    else if(firstFolge.length>=4) t.gvl_staffel=firstFolge.slice(0,-2);
   }
   save(db);
-  var ov=document.querySelector('[data-gvlt-ov]');
+  window._gvltDetail=null;
+  var ov=document.getElementById('gvlt-ov');
   if(ov) ov.remove();
   openDetail(tid);
   showToast('✓ GVL Folgen gespeichert');
@@ -2624,6 +2698,27 @@ function applyMergeSuggestion(terminId, field){
   save(db);
   rTermine();
   openDetail(terminId);
+}
+
+// Einzelnes Feld aus dem Merge herausnehmen — alten Wert wiederherstellen
+function revertMergeField(terminId, field, oldVal){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  // Alten Wert wiederherstellen
+  t[field] = oldVal;
+  // Als manuell markieren → wird bei zukünftigen Merges nicht überschrieben
+  if(!t._manualFields) t._manualFields=[];
+  if(t._manualFields.indexOf(field)<0) t._manualFields.push(field);
+  save(db);
+  // Zeile im UI sofort als "behalten" markieren ohne neu zu rendern
+  var row = document.getElementById('merge-row-'+field);
+  if(row){
+    row.style.opacity='0.4';
+    row.style.textDecoration='line-through';
+    var btn = row.querySelector('button');
+    if(btn){ btn.textContent='✓ behalten'; btn.style.background='#f0fdf4'; btn.style.color='#15803d'; btn.onclick=null; }
+  }
+  showToast('✕ '+field+' nicht übernommen');
 }
 
 function discardMergeChanges(){
@@ -6457,13 +6552,10 @@ function _buildMergePreview(d, t){
     var dStr = String(dVal);
     var tStr = String(tVal);
     if(!tVal){
-      // NEU
-      rows.push({label:label, status:'NEU', alt:'', neu:dStr});
+      rows.push({label:label, tField:tField, status:'NEU', alt:'', neu:dStr});
     } else if(tStr.trim().toLowerCase()!==dStr.trim().toLowerCase()){
-      // GEÄNDERT
-      rows.push({label:label, status:'GEÄNDERT', alt:tStr, neu:dStr});
+      rows.push({label:label, tField:tField, status:'GEÄNDERT', alt:tStr, neu:dStr});
     }
-    // gleich → nicht zeigen
   }
   check('Produktion', 'titel', d.titel);
   check('Datum', 'datum', d.datum);
@@ -6524,10 +6616,18 @@ function _buildMergePreview(d, t){
     var isNeu = r.status==='NEU';
     var badgeBg = isNeu ? '#d1fae5' : '#fef3c7';
     var badgeColor = isNeu ? '#065f46' : '#92400e';
-    html+='<div style="padding:8px 0;border-bottom:1px solid #f5f5f5">'
-      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+    var tid = t.id||'';
+    html+='<div id="merge-row-'+r.tField+'" style="padding:8px 0;border-bottom:1px solid #f5f5f5">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px">'
+      +'<div style="display:flex;align-items:center;gap:6px">'
       +'<span style="font-size:10px;color:#888;font-weight:600">'+r.label+'</span>'
       +'<span style="background:'+badgeBg+';color:'+badgeColor+';font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px">'+r.status+'</span>'
+      +'</div>'
+      // ✕ nur bei GEÄNDERT — NEU kann man nicht "nicht übernehmen" wenn es leer war
+      +(!isNeu
+        ? '<button type="button" onclick="revertMergeField(\''+tid+'\',\''+r.tField+'\',\''+r.alt.replace(/'/g,"\\'")+'\')" '
+          +'style="background:#fee2e2;color:#c2410c;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation;flex-shrink:0">✕ nicht übernehmen</button>'
+        : '')
       +'</div>'
       +(r.alt?'<div style="font-size:11px;color:#aaa;text-decoration:line-through">'+esc(r.alt)+'</div>':'')
       +'<div style="font-size:13px;font-weight:700;color:#1a1a1a">'+esc(r.neu)+'</div>'
