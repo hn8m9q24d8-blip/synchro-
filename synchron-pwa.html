@@ -2500,8 +2500,9 @@ function dokSessionPeek(elOrId, sessionIdx){
   t._hasPendingMerge = true;
   save(db);
 
-  // Rücknavigation zum Dok
+  // Rücknavigation zum Dok merken, dann Dok-Panel schließen
   _returnToDokId = _dokCurrentId;
+  dokDetailClose(); // ← Dok-Panel schließen, sonst blockiert es die Ansicht
   var dp2 = document.getElementById('detail-panel');
   if(dp2) dp2.classList.remove('open');
   ctid = null;
@@ -5781,15 +5782,14 @@ function dokOpenDetail(id){
         var matchColor=tm?'#15803d':'#c2410c';
         var matchBg=tm?'#f0fdf4':'#fff7ed';
         var matchBorder=tm?'#86efac':'#fed7aa';
-        // Klickbar wenn Termin gefunden — öffnet Kalenderabgleich für diese Session
-        var clickable=!!tm;
-        var sessionOnclick = clickable
+        // Gematcht → Termin-Peek, ungematcht → Kalender-Suche zum manuellen Zuordnen
+        var sessionOnclick = tm
           ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
-          : '';
-        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(clickable?'cursor:pointer;touch-action:manipulation;':'')+'"'+sessionOnclick+'>'; 
+          : ' onclick="dokSessionGotoKalender(\''+d.id+'\','+si+')"';
+        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;touch-action:manipulation"'+sessionOnclick+'>'; 
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
-        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Kein Termin')+'</div>';
+        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Tippen zum Zuordnen')+'</div>';
         body+='</div>';
         body+='<div style="font-size:11px;color:#666">';
         if(s.rolle) body+=esc(s.rolle)+' · ';
@@ -5954,6 +5954,7 @@ function dokDetailClose(){
 
 // Pending-Link: Dok-ID das auf Termin wartet
 var _pendingDokLink=null;
+var _pendingSessionIdx=null; // Session-Index wenn ein Einzel-Session-Link aussteht
 var _returnToDokId=null; // Dok-ID für Rücknavigation aus Termin-Peek
 var _mergeSnapshot=null; // Snapshot des Termins vor Merge — zum Verwerfen
 var _mergeTerminId=null; // TerminId des pending Merge
@@ -6221,8 +6222,50 @@ function dokGotoKalender(dokId){
 
 function dokLinkCancel(){
   _pendingDokLink=null;
+  _pendingSessionIdx=null;
   var banner=document.getElementById('dok-link-banner');
   if(banner) banner.style.display='none';
+}
+
+// Kalender öffnen um eine ungematche Session manuell einem Termin zuzuordnen
+function dokSessionGotoKalender(dokId, si){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d||!d.sessions||!d.sessions[si]) return;
+  var s=d.sessions[si];
+  _pendingDokLink=dokId;
+  _pendingSessionIdx=si;
+  var panel=document.getElementById('dok-detail-panel');
+  if(panel) panel.classList.remove('open');
+  _dokCurrentId=null;
+  _unlockPageZoom();
+  if(s.datum){
+    calSelectedDate=s.datum;
+    calViewDate=new Date(s.datum+'T00:00:00');
+    calViewDate=new Date(calViewDate.getFullYear(),calViewDate.getMonth(),1);
+  }
+  document.querySelectorAll('.view').forEach(function(el){ el.classList.remove('active'); });
+  var tv=document.getElementById('view-termine');
+  if(tv) tv.classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(function(el){ el.classList.remove('active'); });
+  var nb=document.getElementById('nav-termine');
+  if(nb) nb.classList.add('active');
+  rTermine(); updateBadge();
+  setTimeout(function(){
+    var banner=document.getElementById('dok-link-banner');
+    if(!banner){
+      banner=document.createElement('div');
+      banner.id='dok-link-banner';
+      banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:600;background:#c2410c;color:#fff;font-size:12px;font-weight:700;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+      document.body.appendChild(banner);
+    }
+    var label=(s.datum?s.datum.split('-').reverse().join('.')+' ':'')+(s.titel||d.titel||'Session');
+    banner.innerHTML='<div style="flex:1;min-width:0">'
+      +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">📎 Session zuordnen:</div>'
+      +'<div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(label.slice(0,35))+'</div>'
+      +'</div>'
+      +'<button type="button" onclick="dokLinkCancel()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>';
+    banner.style.display='flex';
+  }, 300);
 }
 
 // Baut Merge-Vorschau HTML: zeigt GEÄNDERT/NEU Felder mit altem Wert durchgestrichen
@@ -6835,8 +6878,20 @@ function _checkPendingDokLink(terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d||!t) return;
+  var si=_pendingSessionIdx;
   _pendingDokLink=null;
+  _pendingSessionIdx=null;
   dokLinkCancel();
+  // Session-Zuordnung: nur diese eine Session dem Termin zuweisen
+  if(si!==null && d.sessions && d.sessions[si]){
+    d.sessions[si].terminId=terminId;
+    save(db);
+    showToast('✓ Session mit Termin verknüpft');
+    // Jetzt direkt in den Termin springen und mergen
+    dokSessionPeek(d.id, si);
+    return;
+  }
+  // Normaler Einzel-Dok-Link
   d.terminId=terminId;
   var changed=dokMergeIntoTermin(d,t);
   save(db); rDokumente(); rTermine();
