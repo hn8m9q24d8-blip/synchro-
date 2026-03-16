@@ -1669,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '208';
+  if(el) el.textContent = '212';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1957,6 +1957,14 @@ function openDetail(id){
   var allDoks=(db.dokumente||[]).filter(function(x){return x.terminId===id;});
   var dispoDateinamen=(db.dokumente||[]).filter(function(x){return x.terminId===id&&x.typ==='dispo';}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
   var abDateinamen=(db.dokumente||[]).filter(function(x){return x.terminId===id&&(x.typ==='abrechn'||x.typ==='monats_abrechn');}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
+  // Auch aus db.abrechnungen den Dateinamen holen (dort landet t.abId)
+  if(t.abId){
+    var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
+    if(abRec){
+      var abName=abRec.dateiname||abRec.gutschrift_nr||abRec.studio||'';
+      if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
+    }
+  }
   var dispoDoks=allDoks.filter(function(x){return x.typ==='dispo';});
   var abDoks=allDoks.filter(function(x){return x.typ==='abrechn';});
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
@@ -2270,6 +2278,9 @@ function closeDetail(){
   var dp=document.getElementById('detail-panel');
   if(dp)dp.classList.remove('open');
   ctid=null;
+  // Banner verstecken — darf nicht über Termin-Panel hängen bleiben
+  var qb=document.getElementById('dok-queue-banner');
+  if(qb) qb.style.display='none';
   // Suche wiederherstellen wenn aktiv
   if(_lastSucheQuery){
     termineSuche(_lastSucheQuery);
@@ -2291,9 +2302,10 @@ function saveMergeChanges(){
       _archiveDateiname(dok.dateiname||dok.beschr);
     }
   }
-  // Auch alle verknüpften Dokumente mit _pendingDelete aufräumen
+  // Alle Dokumente mit _pendingDelete archivieren — terminId-Check entfernt
+  // weil ctid beim Speichern nicht immer mit dem Dok-terminId übereinstimmt
   (db.dokumente||[]).forEach(function(dok){
-    if(dok._pendingDelete && dok.terminId===ctid){
+    if(dok._pendingDelete){
       dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
       _archiveDateiname(dok.dateiname||dok.beschr);
     }
@@ -5093,7 +5105,7 @@ function _dokQueueBannerShow(){
   if(!_dokQueue.length) return;
   var banner = document.createElement('div');
   banner.id = 'dok-queue-banner';
-  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:#1d6fa8;color:#fff;font-size:12px;font-weight:700;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:45;background:#1d6fa8;color:#fff;font-size:12px;font-weight:700;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
   var MAX_BATCH = 10;
   var next = Math.min(_dokQueue.length, MAX_BATCH);
   banner.innerHTML = '<div style="flex:1;min-width:0">'
@@ -6182,14 +6194,22 @@ function dokOpenDetail(id){
 
     // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
     if(termin){
-      // Zugeordneter Termin — Name prominent anzeigen
-      body += '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
+      // Prüfen ob Termin bereits eine Dispo hat
+      var terminHatDispo = !!(termin.dispoImg || (db.dokumente||[]).find(function(x){
+        return x.terminId===termin.id && x.typ==='dispo' && x.bestaetigt;
+      }));
+      var terminBannerBg = terminHatDispo ? '#fff7ed' : '#f0fdf4';
+      var terminBannerBorder = terminHatDispo ? '#fed7aa' : '#86efac';
+      var terminLabelColor = terminHatDispo ? '#c2410c' : '#15803d';
+      var terminLabel = terminHatDispo ? '⚠ TERMIN HAT BEREITS EINE DISPO' : '📅 TERMIN GEFUNDEN';
+      body += '<div style="background:'+terminBannerBg+';border:1.5px solid '+terminBannerBorder+';border-radius:10px;padding:10px 14px;margin-bottom:10px">'
         + '<div>'
-        + '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:2px">📅 TERMIN GEFUNDEN</div>'
+        + '<div style="font-size:10px;font-weight:700;color:'+terminLabelColor+';margin-bottom:2px">'+terminLabel+'</div>'
         + '<div style="font-size:14px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
         + '<div style="font-size:11px;color:#555">'+fd(termin.datum)+(termin.uhrzeit?' · '+termin.uhrzeit:'')+(termin.studio?' · '+esc(termin.studio):'')+'</div>'
+        + (terminHatDispo ? '<div style="font-size:11px;color:#c2410c;margin-top:4px;font-weight:600">Trotzdem möglich — bitte prüfen ob es dieselbe Dispo ist.</div>' : '')
         + '</div>'
-        + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
+        + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:'+terminLabelColor+';color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
         + '</div>';
       body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:#f8fafc;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
       body += _buildMergePreview(d, termin);
@@ -8713,6 +8733,7 @@ var _abData=null;
 var _abFileB64=null;
 var _abFileDataURL=null;
 var _abFileType=null;
+var _abFileName='';
 var _abMonatOffset=0;
 
 function abScanOpen(){
@@ -8757,6 +8778,7 @@ function abGotFile(inp,typ){
   var file=inp.files[0];if(!file)return;
   _abFileType=typ;
   _abFileMime=file.type||'image/jpeg';
+  _abFileName=file.name||'';
   var reader=new FileReader();
   reader.onload=function(e){
     _abFileDataURL=e.target.result;
@@ -8809,7 +8831,11 @@ function abRunScan(){
     text=text.replace(/```json/g,'').replace(/```/g,'').trim();
     var m=text.match(/\{[\s\S]*\}/);
     if(!m){showToast('Kein JSON: '+text.slice(0,60));return;}
-    try{_abData=JSON.parse(m[0]);abShowResult();}catch(e){showToast('Parse: '+e.message);}
+    try{
+      _abData=JSON.parse(m[0]);
+      _abData.dateiname = _abFileName||_abData.beschr||'';
+      abShowResult();
+    }catch(e){showToast('Parse: '+e.message);}
   })
   .catch(function(err){
     document.getElementById('ab-scan-spinner').style.display='none';
@@ -8973,6 +8999,7 @@ function abSpeichern(){
     studio:_abData.studio||'',
     produktion:_abData.produktion||'',
     gutschrift_nr:_abData.gutschrift_nr||'',
+    dateiname:_abData.dateiname||_abData.beschr||'',
     brutto:_abData.brutto||0,
     netto:_abData.netto||0,
     mwst:_abData.mwst||0,
