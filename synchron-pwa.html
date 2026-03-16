@@ -671,8 +671,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <!-- Action buttons row -->
   <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream)">
-    <div onclick="dokRefreshAll()" style="flex:1;background:#be185d;color:#fff;font-size:12px;font-weight:700;padding:9px 0;border-radius:10px;cursor:pointer;text-align:center;touch-action:manipulation">&#x1F50D; Alle analysieren</div>
-    <div onclick="dokDeleteAll()" style="background:#fff0f0;border:1.5px solid #fca5a5;color:#dc2626;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">&#x1F5D1; Alle</div>
+        <div onclick="dokDeleteAll()" style="background:#fff0f0;border:1.5px solid #fca5a5;color:#dc2626;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">&#x1F5D1; Alle</div>
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
     <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:#1a6ea8;color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;touch-action:manipulation">&#x2601;&#xFE0F; Ordner</button>
@@ -1670,7 +1669,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '199';
+  if(el) el.textContent = '202';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2430,22 +2429,57 @@ function showDateinamen(el){
   var namen = (el.getAttribute('data-namen')||'').split('|').filter(Boolean);
   var label = el.getAttribute('data-label')||'Dokument';
   if(!namen.length) return;
-  // Toast mit Dateinamen + Kopier-Sheet
+
+  // Erstmal: Dokument noch in App? Dann direkt öffnen
+  var firstDoc = null;
+  for(var ni=0; ni<namen.length; ni++){
+    var found = (db.dokumente||[]).find(function(d){ return d.dateiname===namen[ni] && d.dataURL; });
+    if(found){ firstDoc=found; break; }
+  }
+  if(firstDoc){
+    // Noch in App und hat Bild → direkt öffnen
+    var panelClose = document.querySelector('[data-namen-ov]');
+    if(panelClose) panelClose.remove();
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(firstDoc.id); }, 80);
+    return;
+  }
+
+  // Archiviert → Dateiname kopieren + Hilfe-Sheet
+  var firstName = namen[0];
+  var ordner = /abrechn|gutschrift|abrechnung/i.test(firstName) ? 'Gagenabrechnungen' : 'Dispofotos';
+
+  // Sofort in Clipboard kopieren
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(firstName).catch(function(){});
+  }
+
   var ov = document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  ov.setAttribute('data-namen-ov','1');
   var box = document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 40px;width:100%;max-width:480px';
-  var html='<div style="font-size:15px;font-weight:800;margin-bottom:12px">📎 '+label+' — Datei'+(namen.length>1?'en':'')+'</div>';
-  namen.forEach(function(name){
-    html+='<div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
-      +'<div style="font-size:13px;font-weight:600;color:#374151;word-break:break-all" id="dname-'+i+'">'+esc(name)+'</div>'
-      +'<button type="button" data-copy="'+name.replace(/"/g,'&quot;')+'" onclick="copyDateiname(this)" style="flex-shrink:0;margin-left:8px;background:#1d6fa8;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Kopieren</button>'
-      +'</div>';
-  });
-  html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Dateiname kopieren → in Dateien-App suchen</div>';
+
+  var html='<div style="font-size:15px;font-weight:800;margin-bottom:4px">📎 '+esc(label)+'</div>';
+  html+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+    +'<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:3px">📋 IN ZWISCHENABLAGE KOPIERT</div>'
+    +'<div style="font-size:13px;font-weight:700;color:#374151;word-break:break-all">'+esc(firstName)+'</div>'
+    +'</div>';
+  if(namen.length>1){
+    namen.slice(1).forEach(function(name){
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;margin-bottom:6px">'
+        +'<div style="font-size:12px;color:#374151;word-break:break-all">'+esc(name)+'</div>'
+        +'<button type="button" data-copy="'+name.replace(/"/g,'&quot;')+'" onclick="copyDateiname(this)" style="flex-shrink:0;margin-left:8px;background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Kopieren</button>'
+        +'</div>';
+    });
+  }
+  html+='<div style="font-size:12px;color:#555;margin-bottom:12px;line-height:1.5">'
+    +'Dateien-App öffnen → Ordner <b>'+ordner+'</b> → Suche antippen → Einfügen</div>';
+  html+='<button type="button" onclick="window.location.href=\'shareddocuments://\'" '
+    +'style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📁 Dateien-App öffnen</button>';
   html+='<button type="button" onclick="removeNamenOv()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
+
   box.innerHTML=html;
-  ov.setAttribute('data-namen-ov','1');
   ov.appendChild(box);
   ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
   document.body.appendChild(ov);
@@ -7512,9 +7546,12 @@ function rAbrechnungen(){
     var ab=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
     if(!ab) return;
     var errechnet=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+    var studioBrutto=parseFloat(ab.brutto)||0;
     var ausgezahlt=parseFloat(ab.auszahlung)||0;
-    var diff=ausgezahlt-errechnet;
-    if(Math.abs(diff)>=0.5) diffTermine.push({t:t,ab:ab,errechnet:errechnet,ausgezahlt:ausgezahlt,diff:diff});
+    // Korrekte Differenz: App-Netto vs Studio-Brutto (gleiche Zahl, verschiedene Namen)
+    // Auszahlung ist nach SV-Abzügen — kein Fehler, kein Mahngrund
+    var diff=studioBrutto>0 ? (studioBrutto-errechnet) : (ausgezahlt-errechnet);
+    if(Math.abs(diff)>=0.5) diffTermine.push({t:t,ab:ab,errechnet:errechnet,ausgezahlt:ausgezahlt,studioBrutto:studioBrutto,diff:diff});
   });
   if(diffTermine.length){
     var diffTotal=diffTermine.reduce(function(s,x){return s+Math.abs(x.diff);},0);
@@ -7538,8 +7575,8 @@ function rAbrechnungen(){
         +'<div style="font-size:10px;color:#aaa">'+(zuviel?'zuviel':'zuwenig')+'</div>'
         +'</div></div>'
         +'<div style="display:flex;gap:0;margin-top:7px;padding-top:7px;border-top:1px solid #fee2b3">'
-        +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Errechnet</div><strong>'+fmtEur(d.errechnet)+'</strong></div>'
-        +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Ausgezahlt</div><strong>'+fmtEur(d.ausgezahlt)+'</strong></div>'
+        +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">App-Netto</div><strong>'+fmtEur(d.errechnet)+'</strong></div>'
+        +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Studio-Brutto</div><strong>'+fmtEur(d.studioBrutto||d.ausgezahlt)+'</strong></div>'
         +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Gutschrift-Nr.</div><strong>'+(d.ab.gutschrift_nr||'–')+'</strong></div>'
         +'</div></div>'
         +'<div id="mahn-btn-'+tid+'" onclick="abMahnEmail(\''+tid+'\')" style="margin-top:6px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:8px;text-align:center;font-size:12px;font-weight:700;color:#c2410c;cursor:pointer">✉ Nachfrage-Mail vorbereiten</div>'
@@ -7621,8 +7658,10 @@ function abMahnEmail(tid){
   var ab=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
   if(!ab) return;
   var errechnet=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+  var studioBrutto=parseFloat(ab.brutto)||0;
   var ausgezahlt=parseFloat(ab.auszahlung)||0;
-  var diff=ausgezahlt-errechnet;
+  // Korrekte Differenz: App-Netto vs Studio-Brutto
+  var diff=studioBrutto>0 ? (studioBrutto-errechnet) : (ausgezahlt-errechnet);
   var zuviel=diff>0;
   var profil=db.profil||{};
   var subject='Rueckfrage Gagenabrechnung '+fd(t.datum)+' - '+(t.titel||t.studio||'');
@@ -7633,13 +7672,13 @@ function abMahnEmail(tid){
     +'  Aufnahmedatum: '+fd(t.datum)+'\n'
     +(ab.gutschrift_nr?'  Gutschrift-Nr.: '+ab.gutschrift_nr+'\n':'')
     +'\n'
-    +'  Errechnete Gage: '+fmtEur(errechnet)+'\n'
-    +'  Ausgezahlter Betrag: '+fmtEur(ausgezahlt)+'\n'
-    +'  Differenz: '+fmtEur(Math.abs(diff))+' ('+(zuviel?'zuviel ausgezahlt':'zuwenig ausgezahlt')+')\n'
+    +'  Errechnete Gage (Netto): '+fmtEur(errechnet)+'\n'
+    +'  Abgerechnetes Brutto (Studio): '+fmtEur(studioBrutto||ausgezahlt)+'\n'
+    +'  Differenz: '+fmtEur(Math.abs(diff))+' ('+(zuviel?'zuviel abgerechnet':'zuwenig abgerechnet')+')\n'
     +'\n'
     +(zuviel
-      ?'Es scheint mir zuviel ausgezahlt worden zu sein. Bitte um kurze Rueckmeldung, wie wir das bereinigen.\n'
-      :'Koennten Sie mir bitte erlaeutern, warum der ausgezahlte Betrag von der errechneten Gage abweicht?\n'
+      ?'Es scheint mir zuviel abgerechnet worden zu sein. Bitte um kurze Rueckmeldung, wie wir das bereinigen.\n'
+      :'Koennten Sie mir bitte erlaeutern, warum der abgerechnete Brutto-Betrag von der vereinbarten Gage abweicht?\n'
     )
     +'\nMit freundlichen Gruessen\n'+(profil.name||'Tim Knauer');
   window.location.href='mailto:?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
