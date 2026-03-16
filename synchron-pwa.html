@@ -694,7 +694,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Ausgaben</div>
     <div id="dok-tab-offen" onclick="dokSetTab('offen')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Offen</div>
   </div>
-  <div id="dokumente-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom)+340px)"></div>
+  <div id="dokumente-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom) + 90px)"></div>
 </div>
 
 <!-- ══════ UST-VORANMELDUNG VIEW ════════════════════════════ -->
@@ -1369,7 +1369,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- TERMIN DETAIL -->
 <div class="detail-panel" id="detail-panel">
   <div class="dp-header">
-    <div class="back-btn" onclick="closeDetail()">‹</div>
+    <div class="back-btn" onclick="terminBackBtn()">‹</div>
     <div class="dp-title" id="dp-title">Termin</div>
     <div class="icon-btn" onclick="deleteCurrentTermin()">
       <svg width="14" height="16" fill="none" viewBox="0 0 14 16"><path d="M1 3.5h12M4 3.5V2.5a1 1 0 011-1h4a1 1 0 011 1v1M5.5 7v5M8.5 7v5M2.5 3.5l.8 9a1 1 0 001 .9h5.4a1 1 0 001-.9l.8-9" stroke="#e8392a" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -1670,7 +1670,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '182';
+  if(el) el.textContent = '197';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1874,8 +1874,8 @@ function tCard(t){
   var produktion=dispoDok&&dispoDok.produktion||t.produktion||'';
 
   var badges='';
-  if(hasDispo) badges+='<span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">📋 Dispo</span>';
-  if(hasAbrechnung) badges+='<span style="background:#f0fdf4;color:#15803d;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">🧾 Abrechn.</span>';
+  if(hasDispo) badges+='<span style="background:#fde8e6;color:#c0392b;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">📋 Dispo</span>';
+  if(hasAbrechnung) badges+='<span style="background:#fff9e0;color:#92400e;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">🧾 Abrechn.</span>';
   if(t.memo) badges+='<span style="background:#fff7ed;color:#c2410c;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px">📝</span>';
 
   // Zusatzinfos aus Dokumenten
@@ -1978,8 +1978,8 @@ function openDetail(id){
       +'</div>';
   }
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
-    +ampelDot('Dispo',hasDispo,'#1a6ea8',dispoDateinamen)
-    +ampelDot('Abrechnung',hasAbrechn,'#f97316',abDateinamen)
+    +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
+    +ampelDot('Abrechnung',hasAbrechn,'#f5c518',abDateinamen)
     +ampelDot('Zahlung',hasZahlung,'#22c55e',[])
     +'</div>';
 
@@ -2281,14 +2281,20 @@ function saveMergeChanges(){
     t._hasPendingMerge=false;
     t._mergeSuggestions=null;
   }
-  // Jetzt Foto löschen — Termin wurde gespeichert
+  // Jetzt Foto löschen + archivieren — Termin wurde gespeichert
   if(t && t.dispoDocId){
     var dok=(db.dokumente||[]).find(function(x){return x.id===t.dispoDocId;});
-    if(dok && dok._pendingDelete){ dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false; }
+    if(dok && dok._pendingDelete){
+      dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
+      _archiveDateiname(dok.dateiname||dok.beschr);
+    }
   }
   // Auch alle verknüpften Dokumente mit _pendingDelete aufräumen
   (db.dokumente||[]).forEach(function(dok){
-    if(dok._pendingDelete && dok.terminId===ctid){ dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false; }
+    if(dok._pendingDelete && dok.terminId===ctid){
+      dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
+      _archiveDateiname(dok.dateiname||dok.beschr);
+    }
   });
   _mergeSnapshot=null;
   _mergeTerminId=null;
@@ -3628,7 +3634,7 @@ function icsParse(text){
     // Nur Synchron-Arbeitstermine — erkennbar an Studiokürzeln im Titel/Location
     var STUDIO_KEYWORDS = [
       // Studios
-      'arena','ffs','tnt','vsi','sdi','iyuno','interopa','omni','dmt','oxygen',
+      'arena','ffs','tnt','vsi','sdi','iyuno','interopa','omni','dmt','oxygen','oddone','g&g','livelive','audioberlin',
       'transperfect','taunusfilm','neue tonfilm','blg','cls','eva','rc ','konterfei',
       'hermes','euref','babelsberg','berliner','scalamedia','cinephon','mixwerk',
       'rotor','riverside','rekorder','wave','jammin','audiocue','studiofunk',
@@ -4740,26 +4746,17 @@ function dokGotFilesFolder(inp){
     inp.value=''; return;
   }
 
-  // Zu viele Dateien → Warnung + in Chargen aufteilen
-  var MAX_BATCH = 20;
+  // Zu viele Dateien → Rest in Warteschlange, erste Charge sofort anbieten
+  var MAX_BATCH = 10;
   if(neu.length > MAX_BATCH){
-    var ov = document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
-    var box = document.createElement('div');
-    box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
-    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:8px">⚠️ Zu viele Dateien</div>'      +'<div style="font-size:13px;color:#555;margin-bottom:16px">'+neu.length+' neue Dateien — iOS kann maximal <b>'+MAX_BATCH+' auf einmal</b> verarbeiten. Bitte in kleineren Gruppen importieren.<br><br>Empfehlung: z.B. erst alle Dispos eines Monats, dann alle Abrechnungen.</div>'      +'<div style="font-size:12px;color:#888;margin-bottom:16px">Die ersten '+MAX_BATCH+' Dateien werden trotzdem geladen:</div>'      +'<button type="button" id="batch-ok-btn" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Erste '+MAX_BATCH+' laden</button>'      +'<button type="button" id="batch-cancel-btn" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
-    ov.appendChild(box);
-    document.body.appendChild(ov);
-    var katFnCopy = kategorieAusOrdner;
-    var neuCopy = neu;
-    var skippedCopy = skipped;
-    document.getElementById('batch-ok-btn').onclick = function(){
-      ov.remove();
-      _dokOrdnerVorschau(neuCopy.slice(0, MAX_BATCH), skippedCopy + (neuCopy.length - MAX_BATCH), katFnCopy);
-    };
-    document.getElementById('batch-cancel-btn').onclick = function(){ ov.remove(); };
-    inp.value='';
-    return;
+    // Rest in Queue speichern
+    _dokQueue = neu.slice(MAX_BATCH);
+    _dokQueueKatFn = kategorieAusOrdner;
+    neu = neu.slice(0, MAX_BATCH);
+    showToast('📦 '+_dokQueue.length+' weitere in Warteschlange');
+  } else {
+    _dokQueue = [];
+    _dokQueueKatFn = null;
   }
 
   // Vorschau-Sheet anzeigen BEVOR importiert wird
@@ -4827,6 +4824,8 @@ function _dokImportAndAnalyse(files, katFn){
       save(db); rDokumente();
       switchView('dokumente');
       showToast('✓ '+newIds.length+' Dokument'+(newIds.length>1?'e':'')+' importiert – jetzt einzeln analysieren');
+      // Warteschlange-Banner zeigen falls noch Dokumente warten
+      setTimeout(_dokQueueBannerShow, 500);
       return;
     }
     var file=files[idx];
@@ -4850,6 +4849,45 @@ function _dokImportAndAnalyse(files, katFn){
     reader.readAsDataURL(file);
   }
   loadNext(0);
+}
+
+// ── DOKUMENT-WARTESCHLANGE ────────────────────────────────────
+// Wenn mehr Dateien hochgeladen werden als MAX_BATCH, landen die
+// restlichen hier. Nach jedem Batch erscheint ein Banner mit
+// "Nächste X laden" bis die Warteschlange leer ist.
+var _dokQueue = [];       // Noch nicht importierte File-Objekte
+var _dokQueueKatFn = null; // Kategorie-Funktion für die Queue
+
+function _dokQueueBannerShow(){
+  var existing = document.getElementById('dok-queue-banner');
+  if(existing) existing.remove();
+  if(!_dokQueue.length) return;
+  var banner = document.createElement('div');
+  banner.id = 'dok-queue-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:#1d6fa8;color:#fff;font-size:12px;font-weight:700;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  var MAX_BATCH = 10;
+  var next = Math.min(_dokQueue.length, MAX_BATCH);
+  banner.innerHTML = '<div style="flex:1;min-width:0">'
+    + '<div style="font-size:11px;opacity:.8;margin-bottom:1px">📦 Warteschlange</div>'
+    + '<div style="font-size:12px;font-weight:800">Noch <b>'+_dokQueue.length+'</b> Dokumente warten</div>'
+    + '</div>'
+    + '<button type="button" id="dok-queue-next-btn" style="background:#fff;color:#1d6fa8;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation;white-space:nowrap">Nächste '+next+' laden →</button>'
+    + '<button type="button" onclick="dokQueueClear()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>';
+  document.body.appendChild(banner);
+  document.getElementById('dok-queue-next-btn').onclick = function(){
+    var batch = _dokQueue.splice(0, MAX_BATCH);
+    var katFn = _dokQueueKatFn || function(){ return null; };
+    banner.remove();
+    _dokOrdnerVorschau(batch, 0, katFn);
+  };
+}
+
+function dokQueueClear(){
+  _dokQueue = [];
+  _dokQueueKatFn = null;
+  var banner = document.getElementById('dok-queue-banner');
+  if(banner) banner.remove();
+  showToast('Warteschlange geleert');
 }
 
 // ── ANALYSE ALLE NICHT ZUGEORDNETEN ─────────────────────────
@@ -5321,25 +5359,34 @@ function dokAnalyseDoc(d, key, cb){
     try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
   } // end _sendToAPI
 
-  // PDF: zuerst bekanntes Passwort versuchen; falls geschützt → entschlüsseln + als Bild senden
+  // PDF: zuerst bekanntes Passwort versuchen — Studio aus Dateinamen als Fallback
   if(mime==='application/pdf'){
-    var autoPw = _findPdfPassword(d.studio||'');
+    // d.studio ist bei Erstanalyse noch leer → Dateinamen als Fallback nutzen
+    var pwStudio = d.studio || d.dateiname || '';
+    var autoPw = _findPdfPassword(pwStudio);
     if(autoPw){
       // Bekanntes Passwort → als Bild-Screenshot an KI
       _renderPdfPageAsImage(d.dataURL, autoPw, function(imgDataURL){
-        // mime temporär auf Bild setzen damit KI es als Bild empfängt
         var origMime = mime;
         mime = 'image/jpeg';
         _sendToAPI(imgDataURL);
         mime = origMime;
       }, function(){
-        // Passwort falsch → direkt senden (API-Fehler zeigen)
-        _sendToAPI(d.dataURL);
+        // Passwort falsch → User fragen
+        _askPdfPassword(d, key, cb);
       });
     } else {
-      // Kein Passwort gespeichert — direkt versuchen
-      // Falls geschützt: API gibt Fehler → User sieht Meldung
-      _sendToAPI(d.dataURL);
+      // Kein Passwort gespeichert → erst ungeschützt versuchen, bei Fehler fragen
+      _renderPdfPageAsImage(d.dataURL, null, function(imgDataURL){
+        // Kein Passwort nötig — als Bild senden
+        var origMime = mime;
+        mime = 'image/jpeg';
+        _sendToAPI(imgDataURL);
+        mime = origMime;
+      }, function(){
+        // PDF ist passwortgeschützt, kein Passwort bekannt → User fragen
+        _askPdfPassword(d, key, cb);
+      });
     }
   } else {
     // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
@@ -5349,6 +5396,84 @@ function dokAnalyseDoc(d, key, cb){
     });
   }
 } // end dokAnalyseDoc
+
+// Passwort-Dialog wenn PDF geschützt und kein gespeichertes Passwort gefunden
+function _askPdfPassword(d, key, cb){
+  // Vorhandenen Dialog entfernen
+  var old = document.getElementById('pdf-pw-ask-overlay');
+  if(old) old.remove();
+
+  var ov = document.createElement('div');
+  ov.id = 'pdf-pw-ask-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+  box.innerHTML = '<div style="font-size:17px;font-weight:900;margin-bottom:6px">🔒 PDF ist passwortgeschützt</div>'
+    + '<div style="font-size:13px;color:#555;margin-bottom:14px">Bitte Passwort eingeben um <b>'+esc(d.dateiname||'dieses Dokument')+'</b> zu analysieren.</div>'
+    + '<input id="pdf-pw-ask-input" type="password" placeholder="Passwort" autocomplete="off" '
+    + 'style="width:100%;padding:12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;box-sizing:border-box;margin-bottom:8px">'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#555;margin-bottom:14px;cursor:pointer">'
+    + '<input type="checkbox" id="pdf-pw-ask-save"> Passwort für dieses Studio speichern</label>';
+
+  var btnOk = document.createElement('button');
+  btnOk.type = 'button';
+  btnOk.textContent = '✓ Analyse starten';
+  btnOk.style.cssText = 'width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px';
+
+  var btnCancel = document.createElement('button');
+  btnCancel.type = 'button';
+  btnCancel.textContent = 'Abbrechen';
+  btnCancel.style.cssText = 'width:100%;background:#f3f4f6;color:#555;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation';
+
+  btnOk.onclick = function(){
+    var pw = document.getElementById('pdf-pw-ask-input').value.trim();
+    if(!pw){ showToast('Bitte Passwort eingeben'); return; }
+    var doSave = document.getElementById('pdf-pw-ask-save').checked;
+    ov.remove();
+    // Optional: Passwort speichern
+    if(doSave && d.studio){
+      var pws = _getStudioPasswords();
+      pws[d.studio] = pw;
+      if(!db.profil) db.profil = {};
+      db.profil.studioPasswords = pws;
+      save(db);
+      showToast('✓ Passwort für '+d.studio+' gespeichert');
+    }
+    // PDF mit Passwort als Bild rendern und analysieren
+    _renderPdfPageAsImage(d.dataURL, pw, function(imgDataURL){
+      var orig = d.dataURL;
+      var origMime = d.mime;
+      d.dataURL = imgDataURL;
+      d.mime = 'image/jpeg';
+      dokAnalyseDoc(d, key, function(){
+        d.dataURL = orig;
+        d.mime = origMime;
+        if(cb) cb();
+      });
+    }, function(){
+      showToast('⚠ Passwort falsch — bitte erneut versuchen');
+      _askPdfPassword(d, key, cb);
+    });
+  };
+
+  btnCancel.onclick = function(){
+    ov.remove();
+    d.typ = 'sonstig';
+    d.beschr = d.dateiname;
+    save(db); rDokumente();
+    if(cb) cb();
+  };
+
+  var inp = box.querySelector('#pdf-pw-ask-input');
+  if(inp) inp.onkeydown = function(e){ if(e.key==='Enter') btnOk.click(); };
+
+  box.appendChild(btnOk);
+  box.appendChild(btnCancel);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  setTimeout(function(){ var i=document.getElementById('pdf-pw-ask-input'); if(i) i.focus(); }, 200);
+}
+
 function terminGageRecherche(terminId){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!t){ showToast('Termin nicht gefunden'); return; }
@@ -5910,19 +6035,22 @@ function dokOpenDetail(id){
         +'<div style="font-size:12px">'+esc(ausgabe.beschr||'')+'  ·  Brutto '+fmtEur(ausgabe.brutto)+'  ·  VSt '+fmtEur(ausgabe.vorsteuer)+'</div>'
         +'</div>';
     }
-    if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:#f5f5f5;border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
-
-    // ── BESTÄTIGEN-BUTTON direkt im Body (kein separater Footer!) ──
-    var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
-    var btnAction = termin
-      ? 'dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')'
-      : 'dokBestaetigen()';
-    body += '<div style="padding:8px 0 20px">'
-      + '<button type="button" onclick="' + btnAction + '" '
-      + 'style="width:100%;background:#15803d;color:#fff;border:none;border-radius:14px;'
-      + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
-      + '-webkit-tap-highlight-color:transparent;display:block">'
-      + btnLabel + '</button></div>';
+    // PDF-Platzhalter + grüner Button nur bei Einzel-Dokumenten
+    // Bei Monatsabrechnungen mit Sessions zählt nur der blaue "Alle übernehmen"-Button
+    var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
+    if(!isMonatsAbrechn){
+      if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:#f5f5f5;border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
+      var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
+      var btnAction = termin
+        ? 'dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')'
+        : 'dokBestaetigen()';
+      body += '<div style="padding:8px 0 20px">'
+        + '<button type="button" onclick="' + btnAction + '" '
+        + 'style="width:100%;background:#15803d;color:#fff;border:none;border-radius:14px;'
+        + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
+        + '-webkit-tap-highlight-color:transparent;display:block">'
+        + btnLabel + '</button></div>';
+    }
   }
 
   document.getElementById('dok-detail-body').innerHTML = body;
@@ -6048,7 +6176,17 @@ function renderPDFCanvas(canvasId, dataURL, password){
   if(typeof pdfjsLib==="undefined") return;
   var canvas=document.getElementById(canvasId);
   if(!canvas) return;
-  var params = {url: dataURL};
+  // iOS Safari hängt bei {url: dataURL} für data:-URIs → immer {data: Uint8Array} nutzen
+  var params;
+  try {
+    var b64 = dataURL.split(',')[1];
+    var bin = atob(b64);
+    var arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    params = {data: arr};
+  } catch(e) {
+    params = {url: dataURL}; // Fallback
+  }
   if(password) params.password = password;
   pdfjsLib.getDocument(params).promise.then(function(pdf){
     return pdf.getPage(1);
@@ -6614,10 +6752,8 @@ function dokBestaetigenMitTermin(dokId, terminId){
   }
   d.bestaetigt = true;
   d.awaitConfirm = false;
-  // Foto NOCH NICHT löschen — erst wenn Kalendertermin gespeichert wird
-  // d._pendingDelete = true markiert es zum Löschen beim nächsten saveMergeChanges
+  // Foto + Archivierung erst wenn Kalendertermin gespeichert wird (_pendingDelete)
   d._pendingDelete = true;
-  _archiveDateiname(d.dateiname||d.beschr);
   save(db);
   rDokumente();
   rTermine();
