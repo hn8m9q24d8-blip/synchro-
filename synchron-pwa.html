@@ -1673,7 +1673,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '225';
+  if(el) el.textContent = '226';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3820,32 +3820,60 @@ function gvlBuildData(year){
     }
   });
 
-  // Sekundaerquelle: Termine ohne verknuepfte Dispo-Docs
+  // Sekundaerquelle: Termine die NICHT bereits durch Dispo-Docs erfasst wurden
   (db.termine||[]).forEach(function(t){
     if(!t.datum||!t.datum.startsWith(yStr)) return;
-    if(t.dispoDocId) return;
-    var takes=parseInt(t.takes)||0;
+    // Überspringen wenn bereits durch ein bestätigtes Dispo-Dok erfasst
+    var hatDispoDok=(db.dokumente||[]).some(function(d){
+      return d.terminId===t.id && d.typ==='dispo' && d.bestaetigt;
+    });
+    if(hatDispoDok) return;
+    var takes=parseInt(t.gvl_takes||t.takes)||0;
     if(!takes) return;
     var key=(t.titel||t.studio||'Unbekannt').trim();
     if(!prods[key]) prods[key]={
       titel:key, studio:t.studio||'', rolle:t.rolle||'',
-      staffeln:{}, takes_gesamt:0, termine_count:0, dokCount:0
+      staffeln:{}, takes_gesamt:0, termine_count:0, dokCount:0,
+      datum_min:t.datum, datum_max:t.datum
     };
     var p=prods[key];
     p.termine_count++;
-    p.takes_gesamt+=takes;
     if(t.rolle&&!p.rolle) p.rolle=t.rolle;
-    // Fallback: Parse takes from notizen
-    var eps=parseAllEpisodes(t.notizen||'');
-    eps.forEach(function(ep){
-      if(!ep.folge) return;
-      var sk='S'+(ep.staffel||0);
-      if(!p.staffeln[sk]) p.staffeln[sk]={staffel:ep.staffel||0,folgen:{},takes_summe:0};
-      var fkey='F'+ep.folge;
-      if(!p.staffeln[sk].folgen[fkey]) p.staffeln[sk].folgen[fkey]={folge:ep.folge,takes:0};
-      p.staffeln[sk].folgen[fkey].takes+=ep.takes||takes;
-      p.staffeln[sk].takes_summe+=ep.takes||takes;
-    });
+    if(!p.datum_min||t.datum<p.datum_min) p.datum_min=t.datum;
+    if(!p.datum_max||t.datum>p.datum_max) p.datum_max=t.datum;
+    p.datum_range=p.datum_min===p.datum_max?fd(p.datum_min):fd(p.datum_min)+' – '+fd(p.datum_max);
+
+    // gvl_takes_detail aus Termin — Folgen-Aufschlüsselung
+    if(t.gvl_takes_detail&&t.gvl_takes_detail.length){
+      t.gvl_takes_detail.forEach(function(e){
+        var folgeStr=String(e.folge||'0');
+        var folgeNr, staffelNr;
+        if(e.folge===0){ // Film
+          folgeNr=0; staffelNr=0;
+        } else {
+          folgeNr=parseInt(folgeStr.slice(-2));
+          staffelNr=parseInt(folgeStr.slice(0,-2))||parseInt(t.gvl_staffel||0);
+        }
+        var tk=parseInt(e.takes)||0;
+        p.takes_gesamt+=tk;
+        var sk=e.folge===0?'Film':'S'+staffelNr;
+        if(!p.staffeln[sk]) p.staffeln[sk]={staffel:staffelNr,folgen:{},takes_summe:0};
+        var fkey=e.folge===0?'Film':'F'+folgeNr;
+        if(!p.staffeln[sk].folgen[fkey]) p.staffeln[sk].folgen[fkey]={folge:folgeNr,takes:0};
+        p.staffeln[sk].folgen[fkey].takes+=tk;
+        p.staffeln[sk].takes_summe+=tk;
+      });
+    } else {
+      // Kein Detail — nur Gesamtzahl
+      p.takes_gesamt+=takes;
+      var staffelNr=parseInt(t.gvl_staffel||0);
+      var sk='S'+staffelNr;
+      if(!p.staffeln[sk]) p.staffeln[sk]={staffel:staffelNr,folgen:{},takes_summe:0};
+      var fkey=t.gvl_folge?'F'+parseInt(t.gvl_folge):'F?';
+      if(!p.staffeln[sk].folgen[fkey]) p.staffeln[sk].folgen[fkey]={folge:t.gvl_folge||'?',takes:0};
+      p.staffeln[sk].folgen[fkey].takes+=takes;
+      p.staffeln[sk].takes_summe+=takes;
+    }
   });
 
   return prods;
