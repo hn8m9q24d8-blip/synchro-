@@ -1673,7 +1673,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '223';
+  if(el) el.textContent = '225';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1984,8 +1984,13 @@ function openDetail(id){
 
   // Verknüpfte Dokumente
   var allDoks=(db.dokumente||[]).filter(function(x){return x.terminId===id;});
-  var dispoDateinamen=(db.dokumente||[]).filter(function(x){return x.terminId===id&&x.typ==='dispo';}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
-  var abDateinamen=(db.dokumente||[]).filter(function(x){return x.terminId===id&&(x.typ==='abrechn'||x.typ==='monats_abrechn');}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
+  var dispoDoks=allDoks.filter(function(x){return x.typ==='dispo';});
+  var abDoks=allDoks.filter(function(x){return x.typ==='abrechn';});
+  // Dateinamen für Ampel — auch bestätigte Dokumente (dataURL=null) einschließen
+  var dispoDateinamen=dispoDoks.map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
+  // Fallback: t.dispoImg existiert aber kein Dokument verknüpft (altes Format)
+  if(!dispoDateinamen.length && t.dispoImg) dispoDateinamen=['Dispo (verknüpft)'];
+  var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
   // Auch aus db.abrechnungen den Dateinamen holen (dort landet t.abId)
   if(t.abId){
     var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
@@ -1994,8 +1999,6 @@ function openDetail(id){
       if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
     }
   }
-  var dispoDoks=allDoks.filter(function(x){return x.typ==='dispo';});
-  var abDoks=allDoks.filter(function(x){return x.typ==='abrechn';});
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
   var hasDispo=!!(t.dispoImg||dispoDoks.length);
@@ -5359,7 +5362,10 @@ function dokBestaetigen(){
       if(d.takes&&!match.takes) match.takes=d.takes;
     }
   }
-  save(db); rDokumente(); dokOpenDetail(d.id);
+  save(db); rDokumente();
+  // Wenn der verknüpfte Kalendertermin gerade offen ist → neu rendern damit Ampel aktualisiert
+  if(d.terminId && ctid===d.terminId) openDetail(d.terminId);
+  dokOpenDetail(d.id);
   showToast('✓ Bestätigt · Felder übertragen');
 }
 
