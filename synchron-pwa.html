@@ -1672,7 +1672,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '213';
+  if(el) el.textContent = '219';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2396,7 +2396,18 @@ function gvlTerminBearbeiten(terminId){
     ? t.gvl_takes_detail.map(function(e){ return {staffel:staffelAusFolge(e.folge), folge:folgeAusFolge(e.folge), takes:e.takes}; })
     : [{staffel:parseInt(t.gvl_staffel)||1, folge:parseInt(t.gvl_folge)||1, takes:parseInt(t.takes)||0}];
 
+  // Film-Modus: folge=0 bedeutet kein Episodenbezug
+  var isFilm = t.gvl_takes_detail && t.gvl_takes_detail.length===1 && t.gvl_takes_detail[0].folge===0;
+  window._gvltIsFilm = isFilm;
+
   function buildRows(){
+    if(window._gvltIsFilm){
+      var takes = detail[0]?detail[0].takes:0;
+      return '<div style="background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 10px;margin-bottom:8px">'
+        +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:6px">TAKES GESAMT</div>'
+        +'<input type="number" id="gvlt-t-0" value="'+takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:20px;font-weight:900;color:#1d6fa8;box-sizing:border-box">'
+        +'</div>';
+    }
     var h='';
     detail.forEach(function(row,i){
       h+='<div id="gvlt-row-'+i+'" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px">'
@@ -2429,10 +2440,16 @@ function gvlTerminBearbeiten(terminId){
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
 
   function render(){
-    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">GVL Folgen & Takes</div>'
+    var filmActive=window._gvltIsFilm;
+    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:8px">GVL Folgen & Takes</div>'
       +'<div style="font-size:12px;color:#888;margin-bottom:12px">'+esc(t.titel||t.studio||'')+'</div>'
+      // Film/Serie Toggle
+      +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+      +'<button type="button" onclick="gvltSetFilm(false)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'#e5e7eb':'#6d28d9')+';background:'+(filmActive?'#f3f4f6':'#ede9fe')+';color:'+(filmActive?'#888':'#6d28d9')+'">📺 Serie / Folgen</button>'
+      +'<button type="button" onclick="gvltSetFilm(true)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'#6d28d9':'#e5e7eb')+';background:'+(filmActive?'#ede9fe':'#f3f4f6')+';color:'+(filmActive?'#6d28d9':'#888')+'">🎬 Film</button>'
+      +'</div>'
       +'<div id="gvlt-rows">'+buildRows()+'</div>'
-      +'<button type="button" onclick="gvltAddRow()" style="width:100%;background:#f3f4f6;color:#6d28d9;border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>'
+      +(!filmActive?'<button type="button" onclick="gvltAddRow()" style="width:100%;background:#f3f4f6;color:#6d28d9;border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>':'<div style="margin-bottom:12px;font-size:11px;color:#888">Keine Staffel/Folge — Takes werden dem Filmtitel direkt zugeordnet.</div>')
       +'<button type="button" id="gvlt-save-btn" data-tid="'+terminId+'" onclick="gvlTerminSave(this)" style="width:100%;background:#6d28d9;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Speichern</button>'
       +'<button type="button" onclick="document.getElementById(\'gvlt-ov\').remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
   }
@@ -2442,10 +2459,22 @@ function gvlTerminBearbeiten(terminId){
 
   // Globale Hilfsfunktionen für Inline-onclick
   window._gvltDetail = detail;
+  window._gvltFullRender = function(){ render(); };
   window._gvltRender = function(){
     var rows=document.getElementById('gvlt-rows');
     if(rows) rows.innerHTML=buildRows();
   };
+}
+
+function gvltSetFilm(isFilm){
+  window._gvltIsFilm = isFilm;
+  if(isFilm && window._gvltDetail){
+    var total=(window._gvltDetail||[]).reduce(function(s,r){return s+r.takes;},0);
+    window._gvltDetail=[{staffel:0,folge:0,takes:total}];
+  } else if(!isFilm && window._gvltDetail && window._gvltDetail[0] && window._gvltDetail[0].folge===0){
+    window._gvltDetail=[{staffel:1,folge:1,takes:window._gvltDetail[0].takes}];
+  }
+  window._gvltFullRender && window._gvltFullRender();
 }
 
 function gvltAddRow(){
@@ -2468,34 +2497,41 @@ function gvlTerminSave(btn){
   var t=(db.termine||[]).find(function(x){return x.id===tid;});
   if(!t) return;
   var d=window._gvltDetail||[];
-  // Aktuelle Werte aus Inputs lesen
+  var isFilm=window._gvltIsFilm;
   var detail=[];
-  d.forEach(function(row,i){
-    var sEl=document.getElementById('gvlt-s-'+i);
-    var fEl=document.getElementById('gvlt-f-'+i);
-    var tEl=document.getElementById('gvlt-t-'+i);
-    var staffel=sEl?parseInt(sEl.value)||1:row.staffel;
-    var folge=fEl?parseInt(fEl.value)||1:row.folge;
-    var takes=tEl?parseInt(tEl.value)||0:row.takes;
-    // Kombinierte Folgen-Nr: Staffel*100+Folge (z.B. S2F8 → 208)
-    var kombiniert=staffel*100+folge;
-    detail.push({folge:kombiniert, takes:takes});
-  });
+  if(isFilm){
+    var tEl=document.getElementById('gvlt-t-0');
+    var takes=tEl?parseInt(tEl.value)||0:(d[0]?d[0].takes:0);
+    detail=[{folge:0, takes:takes}]; // folge:0 = Film
+  } else {
+    d.forEach(function(row,i){
+      var sEl=document.getElementById('gvlt-s-'+i);
+      var fEl=document.getElementById('gvlt-f-'+i);
+      var tEl=document.getElementById('gvlt-t-'+i);
+      var staffel=sEl?parseInt(sEl.value)||1:row.staffel;
+      var folge=fEl?parseInt(fEl.value)||1:row.folge;
+      var takes=tEl?parseInt(tEl.value)||0:row.takes;
+      detail.push({folge:staffel*100+folge, takes:takes});
+    });
+  }
   if(detail.length){
     t.gvl_takes_detail=detail;
     t.gvl_takes=detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
     t.takes=t.gvl_takes;
-    // Staffel aus erstem Eintrag ableiten
-    var firstFolge=String(detail[0].folge);
-    if(firstFolge.length===3) t.gvl_staffel=firstFolge[0];
-    else if(firstFolge.length>=4) t.gvl_staffel=firstFolge.slice(0,-2);
+    if(!isFilm){
+      var firstFolge=String(detail[0].folge);
+      if(firstFolge.length===3) t.gvl_staffel=firstFolge[0];
+      else if(firstFolge.length>=4) t.gvl_staffel=firstFolge.slice(0,-2);
+    } else {
+      t.gvl_staffel=''; t.gvl_folge='';
+    }
   }
   save(db);
-  window._gvltDetail=null;
+  window._gvltDetail=null; window._gvltIsFilm=false;
   var ov=document.getElementById('gvlt-ov');
   if(ov) ov.remove();
   openDetail(tid);
-  showToast('✓ GVL Folgen gespeichert');
+  showToast('✓ GVL gespeichert');
 }
 
 function gvlDokBearbeiten(dokId){
@@ -2509,7 +2545,17 @@ function gvlDokBearbeiten(dokId){
     ? d.gvl_takes_detail.map(function(e){ return {staffel:staffelAus(e.folge),folge:folgeAus(e.folge),takes:e.takes}; })
     : [{staffel:parseInt(d.gvl_staffel||d.gvl_staffel_header)||1, folge:parseInt(d.gvl_folge||d.gvl_episode_header)||1, takes:parseInt(d.gvl_takes||d.takes)||0}];
 
+  var isFilmDok = d.gvl_takes_detail && d.gvl_takes_detail.length===1 && d.gvl_takes_detail[0].folge===0;
+  window._gvlDokIsFilm = isFilmDok;
+
   function buildRows(){
+    if(window._gvlDokIsFilm){
+      var takes=detail[0]?detail[0].takes:0;
+      return '<div style="background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 10px;margin-bottom:8px">'
+        +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:6px">TAKES GESAMT</div>'
+        +'<input type="number" id="gvldok-t-0" value="'+takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:20px;font-weight:900;color:#1d6fa8;box-sizing:border-box">'
+        +'</div>';
+    }
     var h='';
     detail.forEach(function(row,i){
       h+='<div id="gvldok-row-'+i+'" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px">'
@@ -2536,18 +2582,35 @@ function gvlDokBearbeiten(dokId){
     var r=document.getElementById('gvldok-rows');
     if(r) r.innerHTML=buildRows();
   };
-
-  function render(){
-    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">GVL Folgen & Takes</div>'
+  window._gvlDokFullRender=function(){
+    var filmActive=window._gvlDokIsFilm;
+    box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:8px">GVL Folgen & Takes</div>'
       +'<div style="font-size:12px;color:#888;margin-bottom:12px">'+esc(d.beschr||d.dateiname||'')+'</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+      +'<button type="button" onclick="gvlDokSetFilm(false)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'#e5e7eb':'#6d28d9')+';background:'+(filmActive?'#f3f4f6':'#ede9fe')+';color:'+(filmActive?'#888':'#6d28d9')+'">📺 Serie / Folgen</button>'
+      +'<button type="button" onclick="gvlDokSetFilm(true)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'#6d28d9':'#e5e7eb')+';background:'+(filmActive?'#ede9fe':'#f3f4f6')+';color:'+(filmActive?'#6d28d9':'#888')+'">🎬 Film</button>'
+      +'</div>'
       +'<div id="gvldok-rows">'+buildRows()+'</div>'
-      +'<button type="button" onclick="gvlDokAddRow()" style="width:100%;background:#f3f4f6;color:#6d28d9;border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>'
+      +(!filmActive?'<button type="button" onclick="gvlDokAddRow()" style="width:100%;background:#f3f4f6;color:#6d28d9;border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>':'<div style="margin-bottom:12px;font-size:11px;color:#888">Keine Staffel/Folge — Takes werden dem Filmtitel direkt zugeordnet.</div>')
       +'<button type="button" data-did="'+dokId+'" onclick="gvlDokSave(this)" style="width:100%;background:#6d28d9;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Speichern</button>'
       +'<button type="button" onclick="document.getElementById(\'gvldok-ov\').remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
-  }
+  };
+
+  function render(){ window._gvlDokFullRender(); }
   render();
   ov.appendChild(box);
   document.body.appendChild(ov);
+}
+
+function gvlDokSetFilm(isFilm){
+  window._gvlDokIsFilm=isFilm;
+  if(isFilm && window._gvlDokDetail){
+    var total=(window._gvlDokDetail||[]).reduce(function(s,r){return s+r.takes;},0);
+    window._gvlDokDetail=[{staffel:0,folge:0,takes:total}];
+  } else if(!isFilm && window._gvlDokDetail && window._gvlDokDetail[0] && window._gvlDokDetail[0].folge===0){
+    window._gvlDokDetail=[{staffel:1,folge:1,takes:window._gvlDokDetail[0].takes}];
+  }
+  window._gvlDokFullRender && window._gvlDokFullRender();
 }
 
 function gvlDokAddRow(){
@@ -2565,25 +2628,36 @@ function gvlDokSave(btn){
   var d=(db.dokumente||[]).find(function(x){return x.id===did;});
   if(!d)return;
   var rows=window._gvlDokDetail||[];
+  var isFilm=window._gvlDokIsFilm;
   var detail=[];
-  rows.forEach(function(row,i){
-    var s=document.getElementById('gvldok-s-'+i);
-    var f=document.getElementById('gvldok-f-'+i);
-    var t=document.getElementById('gvldok-t-'+i);
-    var staffel=s?parseInt(s.value)||1:row.staffel;
-    var folge=f?parseInt(f.value)||1:row.folge;
-    var takes=t?parseInt(t.value)||0:row.takes;
-    detail.push({folge:staffel*100+folge, takes:takes});
-  });
+  if(isFilm){
+    var tEl=document.getElementById('gvldok-t-0');
+    var takes=tEl?parseInt(tEl.value)||0:(rows[0]?rows[0].takes:0);
+    detail=[{folge:0, takes:takes}];
+  } else {
+    rows.forEach(function(row,i){
+      var s=document.getElementById('gvldok-s-'+i);
+      var f=document.getElementById('gvldok-f-'+i);
+      var t=document.getElementById('gvldok-t-'+i);
+      var staffel=s?parseInt(s.value)||1:row.staffel;
+      var folge=f?parseInt(f.value)||1:row.folge;
+      var takes=t?parseInt(t.value)||0:row.takes;
+      detail.push({folge:staffel*100+folge, takes:takes});
+    });
+  }
   if(detail.length){
     d.gvl_takes_detail=detail;
     d.gvl_takes=detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
     d.takes=d.gvl_takes;
-    var firstF=String(detail[0].folge);
-    d.gvl_staffel=firstF.length>=3?firstF.slice(0,-2):firstF;
+    if(!isFilm){
+      var firstF=String(detail[0].folge);
+      d.gvl_staffel=firstF.length>=3?firstF.slice(0,-2):firstF;
+    } else {
+      d.gvl_staffel=''; d.gvl_folge='';
+    }
   }
   save(db);
-  window._gvlDokDetail=null;
+  window._gvlDokDetail=null; window._gvlDokIsFilm=false;
   var ov=document.getElementById('gvldok-ov');
   if(ov)ov.remove();
   dokOpenDetail(did);
@@ -5332,9 +5406,13 @@ function dokAnalyseDoc(d, key, cb){
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
     +'  rolle + takes + EPS: NUR aus der Zeile mit "Tim Knauer" als Sprecher!\n'
-    +'    ABLAUF: 1) Suche die Zeile wo "Tim Knauer" steht → 2) Lies NUR die Werte DIESER Zeile\n'
-    +'    Jede andere Zeile (andere Sprecher) komplett IGNORIEREN — egal wie ähnlich die Werte aussehen!\n'
-    +'    Tim Knauers Zeile erkennst du daran dass "Tim Knauer" in der Sprecher-Spalte steht\n'
+    +'    ABLAUF — ZWINGEND in dieser Reihenfolge:\n'
+    +'    1) Scanne die Sprecher-Spalte von oben nach unten\n'
+    +'    2) Finde die Zeile wo "Tim Knauer" (oder "T. Knauer" o.ä.) steht\n'
+    +'    3) Lies ALLE Werte NUR aus DIESER Zeile: Rolle, von, bis, EPS, Takes\n'
+    +'    4) Alle anderen Zeilen komplett ignorieren — auch wenn sie ähnliche EPS-Nummern haben!\n'
+    +'    KREUZPRÜFUNG: Die Zeile muss eine Uhrzeit (von/bis) haben — das ist Tims Aufnahmezeit.\n'
+    +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
@@ -5345,7 +5423,9 @@ function dokAnalyseDoc(d, key, cb){
     +'    Formate: "+3" vor der Zahl, "3+" nach der Zahl, "*3" → immer addieren!\n'
     +'\n'
     +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus TIM KNAUERs eigener Tabellenzeile:\n'
-    +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen (Ariana, Buck, Karen etc.) übernehmen!\n'
+    +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen übernehmen!\n'
+    +'  Tims Zeile erkennst du an: Sprecher="Tim Knauer" UND hat eine Uhrzeit (von/bis)\n'
+    +'  Die Zeile direkt darüber oder darunter gehört einem anderen Sprecher — ignorieren!\n'
     +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile mit "Tim Knauer" als Sprecher.\n'
     +'\n'
     +'  LAYOUT A: Takes-Spalte von Tim enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
@@ -5368,13 +5448,17 @@ function dokAnalyseDoc(d, key, cb){
     +'    WICHTIG: 210 ist NICHT Staffel 21 Folge 0 — es ist Staffel 2 Folge 10!\n'
     +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},{"folge":108,"takes":36}]\n'
     +'\n'
-    +'  LAYOUT C: EPS-Spalte von Tim = mehrere Folgen ("203, 204" oder "301, 302, 303"), Takes-Spalte = nur Gesamtzahl\n'
-    +'  → GLEICHMÄSSIG verteilen: Tims takes ÷ Anzahl Folgen (Rest auf ERSTE Folge)\n'
-    +'  ⚠ WICHTIG: Nimm TIMS takes-Wert, NICHT den takes-Wert einer anderen Zeile!\n'
-    +'  Beispiel: Tim hat takes=6, EPS=203,204 → [{"folge":203,"takes":3},{"folge":204,"takes":3}]\n'
-    +'  Beispiel: Tim hat takes=7, EPS=203,204 → [{"folge":203,"takes":4},{"folge":204,"takes":3}]\n'
-    +'  Beispiel: Tim hat takes=80, EPS=301,302,303 → 80÷3=26 Rest 2 → [{"folge":301,"takes":28},{"folge":302,"takes":26},{"folge":303,"takes":26}]\n'
-    +'  Beispiel: Tim hat takes=37, EPS=301,302,303 → 37÷3=12 Rest 1 → [{"folge":301,"takes":13},{"folge":302,"takes":12},{"folge":303,"takes":12}]\n'
+    +'  LAYOUT C: EPS-Spalte von Tim = Folgennummer(n), Takes-Spalte = Gesamtzahl\n'
+    +'  ⚠⚠ KRITISCH: Der Takes-Wert MUSS aus der Zeile mit "Tim Knauer" kommen — NIEMALS aus einer anderen Zeile!\n'
+    +'  Selbst wenn eine andere Zeile dieselben EPS-Nummern hat — ignorieren! Nur Tims Takes zählen.\n'
+    +'  Auch wenn NUR EINE Folge in EPS steht, IMMER als gvl_takes_detail auslesen!\n'
+    +'  ⚠ EPS-Nummern (z.B. "306, 307" oder "306") sind StaffelFolge-Codes — IMMER als gvl_takes_detail speichern!\n'
+    +'    NIEMALS nur als gvl_staffel_header — IMMER mit Takes aufteilen in gvl_takes_detail!\n'
+    +'  → Verfahren: 1) Finde Zeile mit "Tim Knauer" → 2) Lies Takes aus DIESER Zeile → 3) Verteile auf EPS-Folgen\n'
+    +'  → Beispiel: Tim Zeile: EPS="306, 307", Takes=71 → 71÷2=35 Rest 1 → [{"folge":306,"takes":36},{"folge":307,"takes":35}]\n'
+    +'  → Beispiel: Tim Zeile: EPS="203, 204", Takes=6 → 6÷2=3 → [{"folge":203,"takes":3},{"folge":204,"takes":3}]\n'
+    +'  → Beispiel: Tim Zeile: EPS="301, 302, 303", Takes=80 → 80÷3=26 Rest 2 → [{"folge":301,"takes":28},{"folge":302,"takes":26},{"folge":303,"takes":26}]\n'
+    +'  → Beispiel: Tim Zeile: EPS="208", Takes=6 → [{"folge":208,"takes":6}] — NICHT die 13 Takes aus einer anderen Zeile!\n'
     +'  HANDSCHRIFTLICHE ERGÄNZUNGEN: Wenn neben gedruckten Takes handschriftlich weitere\n'
     +'  Takes hinzugefügt wurden (Formate: "+3", "3+", "*3", oder Zahl daneben):\n'
     +'  → Gesamt-Takes erhöhen: "72 3+" bedeutet takes=75\n'
@@ -6584,25 +6668,18 @@ function dokShowFullImg(id){
   var d=(db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d||!d.dataURL) return;
 
-  _lockPageZoom(); // Seiten-Zoom sperren — verhindert dass Overlay wegdriftet
+  _lockPageZoom();
 
   var ov=document.createElement('div');
   ov.id='dok-fullimg-overlay';
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;overflow:hidden';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none';
 
-  var _ovTouchCount=0;
   function close(){
     _unlockPageZoom();
     if(ov.parentNode) ov.parentNode.removeChild(ov);
   }
 
-  ov.addEventListener('touchstart',function(e){ _ovTouchCount=e.touches.length; },{passive:true});
-  ov.addEventListener('touchend',function(e){
-    if(_ovTouchCount===1 && e.target===ov) close();
-    _ovTouchCount=0;
-  });
-
-  // × Button — immer erreichbar
+  // × Button
   var btn=document.createElement('button');
   btn.type='button';
   btn.textContent='×';
@@ -6611,14 +6688,72 @@ function dokShowFullImg(id){
   btn.onclick=function(e){ e.stopPropagation(); close(); };
   ov.appendChild(btn);
 
-  // Bild — kein pinch-zoom damit Seite nicht wegdriftet
+  // Bild mit Pinch-Zoom + Pan
   var img=document.createElement('img');
   img.src=d.dataURL;
-  img.style.cssText='max-width:100%;max-height:90vh;object-fit:contain;touch-action:manipulation';
-  img.addEventListener('touchend',function(e){
-    if(_ovTouchCount===1){ e.stopPropagation(); close(); }
-  });
+  img.style.cssText='max-width:100%;max-height:90vh;object-fit:contain;touch-action:none;transform-origin:center center;will-change:transform;cursor:grab';
   ov.appendChild(img);
+
+  // Zoom/Pan state
+  var _scale=1, _minScale=1, _maxScale=5;
+  var _tx=0, _ty=0;
+  var _lastDist=0, _lastMidX=0, _lastMidY=0;
+  var _panStartX=0, _panStartY=0, _panStartTx=0, _panStartTy=0;
+  var _touches=0;
+
+  function applyTransform(){
+    img.style.transform='translate('+_tx+'px,'+_ty+'px) scale('+_scale+')';
+  }
+  function dist(t){ return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY); }
+  function midX(t){ return (t[0].clientX+t[1].clientX)/2; }
+  function midY(t){ return (t[0].clientY+t[1].clientY)/2; }
+
+  ov.addEventListener('touchstart',function(e){
+    e.preventDefault();
+    _touches=e.touches.length;
+    if(_touches===2){
+      _lastDist=dist(e.touches);
+      _lastMidX=midX(e.touches);
+      _lastMidY=midY(e.touches);
+    } else if(_touches===1){
+      _panStartX=e.touches[0].clientX;
+      _panStartY=e.touches[0].clientY;
+      _panStartTx=_tx;
+      _panStartTy=_ty;
+    }
+  },{passive:false});
+
+  ov.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    if(e.touches.length===2){
+      var d2=dist(e.touches);
+      var mx=midX(e.touches), my=midY(e.touches);
+      var newScale=Math.min(_maxScale, Math.max(_minScale, _scale*(d2/_lastDist)));
+      // Zoom auf Mittelpunkt
+      _tx += (mx-_lastMidX) + (mx - window.innerWidth/2)*(1-d2/_lastDist);
+      _ty += (my-_lastMidY) + (my - window.innerHeight/2)*(1-d2/_lastDist);
+      _scale=newScale;
+      _lastDist=d2; _lastMidX=mx; _lastMidY=my;
+      applyTransform();
+    } else if(e.touches.length===1 && _scale>1){
+      _tx=_panStartTx+(e.touches[0].clientX-_panStartX);
+      _ty=_panStartTy+(e.touches[0].clientY-_panStartY);
+      applyTransform();
+    }
+  },{passive:false});
+
+  ov.addEventListener('touchend',function(e){
+    if(e.touches.length===0){
+      // Single tap zum Schließen nur wenn nicht gezoomt
+      if(_scale<=1.05 && _touches===1){
+        var dx=Math.abs(e.changedTouches[0].clientX-_panStartX);
+        var dy=Math.abs(e.changedTouches[0].clientY-_panStartY);
+        if(dx<10&&dy<10) close();
+      }
+      _touches=0;
+    }
+  },{passive:true});
+
   document.body.appendChild(ov);
 }
 
