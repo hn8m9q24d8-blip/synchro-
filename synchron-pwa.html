@@ -384,16 +384,17 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
   </div>
   <!-- Suchfeld -->
-  <div style="flex-shrink:0;padding:0 12px 6px">
-    <div style="position:relative">
+  <div style="flex-shrink:0;padding:0 12px 6px;display:flex;gap:8px;align-items:center">
+    <div style="position:relative;flex:1">
       <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="#9ca3af" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
       <input id="termine-search" type="text" placeholder="Produktion, Studio, Rolle suchen…"
         oninput="termineSuche(this.value)"
         style="width:100%;box-sizing:border-box;padding:9px 32px 9px 32px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none">
-      <div id="termine-search-clear" onclick="termineSearchClear()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;background:#9ca3af;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center">
+      <div id="termine-search-clear" onclick="termineSearchClear()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;background:#9ca3af;border-radius:50%;cursor:pointer;align-items:center;justify-content:center">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
     </div>
+    <div id="merkliste-filter-btn" onclick="toggleMerklisteFilter()" style="flex-shrink:0;width:38px;height:38px;border-radius:12px;border:1.5px solid #e5e7eb;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;touch-action:manipulation">☆</div>
   </div>
   <!-- Apple-style Month Calendar -->
   <div id="cal-block" style="flex-shrink:0;padding:0 16px 6px;display:flex;align-items:center;justify-content:space-between">
@@ -712,7 +713,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div onclick="ustExport()" style="background:#7c3aed;color:#fff;font-size:12px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer">Export</div>
     </div>
   </div>
-  <div id="ust-scroll" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(env(safe-area-inset-bottom)+80px)"></div>
+  <div id="ust-scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(env(safe-area-inset-bottom)+90px)"></div>
 </div>
 
 
@@ -1672,7 +1673,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '219';
+  if(el) el.textContent = '223';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1702,6 +1703,18 @@ function calSelectDay(iso){
   rWeekStrip();rTermine();
 }
 var _lastSucheQuery = '';
+var _merklisteFilter = false;
+
+function toggleMerklisteFilter(){
+  _merklisteFilter = !_merklisteFilter;
+  var btn = document.getElementById('merkliste-filter-btn');
+  if(btn){
+    btn.textContent = _merklisteFilter ? '⭐' : '☆';
+    btn.style.background = _merklisteFilter ? '#fefce8' : '#fff';
+    btn.style.borderColor = _merklisteFilter ? '#f5c518' : '#e5e7eb';
+  }
+  rTermine();
+}
 
 function termineSearchClear(){
   var inp = document.getElementById('termine-search');
@@ -1803,6 +1816,18 @@ function rTermine(){
   var monthNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
   var all=db.termine.slice().sort(function(a,b){return(a.datum||'')>(b.datum||'')?1:-1;});
+
+  // Merkliste-Filter: alle gemerkten Termine anzeigen
+  if(_merklisteFilter){
+    var merkItems=all.filter(function(t){return t._merkliste;});
+    if(header) header.textContent='⭐ Merkliste ('+merkItems.length+')';
+    if(!merkItems.length){
+      list.innerHTML='<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">Merkliste leer</div><div class="empty-sub">Termine mit ⭐ markieren um sie hier zu sehen.</div></div>';
+    } else {
+      list.innerHTML=merkItems.map(function(t){return tCard(t);}).join('');
+    }
+    return;
+  }
 
   if(calSelectedDate){
     // Show only selected day
@@ -1965,7 +1990,7 @@ function openDetail(id){
   if(t.abId){
     var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
     if(abRec){
-      var abName=abRec.dateiname||abRec.gutschrift_nr||abRec.studio||'';
+      var abName=abRec.dateiname||'';
       if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
     }
   }
@@ -2045,7 +2070,10 @@ function openDetail(id){
       if(gvlDispo.gvl_episode_header) gvlHtml+='<div class="info-row"><div class="ir-key">Episode</div><div class="ir-val">'+esc(gvlDispo.gvl_episode_header)+'</div></div>';
       if(gvlDispo.gvl_takes_detail&&gvlDispo.gvl_takes_detail.length){
         gvlDispo.gvl_takes_detail.forEach(function(td){
-          gvlHtml+='<div class="info-row"><div class="ir-key">'+esc(td.folge||'')+'</div><div class="ir-val">'+esc(String(td.takes||0))+' Takes</div></div>';
+          var fs=String(td.folge||'');
+          // Nur Folge-Nummer anzeigen, nicht den kombinierten StaffelFolge-Code
+          var folgeLabel = td.folge===0 ? 'Film' : (fs.length>=3 ? parseInt(fs.slice(-2)) : fs);
+          gvlHtml+='<div class="info-row"><div class="ir-key">'+folgeLabel+'</div><div class="ir-val">'+esc(String(td.takes||0))+' Takes</div></div>';
         });
       }
       if(gvlDispo.produktion_typ_aktiv){
@@ -2701,9 +2729,8 @@ function showDateinamen(el){
     return;
   }
 
-  // Archiviert → Dateiname kopieren + Hilfe-Sheet
-  var firstName = namen[0];
-  var ordner = /abrechn|gutschrift|abrechnung/i.test(firstName) ? 'Gagenabrechnungen' : 'Dispofotos';
+  // Ordner aus Label erkennen (zuverlässiger als Dateiname)
+  var ordner = /abrechn|abrechnung/i.test(label) ? 'Gagenabrechnungen' : 'Dispofotos';
 
   // Sofort in Clipboard kopieren
   if(navigator.clipboard){
@@ -2729,8 +2756,9 @@ function showDateinamen(el){
         +'</div>';
     });
   }
-  html+='<div style="font-size:12px;color:#555;margin-bottom:12px;line-height:1.5">'
-    +'Dateien-App öffnen → Ordner <b>'+ordner+'</b> → Suche antippen → Einfügen</div>';
+  html+='<div style="background:#f0f4ff;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#374151;line-height:1.6">'
+    +'<b>📂 '+ordner+'</b><br>'
+    +'Dateien-App öffnen → Ordner antippen → Suche → Einfügen</div>';
   html+='<button type="button" onclick="window.location.href=\'shareddocuments://\'" '
     +'style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📁 Dateien-App öffnen</button>';
   html+='<button type="button" onclick="removeNamenOv()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
