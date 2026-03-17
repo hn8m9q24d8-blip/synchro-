@@ -1673,7 +1673,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '226';
+  if(el) el.textContent = '227';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7656,12 +7656,29 @@ function rUstVoranmeldung(){
   var ym = _ustYear+'-'+String(_ustMonth+1).padStart(2,'0');
   var urEinn = db.profil&&db.profil.ust!=null ? db.profil.ust : 0.07;
 
-  // ── EINNAHMEN aus Terminen ────────────────────────────────
-  var einnTermine = (db.termine||[]).filter(function(t){
-    return t.datum && t.datum.startsWith(ym);
+  // ── EINNAHMEN nach ZAHLUNGSEINGANG (Ist-Versteuerung) ────────
+  // Nur Termine/Abrechnungen bei denen im gewählten Monat Geld eingegangen ist
+  var einnTermine = [];
+  (db.termine||[]).forEach(function(t){
+    var zahlDatum = null;
+    // 1. Zahlungsdatum aus verknüpfter Abrechnung (Holvi-Import)
+    if(t.abId){
+      var abRec=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(abRec && abRec.zahlungDatum) zahlDatum=abRec.zahlungDatum;
+    }
+    // 2. Manueller Zahlungseingang aus db.zahlungen
+    if(!zahlDatum){
+      var z=(db.zahlungen||[]).find(function(z){return z.terminId===t.id;});
+      if(z && z.datum) zahlDatum=z.datum;
+    }
+    // 3. Fallback: status=bezahlt aber kein Datum → überspringen (kein Datum bekannt)
+    if(!zahlDatum) return;
+    if(!zahlDatum.startsWith(ym)) return;
+    einnTermine.push({t:t, zahlDatum:zahlDatum});
   });
   var einnNetto = 0;
-  einnTermine.forEach(function(t){
+  einnTermine.forEach(function(e){
+    var t=e.t;
     einnNetto += (parseFloat(t.kommgage)||0) + (parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
   });
   var einnUst = einnNetto * urEinn;
@@ -7695,17 +7712,17 @@ function rUstVoranmeldung(){
     +'<div style="flex:1;font-size:12px;text-align:right"><div style="color:#999;margin-bottom:2px">Vorsteuer Ausgaben</div><strong style="color:#15803d">−'+fmtEur(vorstUst)+'</strong></div>'
     +'</div></div>';
 
-  // ── EINNAHMEN Sektion ─────────────────────────────────────
   html += '<div style="padding:0 16px;margin-bottom:4px">'
-    +'<div style="font-size:12px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Einnahmen ('+einnTermine.length+' Termine)</div>';
+    +'<div style="font-size:12px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Einnahmen ('+einnTermine.length+' Zahlungseingänge)</div>';
   if(einnTermine.length){
     html += '<div style="background:#fff;border:1.5px solid #fecaca;border-radius:10px;overflow:hidden">';
-    einnTermine.forEach(function(t, i){
+    einnTermine.forEach(function(e, i){
+      var t=e.t;
       var n = (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
       var u = n * urEinn;
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i>0?'border-top:1px solid #fef2f2':'')+'">'
         +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.titel||t.studio||'')+'</div>'
-        +'<div style="font-size:10px;color:#999">'+fd(t.datum)+'  ·  Netto '+fmtEur(n)+'  ·  USt '+Math.round(urEinn*100)+'%</div></div>'
+        +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+'  ·  Leistung '+fd(t.datum)+'  ·  Netto '+fmtEur(n)+'  ·  USt '+Math.round(urEinn*100)+'%</div></div>'
         +'<div style="font-size:13px;font-weight:800;color:#c2410c;flex-shrink:0;margin-left:8px">+'+fmtEur(u)+'</div>'
         +'</div>';
     });
@@ -7714,7 +7731,7 @@ function rUstVoranmeldung(){
       +'<div style="font-size:13px;font-weight:900;color:#c2410c">+'+fmtEur(einnUst)+'</div>'
       +'</div></div>';
   } else {
-    html += '<div style="text-align:center;padding:16px;color:#999;font-size:13px">Keine Termine in diesem Monat</div>';
+    html += '<div style="text-align:center;padding:16px;color:#999;font-size:13px">Keine Zahlungseingänge in diesem Monat<br><span style="font-size:11px">Nur Termine mit erfasstem Zahlungseingang erscheinen hier</span></div>';
   }
   html += '</div>';
 
