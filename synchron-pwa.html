@@ -3392,7 +3392,7 @@ function exportData(){
   var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='synchron-backup-'+today()+'.json';
+  a.download='synchron-backup.json';
   a.click();
 }
 function importData(inp){
