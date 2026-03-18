@@ -2460,15 +2460,16 @@ function gvlTerminBearbeiten(terminId){
   window._gvltIsFilm = isFilm;
 
   function buildRows(){
+    var d2 = window._gvltDetail || detail;
     if(window._gvltIsFilm){
-      var takes = detail[0]?detail[0].takes:0;
+      var takes = d2[0]?d2[0].takes:0;
       return '<div style="background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 10px;margin-bottom:8px">'
         +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:6px">TAKES GESAMT</div>'
         +'<input type="number" id="gvlt-t-0" value="'+takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:20px;font-weight:900;color:#1d6fa8;box-sizing:border-box">'
         +'</div>';
     }
     var h='';
-    detail.forEach(function(row,i){
+    d2.forEach(function(row,i){
       h+='<div id="gvlt-row-'+i+'" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px">'
         +'<div style="flex:1">'
         +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">STAFFEL</div>'
@@ -2482,7 +2483,7 @@ function gvlTerminBearbeiten(terminId){
         +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">TAKES</div>'
         +'<input type="number" id="gvlt-t-'+i+'" value="'+row.takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:900;color:#1d6fa8;box-sizing:border-box">'
         +'</div>'
-        +(detail.length>1
+        +(d2.length>1
           ? '<button type="button" onclick="gvltRemoveRow('+i+')" style="flex-shrink:0;background:#fee2e2;color:#c2410c;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;touch-action:manipulation;align-self:flex-end;margin-bottom:2px">✕</button>'
           : '')
         +'</div>';
@@ -2608,15 +2609,16 @@ function gvlDokBearbeiten(dokId){
   window._gvlDokIsFilm = isFilmDok;
 
   function buildRows(){
+    var d2 = window._gvlDokDetail || detail;
     if(window._gvlDokIsFilm){
-      var takes=detail[0]?detail[0].takes:0;
+      var takes=d2[0]?d2[0].takes:0;
       return '<div style="background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 10px;margin-bottom:8px">'
         +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:6px">TAKES GESAMT</div>'
         +'<input type="number" id="gvldok-t-0" value="'+takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:20px;font-weight:900;color:#1d6fa8;box-sizing:border-box">'
         +'</div>';
     }
     var h='';
-    detail.forEach(function(row,i){
+    d2.forEach(function(row,i){
       h+='<div id="gvldok-row-'+i+'" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px">'
         +'<div style="flex:1"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">STAFFEL</div>'
         +'<input type="number" id="gvldok-s-'+i+'" value="'+row.staffel+'" min="1" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
@@ -2624,7 +2626,7 @@ function gvlDokBearbeiten(dokId){
         +'<input type="number" id="gvldok-f-'+i+'" value="'+row.folge+'" min="1" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
         +'<div style="flex:1.5"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">TAKES</div>'
         +'<input type="number" id="gvldok-t-'+i+'" value="'+row.takes+'" min="0" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 7px;font-size:14px;font-weight:900;color:#1d6fa8;box-sizing:border-box"></div>'
-        +(detail.length>1?'<button type="button" onclick="gvlDokRemoveRow('+i+')" style="flex-shrink:0;background:#fee2e2;color:#c2410c;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;touch-action:manipulation;align-self:flex-end;margin-bottom:2px">✕</button>':'')
+        +(d2.length>1?'<button type="button" onclick="gvlDokRemoveRow('+i+')" style="flex-shrink:0;background:#fee2e2;color:#c2410c;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;touch-action:manipulation;align-self:flex-end;margin-bottom:2px">✕</button>':'')
         +'</div>';
     });
     return h;
@@ -5630,17 +5632,36 @@ function dokAnalyseDoc(d, key, cb){
     +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus TIM KNAUERs eigener Tabellenzeile:\n'
     +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen übernehmen!\n'
     +'  Tims Zeile erkennst du an: Sprecher="Tim Knauer" UND hat eine Uhrzeit (von/bis)\n'
-    +'  Die Zeile direkt darüber oder darunter gehört einem anderen Sprecher — ignorieren!\n'
-    +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile mit "Tim Knauer" als Sprecher.\n'
+    +'  MEHRERE ZEILEN FÜR TIM: Manchmal hat Tim mehrere Tabellenzeilen ohne eigene Zeitangabe\n'
+    +'    aber direkt unter seiner Hauptzeile — diese gehören ALLE zu Tim!\n'
+    +'    Erkennbar daran: Sprecher-Zelle leer ODER nur Rollenname, aber in Tims Zeitblock.\n'
+    +'    Beispiel: Zeile 1 "Fielder / Tim Knauer / 09:00-09:45 / 20 / 505:20"\n'
+    +'             Zeile 2 "Fielder / (leer)     / (leer)      /  5 / 502:5"\n'
+    +'    → BEIDE Zeilen zu Tim: gvl_takes_detail=[{"folge":505,"takes":20},{"folge":502,"takes":5}]\n'
+    +'    → takes = 20+5 = 25 gesamt\n'
+    +'  Die Zeile direkt darüber oder darunter mit ANDEREM Sprecher-Namen gehört einem anderen Sprecher — ignorieren!\n'
+    +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile(n) mit "Tim Knauer" als Sprecher.\n'
     +'\n'
     +'  LAYOUT A: Takes-Spalte von Tim enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
     +'    → IMMER als gvl_takes_detail auslesen, auch wenn nur eine Folge und nur 1 Take!\n'
     +'    "809:1" → [{"folge":809,"takes":1}] — 809 = Staffel 8 Folge 09, 1 Take\n'
     +'  LAYOUT D: Separate Spalte "Episode:Takes" oder "EPS:Takes" oder "Folge:Takes" — z.B. "304:10"\n'
     +'    Diese Spalte enthält direkt Folgennummer DOPPELPUNKT Takes — genau wie Layout A behandeln!\n'
+    +'    ⚠ AUCH wenn Tims Takes-Spalte dieselbe Zahl zeigt: Die Episode:Takes-Spalte hat VORRANG!\n'
     +'    Beispiel: Tim Zeile hat Takes=10, Episode:Takes="304:10" → gvl_takes_detail=[{"folge":304,"takes":10}]\n'
-    +'    Mehrere: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
+    +'    Beispiel: Tim Zeile hat Takes=100, Episode:Takes="604:100" → gvl_takes_detail=[{"folge":604,"takes":100}]\n'
+    +'      → 604 = Staffel 6 Folge 04, takes=100 — NICHT takes=604 oder folge=100!\n'
+    +'    Mehrere Einträge in Episode:Takes-Spalte (übereinander oder kommagetrennt):\n'
+    +'      "604:100" und darunter "604:1" → BEIDE auslesen: [{"folge":604,"takes":100},{"folge":604,"takes":1}]\n'
+    +'    Mehrere kommagetrennt: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
     +'    ⚠ WICHTIG: Diese Spalte hat VORRANG vor der normalen Takes-Spalte für gvl_takes_detail!\n'
+    +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Notiz", "Notes", "Remarks")\n'
+    +'    Manchmal steht der Folgen:Takes-Code nicht in einer EPS-Spalte sondern in der Bemerkung!\n'
+    +'    Format: "104:46 Abgedreht" oder "104:46" oder "Ep104:46" in der Bemerkungsspalte\n'
+    +'    → Zahl VOR Doppelpunkt = Folge, Zahl NACH Doppelpunkt = Takes\n'
+    +'    Beispiel: Bemerkung="104:46 Abgedreht", Takes=46 → gvl_takes_detail=[{"folge":104,"takes":46}]\n'
+    +'    Beispiel: Bemerkung="103:21 104:58" → [{"folge":103,"takes":21},{"folge":104,"takes":58}]\n'
+    +'    ⚠ Wörter wie "Abgedreht", "Sprachberatung", "Akzentberatung" in Bemerkung IGNORIEREN — nur Zahlen:Zahlen auslesen!\n'
     +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
