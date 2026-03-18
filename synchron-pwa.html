@@ -622,7 +622,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="buch-menu-arrow">›</div>
     </div>
 
-    <div onclick="switchView('abrechnungen')" class="buch-menu-row">
+    <div onclick="switchView('zahlungen')" class="buch-menu-row">
       <div class="buch-menu-icon" style="background:#e8f5e9;color:#2e7d32">GS</div>
       <div class="buch-menu-body">
         <div class="buch-menu-title">Gagen­abrechnungen / SV-Meld.</div>
@@ -855,29 +855,53 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div onclick="openRechnungSheet(null)" style="position:absolute;bottom:90px;right:20px;width:54px;height:54px;background:var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 16px rgba(26,110,168,.4);cursor:pointer;z-index:50;font-weight:300">+</div>
 </div>
 
-<!-- ══════ ZAHLUNGEN ═════════════════════════════════════ -->
-<div id="view-zahlungen" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue);display:flex;align-items:center;padding:0 16px;height:56px">
+<!-- ══════ ZAHLUNGEN (Neue Übersicht) ═══════════════════ -->
+<div id="view-zahlungen" class="view" style="overflow:hidden;flex-direction:column">
+  <!-- Header -->
+  <div class="app-header" style="background:#1a2332;display:flex;align-items:center;padding:0 16px;height:56px;flex-shrink:0">
     <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
-    <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Zahlungen</div>
+    <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Einnahmen & Analyse</div>
+    <div id="zahl-year-tabs" style="display:flex;gap:4px"></div>
   </div>
-  <!-- Gesamt-Banner -->
-  <div style="background:#263238;padding:16px;flex-shrink:0">
-    <div style="color:#90a4ae;font-size:12px;font-weight:600;margin-bottom:8px">GESAMTVERDIENST ALLER AUFTRAGGEBER</div>
-    <div style="font-size:28px;font-weight:900;color:#fff;margin-bottom:10px" id="zahl-total">€ 0,00</div>
-    <div style="display:flex;justify-content:space-between">
-      <div><div style="color:#ef9a9a;font-size:11px;margin-bottom:2px">offen</div><div id="zahl-offen" style="color:#ef9a9a;font-size:16px;font-weight:800">€ 0,00</div></div>
-      <div style="text-align:right"><div style="color:#a5d6a7;font-size:11px;margin-bottom:2px">bezahlt</div><div id="zahl-bezahlt" style="color:#a5d6a7;font-size:16px;font-weight:800">€ 0,00</div></div>
+  <!-- Hero Banner -->
+  <div style="background:linear-gradient(135deg,#1a2332 0%,#263238 100%);padding:16px 16px 14px;flex-shrink:0">
+    <div style="color:#90a4ae;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px">GESAMTVERDIENST</div>
+    <div style="font-size:32px;font-weight:900;color:#fff;letter-spacing:-1px;margin-bottom:10px" id="zahl-total">€ 0,00</div>
+    <div style="display:flex;gap:0">
+      <div style="flex:1">
+        <div style="color:#ef9a9a;font-size:10px;font-weight:600;margin-bottom:2px">OFFEN</div>
+        <div id="zahl-offen" style="color:#ef9a9a;font-size:15px;font-weight:800">€ 0,00</div>
+      </div>
+      <div style="flex:1">
+        <div style="color:#ffcc80;font-size:10px;font-weight:600;margin-bottom:2px">ABGERECHNET</div>
+        <div id="zahl-abgerechnet" style="color:#ffcc80;font-size:15px;font-weight:800">€ 0,00</div>
+      </div>
+      <div style="flex:1;text-align:right">
+        <div style="color:#a5d6a7;font-size:10px;font-weight:600;margin-bottom:2px">BEZAHLT</div>
+        <div id="zahl-bezahlt" style="color:#a5d6a7;font-size:15px;font-weight:800">€ 0,00</div>
+      </div>
     </div>
   </div>
-  <!-- Filter-Tabs -->
-  <div style="display:flex;border-bottom:2px solid #e0e0e0;flex-shrink:0">
-    <div id="zahl-tab-studio" onclick="zahlenTab('studio')" style="flex:1;padding:12px;text-align:center;font-size:13px;font-weight:700;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer">Nach Studio</div>
-    <div id="zahl-tab-monat" onclick="zahlenTab('monat')" style="flex:1;padding:12px;text-align:center;font-size:13px;font-weight:600;color:#999;cursor:pointer">Nach Monat</div>
+  <!-- Tabs -->
+  <div style="display:flex;background:#fff;border-bottom:2px solid #e5e7eb;flex-shrink:0">
+    <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:700;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer;touch-action:manipulation">Studio</div>
+    <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation">Monat</div>
+    <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation">Produktion</div>
+    <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation">Analyse</div>
   </div>
-  <div id="zahlungen-list" class="view-scroll" style="padding:0;min-height:0;padding-bottom:calc(env(safe-area-inset-bottom) + 80px)">
-    <!-- rendered by rZahlungen() -->
+  <!-- Schnellzugriff-Buttons (nur bei Studio-Tab) -->
+  <div id="zahl-toolbar" style="background:#f8f9fa;padding:8px 12px;display:flex;gap:8px;flex-shrink:0;border-bottom:1px solid #e5e7eb">
+    <div onclick="abHolviOpen()" style="flex:1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
+      <div style="font-size:14px">🏦</div><div style="font-size:10px;font-weight:700;color:#15803d;margin-top:1px">Holvi</div>
+    </div>
+    <div onclick="switchView('ust-voranmeldung')" style="flex:1;background:#fdf2ff;border:1.5px solid #d8b4fe;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
+      <div style="font-size:14px">🧾</div><div style="font-size:10px;font-weight:700;color:#7c3aed;margin-top:1px">USt</div>
+    </div>
+    <div onclick="abMonatOpen()" style="flex:1;background:#fef9ec;border:1.5px solid #fcd34d;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
+      <div style="font-size:14px">📊</div><div style="font-size:10px;font-weight:700;color:#92400e;margin-top:1px">Monatsblatt</div>
+    </div>
   </div>
+  <div id="zahlungen-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(env(safe-area-inset-bottom)+80px)"></div>
 </div>
 
 <!-- ══════ RECHNUNG SHEET ════════════════════════════════ -->
@@ -1673,7 +1697,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '230';
+  if(el) el.textContent = '231';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4531,7 +4555,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
-  else if(v==='abrechnungen'){var avw=document.getElementById('view-abrechnungen');if(avw)avw.style.display='flex';rAbrechnungen();}
+  else if(v==='abrechnungen'){switchView('zahlungen');return;}
   else if(v==='rechnungen'){rRechnungen();}
   else if(v==='zahlungen'){rZahlungen();}
   else if(v==='stammdaten'){} // static
@@ -8518,99 +8542,349 @@ function printRechnung(){
 }
 
 // ── ZAHLUNGEN ────────────────────────────────────────────────
-var _zahlTab2 = 'studio';
+var _zahlTab = 'studio';
+var _zahlYear = new Date().getFullYear();
 
-function zahlenTab(tab){
-  _zahlTab2=tab;
-  var tabs=['studio','monat'];
-  tabs.forEach(function(t){
-    var el=document.getElementById('zahl-tab-'+t);
+function zahlTab(tab){
+  _zahlTab = tab;
+  ['studio','monat','produktion','analyse'].forEach(function(t){
+    var el = document.getElementById('zt-'+t);
     if(!el) return;
-    if(t===tab){
-      el.style.color='var(--blue)';
-      el.style.borderBottom='2px solid var(--blue)';
-      el.style.marginBottom='-2px';
-      el.style.fontWeight='700';
-    } else {
-      el.style.color='#999';
-      el.style.borderBottom='none';
-      el.style.marginBottom='0';
-      el.style.fontWeight='600';
-    }
+    var active = t===tab;
+    el.style.color = active ? 'var(--blue)' : '#9ca3af';
+    el.style.borderBottom = active ? '2px solid var(--blue)' : 'none';
+    el.style.marginBottom = active ? '-2px' : '0';
+    el.style.fontWeight = active ? '700' : '600';
   });
+  var tb = document.getElementById('zahl-toolbar');
+  if(tb) tb.style.display = tab==='studio' ? 'flex' : 'none';
+  rZahlungen();
+}
+
+function zahlSetYear(y){
+  _zahlYear = y;
   rZahlungen();
 }
 
 function rZahlungen(){
-  var el=document.getElementById('zahlungen-list');
+  var el = document.getElementById('zahlungen-list');
+  if(!el) return;
+  var MONTHS = ['Jan','Feb','Mar','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  var MONTHS_FULL = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+  // Year tabs
+  var years = [];
+  (db.termine||[]).forEach(function(t){
+    if(t.datum){ var y=parseInt(t.datum.slice(0,4)); if(years.indexOf(y)<0) years.push(y); }
+  });
+  years.sort(function(a,b){return b-a;});
+  if(!years.length) years=[new Date().getFullYear()];
+  if(years.indexOf(_zahlYear)<0) _zahlYear=years[0];
+  var ytEl = document.getElementById('zahl-year-tabs');
+  if(ytEl){
+    ytEl.innerHTML = years.map(function(y){
+      var act = y===_zahlYear;
+      return '<div onclick="zahlSetYear('+y+')" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;cursor:pointer;touch-action:manipulation;background:'+(act?'rgba(255,255,255,.25)':'rgba(255,255,255,.08)')+';color:'+(act?'#fff':'rgba(255,255,255,.55)')+'">'+y+'</div>';
+    }).join('');
+  }
+
+  function calcNet(t){ return (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0); }
+
+  // Totals for hero
+  var totalAll=0,offenAll=0,bezahltAll=0,abgAll=0;
+  (db.termine||[]).filter(function(t){return t.datum&&t.datum.startsWith(String(_zahlYear));}).forEach(function(t){
+    var net=calcNet(t);
+    totalAll+=net;
+    if(t.status==='bezahlt') bezahltAll+=net;
+    else if(t.status==='abrechnung') abgAll+=net;
+    else offenAll+=net;
+  });
   var totEl=document.getElementById('zahl-total');
   var ofEl=document.getElementById('zahl-offen');
+  var abgEl=document.getElementById('zahl-abgerechnet');
   var bzEl=document.getElementById('zahl-bezahlt');
-  if(!el) return;
+  if(totEl) totEl.textContent=fmtEur(totalAll);
+  if(ofEl) ofEl.textContent=fmtEur(offenAll);
+  if(abgEl) abgEl.textContent=fmtEur(abgAll);
+  if(bzEl) bzEl.textContent=fmtEur(bezahltAll);
 
-  var all=db.termine;
-  var total=0,offen=0,bezahlt=0;
-  all.forEach(function(t){
-    var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-    total+=net;
-    if(t.status==='bezahlt') bezahlt+=net; else offen+=net;
+  // Filtered — skip 0 entries
+  var all = (db.termine||[]).filter(function(t){
+    if(!t.datum||!t.datum.startsWith(String(_zahlYear))) return false;
+    return calcNet(t) > 0;
   });
-  if(totEl) totEl.textContent=fmtEur(total);
-  if(ofEl) ofEl.textContent=fmtEur(offen);
-  if(bzEl) bzEl.textContent=fmtEur(bezahlt);
 
   if(!all.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">💶</div><div class="empty-title">Keine Zahlungen</div><div class="empty-sub">Sobald du Termine einträgst, erscheinen hier deine Einnahmen.</div></div>';
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">💶</div><div class="empty-title">Keine Einnahmen</div><div class="empty-sub">Keine Termine mit Gage für '+_zahlYear+'</div></div>';
     return;
   }
 
-  var html='';
-  if(_zahlTab2==='studio'){
+  // ── STUDIO TAB ──────────────────────────────────────────────
+  if(_zahlTab==='studio'){
+    var diffTermine=[];
+    all.forEach(function(t){
+      if(!t.abId) return;
+      var ab=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
+      if(!ab) return;
+      var errechnet=calcNet(t);
+      var studioBrutto=parseFloat(ab.brutto)||0;
+      var ausgezahlt=parseFloat(ab.auszahlung)||0;
+      var diff=studioBrutto>0?(studioBrutto-errechnet):(ausgezahlt-errechnet);
+      if(Math.abs(diff)>=0.5) diffTermine.push({t:t,ab:ab,errechnet:errechnet,ausgezahlt:ausgezahlt,studioBrutto:studioBrutto,diff:diff});
+    });
     var groups={};
     all.forEach(function(t){
-      var s=t.studio||'Unbekannt';
-      if(!groups[s]) groups[s]={net:0,offen:0,bezahlt:0,count:0};
-      var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-      groups[s].net+=net; groups[s].count++;
-      if(t.status==='bezahlt') groups[s].bezahlt+=net; else groups[s].offen+=net;
+      var key=t.studio||'Unbekannt';
+      if(!groups[key]) groups[key]={termine:[],net:0,offen:0,bezahlt:0,abgerechnet:0};
+      var net=calcNet(t);
+      groups[key].termine.push(t);
+      groups[key].net+=net;
+      if(t.status==='bezahlt') groups[key].bezahlt+=net;
+      else if(t.status==='abrechnung') groups[key].abgerechnet+=net;
+      else groups[key].offen+=net;
     });
-    Object.keys(groups).sort().forEach(function(s){
-      var g=groups[s];
-      html+='<div style="padding:14px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
-        +'<div><div style="font-weight:700;font-size:15px">'+esc(s)+'</div>'
-        +'<div style="font-size:12px;color:#999;margin-top:2px">'+g.count+' Termin'+(g.count!==1?'e':'')+'</div>'
-        +(g.offen>0?'<div style="font-size:11px;color:#e53935;margin-top:1px">'+fmtEur(g.offen)+' offen</div>':'')
-        +(g.bezahlt>0?'<div style="font-size:11px;color:#43a047;margin-top:1px">'+fmtEur(g.bezahlt)+' bezahlt</div>':'')
-        +'</div>'
-        +'<div style="text-align:right"><div style="font-size:18px;font-weight:900">'+fmtEur(g.net)+'</div></div>'
-        +'</div>';
+    var html='';
+    if(diffTermine.length){
+      var diffTotal=diffTermine.reduce(function(s,x){return s+Math.abs(x.diff);},0);
+      html+='<div style="background:#fff7ed;border-left:4px solid #f97316;padding:12px 16px 10px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+        +'<div style="font-weight:900;font-size:14px;color:#c2410c">&#9888; Differenzen ('+diffTermine.length+')</div>'
+        +'<div style="font-size:12px;font-weight:700;color:#c2410c">'+fmtEur(diffTotal)+'</div></div>';
+      diffTermine.forEach(function(d){
+        var zuviel=d.diff>0;
+        html+='<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+          +'<div onclick="openDetail(\''+d.t.id+'\')" style="cursor:pointer">'
+          +'<div style="display:flex;justify-content:space-between">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(d.t.titel||d.t.studio||'')+'</div>'
+          +'<div style="font-size:11px;color:#999">'+esc(d.t.studio||'')+' · '+fd(d.t.datum)+'</div></div>'
+          +'<div style="text-align:right;flex-shrink:0;margin-left:10px"><div style="font-size:15px;font-weight:900;color:'+(zuviel?'#15803d':'#c2410c')+'">'+(zuviel?'+':'')+fmtEur(d.diff)+'</div>'
+          +'<div style="font-size:10px;color:#aaa">'+(zuviel?'zuviel':'zuwenig')+'</div></div></div>'
+          +'<div style="display:flex;gap:0;margin-top:7px;padding-top:7px;border-top:1px solid #fee2b3">'
+          +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">App-Netto</div><strong>'+fmtEur(d.errechnet)+'</strong></div>'
+          +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Studio-Brutto</div><strong>'+fmtEur(d.studioBrutto||d.ausgezahlt)+'</strong></div>'
+          +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Gutschrift</div><strong>'+(d.ab.gutschrift_nr||'–')+'</strong></div>'
+          +'</div></div>'
+          +'<div onclick="abMahnEmail(\''+d.t.id+'\')" style="margin-top:6px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:7px;text-align:center;font-size:12px;font-weight:700;color:#c2410c;cursor:pointer">&#10003; Nachfrage-Mail</div>'
+          +'</div>';
+      });
+      html+='</div>';
+    }
+    var sortedKeys=Object.keys(groups).sort(function(a,b){return groups[b].net-groups[a].net;});
+    sortedKeys.forEach(function(key){
+      var g=groups[key];
+      g.termine.sort(function(a,b){return a.datum<b.datum?-1:1;});
+      var barColor=g.bezahlt>0&&g.offen===0&&g.abgerechnet===0?'#22c55e':g.abgerechnet>0?'#f97316':g.offen>0?'#ef4444':'#94a3b8';
+      var gid='zg-'+key.replace(/[^a-z0-9]/gi,'_');
+      html+='<div style="border-bottom:1.5px solid #f1f5f9">'
+        +'<div onclick="zgToggle(\''+gid+'\')" style="display:flex;align-items:center;padding:12px 16px;gap:10px;cursor:pointer;background:#fff;touch-action:manipulation">'
+        +'<div style="width:4px;height:38px;border-radius:2px;background:'+barColor+';flex-shrink:0"></div>'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(key)+'</div>'
+        +'<div style="font-size:11px;color:#9ca3af;margin-top:2px">'+g.termine.length+' Termin'+(g.termine.length!==1?'e':'')
+        +(g.offen>0?' · <span style="color:#ef4444">'+fmtEur(g.offen)+' offen</span>':'')
+        +(g.abgerechnet>0?' · <span style="color:#f97316">'+fmtEur(g.abgerechnet)+' abgr.</span>':'')
+        +(g.bezahlt>0?' · <span style="color:#22c55e">'+fmtEur(g.bezahlt)+' bezahlt</span>':'')
+        +'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0"><div style="font-size:16px;font-weight:900">'+fmtEur(g.net)+'</div>'
+        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">&#9662;</div></div></div>'
+        +'<div id="'+gid+'">'
+        +g.termine.map(function(t){
+          var tnet=calcNet(t);
+          var sc=t.status==='bezahlt'?'#22c55e':t.status==='abrechnung'?'#f97316':'#ef4444';
+          return '<div onclick="openDetail(\''+t.id+'\')" style="padding:9px 16px 9px 30px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;cursor:pointer;touch-action:manipulation">'
+            +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||'')+'</div>'
+            +'<div style="font-size:11px;color:#9ca3af">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div></div>'
+            +'<div style="text-align:right;flex-shrink:0;margin-left:8px"><div style="font-size:13px;font-weight:700">'+fmtEur(tnet)+'</div>'
+            +'<div style="font-size:11px;color:'+sc+'">'+tlabel2(t.status)+'</div></div></div>';
+        }).join('')
+        +'</div></div>';
     });
-  } else {
-    // By month
-    var months={};
-    var mNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-    all.forEach(function(t){
-      if(!t.datum) return;
-      var p=t.datum.split('-');
-      var key=p[0]+'-'+p[1];
-      if(!months[key]) months[key]={net:0,offen:0,bezahlt:0,count:0,year:parseInt(p[0]),month:parseInt(p[1])-1};
-      var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-      months[key].net+=net; months[key].count++;
-      if(t.status==='bezahlt') months[key].bezahlt+=net; else months[key].offen+=net;
-    });
-    Object.keys(months).sort().reverse().forEach(function(k){
-      var g=months[k];
-      html+='<div style="padding:14px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
-        +'<div><div style="font-weight:700;font-size:15px">'+mNames[g.month]+' '+g.year+'</div>'
-        +'<div style="font-size:12px;color:#999;margin-top:2px">'+g.count+' Termin'+(g.count!==1?'e':'')+'</div>'
-        +(g.offen>0?'<div style="font-size:11px;color:#e53935;margin-top:1px">'+fmtEur(g.offen)+' offen</div>':'')
-        +(g.bezahlt>0?'<div style="font-size:11px;color:#43a047;margin-top:1px">'+fmtEur(g.bezahlt)+' bezahlt</div>':'')
-        +'</div>'
-        +'<div style="text-align:right"><div style="font-size:18px;font-weight:900">'+fmtEur(g.net)+'</div></div>'
-        +'</div>';
-    });
+    el.innerHTML=html;
+    return;
   }
-  el.innerHTML=html;
+
+  // ── MONAT TAB ───────────────────────────────────────────────
+  if(_zahlTab==='monat'){
+    var months={};
+    all.forEach(function(t){
+      var p=t.datum.split('-'); var mi=parseInt(p[1])-1;
+      var key=p[0]+'-'+p[1];
+      if(!months[key]) months[key]={net:0,offen:0,bezahlt:0,abgerechnet:0,count:0,month:mi};
+      var net=calcNet(t); months[key].net+=net; months[key].count++;
+      if(t.status==='bezahlt') months[key].bezahlt+=net;
+      else if(t.status==='abrechnung') months[key].abgerechnet+=net;
+      else months[key].offen+=net;
+    });
+    var now=new Date(); var isCurrentYear=_zahlYear===now.getFullYear();
+    var html='';
+    if(isCurrentYear){
+      var sow=new Date(now); sow.setDate(now.getDate()-((now.getDay()+6)%7));
+      var eow=new Date(sow); eow.setDate(sow.getDate()+6);
+      var kwStart=dateToISO(sow), kwEnd=dateToISO(eow);
+      var jan1=new Date(_zahlYear,0,1);
+      var kw=Math.ceil(((now-jan1)/86400000+jan1.getDay()+1)/7);
+      var kwT=(db.termine||[]).filter(function(t){return t.datum&&t.datum>=kwStart&&t.datum<=kwEnd;});
+      var kwNet=kwT.reduce(function(s,t){return s+calcNet(t);},0);
+      html+='<div style="background:#f0f9ff;border-left:3px solid #0ea5e9;padding:12px 16px">'
+        +'<div style="font-size:10px;font-weight:700;color:#0369a1;letter-spacing:.5px">DIESE WOCHE · KW '+kw+'</div>'
+        +'<div style="font-size:13px;color:#374151;margin-top:2px">'+fd(kwStart)+' – '+fd(kwEnd)+' · '+kwT.length+' Termine</div>'
+        +'<div style="font-size:22px;font-weight:900;color:#0369a1;margin-top:4px">'+fmtEur(kwNet)+'</div>'
+        +'</div>';
+    }
+    var maxNet=0;
+    Object.values(months).forEach(function(m){if(m.net>maxNet)maxNet=m.net;});
+    for(var mi=11;mi>=0;mi--){
+      var key=_zahlYear+'-'+String(mi+1).padStart(2,'0');
+      var g=months[key]; if(!g) continue;
+      var barW=maxNet>0?Math.round((g.net/maxNet)*100):0;
+      html+='<div style="padding:12px 16px;border-bottom:1px solid #f1f5f9">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<div><div style="font-weight:700;font-size:14px">'+MONTHS_FULL[mi]+'</div>'
+        +'<div style="font-size:11px;color:#9ca3af">'+g.count+' Termin'+(g.count!==1?'e':'')
+        +(g.offen>0?' · <span style="color:#ef4444">'+fmtEur(g.offen)+' offen</span>':'')
+        +(g.bezahlt>0?' · <span style="color:#22c55e">'+fmtEur(g.bezahlt)+' bezahlt</span>':'')
+        +'</div></div>'
+        +'<div style="font-size:16px;font-weight:900">'+fmtEur(g.net)+'</div></div>'
+        +'<div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden">'
+        +'<div style="height:100%;width:'+barW+'%;background:linear-gradient(90deg,#1d6fa8,#38bdf8);border-radius:3px"></div>'
+        +'</div></div>';
+    }
+    el.innerHTML=html; return;
+  }
+
+  // ── PRODUKTION TAB ──────────────────────────────────────────
+  if(_zahlTab==='produktion'){
+    var prods={};
+    all.forEach(function(t){
+      var key=(t.titel||t.studio||'Unbekannt').trim();
+      if(!prods[key]) prods[key]={termine:[],net:0,offen:0,bezahlt:0,studio:t.studio||''};
+      var net=calcNet(t);
+      prods[key].termine.push(t); prods[key].net+=net;
+      if(t.status==='bezahlt') prods[key].bezahlt+=net; else prods[key].offen+=net;
+    });
+    var sortedP=Object.keys(prods).sort(function(a,b){return prods[b].net-prods[a].net;});
+    var html='';
+    sortedP.forEach(function(key){
+      var g=prods[key];
+      var gid='zp-'+key.replace(/[^a-z0-9]/gi,'_');
+      html+='<div style="border-bottom:1.5px solid #f1f5f9">'
+        +'<div onclick="zgToggle(\''+gid+'\')" style="display:flex;align-items:center;padding:12px 16px;gap:10px;cursor:pointer;background:#fff;touch-action:manipulation">'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(key)+'</div>'
+        +'<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(g.studio)+' · '+g.termine.length+' Termine'
+        +(g.offen>0?' · <span style="color:#ef4444">'+fmtEur(g.offen)+' offen</span>':'')
+        +'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:900">'+fmtEur(g.net)+'</div>'
+        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">&#9662;</div></div></div>'
+        +'<div id="'+gid+'">'
+        +g.termine.map(function(t){
+          var tnet=calcNet(t);
+          var sc=t.status==='bezahlt'?'#22c55e':t.status==='abrechnung'?'#f97316':'#ef4444';
+          return '<div onclick="openDetail(\''+t.id+'\')" style="padding:9px 16px 9px 26px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;cursor:pointer;touch-action:manipulation">'
+            +'<div style="font-size:12px;color:#374151">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div>'
+            +'<div style="text-align:right"><div style="font-size:13px;font-weight:700">'+fmtEur(tnet)+'</div>'
+            +'<div style="font-size:11px;color:'+sc+'">'+tlabel2(t.status)+'</div></div></div>';
+        }).join('')
+        +'</div></div>';
+    });
+    el.innerHTML=html; return;
+  }
+
+  // ── ANALYSE TAB ─────────────────────────────────────────────
+  if(_zahlTab==='analyse'){
+    var COLORS=['#1d6fa8','#0ea5e9','#22c55e','#f97316','#8b5cf6','#ec4899','#14b8a6','#f59e0b'];
+    var studios={};
+    all.forEach(function(t){var k=t.studio||'Unbekannt';if(!studios[k])studios[k]=0;studios[k]+=calcNet(t);});
+    var studioKeys=Object.keys(studios).sort(function(a,b){return studios[b]-studios[a];}).slice(0,8);
+    var studioMax=studios[studioKeys[0]]||1;
+    var prodMap={};
+    all.forEach(function(t){var k=(t.titel||t.studio||'?').trim();if(!prodMap[k])prodMap[k]=0;prodMap[k]+=calcNet(t);});
+    var prodKeys=Object.keys(prodMap).sort(function(a,b){return prodMap[b]-prodMap[a];}).slice(0,8);
+    var prodMax=prodMap[prodKeys[0]]||1;
+    var monthTrend=[];
+    for(var mi2=0;mi2<12;mi2++){
+      var key2=_zahlYear+'-'+String(mi2+1).padStart(2,'0');
+      var mT=all.filter(function(t){return t.datum&&t.datum.startsWith(key2);});
+      monthTrend.push(mT.reduce(function(s,t){return s+calcNet(t);},0));
+    }
+    var monthMax=Math.max.apply(null,monthTrend)||1;
+    var html='';
+    html+='<div style="background:#1a2332;padding:16px">'
+      +'<div style="color:#90a4ae;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:8px">JAHRESANALYSE '+_zahlYear+'</div>'
+      +'<div style="display:flex;gap:16px">'
+      +'<div><div style="font-size:10px;color:#64748b;margin-bottom:3px">Termine</div><div style="font-size:20px;font-weight:900;color:#fff">'+all.length+'</div></div>'
+      +'<div><div style="font-size:10px;color:#64748b;margin-bottom:3px">Ø/Monat</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(totalAll/12)+'</div></div>'
+      +'<div><div style="font-size:10px;color:#64748b;margin-bottom:3px">Ø/Termin</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(all.length?totalAll/all.length:0)+'</div></div>'
+      +'</div></div>';
+    html+='<div style="padding:16px 16px 8px">'
+      +'<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:12px">&#128200; MONATSVERLAUF</div>'
+      +'<div style="display:flex;align-items:flex-end;gap:3px;height:80px">';
+    monthTrend.forEach(function(v,i){
+      var h2=Math.round((v/monthMax)*76);
+      var isNow=new Date().getFullYear()===_zahlYear&&new Date().getMonth()===i;
+      html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">'
+        +'<div style="width:100%;height:'+h2+'px;background:'+(isNow?'#1d6fa8':'#93c5fd')+';border-radius:3px 3px 0 0;min-height:'+(v>0?3:0)+'px"></div>'
+        +'<div style="font-size:8px;color:#9ca3af;font-weight:600">'+MONTHS[i]+'</div>'
+        +'</div>';
+    });
+    html+='</div></div>';
+    html+='<div style="padding:12px 16px;border-top:1px solid #f1f5f9">'
+      +'<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:12px">&#127908; TOP STUDIOS</div>';
+    studioKeys.forEach(function(k,i){
+      var v=studios[k]; var w=Math.round((v/studioMax)*100);
+      html+='<div style="margin-bottom:10px">'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+        +'<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%">'+esc(k)+'</div>'
+        +'<div style="font-size:12px;font-weight:800;color:#1d6fa8">'+fmtEur(v)+'</div></div>'
+        +'<div style="height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden">'
+        +'<div style="height:100%;width:'+w+'%;background:'+COLORS[i%COLORS.length]+';border-radius:4px"></div>'
+        +'</div></div>';
+    });
+    html+='</div>';
+    html+='<div style="padding:12px 16px;border-top:1px solid #f1f5f9">'
+      +'<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:12px">&#127916; TOP PRODUKTIONEN</div>';
+    prodKeys.forEach(function(k,i){
+      var v=prodMap[k]; var w=Math.round((v/prodMax)*100);
+      html+='<div style="margin-bottom:10px">'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+        +'<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%">'+esc(k)+'</div>'
+        +'<div style="font-size:12px;font-weight:800;color:#7c3aed">'+fmtEur(v)+'</div></div>'
+        +'<div style="height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden">'
+        +'<div style="height:100%;width:'+w+'%;background:'+COLORS[(i+3)%COLORS.length]+';border-radius:4px"></div>'
+        +'</div></div>';
+    });
+    html+='</div>';
+    var total2=totalAll||1;
+    var r=42,cx=60,cy=60,circ=2*Math.PI*r;
+    var bezPct=Math.round((bezahltAll/total2)*100);
+    var offDash=circ*(offenAll/total2);
+    var abgDash=circ*(abgAll/total2);
+    var bezDash=circ*(bezahltAll/total2);
+    html+='<div style="padding:12px 16px;border-top:1px solid #f1f5f9">'
+      +'<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:12px">&#128202; STATUS-VERTEILUNG</div>'
+      +'<div style="display:flex;align-items:center;gap:20px">'
+      +'<svg width="120" height="120" viewBox="0 0 120 120">'
+      +'<circle cx="60" cy="60" r="42" fill="none" stroke="#f1f5f9" stroke-width="14"/>'
+      +(offenAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="#ef4444" stroke-width="14" stroke-dasharray="'+offDash+' '+circ+'" stroke-dashoffset="'+(circ/4)+'" stroke-linecap="round"/>':'')
+      +(abgAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="#f97316" stroke-width="14" stroke-dasharray="'+abgDash+' '+circ+'" stroke-dashoffset="'+(circ/4-offDash)+'" stroke-linecap="round"/>':'')
+      +(bezahltAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="'+bezDash+' '+circ+'" stroke-dashoffset="'+(circ/4-offDash-abgDash)+'" stroke-linecap="round"/>':'')
+      +'<text x="60" y="56" text-anchor="middle" font-size="13" font-weight="900" fill="#1a2332">'+bezPct+'%</text>'
+      +'<text x="60" y="70" text-anchor="middle" font-size="9" fill="#9ca3af">bezahlt</text>'
+      +'</svg>'
+      +'<div style="flex:1">'
+      +(bezahltAll>0?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:10px;height:10px;border-radius:50%;background:#22c55e"></div>Bezahlt</div><div style="font-size:12px;font-weight:800;color:#22c55e">'+fmtEur(bezahltAll)+'</div></div>':'')
+      +(offenAll>0?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444"></div>Offen</div><div style="font-size:12px;font-weight:800;color:#ef4444">'+fmtEur(offenAll)+'</div></div>':'')
+      +(abgAll>0?'<div style="display:flex;justify-content:space-between"><div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:10px;height:10px;border-radius:50%;background:#f97316"></div>Abgerechnet</div><div style="font-size:12px;font-weight:800;color:#f97316">'+fmtEur(abgAll)+'</div></div>':'')
+      +'</div></div></div>';
+    el.innerHTML=html; return;
+  }
+}
+
+function zgToggle(gid){
+  var el=document.getElementById(gid);
+  var arr=document.getElementById(gid+'-arr');
+  if(!el) return;
+  var hidden=el.style.display==='none';
+  el.style.display=hidden?'':'none';
+  if(arr) arr.textContent=hidden?'\u25be':'\u25b8';
 }
 
 // ── TAKES DRUM ROLLER ────────────────────────────────
