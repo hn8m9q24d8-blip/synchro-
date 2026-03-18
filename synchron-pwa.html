@@ -430,12 +430,11 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div id="view-profil" class="view">
   <div class="app-header"><div class="header-title">Profil</div></div>
   <div class="scroll">
-    <div class="profile-avatar" id="profil-avatar">?</div>
-    <div class="profile-name" id="profil-name">–</div>
-    <div class="profile-sub" id="profil-beruf">Synchronsprecher·in</div>
+    <div class="profile-avatar" id="profil-avatar">TK</div>
+    <div class="profile-name" id="profil-name">Tim Knauer</div>
+    <div class="profile-sub" id="profil-beruf">Synchronsprecher</div>
     <div class="settings-group">
 
-      <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div class="sr-icon" style="background:#dbeafe">👤</div><div class="sr-label">Stammdaten</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🔒</div><div class="sr-label">PDF-Passwörter (Studios)</div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
@@ -1697,7 +1696,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '231';
+  if(el) el.textContent = '240';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4604,6 +4603,13 @@ function rProfil(){
   if(nameEl)nameEl.textContent=p.name||'Mein Profil';
   updateApiNotice();
   rStudioPwStatus();
+  // API-Key Status in Profil-Liste
+  var apiStatus=document.getElementById('api-key-status');
+  if(apiStatus) apiStatus.textContent=getKey()?'Gesetzt ✓':'Nicht gesetzt';
+  // iCal Status in Profil-Liste
+  var icalStatus=document.getElementById('ical-worker-status');
+  var icalUrl=(p.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
+  if(icalStatus) icalStatus.textContent=icalUrl?'Gesetzt ✓':'Nicht gesetzt';
 }
 
 
