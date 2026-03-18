@@ -1673,7 +1673,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '227';
+  if(el) el.textContent = '230';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1987,10 +1987,14 @@ function openDetail(id){
   var dispoDoks=allDoks.filter(function(x){return x.typ==='dispo';});
   var abDoks=allDoks.filter(function(x){return x.typ==='abrechn';});
   // Dateinamen für Ampel — auch bestätigte Dokumente (dataURL=null) einschließen
-  var dispoDateinamen=dispoDoks.map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
+  var dispoDateinamen=dispoDoks.map(function(d){
+    return d.dateiname||d.beschr||('Dispo '+fd(d.datum||t.datum));
+  }).filter(Boolean);
   // Fallback: t.dispoImg existiert aber kein Dokument verknüpft (altes Format)
   if(!dispoDateinamen.length && t.dispoImg) dispoDateinamen=['Dispo (verknüpft)'];
-  var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){return d.dateiname||d.beschr||'';}).filter(Boolean);
+  var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){
+    return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
+  }).filter(Boolean);
   // Auch aus db.abrechnungen den Dateinamen holen (dort landet t.abId)
   if(t.abId){
     var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
@@ -3101,7 +3105,18 @@ function saveTermin(){
   el=document.getElementById('f-notizen'); if(el) t.notizen=el.value;
   el=document.getElementById('f-memo'); if(el) t.memo=el.value;
   el=document.getElementById('f-memo'); if(el) t.memo=el.value;
-  el=document.getElementById('f-takes'); if(el) t.takes=el.value;
+  el=document.getElementById('f-takes'); if(el){
+    var oldTakes=parseInt(t.takes)||0;
+    var newTakes=parseInt(el.value)||0;
+    t.takes=newTakes;
+    // GVL synchronisieren wenn Takes geändert
+    if(newTakes!==oldTakes && t.gvl_takes_detail && t.gvl_takes_detail.length){
+      var delta=newTakes-oldTakes;
+      var last=t.gvl_takes_detail[t.gvl_takes_detail.length-1];
+      last.takes=Math.max(0,(parseInt(last.takes)||0)+delta);
+      t.gvl_takes=t.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+    }
+  }
   el=document.getElementById('f-rate'); if(el) t.rate=parseFloat(el.value)||0;
   el=document.getElementById('f-kommgage'); if(el) t.kommgage=parseFloat(el.value)||0;
   el=document.getElementById('f-status'); if(el) t.status=el.value||'offen';
@@ -3753,9 +3768,17 @@ function gvlBuildData(year){
   var yStr=String(year);
   var prods={};
 
-  // Primaerquelle: Dispo-Dokumente
+  // Primaerquelle: Dispo-Dokumente — pro Termin nur EINES zählen (neuestes)
+  // Verhindert Verdoppelung bei doppelt hochgeladener Dispo
+  var disposByTermin = {};
   (db.dokumente||[]).filter(function(d){return d.typ==='dispo'&&d.bestaetigt;}).forEach(function(d){
     if(!d.datum||!d.datum.startsWith(yStr)) return;
+    var tkey = d.terminId || ('_notermid_'+d.datum+'_'+(d.titel||d.studio||''));
+    if(!disposByTermin[tkey] || (d.addedAt||'') > (disposByTermin[tkey].addedAt||'')){
+      disposByTermin[tkey] = d;
+    }
+  });
+  Object.values(disposByTermin).forEach(function(d){
     var key=(d.titel||d.studio||'Unbekannt').trim();
     if(!prods[key]) prods[key]={
       titel:key, studio:d.studio||'', rolle:d.rolle||'',
