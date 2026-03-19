@@ -1696,7 +1696,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '241';
+  if(el) el.textContent = '244';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1918,6 +1918,10 @@ function tCard(t){
   var hasAbrechnung=!!(t.abId);
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
 
+  // Multi-Select Modus — Haken anzeigen wenn gewählt
+  var isMultiSelected = _pendingDokLink && (window._dokLinkMulti||[]).indexOf(t.id)>=0;
+  var multiStyle = isMultiSelected ? 'border:2px solid #c2410c;background:#fff5f5;' : '';
+
   // Daten aus Dispo-Dokument
   var staffel=dispoDok&&dispoDok.gvl_staffel_header||t.gvl_staffel||'';
   var folge=dispoDok&&dispoDok.gvl_episode_header||t.gvl_folge||t.episode||'';
@@ -1948,8 +1952,9 @@ function tCard(t){
 
   var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
   var monthShort=d?monthNames2[d.getMonth()]:'';
-  return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')">'
+  return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')" style="'+multiStyle+'">'
     +'<div class="t-status-bar" style="background:'+sc+'"></div>'
+    +(isMultiSelected?'<div style="position:absolute;top:8px;right:8px;width:22px;height:22px;background:#c2410c;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900">✓</div>':'')
     +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div><div style="font-size:9px;color:#aaa;line-height:1">'+( d?d.getFullYear():'' )+'</div>':'')+'</div>'
     +'<div class="t-body">'
     +'<div class="t-title">'+esc(t.titel)+'</div>'
@@ -7086,14 +7091,23 @@ function dokGotoKalender(dokId){
       document.body.appendChild(banner);
     }
     var titel=d.titel||d.studio||'Dokument';
-    banner.innerHTML='<div style="flex:1;min-width:0">'
-      +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">📎 Dok verknüpfen:</div>'
-      +'<div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(titel.slice(0,35))+'</div>'
-      +'</div>'
-      +'<div style="display:flex;gap:6px;flex-shrink:0">'
-      +'<button type="button" onclick="dokNewTerminAusDok(\''+dokId+'\')" style="background:#fff;color:#c2410c;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
-      +'<button type="button" onclick="dokLinkCancel()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>'
-      +'</div>';
+    window._dokLinkMulti = window._dokLinkMulti || [];
+    function updateBanner(){
+      var sel=window._dokLinkMulti||[];
+      banner.innerHTML='<div style="flex:1;min-width:0">'
+        +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">📎 Dok verknüpfen:</div>'
+        +'<div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(titel.slice(0,35))+'</div>'
+        +(sel.length?'<div style="font-size:10px;margin-top:2px;opacity:.9">'+sel.length+' Termin'+(sel.length>1?'e':'')+' gewählt</div>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:6px;flex-shrink:0">'
+        +(sel.length?'<button type="button" onclick="dokLinkMultiConfirm()" style="background:#fff;color:#c2410c;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">✓ Verknüpfen ('+sel.length+')</button>':'')
+        +'<button type="button" onclick="dokNewTerminAusDok(\''+dokId+'\')" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neu</button>'
+        +'<button type="button" onclick="dokLinkCancel()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>'
+        +'</div>';
+    }
+    window._dokLinkBannerUpdate = updateBanner;
+    window._dokLinkMulti = [];
+    updateBanner();
     banner.style.display='flex';
   }, 300);
 }
@@ -7671,11 +7685,12 @@ function dokMergeIntoTermin(d, termin){
       if(grundgage) termin.kommgage_abgerechnet = grundgage;
 
       // Takes: Dispo hatte Wert → Differenz speichern, NICHT überschreiben
+      // ⚠ Takes aus Abrechnung NIE in Termin schreiben — Dispo/Kalender hat Vorrang
       if(dispTakes > 0 && takes > 0 && dispTakes !== takes){
         termin.takes_differenz = dispTakes - takes;
         changed.push('Differenz Takes: '+dispTakes+' vs '+takes);
       } else {
-        if(takes) overwrite('takes', takes, 'Takes ('+takes+')');
+        // Kein Überschreiben mehr — Takes bleiben wie sie sind
         termin.takes_differenz = 0;
       }
       // Take-Gage: Differenz
@@ -7708,8 +7723,8 @@ function dokMergeIntoTermin(d, termin){
       termin.abStatus=Math.abs(auszahlung-erwartet)<1.5?'ok':'differenz';
       changed.push('Abrechnung angelegt ('+fmtEur(auszahlung)+')');
     } else {
-      // Update bestehende Abrechnung
-      if(takes&&!existingAb.takes)        { existingAb.takes=takes;    overwrite('takes',takes,'Takes'); }
+      // Update bestehende Abrechnung — Takes nie in Termin schreiben
+      if(takes&&!existingAb.takes)        { existingAb.takes=takes; } // nur in Ab, nicht in Termin
       if(takeGage&&!existingAb.take_gage) { existingAb.take_gage=takeGage; overwrite('rate',takeGage,'Take-Gage'); }
       if(grundgage&&!existingAb.grundgage){ existingAb.grundgage=grundgage; overwrite('kommgage',grundgage,'Komm.-Gage'); }
       if(d.gutschrift_nr&&!existingAb.gutschrift_nr){ existingAb.gutschrift_nr=d.gutschrift_nr; changed.push('Gutschrift-Nr.'); }
@@ -7760,24 +7775,114 @@ function _checkPendingDokLink(terminId){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d||!t) return;
   var si=_pendingSessionIdx;
-  _pendingDokLink=null;
-  _pendingSessionIdx=null;
-  dokLinkCancel();
-  // Session-Zuordnung: nur diese eine Session dem Termin zuweisen
+
+  // Session-Zuordnung: sofort verknüpfen (kein Multi-Select)
   if(si!==null && d.sessions && d.sessions[si]){
+    _pendingDokLink=null;
+    _pendingSessionIdx=null;
+    dokLinkCancel();
     d.sessions[si].terminId=terminId;
     save(db);
     showToast('✓ Session mit Termin verknüpft');
-    // Jetzt direkt in den Termin springen und mergen
     dokSessionPeek(d.id, si);
     return;
   }
-  // Normaler Einzel-Dok-Link
-  d.terminId=terminId;
-  var changed=dokMergeIntoTermin(d,t);
+
+  // Multi-Select: Termin zur Liste hinzufügen oder entfernen
+  window._dokLinkMulti = window._dokLinkMulti || [];
+  var idx = window._dokLinkMulti.indexOf(terminId);
+  if(idx>=0){
+    window._dokLinkMulti.splice(idx,1); // deselect
+    showToast('☐ Termin abgewählt');
+  } else {
+    window._dokLinkMulti.push(terminId); // select
+    showToast('☑ Termin gewählt — weitere tippen oder „Verknüpfen"');
+  }
+  // Banner aktualisieren
+  if(window._dokLinkBannerUpdate) window._dokLinkBannerUpdate();
+  // Terminliste neu rendern damit Haken sichtbar
+  rTermine();
+}
+
+function dokLinkMultiConfirm(){
+  var dokId=_pendingDokLink;
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  var terminIds=window._dokLinkMulti||[];
+  if(!d||!terminIds.length){ dokLinkCancel(); return; }
+
+  var termine=terminIds.map(function(id){return (db.termine||[]).find(function(x){return x.id===id;});}).filter(Boolean);
+  var n=termine.length;
+
+  // Dispo: alle Termine verknüpfen
+  if(d.typ==='dispo'){
+    d.terminId=terminIds[0];
+    termine.forEach(function(t){
+      if(d.rolle&&!t.rolle) t.rolle=d.rolle;
+      if(d.regie&&!t.regie) t.regie=d.regie;
+      if(d.titel&&!t.titel) t.titel=d.titel;
+    });
+  }
+
+  // Abrechnung: Betrag aufteilen
+  if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
+    d.terminId=terminIds[0];
+    var abRec=(db.abrechnungen||[]).find(function(a){return a.id===d.abId||a.dokId===d.id;});
+
+    if(abRec && n>1){
+      var totalTakes=termine.reduce(function(s,t){return s+(parseInt(t.takes)||0);},0);
+      var useTakes = totalTakes > 0;
+      var brutto=parseFloat(abRec.brutto)||0;
+      var auszahlung=parseFloat(abRec.auszahlung)||0;
+      var mwst=parseFloat(abRec.mwst)||0;
+      var netto=parseFloat(abRec.netto)||0;
+
+      termine.forEach(function(t,i){
+        var anteil = useTakes
+          ? ((parseInt(t.takes)||0)/totalTakes)
+          : (1/n);
+        var teilAb={
+          id:'ab'+Date.now()+i,
+          datum:abRec.datum,
+          studio:abRec.studio||d.studio||'',
+          produktion:abRec.produktion||d.titel||'',
+          gutschrift_nr:abRec.gutschrift_nr||'',
+          dateiname:abRec.dateiname||'',
+          brutto:Math.round(brutto*anteil*100)/100,
+          netto:Math.round(netto*anteil*100)/100,
+          mwst:Math.round(mwst*anteil*100)/100,
+          auszahlung:Math.round(auszahlung*anteil*100)/100,
+          takes:parseInt(t.takes)||0,
+          terminId:t.id,
+          bezahlt:abRec.bezahlt||false,
+          zahlungDatum:abRec.zahlungDatum||null,
+          erstelltAm:new Date().toISOString(),
+          _aufgeteiltVon:abRec.id
+        };
+        if(!db.abrechnungen) db.abrechnungen=[];
+        db.abrechnungen.push(teilAb);
+        t.abId=teilAb.id;
+        if(d.rolle&&!t.rolle) t.rolle=d.rolle;
+        if(d.regie&&!t.regie) t.regie=d.regie;
+        if(d.titel&&!t.titel) t.titel=d.titel;
+      });
+      abRec.aufgeteilt=true;
+      abRec.aufgeteiltIn=terminIds;
+      showToast('✓ '+n+' Termine · Betrag '+(useTakes?'nach Takes':'gleichmäßig')+' aufgeteilt');
+
+    } else if(abRec && n===1){
+      termine[0].abId=abRec.id;
+      abRec.terminId=terminIds[0];
+      if(d.rolle&&!termine[0].rolle) termine[0].rolle=d.rolle;
+      if(d.titel&&!termine[0].titel) termine[0].titel=d.titel;
+      showToast('✓ Termin verknüpft');
+    }
+  }
+
+  _pendingDokLink=null;
+  _pendingSessionIdx=null;
+  window._dokLinkMulti=[];
+  dokLinkCancel();
   save(db); rDokumente(); rTermine();
-  showToast('✓ Dokument mit Termin verknüpft');
-  if(changed.length) _showMergeSummary(t, changed, d);
 }
 
 // Neuen Termin direkt aus Dispo-Daten vorausfüllen
