@@ -1696,7 +1696,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '240';
+  if(el) el.textContent = '241';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2722,6 +2722,43 @@ function gvlDokSave(btn){
   if(ov)ov.remove();
   dokOpenDetail(did);
   showToast('✓ GVL gespeichert');
+}
+
+function dokReklassifizieren(dokId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">Typ ändern</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:16px">Was ist dieses Dokument wirklich?</div>'
+    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'dispo\')" style="width:100%;background:#fde8e6;color:#c0392b;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;text-align:left">📋 Dispo / Aufnahmeplan</button>'
+    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'abrechn\')" style="width:100%;background:#fff9e0;color:#92400e;border:1.5px solid #fcd34d;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;text-align:left">💶 Gagenabrechnung (Einnahme)</button>'
+    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'ausgabe\')" style="width:100%;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:16px;text-align:left">🧾 Betriebsausgabe (Ausgabe)</button>'
+    +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  ov.appendChild(box);
+  ov.onclick=function(e){if(e.target===ov)ov.remove();};
+  document.body.appendChild(ov);
+}
+
+function dokSetTyp(dokId, newTyp){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  // Alte Ausgabe aus db.ausgaben entfernen wenn vorhanden
+  if(d.typ==='ausgabe' && d.ausgabeId){
+    db.ausgaben=(db.ausgaben||[]).filter(function(a){return a.id!==d.ausgabeId;});
+    d.ausgabeId=null;
+  }
+  d.typ=newTyp;
+  d.bestaetigt=false;
+  d.awaitConfirm=false;
+  save(db);
+  rDokumente();
+  // Overlay schließen
+  document.querySelectorAll('[style*="z-index:3000"]').forEach(function(el){el.remove();});
+  dokOpenDetail(dokId);
+  showToast('✓ Typ geändert → Bitte neu bestätigen');
 }
 
 function removeNamenOv(){
@@ -5764,10 +5801,23 @@ function dokAnalyseDoc(d, key, cb){
     +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
-    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'    +'  beschr = RESTAURANTNAME bei Bewirtung: Name aus Briefkopf/Logo oben auf dem Beleg (z.B. "Ishin", "Pastarium")\n'    +'    NICHT Tischbezeichnung ("To Go", "Tisch 23") oder Rechnungsnummer!\n'    +'    Bei anderen Ausgaben: was wurde gekauft\n'    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'    +'  brutto = Bruttobetrag gesamt in Euro\n'    +'  netto = Nettobetrag (ohne USt)\n'    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer für Tim)\n'
+    +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'
+    +'  ⚠ NICHT "ausgabe" wenn: Sozialversicherungsabzüge (KV/RV/PV), Nutzungsrechte §73ff UrhG, Synchronsprecher-Honorar — das ist "abrechn"!\n'
+    +'  ⚠ NICHT "ausgabe" wenn: Tim selbst eine Rechnung ausstellt (Rechnungssteller = Tim Knauer) — das ist "abrechn"!\n'
+    +'  "ausgabe" NUR wenn Tim der EMPFÄNGER/KÄUFER ist — also er selbst etwas bezahlt hat.\n'
+    +'  beschr = RESTAURANTNAME bei Bewirtung: Name aus Briefkopf/Logo (z.B. "Ishin", "Pastarium")\n'
+    +'    NICHT Tischbezeichnung ("To Go", "Tisch 23") oder Rechnungsnummer!\n'
+    +'    Bei anderen Ausgaben: was wurde gekauft\n'
+    +'  datum = Rechnungs-/Kaufdatum (YYYY-MM-DD)\n'
+    +'  brutto = Bruttobetrag gesamt in Euro\n'
+    +'  netto = Nettobetrag (ohne USt)\n'
+    +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'
+    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer fuer Tim)\n'
     +'    ⚠ IMMER den auf dem Beleg ausgewiesenen Betrag nehmen — NIEMALS selbst berechnen!\n'
     +'    Steht oft als "MwSt. 7% auf 30,84: € 2,16" → mwst=2.16, ust_satz=0.07, netto=30.84\n'
-    +'    Wenn der Beleg keinen USt-Betrag ausweist (z.B. Kleinbetragsrechnung) → mwst aus brutto berechnen\n'    +'  ausgabe_kat = Kategorie der Ausgabe, NUR eine dieser Optionen:\n'    +'    "equipment" = Technik, Mikrofone, Kopfhörer, Kabel, Computer, Tablet\n'    +'    "software" = Apps, Abonnements, Lizenzen, Cloud-Dienste\n'    +'    "fahrt" = Zugtickets, Taxi, ÖPNV, Parkgebühren, Mietwagen\n'    +'    "bewirtung" = Restaurant, Café, Essen/Trinken, Bewirtungsbeleg (auch wenn geteilt!)\n'    +'    "buero" = Büromaterial, Druckerpatronen, Papier\n'    +'    "weiterbildung" = Kurse, Bücher, Fachliteratur, Seminare\n'    +'    "marketing" = Werbung, Visitenkarten, Website\n'    +'    "steuer_recht" = Steuerberater, Rechtsanwalt, Notar\n'    +'    "versicherung" = Berufshaftpflicht, Krankenversicherung anteilig\n'    +'    "kommunikation" = Telefon, Internet, Handy\n'    +'    "sonstiges" = alles andere\n'    +'  GEMISCHTE STEUERSÄTZE (Restaurantbeleg mit USt-Tabelle):\n'    +'    ⚠ NIEMALS selbst berechnen (nicht Brutto×Satz)! Immer die gedruckte USt-Tabelle ablesen!\n'    +'    Beispiel Pastarium: A=19%: Brutto 32,50 Netto 27,31 USt 5,19 | B=7%: Brutto 62,00 Netto 57,94 USt 4,06\n'    +'    → ust_details=[{"satz":0.19,"netto":27.31,"ust":5.19},{"satz":0.07,"netto":57.94,"ust":4.06}]\n'    +'    → mwst = 5,19+4,06 = 9,25 (SUMME der USt-Spalte aus der Tabelle)\n'    +'    → netto = 27,31+57,94 = 85,25 (SUMME der Netto-Spalte aus der Tabelle)\n'    +'    brutto = Gesamtsumme OHNE Trinkgeld | ust_satz = null bei gemischten Sätzen\n'
+    +'    Wenn der Beleg keinen USt-Betrag ausweist → mwst aus brutto berechnen\n'
+    +'  ausgabe_kat = Kategorie: "equipment","software","fahrt","bewirtung","buero","weiterbildung","marketing","steuer_recht","versicherung","kommunikation","sonstiges"\n'
+    +'  GEMISCHTE STEUERSÄTZE: ust_details=[{"satz":0.19,"netto":x,"ust":x},{"satz":0.07,"netto":x,"ust":x}], mwst=Summe USt\n'
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
@@ -6330,6 +6380,20 @@ function dokOpenDetail(id){
       previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">🔍 Tippen = Vollbild</div>';
       previewDiv+='</div></div>';
       body+=previewDiv;
+    } else if(!d.dataURL && d.mime!=='application/pdf'){
+      // Bild wurde von Safari aus dem Speicher geworfen
+      if(d.thumb){
+        body+='<div style="margin-bottom:12px">';
+        body+='<div style="font-size:10px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⚠ Vorschau nicht mehr verfügbar</div>';
+        body+='<img src="'+d.thumb+'" style="width:100%;max-height:200px;object-fit:contain;border-radius:8px;border:1.5px solid #fed7aa;opacity:.7">';
+        body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px;color:#92400e;line-height:1.5">'
+          +'Safari hat das Bild aus dem Speicher entfernt. Die erkannten Daten sind noch vorhanden — bitte anhand der Vorschau prüfen und bestätigen.</div>';
+        body+='</div>';
+      } else {
+        body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.5">'
+          +'⚠ <strong>Bild nicht mehr verfügbar</strong> — Safari hat es aus dem Speicher entfernt. '
+          +'Die erkannten Daten sind noch vorhanden. Bitte prüfen und bei Bedarf neu hochladen.</div>';
+      }
     } else if(d.mime==='application/pdf'){
       if(d.dataURL){
         body+='<div style="margin-bottom:12px">';
@@ -6458,6 +6522,7 @@ function dokOpenDetail(id){
       } else {
         body+='<div class="info-row" style="background:#f0fdf4;border-radius:6px;padding:6px 8px"><div class="ir-key" style="color:#15803d;font-weight:700">Vorsteuer '+Math.round(ustSatzAg2*100)+'%</div><div class="ir-val" style="color:#15803d;font-weight:800">'+fmtEur(mwstAg2)+'</div></div>';
       }
+      body+='<div style="margin-top:10px"><button type="button" onclick="dokReklassifizieren(\''+d.id+'\')" style="width:100%;background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">⚠ Falsch klassifiziert? Typ ändern</button></div>';
     }
     if(d.typ==='monats_abrechn'){
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
