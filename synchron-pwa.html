@@ -71,7 +71,7 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .view-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom) + 90px);min-height:0}
 .scroll::-webkit-scrollbar{display:none}
 
-.t-card{display:flex;align-items:stretch;background:var(--card);border-radius:14px;border:1.5px solid var(--border);box-shadow:0 2px 8px rgba(42,33,24,.08),0 1px 0 var(--border);margin:0 16px 10px;overflow:hidden;cursor:pointer;transition:transform .12s,box-shadow .12s;user-select:none;-webkit-tap-highlight-color:transparent}
+.t-card{display:flex;align-items:stretch;background:var(--card);border-radius:14px;border:1.5px solid var(--border);box-shadow:0 2px 8px rgba(42,33,24,.08),0 1px 0 var(--border);margin:0 16px 10px;overflow:hidden;cursor:pointer;transition:transform .12s,box-shadow .12s;user-select:none;-webkit-tap-highlight-color:transparent;position:relative}
 .t-card:active{transform:translateY(2px);box-shadow:none}
 .t-card.t-past{opacity:.55}
 .t-status-bar{width:5px;flex-shrink:0;border-radius:0}
@@ -1696,7 +1696,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '244';
+  if(el) el.textContent = '247';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1852,6 +1852,40 @@ function rTermine(){
     return;
   }
 
+  // Multi-Select aktiv: Gewählte Termine oben anzeigen
+  if(_pendingDokLink && window._dokLinkMulti && window._dokLinkMulti.length){
+    var sel=window._dokLinkMulti;
+    var selTermine=sel.map(function(id){return all.find(function(t){return t.id===id;});}).filter(Boolean);
+    if(selTermine.length){
+      var selHtml='<div style="background:#fff3f0;border-bottom:2px solid #fca5a5;padding:8px 16px 4px">'
+        +'<div style="font-size:10px;font-weight:700;color:#c2410c;letter-spacing:.5px;margin-bottom:6px">✓ GEWÄHLT ('+selTermine.length+')</div>'
+        +selTermine.map(function(t){t._showMonth=true;var h=tCard(t);delete t._showMonth;return h;}).join('')
+        +'</div>';
+      // Rest der Liste (aktuelle Ansicht)
+      var restHtml='';
+      if(_lastSucheQuery){
+        // Suche aktiv — zeige Suchergebnisse
+        var searchRes=(db.termine||[]).filter(function(t){
+          var q=_lastSucheQuery;
+          return (t.titel||'').toLowerCase().indexOf(q)>=0||(t.studio||'').toLowerCase().indexOf(q)>=0||(t.rolle||'').toLowerCase().indexOf(q)>=0;
+        }).sort(function(a,b){return(a.datum||'')>(b.datum||'')?-1:1;});
+        searchRes.forEach(function(t){t._showMonth=true;});
+        restHtml=searchRes.map(function(t){return tCard(t);}).join('');
+        searchRes.forEach(function(t){delete t._showMonth;});
+      } else if(calSelectedDate){
+        var dayItems=all.filter(function(t){return t.datum===calSelectedDate;});
+        restHtml=dayItems.map(function(t){return tCard(t);}).join('');
+      } else {
+        var vy=calViewDate.getFullYear();var vm=calViewDate.getMonth();
+        var monthItems=all.filter(function(t){if(!t.datum)return false;var p=t.datum.split('-');return parseInt(p[0])===vy&&parseInt(p[1])-1===vm;});
+        restHtml=monthItems.map(function(t){return tCard(t);}).join('');
+      }
+      if(header) header.textContent='Termin antippen zum '+(window._dokLinkMulti.length?'Hinzufügen':'Wählen');
+      list.innerHTML=selHtml+restHtml;
+      return;
+    }
+  }
+
   if(calSelectedDate){
     // Show only selected day
     var dayItems=all.filter(function(t){return t.datum===calSelectedDate;});
@@ -1954,7 +1988,7 @@ function tCard(t){
   var monthShort=d?monthNames2[d.getMonth()]:'';
   return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')" style="'+multiStyle+'">'
     +'<div class="t-status-bar" style="background:'+sc+'"></div>'
-    +(isMultiSelected?'<div style="position:absolute;top:8px;right:8px;width:22px;height:22px;background:#c2410c;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900">✓</div>':'')
+    +(isMultiSelected?'<div style="position:absolute;top:8px;right:8px;width:26px;height:26px;background:#c2410c;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.3)">✓</div>':'')
     +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div><div style="font-size:9px;color:#aaa;line-height:1">'+( d?d.getFullYear():'' )+'</div>':'')+'</div>'
     +'<div class="t-body">'
     +'<div class="t-title">'+esc(t.titel)+'</div>'
@@ -2027,9 +2061,13 @@ function openDetail(id){
   if(t.abId){
     var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
     if(abRec){
-      var abName=abRec.dateiname||'';
+      var abName=abRec.dateiname||abRec.gutschrift_nr||('Abrechnung '+fd(abRec.datum||t.datum));
       if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
     }
+  }
+  // Letzter Fallback: Abrechnung verknüpft aber kein Name
+  if(!abDateinamen.length && (t.abId||abDoks.length)){
+    abDateinamen=['Abrechnung '+fd(t.datum)];
   }
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
