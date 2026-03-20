@@ -1696,7 +1696,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '247';
+  if(el) el.textContent = '250';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1980,8 +1980,12 @@ function tCard(t){
     var rawT=parseInt(t.takes)||0;
     var billT=rawT>0&&rawT<10?10:rawT;
     var cardNet=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
-    var diffOk=Math.abs(cardNet-(parseFloat(ab.brutto)||0))<0.02;
-    extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(ab.auszahlung)+(diffOk?' ✓':' ⚠')+'</div>';
+    var diffOk=Math.abs(cardNet-(parseFloat(ab.brutto)||0))<0.02||ab._aufgeteiltN>0;
+    var anteilLabel='';
+    if(ab._aufgeteiltN && ab._aufgeteiltN>1){
+      anteilLabel=' <span style="font-size:9px;opacity:.7">'+(ab._aufgeteiltIdx+1)+'/'+ab._aufgeteiltN+' · '+fmtEur(ab._aufgeteiltVon)+'</span>';
+    }
+    extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(ab.auszahlung)+anteilLabel+(diffOk?' ✓':' ⚠')+'</div>';
   }
 
   var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
@@ -2399,16 +2403,7 @@ function saveMergeChanges(){
     t._hasPendingMerge=false;
     t._mergeSuggestions=null;
   }
-  // Jetzt Foto löschen + archivieren — Termin wurde gespeichert
-  if(t && t.dispoDocId){
-    var dok=(db.dokumente||[]).find(function(x){return x.id===t.dispoDocId;});
-    if(dok && dok._pendingDelete){
-      dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
-      _archiveDateiname(dok.dateiname||dok.beschr);
-    }
-  }
-  // Alle Dokumente mit _pendingDelete archivieren — terminId-Check entfernt
-  // weil ctid beim Speichern nicht immer mit dem Dok-terminId übereinstimmt
+  // Alle Dokumente mit _pendingDelete archivieren
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){
       dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
@@ -2417,10 +2412,29 @@ function saveMergeChanges(){
   });
   _mergeSnapshot=null;
   _mergeTerminId=null;
-  _returnToDokId=null; // Rücknavigation aufräumen
   save(db);
-  openDetail(ctid);
-  showToast('✓ Änderungen gespeichert');
+  showToast('✓ Gespeichert');
+
+  // Wenn aus Session-Peek: Session als done markieren + zurück zum Dok
+  var returnId=_returnToDokId;
+  _returnToDokId=null;
+  if(returnId){
+    // Session _done setzen
+    var dok=(db.dokumente||[]).find(function(x){return x.id===returnId;});
+    if(dok && dok.sessions){
+      dok.sessions.forEach(function(s){
+        if(s.terminId===ctid) s._done=true;
+      });
+      save(db);
+    }
+    var dp=document.getElementById('detail-panel');
+    if(dp) dp.classList.remove('open');
+    ctid=null;
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+  } else {
+    openDetail(ctid);
+  }
 }
 
 function _inlineField(terminId, field, label, val, inputType){
@@ -2902,7 +2916,6 @@ function terminBackBtn(){
 }
 
 function dokSessionPeek(elOrId, sessionIdx){
-  // Aufruf via Element (data-attribute) oder direkt via IDs
   var dokId, si;
   if(typeof elOrId === 'object' && elOrId && elOrId.getAttribute){
     dokId = elOrId.getAttribute('data-dokid');
@@ -2912,13 +2925,29 @@ function dokSessionPeek(elOrId, sessionIdx){
     si    = parseInt(sessionIdx)||0;
   }
   var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
-  if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden ('+dokId+'/'+si+')'); return; }
-  var sessionIdx = si; // ab hier sessionIdx = si
+  if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden'); return; }
   var s = d.sessions[si];
   var t = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
-  if(!t){ showToast('Termin nicht gefunden'); return; }
 
-  // Temporäres Pseudo-Dok aus der Session bauen für Merge-Preview
+  if(!t){
+    // Kein Termin gefunden — Sheet mit Optionen zeigen
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+    var box=document.createElement('div');
+    box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+    var datLabel=s.datum?s.datum.split('-').reverse().join('.'):'?';
+    box.innerHTML='<div style="font-size:16px;font-weight:900;margin-bottom:4px">Session '+datLabel+'</div>'
+      +'<div style="font-size:12px;color:#888;margin-bottom:16px">Kein Kalendertermin gefunden.</div>'
+      +'<button type="button" onclick="dokSessionSkip(\''+dokId+'\','+si+')" style="width:100%;background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">✓ Ohne Termin speichern & weiter</button>'
+      +'<button type="button" onclick="dokSessionGotoKalender(\''+dokId+'\','+si+');this.closest(\'div\').parentNode.remove();" style="width:100%;background:#ede9fe;color:#6d28d9;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📅 Manuell im Kalender suchen</button>'
+      +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+    ov.appendChild(box);
+    ov.onclick=function(e){if(e.target===ov)ov.remove();};
+    document.body.appendChild(ov);
+    return;
+  }
+
+  // Termin gefunden — Merge + Termin öffnen
   var pseudoDok = {
     id: dokId,
     typ: 'abrechn',
@@ -2930,29 +2959,27 @@ function dokSessionPeek(elOrId, sessionIdx){
     take_gage: s.take_gage||0,
     grundgage: s.grundgage||0,
     brutto: s.brutto_termin||0,
-    _sessionIdx: sessionIdx
+    _sessionIdx: si
   };
-
-  // Snapshot + Merge
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
   _mergeTerminId = t.id;
   dokMergeIntoTermin(pseudoDok, t);
   t._hasPendingMerge = true;
+  // Session als erledigt markieren
+  s._done = true;
   save(db);
 
-  // Rücknavigation zum Dok merken, dann Dok-Panel schließen
   _returnToDokId = _dokCurrentId;
-  dokDetailClose(); // ← Dok-Panel schließen, sonst blockiert es die Ansicht
+  dokDetailClose();
   var dp2 = document.getElementById('detail-panel');
   if(dp2) dp2.classList.remove('open');
   ctid = null;
   switchView('termine');
-  // Lock setzen — verhindert Ghost-Tap auf alten Termin
   _openDetailLock = true;
   var _sessionTerminId = s.terminId;
   setTimeout(function(){
     _openDetailLock = false;
-    var tx = (db.termine||[]).find(function(x){ return x.id===_sessionTerminId; });
+    var tx = (db.terme||[]).find(function(x){ return x.id===_sessionTerminId; });
     if(tx) openDetail(_sessionTerminId);
   }, 350);
 }
@@ -5839,9 +5866,18 @@ function dokAnalyseDoc(d, key, cb){
     +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
     +'  auszahlung = Auszahlungsbetrag\n'
     +'  sessions = Array aller Einzeltermine aus der Tabelle:\n'
-    +'    Pro Termin(tag+film) eine Zeile: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0}\n'
-    +'    WICHTIG: Grundgage-Zeile ("1 x 85,00") und Takegage-Zeile ("80 x 4,20") zum SELBEN Datum+Film ZUSAMMENFASSEN\n'
-    +'    Bei mehreren Filmen am gleichen Tag → separate session-Einträge\n'
+    +'    Pro Termin(tag+film) EINE session — auch wenn die Tabelle mehrere Zeilen für denselben Tag+Film hat!\n'
+    +'    ZUSAMMENFASSEN wenn: gleiche Datum-Spalte UND gleicher Film/Filmcode → eine session, Takes addieren, Brutto addieren\n'
+    +'    Beispiel Arena-Abrechnung:\n'
+    +'      Zeile 1: Di 17.03.26 | 2 | 95 Takes TV | T7182 | Navy CIS -23- | 380,00€\n'
+    +'      Zeile 2: Di 17.03.26 | 18 | Grundgage 1-10 | T7182 | Navy CIS -23- | 120,00€\n'
+    +'      → EINE session: {"datum":"2026-03-17","titel":"Navy CIS -23-","takes":105,"grundgage":120.0,"take_gage":4.0,"brutto_termin":500.0}\n'
+    +'      → takes = 95 + 10 (Grundgage zählt als 1-10 Paket = 10 Takes) = 105\n'
+    +'      → brutto_termin = 380 + 120 = 500\n'
+    +'      → grundgage = der Grundgage-Betrag (120€)\n'
+    +'      → take_gage = Takes-Betrag ÷ Takes-Anzahl (380÷95 = 4,00€)\n'
+    +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\n'
+    +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0}\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
     +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'
@@ -6616,21 +6652,26 @@ function dokOpenDetail(id){
 
     // ── MONATS-ABRECHNUNG: Sessions-Block ──
     if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length){
+      var allDone = d.sessions.every(function(s){return s._done;});
       body+='<div style="margin-bottom:12px">';
       body+='<div style="font-size:11px;font-weight:800;color:#1d6fa8;letter-spacing:.5px;margin-bottom:8px">📋 ERKANNTE TERMINE ('+d.sessions.length+')</div>';
       d.sessions.forEach(function(s, si){
         var tm=s.terminId?(db.termine||[]).find(function(t){return t.id===s.terminId;}):null;
-        var matchColor=tm?'#15803d':'#c2410c';
-        var matchBg=tm?'#f0fdf4':'#fff7ed';
-        var matchBorder=tm?'#86efac':'#fed7aa';
-        // Gematcht → Termin-Peek, ungematcht → Kalender-Suche zum manuellen Zuordnen
-        var sessionOnclick = tm
-          ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
-          : ' onclick="dokSessionGotoKalender(\''+d.id+'\','+si+')"';
-        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;touch-action:manipulation"'+sessionOnclick+'>'; 
+        var isDone = !!s._done;
+        var matchColor = isDone ? '#6b7280' : (tm?'#15803d':'#c2410c');
+        var matchBg    = isDone ? '#f9fafb' : (tm?'#f0fdf4':'#fff7ed');
+        var matchBorder= isDone ? '#e5e7eb' : (tm?'#86efac':'#fed7aa');
+        var sessionOnclick = isDone ? '' :
+          (tm
+            ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
+            : ' onclick="dokSessionGotoKalender(\''+d.id+'\','+si+')"');
+        var statusLabel = isDone
+          ? '✓ Gespeichert'+(tm?' · '+esc(tm.titel||tm.studio||''):'')
+          : (tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Tippen zum Zuordnen');
+        body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(isDone?'opacity:.6':'cursor:pointer;touch-action:manipulation')+'"'+sessionOnclick+'>';
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
-        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+(tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Tippen zum Zuordnen')+'</div>';
+        body+='<div style="font-size:10px;font-weight:700;color:'+matchColor+'">'+statusLabel+'</div>';
         body+='</div>';
         body+='<div style="font-size:11px;color:#666">';
         if(s.rolle) body+=esc(s.rolle)+' · ';
@@ -6641,7 +6682,13 @@ function dokOpenDetail(id){
         body+='</div>';
         body+='</div>';
       });
-      body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle Termine übernehmen & bestätigen</button>';
+      if(allDone){
+        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle bestätigt — Foto löschen & abschließen</button>';
+      } else {
+        var doneCount = d.sessions.filter(function(s){return s._done;}).length;
+        body+='<div style="font-size:11px;color:#888;text-align:center;margin-top:8px">'+doneCount+' von '+d.sessions.length+' Sessions abgehakt</div>';
+        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle Termine übernehmen & bestätigen</button>';
+      }
       body+='</div>';
     } else {
 
@@ -7293,6 +7340,18 @@ function _buildMergePreview(d, t){
 }
 
 // Bestätigen + Termin zuordnen + Termin öffnen
+function dokSessionSkip(dokId, si){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d||!d.sessions||!d.sessions[si]) return;
+  d.sessions[si]._done=true;
+  save(db);
+  // Overlay schließen
+  document.querySelectorAll('[style*="z-index:3000"]').forEach(function(el){el.remove();});
+  showToast('✓ Session gespeichert');
+  // Zurück zum Dok
+  dokOpenDetail(dokId);
+}
+
 function dokBestaetigenMonat(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions) return;
@@ -7361,7 +7420,12 @@ function dokBestaetigenMonat(dokId){
   // Abrechnung als Ganzes bestätigen
   d.bestaetigt=true;
   d.awaitConfirm=false;
-  d.dataURL=null;
+  // Foto nur löschen wenn alle Sessions abgehakt
+  var allSessionsDone = d.sessions.every(function(s){return s._done;});
+  if(allSessionsDone){
+    d.dataURL=null;
+    d.thumb=null;
+  }
   _archiveDateiname(d.dateiname||d.beschr);
   save(db);
   var msg=linked+' Termin'+(linked!==1?'e':'')+' verknüpft';
@@ -7866,53 +7930,80 @@ function dokLinkMultiConfirm(){
     d.terminId=terminIds[0];
     var abRec=(db.abrechnungen||[]).find(function(a){return a.id===d.abId||a.dokId===d.id;});
 
-    if(abRec && n>1){
+    // Beträge — aus abRec falls vorhanden, sonst direkt aus Dokument
+    var brutto   = parseFloat((abRec&&abRec.brutto)   || d.brutto)   || 0;
+    var auszahlung=parseFloat((abRec&&abRec.auszahlung)|| d.auszahlung||d.brutto) || 0;
+    var mwst     = parseFloat((abRec&&abRec.mwst)     || d.mwst)     || 0;
+    var netto    = parseFloat((abRec&&abRec.netto)     || d.netto)    || 0;
+    var gutschriftNr = (abRec&&abRec.gutschrift_nr)||d.gutschrift_nr||'';
+    var dateiname    = (abRec&&abRec.dateiname)||d.dateiname||'';
+
+    if(n > 0){
       var totalTakes=termine.reduce(function(s,t){return s+(parseInt(t.takes)||0);},0);
       var useTakes = totalTakes > 0;
-      var brutto=parseFloat(abRec.brutto)||0;
-      var auszahlung=parseFloat(abRec.auszahlung)||0;
-      var mwst=parseFloat(abRec.mwst)||0;
-      var netto=parseFloat(abRec.netto)||0;
+
+      if(!db.abrechnungen) db.abrechnungen=[];
 
       termine.forEach(function(t,i){
         var anteil = useTakes
           ? ((parseInt(t.takes)||0)/totalTakes)
           : (1/n);
+        // Letzter Termin bekommt Rest (Cent-Ausgleich)
+        var teilBrutto, teilAusz, teilMwst, teilNetto;
+        if(i < n-1){
+          teilBrutto = Math.round(brutto*anteil*100)/100;
+          teilAusz   = Math.round(auszahlung*anteil*100)/100;
+          teilMwst   = Math.round(mwst*anteil*100)/100;
+          teilNetto  = Math.round(netto*anteil*100)/100;
+        } else {
+          // Letzter: Differenz damit Summe stimmt
+          var prevBrutto=termine.slice(0,i).reduce(function(s,_,j){
+            return s+Math.round(brutto*(useTakes?(parseInt(termine[j].takes)||0)/totalTakes:1/n)*100)/100;
+          },0);
+          teilBrutto = Math.round((brutto-prevBrutto)*100)/100;
+          teilAusz   = Math.round(auszahlung*anteil*100)/100;
+          teilMwst   = Math.round(mwst*anteil*100)/100;
+          teilNetto  = Math.round(netto*anteil*100)/100;
+        }
+
         var teilAb={
           id:'ab'+Date.now()+i,
-          datum:abRec.datum,
-          studio:abRec.studio||d.studio||'',
-          produktion:abRec.produktion||d.titel||'',
-          gutschrift_nr:abRec.gutschrift_nr||'',
-          dateiname:abRec.dateiname||'',
-          brutto:Math.round(brutto*anteil*100)/100,
-          netto:Math.round(netto*anteil*100)/100,
-          mwst:Math.round(mwst*anteil*100)/100,
-          auszahlung:Math.round(auszahlung*anteil*100)/100,
+          datum:d.datum||'',
+          studio:d.studio||'',
+          produktion:d.titel||d.beschr||'',
+          gutschrift_nr:gutschriftNr,
+          dateiname:dateiname,
+          brutto:teilBrutto,
+          netto:teilNetto,
+          mwst:teilMwst,
+          auszahlung:teilAusz,
           takes:parseInt(t.takes)||0,
           terminId:t.id,
-          bezahlt:abRec.bezahlt||false,
-          zahlungDatum:abRec.zahlungDatum||null,
+          dokId:d.id,
+          bezahlt:false,
           erstelltAm:new Date().toISOString(),
-          _aufgeteiltVon:abRec.id
+          _aufgeteiltVon:brutto,      // Original-Gesamtbetrag
+          _aufgeteiltN:n,             // Anzahl Teile
+          _aufgeteiltIdx:i            // Index (0-basiert)
         };
-        if(!db.abrechnungen) db.abrechnungen=[];
         db.abrechnungen.push(teilAb);
         t.abId=teilAb.id;
         if(d.rolle&&!t.rolle) t.rolle=d.rolle;
         if(d.regie&&!t.regie) t.regie=d.regie;
         if(d.titel&&!t.titel) t.titel=d.titel;
       });
-      abRec.aufgeteilt=true;
-      abRec.aufgeteiltIn=terminIds;
-      showToast('✓ '+n+' Termine · Betrag '+(useTakes?'nach Takes':'gleichmäßig')+' aufgeteilt');
 
-    } else if(abRec && n===1){
-      termine[0].abId=abRec.id;
-      abRec.terminId=terminIds[0];
-      if(d.rolle&&!termine[0].rolle) termine[0].rolle=d.rolle;
-      if(d.titel&&!termine[0].titel) termine[0].titel=d.titel;
-      showToast('✓ Termin verknüpft');
+      // Original-Dok als aufgeteilt markieren
+      d.aufgeteilt=true;
+      d.aufgeteiltIn=terminIds;
+      d.bestaetigt=true;
+      d.awaitConfirm=false;
+      d.dataURL=null;
+      d.thumb=null;
+      _archiveDateiname(d.dateiname||d.beschr);
+
+      var methode = useTakes ? 'nach Takes' : 'gleichmäßig (÷'+n+')';
+      showToast('✓ '+n+' Termine · Betrag '+methode+' aufgeteilt');
     }
   }
 
