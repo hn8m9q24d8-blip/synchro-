@@ -438,6 +438,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🔒</div><div class="sr-label">PDF-Passwörter (Studios)</div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openStudioEmailSheet()"><div class="sr-left"><div class="sr-icon" style="background:#eff6ff">✉</div><div class="sr-label">E-Mail-Adressen (Studios)</div></div><div class="sr-right" id="studio-email-status">Nicht gesetzt</div></div>
 
     </div>
     <div class="settings-group">
@@ -614,6 +615,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:10px">
 
+    <div onclick="switchView('mahnwesen')" class="buch-menu-row" id="mahn-menu-row">
+      <div class="buch-menu-icon" style="background:#fef2f2;color:#c2410c">⚠</div>
+      <div class="buch-menu-body">
+        <div class="buch-menu-title">Mahnwesen <span id="mahn-menu-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
+        <div class="buch-menu-sub">Überfällige Zahlungen ab 30 Tagen</div>
+      </div>
+      <div class="buch-menu-arrow">›</div>
+    </div>
+
     <div onclick="switchView('verdienstübersicht')" class="buch-menu-row">
       <div class="buch-menu-icon" style="background:#e8f4fd;color:#1a6ea8">∑</div>
       <div class="buch-menu-body">
@@ -661,6 +671,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
 
   </div>
+</div>
+
+<!-- ══════ MAHNWESEN ════════════════════════════════════ -->
+<div id="view-mahnwesen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
+  <div class="app-header" style="background:#c2410c;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="color:#fff;font-size:18px;font-weight:900">Mahnwesen</div><div style="color:rgba(255,255,255,.75);font-size:12px">Überfällige Zahlungen</div></div>
+  </div>
+  <div class="scroll" id="mahn-scroll" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ DOKUMENTE VIEW ══════════════════════════════════ -->
@@ -1184,7 +1203,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <nav class="bottom-nav">
   <div class="nav-btn active" id="nav-termine" onclick="switchView('termine')"><div class="nav-icon">📅</div><div class="nav-label">Termine</div></div>
   <div class="nav-btn" id="nav-dokumente" onclick="switchView('dokumente')"><div class="nav-icon">📋</div><div class="nav-label">Dokumente</div></div>
-  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')"><div class="nav-icon">💶</div><div class="nav-label">Buch</div></div>
+  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><div class="nav-icon">💶</div><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:2px;right:4px;background:#ef4444;color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:900;min-width:14px;text-align:center;line-height:16px"></div></div>
   <div class="nav-btn" id="nav-gvl" onclick="switchView('gvl')"><div class="nav-icon">🎭</div><div class="nav-label">GVL</div></div>
   <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
 </nav>
@@ -1698,7 +1717,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '255';
+  if(el) el.textContent = '256';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5081,7 +5100,7 @@ function switchView(v){
   // bottom nav highlight
   var navMap = {
     'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
-    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente',
+    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch',
     'rechnungen':'profil','zahlungen':'profil','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
@@ -5101,6 +5120,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
+  else if(v==='mahnwesen'){rMahnwesen();}
   else if(v==='abrechnungen'){switchView('zahlungen');return;}
   else if(v==='rechnungen'){rRechnungen();}
   else if(v==='zahlungen'){rZahlungen();}
@@ -7333,6 +7353,85 @@ function rStudioPwStatus(){
   var count = Object.keys(pws).length;
   var el = document.getElementById('studio-pw-status');
   if(el) el.textContent = count ? count+' Studio'+(count>1?'s':'') : 'Nicht gesetzt';
+  // Email status
+  var emails = _getStudioEmails();
+  var ecount = Object.keys(emails).length;
+  var eel = document.getElementById('studio-email-status');
+  if(eel) eel.textContent = ecount ? ecount+' Studio'+(ecount>1?'s':'') : 'Nicht gesetzt';
+}
+
+function openStudioEmailSheet(){
+  var emails = _getStudioEmails();
+  var entries = Object.keys(emails).map(function(k){ return k+'::'+emails[k]; }).join('\n');
+  // Vorausfüllen wenn leer
+  if(!entries){
+    entries = [
+      'Berliner Synchron::mbecker@berliner-synchron.de',
+      'Iyuno::buchhaltung@iyuno-sdi.com',
+      'VSI::mwinkler@vsi-berlin.tv',
+      'Interopa::stanisavljevic@interopa.de',
+      'Studio Hamburg::info@studio-hamburg.de',
+      'Oxygen::info@o2studios.com',
+      'TNT::info@tnt-media.de',
+      'Globaloc::info@globaloc.de',
+      'Lavendel Film::doreen.stavenhagen@lavendelfilm.de',
+      'Cinephon::',
+      'Arena::',
+      'FFS::',
+      'SDI::',
+    ].join('\n');
+  }
+  var ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">✉ Studio E-Mail-Adressen</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::email@studio.de</b> — je Zeile ein Studio<br>Wird für Mahnmails automatisch befüllt.</div>'
+    +'<textarea id="studio-email-input" rows="10" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:12px;font-family:monospace;resize:vertical">'+entries+'</textarea>'
+    +'<button type="button" onclick="saveStudioEmails()" style="margin-top:10px;width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
+    +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="margin-top:8px;width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
+function saveStudioEmails(){
+  var inp = document.getElementById('studio-email-input');
+  if(!inp) return;
+  var emails = {};
+  inp.value.split('\n').forEach(function(line){
+    line = line.trim();
+    if(!line) return;
+    var sep = line.indexOf('::');
+    if(sep > 0){
+      var studio = line.slice(0,sep).trim();
+      var email  = line.slice(sep+2).trim();
+      if(studio && email) emails[studio] = email;
+    }
+  });
+  if(!db.profil) db.profil={};
+  db.profil.studioEmails = emails;
+  save(db);
+  document.querySelector('[data-studio-email-overlay]')
+    ? document.querySelector('[data-studio-email-overlay]').remove()
+    : inp.closest('div').parentNode.remove();
+  rStudioPwStatus();
+  showToast('✓ Studio-E-Mails gespeichert');
+}
+
+function _getStudioEmails(){
+  return (db.profil && db.profil.studioEmails) || {};
+}
+
+function _findStudioEmail(studio){
+  var emails = _getStudioEmails();
+  var studioLow = (studio||'').toLowerCase();
+  var keys = Object.keys(emails);
+  for(var i=0; i<keys.length; i++){
+    if(studioLow.indexOf(keys[i].toLowerCase())>=0 || keys[i].toLowerCase().indexOf(studioLow)>=0){
+      return emails[keys[i]];
+    }
+  }
+  return null;
 }
 
 function _getStudioPasswords(){
@@ -9006,6 +9105,170 @@ function tlabel2(s){
   if(s==='bezahlt') return 'bezahlt';
   if(s==='abrechnung') return 'in Abrechnung';
   return 'offen';
+}
+
+function rMahnwesen(){
+  var el = document.getElementById('mahn-scroll');
+  if(!el) return;
+
+  var heute = today();
+  var FAELLIG_TAGE = 30;
+
+  // Termine die überfällig sind:
+  // - haben eine Abrechnung (abId oder abrechn-Dok)
+  // - sind NICHT bezahlt
+  // - Abrechnungsdatum + 30 Tage < heute
+  var ueberfaellig = (db.termine||[]).filter(function(t){
+    if(t.status === 'bezahlt') return false;
+    if(t.status === 'storno') return false;
+
+    // Abrechnungsdatum ermitteln
+    var abDatum = null;
+    if(t.abId){
+      var ab = (db.abrechnungen||[]).find(function(a){ return a.id===t.abId; });
+      if(ab && ab.datum) abDatum = ab.datum;
+    }
+    if(!abDatum){
+      var dok = (db.dokumente||[]).find(function(d){
+        return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
+      });
+      if(dok && dok.datum) abDatum = dok.datum;
+    }
+    if(!abDatum) return false; // Keine Abrechnung → nicht fällig
+
+    // Fälligkeit prüfen
+    var abDate = new Date(abDatum);
+    var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
+    return faelligAm < new Date(heute);
+  });
+
+  // Badge aktualisieren
+  _updateMahnBadge(ueberfaellig.length);
+
+  if(!ueberfaellig.length){
+    el.innerHTML = '<div class="empty-state">'
+      +'<div class="empty-icon">✅</div>'
+      +'<div class="empty-title">Alles bezahlt</div>'
+      +'<div class="empty-sub">Keine überfälligen Zahlungen</div>'
+      +'</div>';
+    return;
+  }
+
+  // Nach Überfälligkeit sortieren (älteste zuerst)
+  ueberfaellig.sort(function(a,b){
+    return (a.datum||'') < (b.datum||'') ? -1 : 1;
+  });
+
+  var html = '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
+    +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+ueberfaellig.length+' überfällige Zahlung'+(ueberfaellig.length>1?'en':'')+'</div>'
+    +'<div style="font-size:11px;color:#92400e">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
+    +'</div>';
+
+  ueberfaellig.forEach(function(t){
+    var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+    var dok = (db.dokumente||[]).find(function(d){
+      return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
+    });
+    var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
+    var abDate = new Date(abDatum);
+    var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
+    var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
+    var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
+    var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || 0;
+
+    var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
+    var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
+
+    html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+      +'<div>'
+      +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
+      +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
+      +(gutschriftNr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(gutschriftNr)+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right">'
+      +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
+      +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
+      +'</div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
+      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
+      +'</div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
+      +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
+      +'</div>'
+      +'</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function _updateMahnBadge(count){
+  var badge = document.getElementById('mahn-menu-badge');
+  var navBuchBadge = document.getElementById('nav-buch-badge');
+  if(badge){
+    badge.textContent = count > 0 ? count : '';
+    badge.style.display = count > 0 ? 'inline' : 'none';
+  }
+  if(navBuchBadge){
+    navBuchBadge.textContent = count > 0 ? count : '';
+    navBuchBadge.style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+}
+
+function mahnEmail(terminId){
+  var t = (db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+  var dok = (db.dokumente||[]).find(function(d){
+    return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
+  });
+  var gutschriftNr = (ab&&ab.gutschrift_nr)||(dok&&dok.gutschrift_nr)||'';
+  var abDatum = (ab&&ab.datum)||(dok&&dok.datum)||'';
+  var brutto = (ab&&ab.brutto)||(dok&&dok.brutto)||0;
+  var profil = db.profil||{};
+
+  var subject = 'Zahlungserinnerung: Gagenabrechnung '+(gutschriftNr||fd(abDatum))+' - '+(t.titel||t.studio||'');
+  var body = 'Sehr geehrte Damen und Herren,\n\n'
+    +'hiermit moechte ich hoeflich an die Begleichung meiner ausstehenden Gage erinnern:\n\n'
+    +'  Produktion: '+(t.titel||'-')+'\n'
+    +'  Studio: '+(t.studio||'-')+'\n'
+    +'  Aufnahmedatum: '+fd(t.datum)+'\n'
+    +(gutschriftNr?'  Gutschrift-Nr.: '+gutschriftNr+'\n':'')
+    +(abDatum?'  Abrechnungsdatum: '+fd(abDatum)+'\n':'')
+    +(brutto?'  Betrag: '+fmtEur(brutto)+'\n':'')
+    +'\nGemaess § 271a BGB ist die Zahlung innerhalb von 30 Tagen nach Rechnungsstellung '
+    +'faellig. Diese Frist ist leider verstrichen.\n\n'
+    +'Bitte ueberweisen Sie den ausstehenden Betrag baldmoeglichst auf das Ihnen bekannte Konto.\n\n'
+    +'Mit freundlichen Gruessen\n'+(profil.name||'Tim Knauer');
+
+  var studioEmail = _findStudioEmail(t.studio||'');
+  var mailtoBase = studioEmail ? 'mailto:'+studioEmail : 'mailto:';
+  window.location.href = mailtoBase+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+  showToast(studioEmail ? '✉ Mahnmail an '+studioEmail : '✉ Mahnmail-Entwurf geöffnet — Empfänger ergänzen');
+}
+
+function updateMahnBadgeOnLoad(){
+  var heute = today();
+  var count = (db.termine||[]).filter(function(t){
+    if(t.status==='bezahlt'||t.status==='storno') return false;
+    var abDatum = null;
+    if(t.abId){
+      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(ab&&ab.datum) abDatum=ab.datum;
+    }
+    if(!abDatum){
+      var dok=(db.dokumente||[]).find(function(d){
+        return d.terminId===t.id&&(d.typ==='abrechn'||d.typ==='monats_abrechn')&&d.bestaetigt;
+      });
+      if(dok&&dok.datum) abDatum=dok.datum;
+    }
+    if(!abDatum) return false;
+    var faellig=new Date(new Date(abDatum).getTime()+30*24*60*60*1000);
+    return faellig < new Date(heute);
+  }).length;
+  _updateMahnBadge(count);
 }
 
 function abMahnEmail(tid){
@@ -10695,6 +10958,7 @@ function suchHL(text,q){
   // Normal startup
   switchView('termine');
   updateBadge();
+  updateMahnBadgeOnLoad();
 })();
 
 </script>
