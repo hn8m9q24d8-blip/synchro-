@@ -624,6 +624,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="buch-menu-arrow">›</div>
     </div>
 
+    <div onclick="switchView('undo')" class="buch-menu-row">
+      <div class="buch-menu-icon" style="background:#f5f3ff;color:#6d28d9">↩</div>
+      <div class="buch-menu-body">
+        <div class="buch-menu-title">Rückgängig</div>
+        <div class="buch-menu-sub">Letzte 20 Aktionen einsehen &amp; widerrufen</div>
+      </div>
+      <div class="buch-menu-arrow">›</div>
+    </div>
+
     <div onclick="switchView('verdienstübersicht')" class="buch-menu-row">
       <div class="buch-menu-icon" style="background:#e8f4fd;color:#1a6ea8">∑</div>
       <div class="buch-menu-body">
@@ -671,6 +680,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
 
   </div>
+</div>
+
+<!-- ══════ UNDO VIEW ════════════════════════════════════ -->
+<div id="view-undo" class="view" style="overflow:hidden;display:flex;flex-direction:column">
+  <div class="app-header" style="background:#6d28d9;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="color:#fff;font-size:18px;font-weight:900">Rückgängig</div><div style="color:rgba(255,255,255,.75);font-size:12px">Letzte 20 Aktionen</div></div>
+  </div>
+  <div class="scroll" id="undo-log-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ MAHNWESEN ════════════════════════════════════ -->
@@ -3831,13 +3849,20 @@ function holviBestaetigen(){
   if(!db.zahlungen) db.zahlungen = [];
   if(!db.holviImportIds) db.holviImportIds = [];
 
+  // Snapshots für Undo
+  var undoSnapshots = [];
+  var undoZahlungIds = [];
+  var undoZahlungsIds = [];
+
   var importiert = 0;
   matches.forEach(function(m){
     var z = m.zahlung;
     if(db.holviImportIds.indexOf(z.zahlungsId) < 0) db.holviImportIds.push(z.zahlungsId);
+    undoZahlungsIds.push(z.zahlungsId);
 
+    var zid = 'z'+Date.now()+importiert;
     var zahlung = {
-      id: 'z'+Date.now()+importiert,
+      id: zid,
       datum: z.datum,
       betrag: z.betrag,
       studio: z.gegenpartei,
@@ -3847,21 +3872,31 @@ function holviBestaetigen(){
       monatsAbrechnId: m.monatsAbrechn ? m.monatsAbrechn.id : null
     };
     db.zahlungen.push(zahlung);
+    undoZahlungIds.push(zid);
 
     if(m.monatsAbrechn && m.termineAlle && m.termineAlle.length){
-      // Monats-Abrechnung: alle verknüpften Termine auf bezahlt
       m.termineAlle.forEach(function(t){
+        undoSnapshots.push({id:t.id, status:t.status, zahlungDatum:t.zahlungDatum||null});
         t.status = 'bezahlt';
         t.zahlungDatum = z.datum;
       });
       m.monatsAbrechn.zahlungDatum = z.datum;
       m.monatsAbrechn.bezahlt = true;
     } else if(m.termin){
+      undoSnapshots.push({id:m.termin.id, status:m.termin.status, zahlungDatum:m.termin.zahlungDatum||null});
       m.termin.status = 'bezahlt';
       m.termin.zahlungDatum = z.datum;
       m.termin.zahlungBetrag = z.betrag;
     }
     importiert++;
+  });
+
+  // Log für Undo
+  var studios = [...new Set(matches.map(function(m){return m.zahlung.gegenpartei.split(' ')[0];}))].join(', ');
+  logAction('holvi_import', 'Holvi-Import · '+importiert+' Eingang'+(importiert>1?'e':'')+' · '+studios, {
+    zahlungIds: undoZahlungIds,
+    zahlungsIds: undoZahlungsIds,
+    termineVorher: undoSnapshots
   });
 
   save(db);
@@ -5100,7 +5135,7 @@ function switchView(v){
   // bottom nav highlight
   var navMap = {
     'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
-    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch',
+    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch','undo':'buch',
     'rechnungen':'profil','zahlungen':'profil','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
@@ -5121,6 +5156,7 @@ function switchView(v){
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
   else if(v==='mahnwesen'){rMahnwesen();}
+  else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('zahlungen');return;}
   else if(v==='rechnungen'){rRechnungen();}
   else if(v==='zahlungen'){rZahlungen();}
@@ -5133,6 +5169,126 @@ function switchView(v){
 };
 
 // ── BUCHHALTUNG QUICK OVERVIEW ────────────────────────────────
+// ══ UNDO-SYSTEM ══════════════════════════════════════════════
+function logAction(typ, beschr, undoData){
+  if(!db.actionLog) db.actionLog = [];
+  db.actionLog.unshift({
+    id: 'act'+Date.now(),
+    typ: typ,           // 'holvi_import' | 'dok_bestaetigt' | 'termin_bezahlt' | 'dok_verknuepft' | 'multi_link'
+    beschr: beschr,     // Lesbare Beschreibung
+    datum: today(),
+    zeit: new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
+    undoData: undoData  // Was zum Rückgängig-Machen nötig ist
+  });
+  // Max 20 Einträge
+  if(db.actionLog.length > 20) db.actionLog = db.actionLog.slice(0,20);
+}
+
+function undoAction(actionId){
+  var idx = (db.actionLog||[]).findIndex(function(a){return a.id===actionId;});
+  if(idx < 0) return;
+  var action = db.actionLog[idx];
+
+  try{
+    switch(action.typ){
+
+      case 'holvi_import':
+        // Zahlungen entfernen, Termine zurücksetzen
+        (action.undoData.zahlungIds||[]).forEach(function(zid){
+          db.zahlungen = (db.zahlungen||[]).filter(function(z){return z.id!==zid;});
+        });
+        (action.undoData.zahlungsIds||[]).forEach(function(id){
+          db.holviImportIds = (db.holviImportIds||[]).filter(function(x){return x!==id;});
+        });
+        (action.undoData.termineVorher||[]).forEach(function(snap){
+          var t = (db.termine||[]).find(function(x){return x.id===snap.id;});
+          if(t){ t.status=snap.status; t.zahlungDatum=snap.zahlungDatum||null; delete t.zahlungBetrag; }
+        });
+        showToast('↩ Holvi-Import rückgängig');
+        break;
+
+      case 'dok_bestaetigt':
+        // Dokument zurück in Warteliste
+        var d = (db.dokumente||[]).find(function(x){return x.id===action.undoData.dokId;});
+        if(d){
+          d.bestaetigt = false;
+          d.awaitConfirm = true;
+          d.dataURL = action.undoData.dataURL || null; // Foto ist weg — kann nicht wiederhergestellt werden
+          d.typ = action.undoData.typVorher || d.typ;
+        }
+        // Abrechnung entfernen falls neu angelegt
+        if(action.undoData.abId){
+          db.abrechnungen = (db.abrechnungen||[]).filter(function(a){return a.id!==action.undoData.abId;});
+        }
+        // Termin-Verknüpfung lösen
+        if(action.undoData.terminId){
+          var t2 = (db.termine||[]).find(function(x){return x.id===action.undoData.terminId;});
+          if(t2){ t2.abId=null; t2.abgerechnet=false; }
+        }
+        showToast('↩ Dokument zurück in Warteliste (Foto unwiederbringlich gelöscht)');
+        break;
+
+      case 'termin_bezahlt':
+        var t3 = (db.termine||[]).find(function(x){return x.id===action.undoData.terminId;});
+        if(t3){ t3.status=action.undoData.statusVorher||'ausstehend'; delete t3.zahlungDatum; delete t3.zahlungBetrag; }
+        // Zahlung entfernen
+        if(action.undoData.zahlungId){
+          db.zahlungen=(db.zahlungen||[]).filter(function(z){return z.id!==action.undoData.zahlungId;});
+        }
+        showToast('↩ Zahlungsstatus zurückgesetzt');
+        break;
+
+      case 'multi_link':
+        // Verknüpfung mehrerer Termine mit Abrechnung rückgängig
+        (action.undoData.terminSnapshots||[]).forEach(function(snap){
+          var t4=(db.termine||[]).find(function(x){return x.id===snap.id;});
+          if(t4){ t4.abId=snap.abId||null; t4.status=snap.status||'ausstehend'; t4.titel=snap.titel||t4.titel; }
+        });
+        // Teil-Abrechnungen entfernen
+        (action.undoData.teilAbIds||[]).forEach(function(aid){
+          db.abrechnungen=(db.abrechnungen||[]).filter(function(a){return a.id!==aid;});
+        });
+        // Dok zurücksetzen
+        var dLink=(db.dokumente||[]).find(function(x){return x.id===action.undoData.dokId;});
+        if(dLink){ dLink.terminId=null; dLink.aufgeteilt=false; dLink.bestaetigt=false; dLink.awaitConfirm=false; }
+        showToast('↩ Verknüpfung aufgehoben');
+        break;
+    }
+
+    // Aktion aus Log entfernen
+    db.actionLog.splice(idx,1);
+    save(db);
+    rTermine();
+    rDokumente();
+    rMahnwesen && rMahnwesen();
+    rUndoLog();
+
+  } catch(e){
+    showToast('⚠ Rückgängig fehlgeschlagen: '+e.message);
+  }
+}
+
+function rUndoLog(){
+  var el = document.getElementById('undo-log-list');
+  if(!el) return;
+  var log = db.actionLog || [];
+  if(!log.length){
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Keine Aktionen</div><div class="empty-sub">Letzte 20 Aktionen erscheinen hier</div></div>';
+    return;
+  }
+  var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎'};
+  el.innerHTML = log.map(function(a){
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">'
+      +'<div style="font-size:22px;flex-shrink:0">'+(icons[a.typ]||'📝')+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.beschr)+'</div>'
+      +'<div style="font-size:10px;color:#888;margin-top:2px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
+      +'</div>'
+      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rückgängig</button>'
+      +'</div>';
+  }).join('');
+}
+
 function rBuchQuick(){
   var y = new Date().getFullYear();
   var all = db.termine.filter(function(t){return t.datum&&t.datum.startsWith(String(y));});
@@ -5705,7 +5861,21 @@ function rDokumente(){
     if(_dokTab==='offen') return !d.typ||d.typ==='offen';
     return d.typ===_dokTab;
   });
-  docs = docs.slice().sort(function(a,b){ return (b.addedAt||'') > (a.addedAt||'') ? 1 : -1; });
+  // Sortierung: Unanalysiert → Dispo → Abrechnung/Monatsabrechnung → Ausgabe → Bestätigt
+  // Innerhalb jeder Gruppe: neueste zuerst
+  var typPrio = {'offen':0, null:0, 'dispo':1, 'abrechn':2, 'monats_abrechn':2, 'ausgabe':3, 'sonstig':4};
+  docs = docs.slice().sort(function(a,b){
+    // Bestätigte immer nach hinten
+    var aDone = a.bestaetigt ? 10 : 0;
+    var bDone = b.bestaetigt ? 10 : 0;
+    if(aDone !== bDone) return aDone - bDone;
+    // Nicht-bestätigte nach Typ sortieren
+    var pa = typPrio[a.typ||'offen'] !== undefined ? typPrio[a.typ||'offen'] : 4;
+    var pb = typPrio[b.typ||'offen'] !== undefined ? typPrio[b.typ||'offen'] : 4;
+    if(pa !== pb) return pa - pb;
+    // Gleicher Typ: neueste zuerst
+    return (b.addedAt||'') > (a.addedAt||'') ? 1 : -1;
+  });
 
   if(!docs.length){
     el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:#999">'
@@ -6043,13 +6213,10 @@ function dokFooterBestaetigen(){
 function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
-  // Editierte Felder aus den Inputs übernehmen
   _applyEditedFields(d);
-  d.bestaetigt=true;
-  d.awaitConfirm=false;
-  d.dataURL=null; // Foto aus App löschen
+  var undoSnap={dokId:d.id,typVorher:d.typ,terminId:d.terminId||null};
+  d.bestaetigt=true; d.awaitConfirm=false; d.dataURL=null;
   _archiveDateiname(d.dateiname||d.beschr);
-  // Felder in Termin übertragen
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
     if(t2){
@@ -6070,8 +6237,8 @@ function dokBestaetigen(){
       if(d.takes&&!match.takes) match.takes=d.takes;
     }
   }
+  logAction('dok_bestaetigt','Dok bestätigt · '+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),undoSnap);
   save(db); rDokumente();
-  // Wenn der verknüpfte Kalendertermin gerade offen ist → neu rendern damit Ampel aktualisiert
   if(d.terminId && ctid===d.terminId) openDetail(d.terminId);
   dokOpenDetail(d.id);
   showToast('✓ Bestätigt · Felder übertragen');
@@ -6876,7 +7043,7 @@ function dokOpenDetail(id){
     if(d.dataURL && d.mime!=='application/pdf'){
       var previewDiv='<div style="margin-bottom:12px">';
       previewDiv+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Vorschau zum Abgleichen</div>';
-      previewDiv+='<div id="dok-preview-'+d.id+'" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#111;touch-action:manipulation" ontouchstart="_previewTouchStart(event)" ontouchend="_previewTouchEnd(event,\''+d.id+'\')">'
+      previewDiv+='<div id="dok-preview-'+d.id+'" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#111;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\''+d.id+'\')">'
       previewDiv+='<img src="'+d.dataURL+'" style="width:100%;max-height:380px;object-fit:contain;display:block;pointer-events:none">';
       previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">🔍 Tippen = Vollbild</div>';
       previewDiv+='</div></div>';
@@ -7531,10 +7698,75 @@ function dokOpenPDF(id){
   document.body.appendChild(ov);
 }
 var _previewTouchCount=0;
-function _previewTouchStart(e){ _previewTouchCount=e.touches.length; }
+var _previewPinchState=null; // aktiver Pinch-Zustand
+
+function _previewTouchStart(e){
+  _previewTouchCount=e.touches.length;
+  if(e.touches.length===2){
+    // Pinch beginnt — sofort initialisieren
+    e.preventDefault();
+    var div=e.currentTarget;
+    var img=div.querySelector('img');
+    if(!img) return;
+    if(!img._pScale) img._pScale=1;
+    if(!img._pTx) img._pTx=0;
+    if(!img._pTy) img._pTy=0;
+    _previewPinchState={
+      img:img,
+      startDist:Math.hypot(
+        e.touches[0].clientX-e.touches[1].clientX,
+        e.touches[0].clientY-e.touches[1].clientY
+      ),
+      startScale:img._pScale,
+      startMx:(e.touches[0].clientX+e.touches[1].clientX)/2,
+      startMy:(e.touches[0].clientY+e.touches[1].clientY)/2,
+      startTx:img._pTx,
+      startTy:img._pTy
+    };
+  } else {
+    _previewPinchState=null;
+  }
+}
+
+function _previewTouchMove(e){
+  if(e.touches.length===2 && _previewPinchState){
+    e.preventDefault();
+    var p=_previewPinchState;
+    var curDist=Math.hypot(
+      e.touches[0].clientX-e.touches[1].clientX,
+      e.touches[0].clientY-e.touches[1].clientY
+    );
+    var newScale=Math.min(5, Math.max(1, p.startScale*(curDist/p.startDist)));
+    var curMx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+    var curMy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+    var dx=curMx-p.startMx;
+    var dy=curMy-p.startMy;
+    p.img._pScale=newScale;
+    p.img._pTx=p.startTx+dx;
+    p.img._pTy=p.startTy+dy;
+    p.img.style.transform='translate('+p.img._pTx+'px,'+p.img._pTy+'px) scale('+p.img._pScale+')';
+    p.img.style.transformOrigin='center center';
+  }
+}
+
 function _previewTouchEnd(e, id){
-  // Nur bei Single-Tap (kein Pinch) Vollbild öffnen
+  if(_previewPinchState){
+    // Nach Pinch: wenn fast auf 1x → reset
+    var img=_previewPinchState.img;
+    if(img && img._pScale < 1.1){
+      img._pScale=1; img._pTx=0; img._pTy=0;
+      img.style.transform='';
+    }
+    _previewPinchState=null;
+    _previewTouchCount=0;
+    return;
+  }
+  // Single-Tap → Vollbild öffnen
   if(_previewTouchCount===1 && e.changedTouches.length===1){
+    // Prüfen ob Bild gezoomt ist
+    var div=e.currentTarget||e.target.closest('[id^="dok-preview-"]');
+    var img2=div?div.querySelector('img'):null;
+    if(img2 && img2._pScale>1.05) return; // Gezoomt → kein Vollbild
     dokShowFullImg(id);
   }
   _previewTouchCount=0;
