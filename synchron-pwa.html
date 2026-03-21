@@ -697,7 +697,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div><div style="color:#fff;font-size:18px;font-weight:900">Zahlungseingänge</div><div style="color:rgba(255,255,255,.75);font-size:12px">Importierte Holvi-Zahlungen</div></div>
   </div>
-  <div class="scroll" id="zahlungen-list" style="padding:16px;padding-bottom:100px"></div>
+  <div class="scroll" id="zahlungseingaenge-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ MAHNWESEN ════════════════════════════════════ -->
@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '271';
+  if(el) el.textContent = '272';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10286,9 +10286,7 @@ function zahlSetYear(y){
 }
 
 function rZahlungsEingaenge(){
-  var el = document.getElementById('zahlungen-list');
-  if(!el) return;
-  var zahl = (db.zahlungen||[]).slice().sort(function(a,b){
+  var el = document.getElementById('zahlungseingaenge-list');(function(a,b){
     return (b.datum||'') > (a.datum||'') ? 1 : -1;
   });
   if(!zahl.length){
