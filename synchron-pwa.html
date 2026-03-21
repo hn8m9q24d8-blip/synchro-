@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '260';
+  if(el) el.textContent = '271';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5317,9 +5317,10 @@ function switchView(v){
   else if(v==='verdienstübersicht'){rVerdienst();}
   else if(v==='mahnwesen'){rMahnwesen();}
   else if(v==='undo'){rUndoLog();}
-  else if(v==='abrechnungen'){switchView('zahlungen');return;}
+  else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
+  else if(v==='gagenabrechnungen'){rZahlungen();}
   else if(v==='rechnungen'){rRechnungen();}
-  else if(v==='zahlungen'){rZahlungen();}
+  else if(v==='zahlungen'){rZahlungsEingaenge();}
   else if(v==='stammdaten'){} // static
   else if(v==='standardgagen'){rStandardgagen();}
   else if(v==='pers-daten'){rPersDaten();}
@@ -10362,7 +10363,8 @@ function rZahlungen(){
   // Filtered — skip 0 entries
   var all = (db.termine||[]).filter(function(t){
     if(!t.datum||!t.datum.startsWith(String(_zahlYear))) return false;
-    return calcNet(t) > 0;
+    // Termin einschließen wenn: Gage berechnet werden kann ODER Abrechnung verknüpft ODER Auszahlung vorhanden
+    return calcNet(t) > 0 || t.abId || t.abrechnungBrutto || t.pauschalgage;
   });
 
   if(!all.length){
