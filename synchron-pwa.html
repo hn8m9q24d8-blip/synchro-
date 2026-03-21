@@ -633,6 +633,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="buch-menu-arrow">›</div>
     </div>
 
+    <div onclick="runIntegrityCheckAndShow()" class="buch-menu-row">
+      <div class="buch-menu-icon" style="background:#fefce8;color:#854d0e">🔍</div>
+      <div class="buch-menu-body">
+        <div class="buch-menu-title">Daten-Check <span id="integrity-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
+        <div class="buch-menu-sub">Summen &amp; Verknüpfungen prüfen</div>
+      </div>
+      <div class="buch-menu-arrow">›</div>
+    </div>
+
     <div onclick="switchView('gagenabrechnungen')" class="buch-menu-row">
       <div class="buch-menu-icon" style="background:#e8f5e9;color:#2e7d32">GS</div>
       <div class="buch-menu-body">
@@ -6635,8 +6644,14 @@ function dokAnalyseDoc(d, key, cb){
     +'  produktionstyp_kino = true wenn "Kino" in den Positionen steht\n'
     +'  Wenn "Trailer", "TR" oder "Trailer-Aufnahme" im Titel/Positionen: grundgage = Pauschalgage, takes=0\n'
     +'\n'
-    +'Bei "monats_abrechn" — NUR wenn: Titel enthält "Monats-Gutschrift" ODER Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten:\n'
-    +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum, oder "Bisherige Jahressummen" am Ende (das sind Jahres-Kumulativwerte!)\n'
+    +'Bei "monats_abrechn" — NUR wenn EINES dieser Kriterien zutrifft:\n'
+    +'  1. Titel enthält "Monats-Gutschrift"\n'
+    +'  2. Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten\n'
+    +'  3. PDF enthält MEHRERE SEPARATE GUTSCHRIFTEN hintereinander (z.B. "GAGE / Gutschrift März 2026,1", "GAGE / Gutschrift März 2026,2" etc.)\n'
+    +'     → Alle Gutschriften zusammenfassen: brutto = Summe aller Brutto-Gagen, auszahlung = Summe aller Auszahlungen\n'
+    +'     → Jede Gutschrift = eine session mit ihrem Datum, Titel und Betrag\n'
+    +'     → gutschrift_nr = erste Gutschrift-Nr. (z.B. "101/20260301")\n'
+    +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum, oder "Bisherige Jahressummen" am Ende\n'
     +'  studio = der KURZNAME des Synchronstudios (z.B. "FFS", "VSI", "Arena", "TNT", "Interopa") — NICHT der Atelierraum\n'
     +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
     +'  brutto = BRUTTO GAGE gesamt (z.B. 4687.60)\n'
@@ -8766,11 +8781,18 @@ function dokMergeIntoTermin(d, termin){
         termin.rate_differenz = 0;
       }
       // Komm.-Gage: Differenz
-      if(dispKomm > 0 && grundgage > 0 && Math.abs(dispKomm-grundgage)>0.5){
+      // ⚠ 1-10 Take-Regel: Bei ≤10 Takes wird mind. 10 Takes abgerechnet
+      // → Erwarteter Brutto = dispKomm + max(dispTakes,10) × dispRate
+      var billTakes10 = dispTakes > 0 && dispTakes < 10 ? 10 : dispTakes;
+      var erwartetMit1to10 = dispKomm > 0 && dispRate > 0
+        ? Math.round((dispKomm + billTakes10 * dispRate)*100)/100
+        : 0;
+      var kommGageOk = Math.abs(grundgage - erwartetMit1to10) < 1.0;
+      if(dispKomm > 0 && grundgage > 0 && Math.abs(dispKomm-grundgage)>0.5 && !kommGageOk){
         termin.kommgage_differenz = Math.round((dispKomm-grundgage)*100)/100;
         changed.push('Differenz Komm.-Gage: '+dispKomm+'€ vs '+grundgage+'€');
       } else {
-        if(grundgage) overwrite('kommgage', grundgage, 'Komm.-Gage ('+fmtEur(grundgage)+')');
+        if(grundgage && !kommGageOk) overwrite('kommgage', grundgage, 'Komm.-Gage ('+fmtEur(grundgage)+')');
         termin.kommgage_differenz = 0;
       }
       // USt aus Abrechnung erkennen
@@ -8782,8 +8804,9 @@ function dokMergeIntoTermin(d, termin){
           changed.push('USt-Satz erkannt ('+Math.round(erkUst*100)+'%)');
         }
       }
-      // Abgleich-Status
-      var erwartet=isPausch?auszahlung:(takes*takeGage+grundgage);
+      // Abgleich-Status — mit 1-10 Take-Regel
+      var billTakesAb = takes > 0 && takes < 10 ? 10 : takes;
+      var erwartet = isPausch ? auszahlung : (billTakesAb*takeGage + grundgage);
       termin.abStatus=Math.abs(auszahlung-erwartet)<1.5?'ok':'differenz';
       changed.push('Abrechnung angelegt ('+fmtEur(auszahlung)+')');
     } else {
@@ -9119,7 +9142,21 @@ function rUstVoranmeldung(){
   var einnNetto = 0;
   einnTermine.forEach(function(e){
     var t=e.t;
-    einnNetto += (parseFloat(t.kommgage)||0) + (parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+    // Echten Abrechnungsbetrag nehmen wenn vorhanden, sonst Schätzung
+    var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+    if(ab && ab.brutto && !ab.aufgeteilt){
+      einnNetto += parseFloat(ab.brutto)||0;
+    } else if(ab && ab.brutto && ab.aufgeteilt){
+      // Aufgeteilte: Summe der Teilabrechnungen
+      var teile=(db.abrechnungen||[]).filter(function(a){return a._aufgeteiltVon===ab.brutto&&a.terminId===t.id;});
+      if(teile.length) einnNetto += teile.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+      else einnNetto += parseFloat(ab.brutto)||0;
+    } else {
+      // Kein Abrechnungsobjekt — aus Termin-Feldern berechnen
+      var rawT=parseInt(t.takes)||0;
+      var billT=rawT>0&&rawT<10?10:rawT;
+      einnNetto += (parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
+    }
   });
   var einnUst = einnNetto * urEinn;
 
@@ -9717,6 +9754,125 @@ function mahnEmail(terminId){
   var mailtoBase = studioEmail ? 'mailto:'+studioEmail : 'mailto:';
   window.location.href = mailtoBase+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   showToast(studioEmail ? '✉ Mahnmail an '+studioEmail : '✉ Mahnmail-Entwurf geöffnet — Empfänger ergänzen');
+}
+
+// ══ INTEGRITÄTS-CHECK ════════════════════════════════════════
+function runIntegrityCheck(silent){
+  var warnings = [];
+  var fixes = 0;
+
+  // 1. Aufgeteilte Original-Abrechnungen dürfen nicht in Summen eingehen
+  (db.abrechnungen||[]).forEach(function(ab){
+    if(ab.aufgeteilt && ab.aufgeteiltIn && ab.aufgeteiltIn.length){
+      // Prüfen ob Teilabrechnungen existieren
+      var teile = (db.abrechnungen||[]).filter(function(a){
+        return a._aufgeteiltVon === ab.brutto && a.dokId === ab.dokId && !a.aufgeteilt;
+      });
+      if(!teile.length){
+        // Keine Teile gefunden — aufgeteilt-Flag zurücksetzen
+        ab.aufgeteilt = false;
+        fixes++;
+        warnings.push('⚠ Abrechnung '+ab.gutschrift_nr+': aufgeteilt-Flag ohne Teile — zurückgesetzt');
+      }
+    }
+  });
+
+  // 2. Keine Termine sollen dieselbe abId teilen (außer aufgeteilt)
+  var abIdMap = {};
+  (db.termine||[]).forEach(function(t){
+    if(!t.abId) return;
+    if(!abIdMap[t.abId]) abIdMap[t.abId] = [];
+    abIdMap[t.abId].push(t.id);
+  });
+  Object.keys(abIdMap).forEach(function(abId){
+    if(abIdMap[abId].length > 1){
+      var ab = (db.abrechnungen||[]).find(function(a){return a.id===abId;});
+      if(ab && !ab.aufgeteilt && !ab._aufgeteiltVon){
+        warnings.push('⚠ Abrechnung '+abId+' ist '+abIdMap[abId].length+' Terminen zugeordnet — bitte prüfen');
+      }
+    }
+  });
+
+  // 3. Betrag-Konsistenz: Summe der Teile = Original?
+  (db.abrechnungen||[]).filter(function(a){return a.aufgeteilt;}).forEach(function(ab){
+    var teile = (db.abrechnungen||[]).filter(function(a){return a._aufgeteiltVon===ab.brutto&&a.dokId===ab.dokId;});
+    if(teile.length > 1){
+      var summe = Math.round(teile.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0)*100)/100;
+      if(Math.abs(summe - (parseFloat(ab.brutto)||0)) > 0.05){
+        warnings.push('⚠ Aufteilung '+ab.gutschrift_nr+': Summe Teile ('+fmtEur(summe)+') ≠ Original ('+fmtEur(ab.brutto)+')');
+      }
+    }
+  });
+
+  // 4. Terme mit abId aber Abrechnung nicht gefunden
+  (db.termine||[]).forEach(function(t){
+    if(t.abId){
+      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(!ab){
+        // Verwaiste abId entfernen
+        delete t.abId;
+        fixes++;
+        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+': verwaiste abId entfernt');
+      }
+    }
+  });
+
+  if(fixes > 0) save(db);
+
+  // Ergebnis speichern
+  db._lastIntegrityCheck = {
+    datum: today(),
+    warnings: warnings,
+    fixes: fixes
+  };
+  save(db);
+
+  if(!silent){
+    if(warnings.length){
+      showToast('⚠ Integritäts-Check: '+warnings.length+' Problem'+(warnings.length>1?'e':'')+' gefunden');
+    } else {
+      showToast('✓ Integritäts-Check: Alles ok');
+    }
+  }
+  return warnings;
+}
+
+function runIntegrityCheckAndShow(){
+  var warnings = runIntegrityCheck(false);
+  var badge = document.getElementById('integrity-badge');
+  if(badge){ badge.textContent=warnings.length||''; badge.style.display=warnings.length?'inline':'none'; }
+
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  var last=db._lastIntegrityCheck||{};
+  var html='<div style="font-size:17px;font-weight:900;margin-bottom:4px">🔍 Daten-Check</div>'
+    +'<div style="font-size:11px;color:#888;margin-bottom:14px">Geprüft: '+( last.datum||'jetzt')+(last.fixes?' · '+last.fixes+' Auto-Fix'+(last.fixes>1?'es':''):'')+'</div>';
+
+  if(!warnings.length){
+    html+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px;text-align:center">'
+      +'<div style="font-size:24px;margin-bottom:6px">✅</div>'
+      +'<div style="font-size:14px;font-weight:700;color:#15803d">Alle Prüfungen bestanden</div>'
+      +'<div style="font-size:12px;color:#555;margin-top:4px">Keine Inkonsistenzen gefunden</div>'
+      +'</div>';
+  } else {
+    html+='<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px;margin-bottom:12px">'
+      +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:8px">'+warnings.length+' Problem'+(warnings.length>1?'e':'')+' gefunden</div>';
+    warnings.forEach(function(w){
+      html+='<div style="font-size:12px;color:#7f1d1d;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #fecaca">'+esc(w)+'</div>';
+    });
+    html+='</div>';
+    html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Auto-Fixes wurden bereits angewendet. Manuelle Korrekturen über Buch → Rückgängig.</div>';
+  }
+
+  html+='<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
+
+  box.innerHTML=html;
+  ov.appendChild(box);
+  ov.onclick=function(e){if(e.target===ov)ov.remove();};
+  document.body.appendChild(ov);
 }
 
 function updateMahnBadgeOnLoad(){
@@ -11251,7 +11407,10 @@ function abMonatRender(){
   var mnames=['Januar','Februar','Maerz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   document.getElementById('ab-monat-label').textContent=mnames[mo]+' '+yr;
   var prefix=yr+'-'+(mo+1<10?'0'+(mo+1):(''+(mo+1)));
-  var abs=(db.abrechnungen||[]).filter(function(a){return (a.datum||'').startsWith(prefix);});
+  // ⚠ Aufgeteilte Original-Abrechnungen ausschließen (Teilabrechnungen sind in db.abrechnungen)
+  var abs=(db.abrechnungen||[]).filter(function(a){
+    return (a.datum||'').startsWith(prefix) && !a.aufgeteilt;
+  });
   var totalBrutto=0,totalAuszahlung=0,totalMwst=0;
   abs.forEach(function(a){totalBrutto+=a.brutto||0;totalAuszahlung+=a.auszahlung||0;totalMwst+=a.mwst||0;});
   var offene=db.termine.filter(function(t){return (t.datum||'').startsWith(prefix)&&t.status!=='bezahlt'&&t.status!=='abrechnung';});
@@ -11467,6 +11626,14 @@ function suchHL(text,q){
   switchView('termine');
   updateBadge();
   updateMahnBadgeOnLoad();
+  // Integritäts-Check beim Start (still, nur bei Problemen Toast)
+  setTimeout(function(){
+    var warnings = runIntegrityCheck(true);
+    if(warnings.length){
+      var badge = document.getElementById('integrity-badge');
+      if(badge){ badge.textContent=warnings.length; badge.style.display='inline'; }
+    }
+  }, 1500);
 })();
 
 </script>
