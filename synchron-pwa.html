@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '272';
+  if(el) el.textContent = '275';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3701,7 +3701,53 @@ function holviImport(inp){
           };
         }
 
-        // Normaler Einzel-Termin-Match
+        // ★ ZWEITENS: Mehrere Einzel-Abrechnungen desselben Studios deren Summe passt
+        if(!monatsMatch){
+          var studioAbs = (db.dokumente||[]).filter(function(d){
+            if(d.typ !== 'abrechn') return false;
+            if(!d.bestaetigt) return false;
+            var dStudio = studioNorm(d.studio||'');
+            return dStudio && zStudio && (dStudio.indexOf(zStudio)>=0 || zStudio.indexOf(dStudio)>=0);
+          });
+          // Nur unbezahlte Termine dazu
+          var unbezahlteAbs = studioAbs.filter(function(d){
+            var t = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
+            return t && t.status !== 'bezahlt';
+          });
+          if(unbezahlteAbs.length > 0){
+            var sumAusz = unbezahlteAbs.reduce(function(s,d){ return s+(parseFloat(d.auszahlung)||0); },0);
+            if(Math.abs(sumAusz - z.betrag) <= Math.max(1.0, sumAusz * 0.01)){
+              // Treffer — alle Termine sammeln
+              var multiTermine = unbezahlteAbs.map(function(d){
+                return d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
+              }).filter(Boolean);
+              // Pseudo-monatsAbrechn Objekt erstellen
+              var pseudoMonats = {
+                id: 'multi_'+Date.now(),
+                typ: 'monats_abrechn',
+                studio: unbezahlteAbs[0].studio,
+                auszahlung: sumAusz,
+                beschr: 'Sammelzahlung '+esc(unbezahlteAbs[0].studio||'')
+                  +' ('+unbezahlteAbs.length+' Abrechnungen)',
+                sessions: unbezahlteAbs.map(function(d){
+                  return {terminId: d.terminId, datum: d.datum, titel: d.beschr||d.dateiname||''};
+                }),
+                _isMultiMatch: true,
+                _abIds: unbezahlteAbs.map(function(d){return d.id;})
+              };
+              return {
+                zahlung: z,
+                termin: multiTermine[0]||null,
+                termineAlle: multiTermine,
+                sessionsOhneTermin: [],
+                gesamtSessions: multiTermine.length,
+                monatsAbrechn: pseudoMonats,
+                betragsAbweichung: 0,
+                terminKandidaten: []
+              };
+            }
+          }
+        }
         var kandidaten = (db.termine||[]).filter(function(t){
           if(t.status==='bezahlt') return false;
           var tStudio = studioNorm(t.studio||'');
@@ -3831,19 +3877,52 @@ function holviTerminWechseln(matchIdx){
       t.studio.toLowerCase().replace(/[^a-z]/g,'').indexOf(
         m.zahlung.gegenpartei.toLowerCase().replace(/[^a-z]/g,'').slice(0,6)
       ) >= 0;
-  }).sort(function(a,b){ return (b.datum||'') > (a.datum||'') ? 1 : -1; }).slice(0,15);
+  }).sort(function(a,b){ return (b.datum||'') > (a.datum||'') ? 1 : -1; });
 
-  // Auch alle anderen Termine als Fallback
+  // Smarter: Nach Betrag + Monat einschränken
+  var betrag = m.zahlung.betrag;
+  var zahlDatum = m.zahlung.datum || '';
+  var zahlMonat = zahlDatum.slice(0,7); // z.B. "2026-03"
+
+  // Score-Funktion: je höher desto besser
+  function score(t){
+    var s = 0;
+    // Gleicher Monat wie Zahlung oder Vormonat → +3
+    if(t.datum && t.datum.slice(0,7)===zahlMonat) s+=2;
+    var prevMonat = zahlDatum ? new Date(zahlDatum+'T00:00:00') : null;
+    if(prevMonat){ prevMonat.setMonth(prevMonat.getMonth()-1); }
+    var prevStr = prevMonat ? prevMonat.toISOString().slice(0,7) : '';
+    if(t.datum && prevStr && t.datum.slice(0,7)===prevStr) s+=3;
+    var prev2 = prevMonat ? new Date(prevMonat) : null;
+    if(prev2){ prev2.setMonth(prev2.getMonth()-1); }
+    var prev2Str = prev2 ? prev2.toISOString().slice(0,7) : '';
+    if(t.datum && prev2Str && t.datum.slice(0,7)===prev2Str) s+=1;
+    // Betrag passt zu Abrechnung → +5
+    if(t.abId){
+      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(ab && Math.abs((parseFloat(ab.auszahlung)||0)-betrag)<1.0) s+=5;
+      if(ab && Math.abs((parseFloat(ab.brutto)||0)-betrag)<1.0) s+=3;
+    }
+    // Noch nicht bezahlt → +2
+    if(t.status!=='bezahlt') s+=2;
+    return s;
+  }
+
+  alle = alle.sort(function(a,b){ return score(b)-score(a); }).slice(0,10);
+
+  // Fallback falls keine Studio-Treffer
   if(alle.length < 3){
     alle = (db.termine||[]).slice().sort(function(a,b){
       return (b.datum||'') > (a.datum||'') ? 1 : -1;
-    }).slice(0,20);
+    }).slice(0,15);
   }
 
   var ov2 = document.createElement('div');
-  ov2.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2100;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 0';
+  ov2.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2100;display:flex;align-items:flex-end;justify-content:center;touch-action:manipulation';
+  ov2.onclick = function(e){ if(e.target===ov2) ov2.remove(); };
   var box2 = document.createElement('div');
-  box2.style.cssText = 'background:#fff;border-radius:20px;margin:0 12px;padding:20px 16px;max-width:480px;margin-left:auto;margin-right:auto';
+  box2.style.cssText = 'background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+  box2.onclick = function(e){ e.stopPropagation(); };
 
   var h = '<div style="font-size:16px;font-weight:900;margin-bottom:4px">Termin wählen</div>'
     +'<div style="font-size:12px;color:#888;margin-bottom:4px">'+fmtEur(m.zahlung.betrag)+' · '+esc(m.zahlung.gegenpartei)+'</div>'
@@ -3851,11 +3930,15 @@ function holviTerminWechseln(matchIdx){
 
   alle.forEach(function(t){
     var isSelected = m.termin && m.termin.id === t.id;
+    var s = score(t);
+    var hint = '';
+    if(s>=5) hint='<div style="font-size:10px;color:#15803d;font-weight:700">★ Bester Treffer</div>';
+    else if(s>=3) hint='<div style="font-size:10px;color:#f97316;font-weight:700">~ Guter Treffer</div>';
     h += '<div onclick="holviSetTermin('+matchIdx+',\''+t.id+'\');this.closest(\'div\').parentNode.remove()" '
-      +'style="background:'+(isSelected?'#f0fdf4':'#f8fafc')+';border:1.5px solid '+(isSelected?'#86efac':'#e5e7eb')+';border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;touch-action:manipulation">'
+      +'style="background:'+(isSelected?'#f0fdf4':s>=5?'#f0fdf4':s>=3?'#fff7ed':'#f8fafc')+';border:1.5px solid '+(isSelected?'#86efac':s>=5?'#86efac':s>=3?'#fed7aa':'#e5e7eb')+';border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;touch-action:manipulation">'
       +'<div style="font-size:13px;font-weight:800">'+esc(t.titel||t.studio||'')+'</div>'
       +'<div style="font-size:11px;color:#888">'+(t.datum?t.datum.split('-').reverse().join('.'):'')+(t.studio?' · '+esc(t.studio):'')+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div>'
-      +(isSelected?'<div style="font-size:10px;color:#15803d;font-weight:700">✓ Aktuell gewählt</div>':'')
+      +(isSelected?'<div style="font-size:10px;color:#15803d;font-weight:700">✓ Aktuell gewählt</div>':hint)
       +'</div>';
   });
 
@@ -3923,8 +4006,18 @@ function holviBestaetigen(){
         t.status = 'bezahlt';
         t.zahlungDatum = z.datum;
       });
-      m.monatsAbrechn.zahlungDatum = z.datum;
-      m.monatsAbrechn.bezahlt = true;
+      // Bei Multi-Match: echte Dok-Abrechnungen auch als bezahlt markieren
+      if(m.monatsAbrechn._isMultiMatch && m.monatsAbrechn._abIds){
+        m.monatsAbrechn._abIds.forEach(function(abId){
+          var dok=(db.dokumente||[]).find(function(d){return d.id===abId;});
+          if(dok){ dok.bezahlt=true; dok.zahlungDatum=z.datum; }
+          var ab=(db.abrechnungen||[]).find(function(a){return a.dokId===abId;});
+          if(ab){ ab.bezahlt=true; ab.zahlungDatum=z.datum; }
+        });
+      } else {
+        m.monatsAbrechn.zahlungDatum = z.datum;
+        m.monatsAbrechn.bezahlt = true;
+      }
     } else if(m.termin){
       undoSnapshots.push({id:m.termin.id, status:m.termin.status, zahlungDatum:m.termin.zahlungDatum||null});
       m.termin.status = 'bezahlt';
