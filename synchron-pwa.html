@@ -447,7 +447,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <input type="file" id="backup-import-input" accept=".json" style="display:none" onchange="importData(this)">
       <div class="settings-row" onclick="document.getElementById('holvi-import-input').click()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Holvi-Kontoauszug importieren</div></div><div class="sr-right" id="holvi-import-status">›</div></div>
       <input type="file" id="holvi-import-input" accept=".xlsx,.xls" style="display:none" onchange="holviImport(this)">
-      <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Steuer-CSV exportieren</div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🗑</div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
     <div style="background:var(--card);border-radius:14px;border:1px solid var(--border);padding:16px;margin-bottom:12px;font-size:12px;color:var(--ink3);line-height:1.6">
@@ -633,16 +633,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="buch-menu-arrow">›</div>
     </div>
 
-    <div onclick="switchView('verdienstübersicht')" class="buch-menu-row">
-      <div class="buch-menu-icon" style="background:#e8f4fd;color:#1a6ea8">∑</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Verdienstübersicht</div>
-        <div class="buch-menu-sub">Jahres-, Monats- &amp; Wochenauswertung</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
-    </div>
-
-    <div onclick="switchView('zahlungen')" class="buch-menu-row">
+    <div onclick="switchView('gagenabrechnungen')" class="buch-menu-row">
       <div class="buch-menu-icon" style="background:#e8f5e9;color:#2e7d32">GS</div>
       <div class="buch-menu-body">
         <div class="buch-menu-title">Gagen­abrechnungen / SV-Meld.</div>
@@ -663,8 +654,8 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div onclick="switchView('zahlungen')" class="buch-menu-row">
       <div class="buch-menu-icon" style="background:#fce4ec;color:#c62828">€</div>
       <div class="buch-menu-body">
-        <div class="buch-menu-title">Zahlungen</div>
-        <div class="buch-menu-sub">Einnahmen nach Auftraggeber</div>
+        <div class="buch-menu-title">Zahlungseingänge</div>
+        <div class="buch-menu-sub">Importierte Holvi-Zahlungen</div>
       </div>
       <div class="buch-menu-arrow">›</div>
     </div>
@@ -689,6 +680,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div><div style="color:#fff;font-size:18px;font-weight:900">Rückgängig</div><div style="color:rgba(255,255,255,.75);font-size:12px">Letzte 20 Aktionen</div></div>
   </div>
   <div class="scroll" id="undo-log-list" style="padding:16px;padding-bottom:100px"></div>
+</div>
+
+<!-- ══════ ZAHLUNGSEINGÄNGE ════════════════════════════════════ -->
+<div id="view-zahlungen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
+  <div class="app-header" style="background:#c62828;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="color:#fff;font-size:18px;font-weight:900">Zahlungseingänge</div><div style="color:rgba(255,255,255,.75);font-size:12px">Importierte Holvi-Zahlungen</div></div>
+  </div>
+  <div class="scroll" id="zahlungen-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ MAHNWESEN ════════════════════════════════════ -->
@@ -894,7 +894,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 </div>
 
 <!-- ══════ ZAHLUNGEN (Neue Übersicht) ═══════════════════ -->
-<div id="view-zahlungen" class="view" style="overflow:hidden;flex-direction:column">
+<div id="view-gagenabrechnungen" class="view" style="overflow:hidden;flex-direction:column">
   <!-- Header -->
   <div class="app-header" style="background:#1a2332;display:flex;align-items:center;padding:0 16px;height:56px;flex-shrink:0">
     <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
@@ -921,11 +921,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
   </div>
   <!-- Tabs -->
-  <div style="display:flex;background:#fff;border-bottom:2px solid #e5e7eb;flex-shrink:0">
-    <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:700;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer;touch-action:manipulation">Studio</div>
-    <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation">Monat</div>
-    <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation">Produktion</div>
-    <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation">Analyse</div>
+  <div style="display:flex;background:#fff;border-bottom:2px solid #e5e7eb;flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:700;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer;touch-action:manipulation;white-space:nowrap">Studio</div>
+    <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation;white-space:nowrap">Monat</div>
+    <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation;white-space:nowrap">Produktion</div>
+    <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation;white-space:nowrap">Analyse</div>
+    <div id="zt-zahldauer" onclick="zahlTab('zahldauer')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:#9ca3af;cursor:pointer;touch-action:manipulation;white-space:nowrap">⏱ Zahlung</div>
   </div>
   <!-- Schnellzugriff-Buttons (nur bei Studio-Tab) -->
   <div id="zahl-toolbar" style="background:#f8f9fa;padding:8px 12px;display:flex;gap:8px;flex-shrink:0;border-bottom:1px solid #e5e7eb">
@@ -939,7 +940,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div style="font-size:14px">📊</div><div style="font-size:10px;font-weight:700;color:#92400e;margin-top:1px">Monatsblatt</div>
     </div>
   </div>
-  <div id="zahlungen-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(env(safe-area-inset-bottom)+80px)"></div>
+  <div id="zahlungen-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(env(safe-area-inset-bottom) + 90px)"></div>
 </div>
 
 <!-- ══════ RECHNUNG SHEET ════════════════════════════════ -->
@@ -2458,10 +2459,19 @@ function saveMergeChanges(){
 
   // Log für Undo (Snapshot war _mergeSnapshot)
   if(_mergeSnapshot){
-    logAction('merge_saved',
-      'Termin gespeichert · '+(t?esc(t.titel||t.studio||''):'')+(deletedDoks.length?' · Foto gelöscht':''),
-      {terminId:ctid, terminSnap:_mergeSnapshot, deletedDoks:deletedDoks}
-    );
+    var fromDokId = _mergeSnapshot._fromDokId || null;
+    var fromSi    = _mergeSnapshot._fromSessionIdx != null ? _mergeSnapshot._fromSessionIdx : null;
+    var fromDok   = fromDokId ? (db.dokumente||[]).find(function(x){return x.id===fromDokId;}) : null;
+    var beschr    = fromDok
+      ? 'Session verknüpft · '+(fromDok.beschr||fromDok.dateiname||'')+(t?' → '+esc(t.titel||t.studio||''):'')
+      : 'Termin gespeichert · '+(t?esc(t.titel||t.studio||''):'')+(deletedDoks.length?' · Foto gelöscht':'');
+    logAction('merge_saved', beschr, {
+      terminId: ctid,
+      terminSnap: _mergeSnapshot,
+      deletedDoks: deletedDoks,
+      fromDokId: fromDokId,
+      fromSessionIdx: fromSi
+    });
   }
 
   _mergeSnapshot=null;
@@ -3019,11 +3029,11 @@ function dokSessionPeek(elOrId, sessionIdx){
     _sessionIdx: si
   };
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
+  _mergeSnapshot._fromDokId = dokId;   // Rückgängig braucht Dok-Referenz
+  _mergeSnapshot._fromSessionIdx = si;
   _mergeTerminId = t.id;
   dokMergeIntoTermin(pseudoDok, t);
   t._hasPendingMerge = true;
-  // Session als erledigt markieren
-  s._done = true;
   save(db);
 
   _returnToDokId = _dokCurrentId;
@@ -3036,7 +3046,7 @@ function dokSessionPeek(elOrId, sessionIdx){
   var _sessionTerminId = s.terminId;
   setTimeout(function(){
     _openDetailLock = false;
-    var tx = (db.terme||[]).find(function(x){ return x.id===_sessionTerminId; });
+    var tx = (db.termine||[]).find(function(x){ return x.id===_sessionTerminId; });
     if(tx) openDetail(_sessionTerminId);
   }, 350);
 }
@@ -3933,18 +3943,135 @@ function holviBestaetigen(){
 }
 
 function exportCSV(){
-  var rows=[['Datum','Titel','Studio','Regie','Status','Netto','Brutto']];
-  var ur=db.profil.ust!=null?db.profil.ust:0.07;
-  db.termine.forEach(function(t){
-    var net=(t.kommgage||0)+(t.takes||0)*(t.rate||0);
-    rows.push([t.datum||'',t.titel||'',t.studio||'',t.regie||'',t.status||'offen',net.toFixed(2),(net*(1+ur)).toFixed(2)]);
+  // Jahresauswahl
+  var jahre = [...new Set((db.termine||[]).map(function(t){ return t.datum?t.datum.slice(0,4):null; }).filter(Boolean))].sort();
+  var aktJahr = new Date().getFullYear();
+  if(jahre.indexOf(String(aktJahr))<0 && jahre.length) aktJahr=parseInt(jahre[jahre.length-1]);
+
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+
+  var jahrOpts=jahre.map(function(j){
+    return '<option value="'+j+'"'+(j==aktJahr?' selected':'')+'>'+j+'</option>';
+  }).join('');
+
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">📊 Jahresübersicht exportieren</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:14px">Einnahmen &amp; Ausgaben für deinen Steuerberater (EÜR)</div>'
+    +'<div style="margin-bottom:14px"><label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:6px">Jahr</label>'
+    +'<select id="csv-jahr-sel" style="width:100%;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px;font-size:14px">'+jahrOpts+'</select></div>'
+    +'<button type="button" onclick="doExportCSV()" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">⬇ CSV herunterladen</button>'
+    +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
+  ov.appendChild(box);
+  ov.onclick=function(e){if(e.target===ov)ov.remove();};
+  document.body.appendChild(ov);
+}
+
+function doExportCSV(){
+  var sel=document.getElementById('csv-jahr-sel');
+  var jahr=sel?sel.value:String(new Date().getFullYear());
+  var ur=(db.profil&&db.profil.ust!=null)?db.profil.ust:0.07;
+
+  var rows=[];
+
+  // ── EINNAHMEN ──────────────────────────────────────────────
+  rows.push(['=== EINNAHMEN '+jahr+' ===','','','','','','','','']);
+  rows.push(['Zahlungsdatum','Leistungsdatum','Studio','Produktion','Gutschrift-Nr.','Brutto €','SV-Abzüge €','USt '+Math.round(ur*100)+'% €','Auszahlung €']);
+
+  var einnahmenGesamt=0, einnahmenUst=0;
+  (db.termine||[]).filter(function(t){
+    // Ist-Versteuerung: Zahlungsdatum entscheidet
+    var zDat = t.zahlungDatum || (t.status==='bezahlt'?t.datum:null);
+    return zDat && zDat.startsWith(jahr);
+  }).sort(function(a,b){
+    var za=a.zahlungDatum||a.datum||'';
+    var zb=b.zahlungDatum||b.datum||'';
+    return za>zb?1:-1;
+  }).forEach(function(t){
+    var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+    var brutto=parseFloat((ab&&ab.brutto)||t.abrechnungBrutto||0)||0;
+    var auszahlung=parseFloat((ab&&ab.auszahlung)||0)||0;
+    var mwst=parseFloat((ab&&ab.mwst)||0)||(brutto?Math.round(brutto*ur/(1+ur)*100)/100:0);
+    var netto=Math.round((brutto-mwst)*100)/100;
+    var kv=parseFloat((ab&&ab.kv_abzug)||0)||0;
+    var rv=parseFloat((ab&&ab.rv_abzug)||0)||0;
+    var pv=parseFloat((ab&&ab.pv_abzug)||0)||0;
+    var sv=Math.abs(kv)+Math.abs(rv)+Math.abs(pv);
+    var gutschrift=(ab&&ab.gutschrift_nr)||t.gutschrift_nr||'';
+    if(!brutto && !auszahlung) return; // Termin ohne Betrag überspringen
+    rows.push([
+      t.zahlungDatum||'',
+      t.datum||'',
+      t.studio||'',
+      t.titel||'',
+      gutschrift,
+      brutto.toFixed(2).replace('.',','),
+      sv?('-'+sv.toFixed(2).replace('.',',')):'-',
+      mwst.toFixed(2).replace('.',','),
+      auszahlung?auszahlung.toFixed(2).replace('.',','):netto.toFixed(2).replace('.',',')
+    ]);
+    einnahmenGesamt+=brutto;
+    einnahmenUst+=mwst;
   });
-  var csv=rows.map(function(r){return r.map(function(c){return'"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  rows.push(['SUMME Einnahmen','','','','',einnahmenGesamt.toFixed(2).replace('.',','),'','',einnahmenUst.toFixed(2).replace('.',',')]);
+  rows.push(['','','','','','','','','']);
+
+  // ── AUSGABEN ──────────────────────────────────────────────
+  rows.push(['=== AUSGABEN '+jahr+' ===','','','','','','','','']);
+  rows.push(['Datum','Beschreibung','Kategorie','Brutto €','Netto €','Vorsteuer €','USt-Satz','','']);
+
+  var ausgabenGesamt=0, ausgabenVst=0;
+  var katLabels={equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
+    bewirtung:'Bewirtung',buero:'Büromaterial',weiterbildung:'Weiterbildung',
+    marketing:'Marketing',steuer_recht:'Steuer/Recht',versicherung:'Versicherung',
+    kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
+  (db.ausgaben||[]).filter(function(a){
+    return a.datum && a.datum.startsWith(jahr);
+  }).sort(function(a,b){return (a.datum||'')>(b.datum||'')?1:-1;})
+  .forEach(function(a){
+    var brutto=parseFloat(a.brutto)||0;
+    var mwst=parseFloat(a.mwst)||0;
+    var netto=parseFloat(a.netto)||(brutto-mwst);
+    var kat=katLabels[a.kategorie||a.ausgabe_kat||'']||a.kategorie||a.ausgabe_kat||'Sonstiges';
+    var satz=a.ust_satz!=null?Math.round(a.ust_satz*100)+'%':'';
+    rows.push([
+      a.datum||'',
+      a.beschr||'',
+      kat,
+      brutto.toFixed(2).replace('.',','),
+      netto.toFixed(2).replace('.',','),
+      mwst.toFixed(2).replace('.',','),
+      satz,'',''
+    ]);
+    ausgabenGesamt+=brutto;
+    ausgabenVst+=mwst;
+  });
+  rows.push(['SUMME Ausgaben','','',ausgabenGesamt.toFixed(2).replace('.',','),'',ausgabenVst.toFixed(2).replace('.',','),'','','']);
+  rows.push(['','','','','','','','','']);
+
+  // ── ÜBERSICHT ──────────────────────────────────────────────
+  rows.push(['=== ÜBERSICHT '+jahr+' ===','','','','','','','','']);
+  rows.push(['Einnahmen Brutto','','',einnahmenGesamt.toFixed(2).replace('.',','),'','','','','']);
+  rows.push(['Ausgaben Brutto','','',ausgabenGesamt.toFixed(2).replace('.',','),'','','','','']);
+  var gewinn=einnahmenGesamt-ausgabenGesamt;
+  rows.push(['Überschuss (EÜR)','','',gewinn.toFixed(2).replace('.',','),'','','','','']);
+  rows.push(['USt Einnahmen','','','','',einnahmenUst.toFixed(2).replace('.',','),'','','']);
+  rows.push(['VSt Ausgaben','','','','',ausgabenVst.toFixed(2).replace('.',','),'','','']);
+  rows.push(['USt-Zahllast','','','','',(einnahmenUst-ausgabenVst).toFixed(2).replace('.',','),'','','']);
+
+  // Export
+  var BOM='\uFEFF'; // UTF-8 BOM für Excel
+  var csv=BOM+rows.map(function(r){
+    return r.map(function(c){return'"'+String(c||'').replace(/"/g,'""')+'"';}).join(';');
+  }).join('\n');
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='synchron-'+today()+'.csv';
+  a.download='Jahresuebersicht-'+jahr+'.csv';
   a.click();
+  document.querySelector('[style*="z-index:2000"]')&&document.querySelector('[style*="z-index:2000"]').remove();
+  showToast('✓ Jahresübersicht '+jahr+' exportiert');
 }
 function confirmReset(){
   if(!confirm('Alle Daten unwiderruflich löschen?'))return;
@@ -5160,7 +5287,7 @@ function switchView(v){
   var navMap = {
     'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
     'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch','undo':'buch',
-    'rechnungen':'profil','zahlungen':'profil','stammdaten':'profil',
+    'rechnungen':'buch','zahlungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
     'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil'
@@ -5265,17 +5392,27 @@ function undoAction(actionId){
       case 'merge_saved':
         // Termin aus Snapshot wiederherstellen
         if(action.undoData.terminSnap){
+          var snap = action.undoData.terminSnap;
           var tIdx=(db.termine||[]).findIndex(function(x){return x.id===action.undoData.terminId;});
           if(tIdx>=0){
-            db.termine[tIdx]=action.undoData.terminSnap;
+            // _fromDokId und _fromSessionIdx nicht wiederherstellen
+            delete snap._fromDokId; delete snap._fromSessionIdx;
+            db.termine[tIdx]=snap;
           }
         }
-        // Gelöschte Dok-Fotos können nicht wiederhergestellt werden — nur Status zurück
+        // Session _done zurücksetzen falls aus Session-Peek
+        if(action.undoData.fromDokId != null && action.undoData.fromSessionIdx != null){
+          var dSess=(db.dokumente||[]).find(function(x){return x.id===action.undoData.fromDokId;});
+          if(dSess && dSess.sessions && dSess.sessions[action.undoData.fromSessionIdx]){
+            dSess.sessions[action.undoData.fromSessionIdx]._done=false;
+          }
+        }
+        // Gelöschte Dok-Fotos → Dok zurück in Warteliste
         (action.undoData.deletedDoks||[]).forEach(function(snap){
           var dok2=(db.dokumente||[]).find(function(x){return x.id===snap.dokId;});
           if(dok2){ dok2.bestaetigt=false; dok2.awaitConfirm=true; }
         });
-        showToast('↩ Termin-Merge rückgängig (Fotos unwiederbringlich gelöscht)');
+        showToast('↩ Rückgängig'+(action.undoData.deletedDoks&&action.undoData.deletedDoks.length?' (Fotos unwiederbringlich gelöscht)':''));
         break;
 
       case 'dok_typ':
@@ -7055,6 +7192,29 @@ function dokOpenDetail(id){
   _dokCurrentId = id;
   var d = (db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d) return;
+
+  // Monats-Abrechnung: doppelte Sessions (gleicher Tag + gleicher Film) zusammenführen
+  if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length > 1){
+    var merged = [];
+    d.sessions.forEach(function(s){
+      var key = (s.datum||'')+'|'+(s.titel||'').toLowerCase().trim();
+      var existing = merged.find(function(m){ return (m.datum||'')+'|'+(m.titel||'').toLowerCase().trim() === key; });
+      if(existing){
+        // Zusammenführen
+        existing.takes = (parseInt(existing.takes)||0) + (parseInt(s.takes)||0);
+        existing.brutto_termin = Math.round(((parseFloat(existing.brutto_termin)||0) + (parseFloat(s.brutto_termin)||0))*100)/100;
+        if(s.grundgage && !existing.grundgage) existing.grundgage = s.grundgage;
+        if(s.take_gage && !existing.take_gage) existing.take_gage = s.take_gage;
+        if(s.terminId && !existing.terminId) existing.terminId = s.terminId;
+      } else {
+        merged.push(JSON.parse(JSON.stringify(s)));
+      }
+    });
+    if(merged.length < d.sessions.length){
+      d.sessions = merged;
+      save(db);
+    }
+  }
   var t = DOK_TYPES[d.typ||'sonstig']||DOK_TYPES.sonstig;
 
   document.getElementById('dok-detail-title').textContent = d.beschr||d.dateiname||'Dokument';
@@ -9944,7 +10104,7 @@ var _zahlYear = new Date().getFullYear();
 
 function zahlTab(tab){
   _zahlTab = tab;
-  ['studio','monat','produktion','analyse'].forEach(function(t){
+  ['studio','monat','produktion','analyse','zahldauer'].forEach(function(t){
     var el = document.getElementById('zt-'+t);
     if(!el) return;
     var active = t===tab;
@@ -9955,12 +10115,50 @@ function zahlTab(tab){
   });
   var tb = document.getElementById('zahl-toolbar');
   if(tb) tb.style.display = tab==='studio' ? 'flex' : 'none';
-  rZahlungen();
+  if(tab==='zahldauer'){
+    var el2 = document.getElementById('zahlungen-list');
+    if(el2) el2.innerHTML = rZahlungsStatistik(_zahlYear)||'<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-title">Noch keine Daten</div><div class="empty-sub">Zahlungseingänge importieren um die Statistik zu sehen</div></div>';
+  } else {
+    rZahlungen();
+  }
 }
 
 function zahlSetYear(y){
   _zahlYear = y;
   rZahlungen();
+}
+
+function rZahlungsEingaenge(){
+  var el = document.getElementById('zahlungen-list');
+  if(!el) return;
+  var zahl = (db.zahlungen||[]).slice().sort(function(a,b){
+    return (b.datum||'') > (a.datum||'') ? 1 : -1;
+  });
+  if(!zahl.length){
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">💶</div>'
+      +'<div class="empty-title">Keine Zahlungseingänge</div>'
+      +'<div class="empty-sub">Holvi-Kontoauszug importieren um Zahlungen hier zu sehen</div></div>';
+    return;
+  }
+  var gesamt = zahl.reduce(function(s,z){return s+(parseFloat(z.betrag)||0);},0);
+  var html = '<div style="background:#c62828;border-radius:12px;padding:14px 16px;margin-bottom:14px;color:#fff">'
+    +'<div style="font-size:11px;opacity:.8;margin-bottom:4px">GESAMT EINGEGANGEN</div>'
+    +'<div style="font-size:26px;font-weight:900">'+fmtEur(gesamt)+'</div>'
+    +'<div style="font-size:11px;opacity:.8;margin-top:4px">'+zahl.length+' Zahlung'+(zahl.length>1?'en':'')+'</div>'
+    +'</div>';
+  zahl.forEach(function(z){
+    var t = z.terminId ? (db.termine||[]).find(function(x){return x.id===z.terminId;}) : null;
+    html += '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
+      +'<div style="font-size:14px;font-weight:800">'+fmtEur(z.betrag)+'</div>'
+      +'<div style="font-size:11px;color:#888">'+(z.datum?z.datum.split('-').reverse().join('.'):'')+'</div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:#555;margin-bottom:2px">'+esc(z.studio||z.gegenpartei||'')+'</div>'
+      +(t?'<div style="font-size:11px;color:#15803d;font-weight:700">✓ '+esc(t.titel||t.studio||'')+'</div>':'')
+      +(z.nachricht?'<div style="font-size:10px;color:#999;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(z.nachricht.slice(0,60))+'</div>':'')
+      +'</div>';
+  });
+  el.innerHTML = html;
 }
 
 function rZahlungen(){
