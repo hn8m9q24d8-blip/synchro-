@@ -1735,7 +1735,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '258';
+  if(el) el.textContent = '260';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2447,12 +2447,23 @@ function saveMergeChanges(){
     t._mergeSuggestions=null;
   }
   // Alle Dokumente mit _pendingDelete archivieren
+  var deletedDoks=[];
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){
+      deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||''});
       dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
       _archiveDateiname(dok.dateiname||dok.beschr);
     }
   });
+
+  // Log für Undo (Snapshot war _mergeSnapshot)
+  if(_mergeSnapshot){
+    logAction('merge_saved',
+      'Termin gespeichert · '+(t?esc(t.titel||t.studio||''):'')+(deletedDoks.length?' · Foto gelöscht':''),
+      {terminId:ctid, terminSnap:_mergeSnapshot, deletedDoks:deletedDoks}
+    );
+  }
+
   _mergeSnapshot=null;
   _mergeTerminId=null;
   save(db);
@@ -2845,17 +2856,20 @@ function dokReklassifizieren(dokId){
 function dokSetTyp(dokId, newTyp){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
-  // Alte Ausgabe aus db.ausgaben entfernen wenn vorhanden
+  var typVorher=d.typ;
   if(d.typ==='ausgabe' && d.ausgabeId){
     db.ausgaben=(db.ausgaben||[]).filter(function(a){return a.id!==d.ausgabeId;});
     d.ausgabeId=null;
   }
+  logAction('dok_typ',
+    'Typ geändert · '+(d.beschr||d.dateiname||'')+' · '+(typVorher||'?')+' → '+newTyp,
+    {dokId:dokId, typVorher:typVorher}
+  );
   d.typ=newTyp;
   d.bestaetigt=false;
   d.awaitConfirm=false;
   save(db);
   rDokumente();
-  // Overlay schließen
   document.querySelectorAll('[style*="z-index:3000"]').forEach(function(el){el.remove();});
   dokOpenDetail(dokId);
   showToast('✓ Typ geändert → Bitte neu bestätigen');
@@ -3295,7 +3309,17 @@ function saveTermin(){
   }
   el=document.getElementById('f-rate'); if(el) t.rate=parseFloat(el.value)||0;
   el=document.getElementById('f-kommgage'); if(el) t.kommgage=parseFloat(el.value)||0;
-  el=document.getElementById('f-status'); if(el) t.status=el.value||'offen';
+  el=document.getElementById('f-status'); if(el){
+    var oldStatus = t.status;
+    t.status=el.value||'offen';
+    // Log wenn Status auf bezahlt gesetzt wird
+    if(!isNew && t.status==='bezahlt' && oldStatus!=='bezahlt'){
+      logAction('termin_bezahlt',
+        'Termin manuell bezahlt · '+esc(t.titel||t.studio||'')+(t.datum?' · '+fd(t.datum):''),
+        {terminId:t.id, statusVorher:oldStatus}
+      );
+    }
+  }
   if(!t.titel){showToast('⚠️ Bitte Titel eingeben');return;}
   if(!t.datum){showToast('⚠️ Bitte Datum eingeben');return;}
   save(db);
@@ -5238,7 +5262,27 @@ function undoAction(actionId){
         showToast('↩ Zahlungsstatus zurückgesetzt');
         break;
 
-      case 'multi_link':
+      case 'merge_saved':
+        // Termin aus Snapshot wiederherstellen
+        if(action.undoData.terminSnap){
+          var tIdx=(db.termine||[]).findIndex(function(x){return x.id===action.undoData.terminId;});
+          if(tIdx>=0){
+            db.termine[tIdx]=action.undoData.terminSnap;
+          }
+        }
+        // Gelöschte Dok-Fotos können nicht wiederhergestellt werden — nur Status zurück
+        (action.undoData.deletedDoks||[]).forEach(function(snap){
+          var dok2=(db.dokumente||[]).find(function(x){return x.id===snap.dokId;});
+          if(dok2){ dok2.bestaetigt=false; dok2.awaitConfirm=true; }
+        });
+        showToast('↩ Termin-Merge rückgängig (Fotos unwiederbringlich gelöscht)');
+        break;
+
+      case 'dok_typ':
+        var dTyp=(db.dokumente||[]).find(function(x){return x.id===action.undoData.dokId;});
+        if(dTyp){ dTyp.typ=action.undoData.typVorher; dTyp.bestaetigt=false; dTyp.awaitConfirm=false; }
+        showToast('↩ Dokumenttyp zurückgesetzt');
+        break;
         // Verknüpfung mehrerer Termine mit Abrechnung rückgängig
         (action.undoData.terminSnapshots||[]).forEach(function(snap){
           var t4=(db.termine||[]).find(function(x){return x.id===snap.id;});
@@ -6011,6 +6055,17 @@ function dokGotFilesFolder(inp){
     _dokQueue = [];
     _dokQueueKatFn = null;
   }
+
+  // Dateien nach Typ sortieren: Dispo → Abrechnung → Ausgabe → Rest
+  var typOrder = function(f){
+    var kat = kategorieAusOrdner(f);
+    if(kat==='dispo')   return 0;
+    if(kat==='abrechn') return 1;
+    if(kat==='ausgabe') return 2;
+    return 3;
+  };
+  neu.sort(function(a,b){ return typOrder(a)-typOrder(b); });
+  if(_dokQueue.length) _dokQueue.sort(function(a,b){ return typOrder(a)-typOrder(b); });
 
   // Vorschau-Sheet anzeigen BEVOR importiert wird
   _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner);
@@ -8153,13 +8208,20 @@ function dokBestaetigenMonat(dokId){
   // Abrechnung als Ganzes bestätigen
   d.bestaetigt=true;
   d.awaitConfirm=false;
-  // Foto nur löschen wenn alle Sessions abgehakt
   var allSessionsDone = d.sessions.every(function(s){return s._done;});
   if(allSessionsDone){
     d.dataURL=null;
     d.thumb=null;
   }
   _archiveDateiname(d.dateiname||d.beschr);
+
+  // Log für Undo
+  var linkedTerminIds = (d.sessions||[]).filter(function(s){return s.terminId;}).map(function(s){return s.terminId;});
+  logAction('dok_bestaetigt',
+    'Monats-Abrechnung bestätigt · '+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),
+    {dokId:d.id, typVorher:'monats_abrechn', terminIds:linkedTerminIds}
+  );
+
   save(db);
   var msg=linked+' Termin'+(linked!==1?'e':'')+' verknüpft';
   if(notFound.length) msg+=' · '+notFound.length+' nicht gefunden';
@@ -8334,8 +8396,15 @@ function dokBestaetigenMitTermin(dokId, terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d) return;
-  // Editierte Felder aus den Inputs übernehmen BEVOR gemerged wird
   _applyEditedFields(d);
+
+  // Snapshot für Undo
+  var tSnap = t ? JSON.parse(JSON.stringify(t)) : null;
+  logAction('dok_bestaetigt',
+    'Dok mit Termin verknüpft · '+(d.beschr||d.dateiname||'')+(t?' → '+esc(t.titel||t.studio||''):''),
+    {dokId:dokId, typVorher:d.typ, terminId:terminId, terminSnap:tSnap}
+  );
+
   d.terminId = terminId;
   if(t){
     // Snapshot vor Merge speichern — kann verworfen werden
@@ -8736,6 +8805,15 @@ function dokLinkMultiConfirm(){
       _archiveDateiname(d.dateiname||d.beschr);
 
       var methode = useTakes ? 'nach Takes' : 'gleichmäßig (÷'+n+')';
+      var teilAbIds = termine.map(function(t){ return t.abId; }).filter(Boolean);
+      logAction('multi_link',
+        n+' Termine verknüpft · '+(d.beschr||d.dateiname||'')+' · '+methode,
+        {
+          dokId: d.id,
+          terminSnapshots: termine.map(function(t){ return {id:t.id, abId:null, status:t.status||'ausstehend', titel:t.titel}; }),
+          teilAbIds: teilAbIds
+        }
+      );
       showToast('✓ '+n+' Termine · Betrag '+methode+' aufgeteilt');
     }
   }
