@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '276';
+  if(el) el.textContent = '277';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3606,6 +3606,49 @@ function importData(inp){
   };
   r.readAsText(file);
 }
+// ── GAGE-EINGANG ERKENNUNG ────────────────────────────────────
+function isGageEingang(eingang){
+  var gegenpartei = (eingang.gegenpartei||'').toLowerCase();
+  var nachricht   = (eingang.nachricht||'').toLowerCase();
+  var betrag      = eingang.betrag||0;
+
+  // 1. Bekannte Studios aus Profil
+  var studioEmails = _getStudioEmails();
+  var studioNames  = Object.keys(studioEmails).map(function(k){return k.toLowerCase();});
+  // Auch hardcoded Bekannte
+  var knownStudios = ['synchron','arena','interopa','vsi','iyuno','sdi','berliner','cinephon',
+    'globaloc','lavendel','oxygen','o2 studio','tnt','studio hamburg','ffs','neue tonfilm',
+    'sesam','lohn','gehalt'];
+  var allStudios = studioNames.concat(knownStudios);
+
+  // Prüfe Gegenpartei
+  for(var i=0;i<allStudios.length;i++){
+    if(gegenpartei.indexOf(allStudios[i])>=0) return {ja:true, grund:'Studio: '+allStudios[i]};
+  }
+
+  // 2. Keywords im Verwendungszweck
+  var keywords = ['gage','gutschrift','synchron','sesam','lohn/gehalt','lohn gehalt',
+    'gagenabrechnung','auszahlung gage','honorar','synchronsprecher'];
+  for(var j=0;j<keywords.length;j++){
+    if(nachricht.indexOf(keywords[j])>=0) return {ja:true, grund:'Keyword: '+keywords[j]};
+  }
+
+  // 3. Nicht relevant — typische Nicht-Gage-Eingänge ausschließen
+  var ausschluss = ['zinsen','erstattung','rueckerstattung','paypal','amazon','ebay',
+    'klarna','sparkasse','haspa','commerzbank','dkb','n26','ing-diba','volksbank',
+    'transfer','umbuchung','guthabenzins'];
+  for(var k=0;k<ausschluss.length;k++){
+    if(gegenpartei.indexOf(ausschluss[k])>=0||nachricht.indexOf(ausschluss[k])>=0){
+      return {ja:false, grund:'Ausschluss: '+ausschluss[k]};
+    }
+  }
+
+  // 4. Betrag plausibel für Synchrongage (>50€ und <20.000€)
+  if(betrag >= 50 && betrag <= 20000) return {ja:'maybe', grund:'Betrag plausibel'};
+
+  return {ja:false, grund:'Kein Muster erkannt'};
+}
+
 function holviImport(inp){
   var file = inp.files[0];
   if(!file) return;
@@ -3651,8 +3694,35 @@ function holviImport(inp){
 
       if(!neu.length){ showToast('✓ Alle Eingänge bereits importiert'); return; }
 
+      // Gage-Erkennung: relevant / maybe / irrelevant trennen
+      var gageEingaenge = [];
+      var skippedEingaenge = [];
+      neu.forEach(function(z){
+        var check = isGageEingang(z);
+        if(check.ja===true || check.ja==='maybe'){
+          z._gageGrund = check.grund;
+          z._gageSicher = check.ja===true;
+          gageEingaenge.push(z);
+        } else {
+          z._skipGrund = check.grund;
+          skippedEingaenge.push(z);
+        }
+      });
+
+      if(!gageEingaenge.length){
+        showToast('Keine Gagenzahlungen erkannt ('+neu.length+' Eingänge geprüft)');
+        return;
+      }
+
+      if(skippedEingaenge.length){
+        window._holviSkipped = skippedEingaenge;
+        showToast(skippedEingaenge.length+' Nicht-Gage-Eingang'+(skippedEingaenge.length>1?'e':'')+' übersprungen');
+      } else {
+        window._holviSkipped = [];
+      }
+
       // Abgleich gegen Termine + Monats-Abrechnungen
-      var matches = neu.map(function(z){
+      var matches = gageEingaenge.map(function(z){
         var studioNorm = function(s){ return (s||'').toLowerCase().replace(/\s+gmbh.*|synchron.*|film.*|berlin.*/,'').replace(/[^a-z0-9äöüß]/g,' ').trim(); };
         var zStudio = studioNorm(z.gegenpartei);
 
@@ -3783,8 +3853,8 @@ function holviShowPreview(matches, gesamt){
   var mitTermin = matches.filter(function(m){ return m.termin; });
   var ohneTermin = matches.filter(function(m){ return !m.termin; });
 
-  var html = '<div style="font-size:18px;font-weight:900;margin-bottom:4px">🏦 Holvi-Import</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:16px">'+matches.length+' neue Eingänge · '+gesamt+' gesamt</div>';
+  var html = '<div style="font-size:18px;font-weight:900;margin-bottom:4px">🏦 Kontoauszug-Import</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:16px">'+matches.length+' Gage-Eingang'+(matches.length!==1?'e':'')+' erkannt · '+gesamt+' gesamt</div>';
 
   if(mitTermin.length){
     html += '<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px;letter-spacing:.5px">✓ TERMIN GEFUNDEN ('+mitTermin.length+') — Tippen zum Ändern</div>';
@@ -3861,6 +3931,18 @@ function holviShowPreview(matches, gesamt){
     +'<button type="button" onclick="holviBestaetigen()" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Importieren</button>'
     +'<button type="button" onclick="document.getElementById(\'holvi-ov\').remove()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:14px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>'
     +'</div>';
+
+  // Übersprungene anzeigen
+  if(window._holviSkipped && window._holviSkipped.length){
+    html += '<div style="margin-top:14px;border-top:1px solid #e5e7eb;padding-top:12px">'
+      +'<div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:6px">ÜBERSPRUNGEN ('+window._holviSkipped.length+' Nicht-Gage-Eingänge)</div>';
+    window._holviSkipped.forEach(function(z){
+      html+='<div style="font-size:11px;color:#9ca3af;padding:3px 0;border-bottom:1px solid #f3f4f6">'
+        +esc((z.gegenpartei||'').slice(0,30))+' · '+fmtEur(z.betrag)
+        +'<span style="float:right;font-size:10px;color:#d1d5db">'+esc(z._skipGrund||'')+'</span></div>';
+    });
+    html += '</div>';
+  }
 
   box.innerHTML = html;
   ov.appendChild(box);
