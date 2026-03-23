@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '277';
+  if(el) el.textContent = '282';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2318,6 +2318,21 @@ function openDetail(id){
   }
 
   // ── DIFFERENZ-WARNUNG: Dispo vs. Abrechnung ─────────────────
+  // Vor der Anzeige prüfen: ist kommgage_differenz durch 1-10-Regel erklärbar?
+  if(t.kommgage_differenz && t.kommgage_differenz !== 0){
+    var rawTakes = parseInt(t.takes)||0;
+    var billTakes10 = rawTakes > 0 && rawTakes < 10 ? 10 : rawTakes;
+    var dispKomm = parseFloat(t.kommgage)||0;
+    var dispRate = parseFloat(t.rate)||0;
+    var erwartetMit1to10 = dispKomm + billTakes10 * dispRate;
+    var abgerechnet = parseFloat(t.kommgage_abgerechnet)||0;
+    if(abgerechnet > 0 && Math.abs(abgerechnet - erwartetMit1to10) < 1.0){
+      // Differenz ist durch 1-10-Regel erklärbar → automatisch klären
+      t.kommgage_differenz = 0;
+      save(db);
+    }
+  }
+
   var diffWarnHtml = '';
   var hasDiff = (t.takes_differenz && t.takes_differenz !== 0)
              || (t.rate_differenz && t.rate_differenz !== 0)
@@ -6820,6 +6835,12 @@ function dokAnalyseDoc(d, key, cb){
     +'  auszahlung = Auszahlungsbetrag (Netto + MwSt)\n'
     +'  produktionstyp_kino = true wenn "Kino" in den Positionen steht\n'
     +'  Wenn "Trailer", "TR" oder "Trailer-Aufnahme" im Titel/Positionen: grundgage = Pauschalgage, takes=0\n'
+    +'  ⚠ WICHTIG — 1-10 Take-Pauschalzeilen in Abrechnungstabellen:\n'
+    +'    "Streaming 1-10 Ta", "TV 1-10 Ta", "Grundgage 1-10", "Streaming 1-10 Takes" = Pauschalzeile für 1-10 Takes\n'
+    +'    Diese Zeile enthält bereits die Grundgage für min. 10 Takes — NICHT als eigene session!\n'
+    +'    Zeile "Streaming 1-10 Ta | Film XY | 127,00€" bedeutet: grundgage=127.0 (Pauschale für ≤10 Takes)\n'
+    +'    Der Betrag ist KORREKT — keine Differenz zur Dispo (die zeigt oft nur die Komm.-Gage ohne 1-10-Regel)\n'
+    +'    Bei Einzelabrechnung (abrechn): grundgage = dieser Pauschalbetrag, takes=0, take_gage=0\n'
     +'\n'
     +'Bei "monats_abrechn" — NUR wenn EINES dieser Kriterien zutrifft:\n'
     +'  1. Titel enthält "Monats-Gutschrift"\n'
@@ -6839,9 +6860,13 @@ function dokAnalyseDoc(d, key, cb){
     +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
     +'  auszahlung = Auszahlungsbetrag\n'
     +'  sessions = Array aller Einzeltermine aus der Tabelle:\n'
-    +'    Pro Termin(tag+film) EINE session — auch wenn die Tabelle mehrere Zeilen für denselben Tag+Film hat!\n'
-    +'    ZUSAMMENFASSEN wenn: gleiche Datum-Spalte UND gleicher Film/Filmcode → eine session, Takes addieren, Brutto addieren\n'
-    +'    Beispiel Arena-Abrechnung:\n'
+    +'    ⚠⚠ KRITISCH: Pro Termin(tag+film) EINE session — auch wenn die Tabelle mehrere Zeilen für denselben Tag+Film hat!\n'
+    +'    EINFACHE REGEL: Gleicher Filmtitel + gleiches Studio = IMMER derselbe Termin. Egal ob Datum leicht abweicht oder andere Zeilentypen!\n'
+    +'    ZUSAMMENFASSEN wenn: gleicher Filmcode (z.B. T7182) ODER gleicher Filmtitel → eine session, Takes+Brutto addieren\n'
+    +'    ⚠ "Grundgage 1-10" oder "Grundgage TV" gehört IMMER zur Takes-Zeile desselben Films — NIEMALS als eigene Session!\n'
+    +'    ⚠ Datum der Grundgage-Zeile IGNORIEREN — Datum der Takes-Zeile übernehmen!\n'
+    +'    ⚠ Wenn du unsicher bist welches Datum richtig ist: nimm das FRÜHESTE Datum der zusammengehörigen Zeilen!\n'
+    +'    Beispiel Arena-Abrechnung (EXAKT SO MACHEN):\n'
     +'      Zeile 1: Di 17.03.26 | 2 | 95 Takes TV | T7182 | Navy CIS -23- | 380,00€\n'
     +'      Zeile 2: Di 17.03.26 | 18 | Grundgage 1-10 | T7182 | Navy CIS -23- | 120,00€\n'
     +'      → EINE session: {"datum":"2026-03-17","titel":"Navy CIS -23-","takes":105,"grundgage":120.0,"take_gage":4.0,"brutto_termin":500.0}\n'
@@ -6849,6 +6874,7 @@ function dokAnalyseDoc(d, key, cb){
     +'      → brutto_termin = 380 + 120 = 500\n'
     +'      → grundgage = der Grundgage-Betrag (120€)\n'
     +'      → take_gage = Takes-Betrag ÷ Takes-Anzahl (380÷95 = 4,00€)\n'
+    +'    AUCH wenn die Grundgage-Zeile ein anderes Datum hat — wenn Filmcode gleich → ZUSAMMENFASSEN und das Datum der Takes-Zeile nehmen!\n'
     +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\n'
     +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0}\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
@@ -7389,8 +7415,15 @@ function dokOpenDetail(id){
   if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length > 1){
     var merged = [];
     d.sessions.forEach(function(s){
-      var key = (s.datum||'')+'|'+(s.titel||'').toLowerCase().trim();
-      var existing = merged.find(function(m){ return (m.datum||'')+'|'+(m.titel||'').toLowerCase().trim() === key; });
+      var sTitel = (s.titel||'').toLowerCase().trim();
+      var existing = merged.find(function(m){
+        var mTitel = (m.titel||'').toLowerCase().trim();
+        // Gleicher Filmtitel = gleicher Termin (Grundgage-Zeilen haben immer denselben Filmtitel)
+        var gleicherTitel = sTitel && mTitel && sTitel===mTitel;
+        // Oder gleicher Filmcode
+        var gleicherCode = s.filmcode && m.filmcode && s.filmcode===m.filmcode;
+        return gleicherTitel || gleicherCode;
+      });
       if(existing){
         // Zusammenführen
         existing.takes = (parseInt(existing.takes)||0) + (parseInt(s.takes)||0);
@@ -7473,9 +7506,9 @@ function dokOpenDetail(id){
       if(d.dataURL){
         body+='<div style="margin-bottom:12px">';
         body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">PDF-Vorschau zum Abgleichen</div>';
-        body+='<div style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#e8e8e8;cursor:zoom-in" onclick="dokOpenPDF(\''+d.id+'\')">';
-        body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block"></canvas>';
-        body+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">🔍 Tippen = Vollbild</div>';
+        body+='<div id="pdf-wrap-'+d.id+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#e8e8e8;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\'__pdf__'+d.id+'\')">';
+        body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block;transform-origin:center center"></canvas>';
+        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">🔍 Tippen = Vollbild</div>';
         body+='</div>';
         body+='</div>';
       } else {
@@ -8110,25 +8143,24 @@ var _previewPinchState=null; // aktiver Pinch-Zustand
 function _previewTouchStart(e){
   _previewTouchCount=e.touches.length;
   if(e.touches.length===2){
-    // Pinch beginnt — sofort initialisieren
     e.preventDefault();
     var div=e.currentTarget;
-    var img=div.querySelector('img');
-    if(!img) return;
-    if(!img._pScale) img._pScale=1;
-    if(!img._pTx) img._pTx=0;
-    if(!img._pTy) img._pTy=0;
+    var el=div.querySelector('img')||div.querySelector('canvas');
+    if(!el) return;
+    if(!el._pScale) el._pScale=1;
+    if(!el._pTx) el._pTx=0;
+    if(!el._pTy) el._pTy=0;
     _previewPinchState={
-      img:img,
+      img:el,
       startDist:Math.hypot(
         e.touches[0].clientX-e.touches[1].clientX,
         e.touches[0].clientY-e.touches[1].clientY
       ),
-      startScale:img._pScale,
+      startScale:el._pScale,
       startMx:(e.touches[0].clientX+e.touches[1].clientX)/2,
       startMy:(e.touches[0].clientY+e.touches[1].clientY)/2,
-      startTx:img._pTx,
-      startTy:img._pTy
+      startTx:el._pTx,
+      startTy:el._pTy
     };
   } else {
     _previewPinchState=null;
@@ -8158,7 +8190,6 @@ function _previewTouchMove(e){
 
 function _previewTouchEnd(e, id){
   if(_previewPinchState){
-    // Nach Pinch: wenn fast auf 1x → reset
     var img=_previewPinchState.img;
     if(img && img._pScale < 1.1){
       img._pScale=1; img._pTx=0; img._pTy=0;
@@ -8168,12 +8199,16 @@ function _previewTouchEnd(e, id){
     _previewTouchCount=0;
     return;
   }
+  // PDF-Canvas: kein Vollbild beim Tap — nur Zoom
+  if(id && id.indexOf('__pdf__')===0){
+    _previewTouchCount=0;
+    return;
+  }
   // Single-Tap → Vollbild öffnen
   if(_previewTouchCount===1 && e.changedTouches.length===1){
-    // Prüfen ob Bild gezoomt ist
     var div=e.currentTarget||e.target.closest('[id^="dok-preview-"]');
     var img2=div?div.querySelector('img'):null;
-    if(img2 && img2._pScale>1.05) return; // Gezoomt → kein Vollbild
+    if(img2 && img2._pScale>1.05){ _previewTouchCount=0; return; }
     dokShowFullImg(id);
   }
   _previewTouchCount=0;
