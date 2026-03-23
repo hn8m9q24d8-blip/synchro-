@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '284';
+  if(el) el.textContent = '287';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2169,6 +2169,7 @@ function openDetail(id){
   var stamm='<div class="info-card">'
     +'<div class="info-card-header"><span>Stammdaten</span></div>'
     +_inlineField(id,'regie','Regie',t.regie||'')
+    +(t.sender?'<div class="info-row"><div class="ir-key" style="color:#6d28d9">Sender</div><div class="ir-val" style="color:#6d28d9;font-weight:700">'+esc(t.sender)+(t.sender_kuerzel&&t.sender_kuerzel!==t.sender?' <span style="font-size:10px;color:#9ca3af">('+esc(t.sender_kuerzel)+')</span>':'')+'</div></div>':'')
     +_inlineField(id,'notizen','Atelier',t.notizen||'')
     +_inlineField(id,'episode','Episode',t.episode||'')
     +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time')
@@ -2280,8 +2281,20 @@ function openDetail(id){
   if(ab){
     var abBrutto=parseFloat(ab.brutto)||0;
     var netBruttoOk=Math.abs(net-abBrutto)<0.02;
-    var takesDiff=ab.takes&&(parseInt(ab.takes)!==parseInt(t.takes));
-    var gageDiff=ab.grundgage&&(Math.abs(parseFloat(ab.grundgage)-(parseFloat(t.kommgage)||0))>0.02);
+    // 1-10 Regel: Grundgage = dispKomm + 10×dispRate → kein Fehler
+    var _tRate = parseFloat(t.rate)||0;
+    var _tKomm = parseFloat(t.kommgage)||0;
+    var _tTakes = parseInt(t.takes)||0;
+    var _abGG = parseFloat(ab.grundgage)||0;
+    var _abRate = parseFloat(ab.take_gage)||0;
+    // Rückwärts: aus abgerechneter Rate Komm-Gage ableiten
+    var _erwartetKomm = _abRate>0 ? (kommGageFromRate ? (kommGageFromRate(_abRate)||{komm:_tKomm}).komm : _tKomm) : _tKomm;
+    var _gg1to10 = _erwartetKomm>0 && _abRate>0 && Math.abs(_abGG-(_erwartetKomm+10*_abRate))<1.5;
+    var _billT = _tTakes>0&&_tTakes<10?10:_tTakes;
+    var _erw = _erwartetKomm>0&&(_abRate||_tRate)>0 ? Math.round((_erwartetKomm+_billT*(_abRate||_tRate))*100)/100 : 0;
+    var _kommOk = _gg1to10 || (_erw>0 && Math.abs(_abGG-_erw)<1.5);
+    var takesDiff = ab.takes && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
+    var gageDiff = ab.grundgage && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     var matchCol=netBruttoOk?'#15803d':'#c2410c';
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
       +'<div class="info-card-header"><span>💶 Abrechnung</span>'
@@ -3432,6 +3445,39 @@ function saveUst(){
 // ── GAGENPROFILE ──────────────────────────────────────────────
 // ── GAGE-PROFIL AUS TAKE-RATE ABLEITEN ───────────────────────
 // Aus der abgerechneten Take-Rate die passende Komm-Gage rückwärts ermitteln
+// ── SENDER-ERKENNUNG ─────────────────────────────────────────
+var SENDER_MAP = {
+  'WARN':'Warner Bros.','WB':'Warner Bros.','WBTV':'Warner Bros.',
+  'AMAZ':'Amazon','AMZ':'Amazon','PRIM':'Amazon Prime',
+  'NFLX':'Netflix','NFL':'Netflix',
+  'DISN':'Disney+','DSNP':'Disney+','DISNEY':'Disney+',
+  'APPLE':'Apple TV+','AAPL':'Apple TV+',
+  'SKY':'Sky','SKYG':'Sky Germany',
+  'PRO':'Pro7','PRO7':'Pro7','P7':'Pro7',
+  'SAT':'Sat.1','SAT1':'Sat.1',
+  'RTL':'RTL','RTLZ':'RTL',
+  'ZDF':'ZDF','ARD':'ARD','ARTE':'ARTE',
+  'PROK':'ProSiebenKanal','KABEL':'Kabel 1',
+  'SYF':'Syfy','TNT':'TNT','CNN':'CNN',
+  'PARA':'Paramount+','PLUT':'Pluto TV',
+  'PCOK':'Peacock','HBO':'HBO/Max','MAX':'HBO/Max',
+  'HULU':'Hulu','BRVO':'Bravo',
+  'TELE':'Tele 5','VIACOM':'Viacom',
+};
+
+function erkenneSender(kuerzel){
+  if(!kuerzel) return null;
+  var k = kuerzel.toUpperCase().trim();
+  if(SENDER_MAP[k]) return SENDER_MAP[k];
+  // Teilmatch
+  for(var key in SENDER_MAP){
+    if(k.indexOf(key)===0 || key.indexOf(k)===0) return SENDER_MAP[key];
+  }
+  // Unbekannt aber sieht wie Kürzel aus (2-5 Großbuchstaben)
+  if(/^[A-Z0-9]{2,6}$/.test(k)) return k;
+  return null;
+}
+
 function kommGageFromRate(takeGage){
   // Standard Synchron-Tarife (können sich ändern)
   var tarife = [
@@ -4226,32 +4272,69 @@ function doExportCSV(){
   rows.push(['Zahlungsdatum','Leistungsdatum','Studio','Produktion','Gutschrift-Nr.','Brutto €','SV-Abzüge €','USt '+Math.round(ur*100)+'% €','Auszahlung €']);
 
   var einnahmenGesamt=0, einnahmenUst=0;
+  var csvGezaehlteDoks={};
+  var csvGezaehltTermine={};
+
   (db.termine||[]).filter(function(t){
-    // Ist-Versteuerung: Zahlungsdatum entscheidet
-    var zDat = t.zahlungDatum || (t.status==='bezahlt'?t.datum:null);
+    var zDat=t.zahlungDatum||(t.status==='bezahlt'?t.datum:null);
+    if(!zDat||!zDat.startsWith(jahr)) return false;
+    // Zahlungsdatum auch aus Dokument
+    if(!zDat && t.dokIds){
+      t.dokIds.forEach(function(did){
+        var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+        if(mz) zDat=mz.datum;
+      });
+    }
     return zDat && zDat.startsWith(jahr);
   }).sort(function(a,b){
     var za=a.zahlungDatum||a.datum||'';
     var zb=b.zahlungDatum||b.datum||'';
     return za>zb?1:-1;
   }).forEach(function(t){
+    // Monats-Abrechnung: einmal als Ganzes ausgeben
+    if(t.dokIds&&t.dokIds.length){
+      var handled=false;
+      t.dokIds.forEach(function(did){
+        if(csvGezaehlteDoks[did]) return;
+        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&d.typ==='monats_abrechn'&&d.bestaetigt;});
+        if(!dok) return;
+        csvGezaehlteDoks[did]=true;
+        handled=true;
+        var brutto=parseFloat(dok.brutto)||0;
+        var auszahlung=parseFloat(dok.auszahlung)||0;
+        var mwst=parseFloat(dok.mwst)||(brutto?Math.round(brutto*ur/(1+ur)*100)/100:0);
+        var kv=Math.abs(parseFloat(dok.kv_abzug)||0);
+        var rv=Math.abs(parseFloat(dok.rv_abzug)||0);
+        var pv=Math.abs(parseFloat(dok.pv_abzug)||0);
+        var sv=kv+rv+pv;
+        var zahlDok=null;
+        var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+        if(mz) zahlDok=mz.datum; else zahlDok=dok.zahlungDatum||t.zahlungDatum||'';
+        if(!brutto&&!auszahlung) return;
+        rows.push([zahlDok||'',dok.datum||'',dok.studio||'','Monats-Gutschrift ('+((dok.sessions||[]).length)+' Termine)',dok.gutschrift_nr||'',
+          brutto.toFixed(2).replace('.',','),
+          sv?('-'+sv.toFixed(2).replace('.',',')):'-',
+          mwst.toFixed(2).replace('.',','),
+          auszahlung?auszahlung.toFixed(2).replace('.',','):''
+        ]);
+        einnahmenGesamt+=brutto;
+        einnahmenUst+=mwst;
+      });
+      if(handled) return;
+    }
+
+    if(csvGezaehltTermine[t.id]) return;
+    csvGezaehltTermine[t.id]=true;
     var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
     var brutto=parseFloat((ab&&ab.brutto)||t.abrechnungBrutto||0)||0;
     var auszahlung=parseFloat((ab&&ab.auszahlung)||0)||0;
     var mwst=parseFloat((ab&&ab.mwst)||0)||(brutto?Math.round(brutto*ur/(1+ur)*100)/100:0);
     var netto=Math.round((brutto-mwst)*100)/100;
-    var kv=parseFloat((ab&&ab.kv_abzug)||0)||0;
-    var rv=parseFloat((ab&&ab.rv_abzug)||0)||0;
-    var pv=parseFloat((ab&&ab.pv_abzug)||0)||0;
+    var kv=parseFloat((ab&&ab.kv)||0);var rv=parseFloat((ab&&ab.rv)||0);var pv=parseFloat((ab&&ab.pv)||0);
     var sv=Math.abs(kv)+Math.abs(rv)+Math.abs(pv);
     var gutschrift=(ab&&ab.gutschrift_nr)||t.gutschrift_nr||'';
-    if(!brutto && !auszahlung) return; // Termin ohne Betrag überspringen
-    rows.push([
-      t.zahlungDatum||'',
-      t.datum||'',
-      t.studio||'',
-      t.titel||'',
-      gutschrift,
+    if(!brutto&&!auszahlung) return;
+    rows.push([t.zahlungDatum||'',t.datum||'',t.studio||'',t.titel||'',gutschrift,
       brutto.toFixed(2).replace('.',','),
       sv?('-'+sv.toFixed(2).replace('.',',')):'-',
       mwst.toFixed(2).replace('.',','),
@@ -6927,7 +7010,8 @@ function dokAnalyseDoc(d, key, cb){
     +'      → take_gage = Takes-Betrag ÷ Takes-Anzahl (380÷95 = 4,00€)\n'
     +'    AUCH wenn die Grundgage-Zeile ein anderes Datum hat — wenn Filmcode gleich → ZUSAMMENFASSEN und das Datum der Takes-Zeile nehmen!\n'
     +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\n'
-    +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0}\n'
+    +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0,"kuerzel":"WARN"}\n'
+    +'    kuerzel = Senderkürzel aus der Tabelle (z.B. "WARN", "AMAZ", "PRO", "ZDF") — IMMER aus der Zeile übernehmen!\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
     +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'
@@ -8628,12 +8712,14 @@ function dokBestaetigenMonat(dokId){
       if(s.take_gage && !t.take_gage) t.take_gage=s.take_gage;
       if(s.grundgage && !t.grundgage) t.grundgage=s.grundgage;
       if(s.brutto_termin) t.kommgage=parseFloat(s.brutto_termin)||0;
-      // MwSt-Anteil + USt-Satz am Termin speichern
+      // Sender aus Kürzel
+      if(s.kuerzel && !t.sender){
+        var senderName = erkenneSender(s.kuerzel);
+        if(senderName){ t.sender=senderName; t.sender_kuerzel=s.kuerzel; }
+      }
       if(s._mwst_anteil!=null) t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz!=null)    t.ust_satz     = s._ust_satz;
-      // Gutschrift-Nr. — alle Termine derselben Monats-Abrechnung teilen sie
       if(gutschriftNr) t.gutschrift_nr = gutschriftNr;
-      // Abrechnung verknüpfen
       if(!t.dokIds) t.dokIds=[];
       if(t.dokIds.indexOf(dokId)<0) t.dokIds.push(dokId);
       t.abgerechnet=true;
@@ -9399,45 +9485,85 @@ function rUstVoranmeldung(){
   var urEinn = db.profil&&db.profil.ust!=null ? db.profil.ust : 0.07;
 
   // ── EINNAHMEN nach ZAHLUNGSEINGANG (Ist-Versteuerung) ────────
-  // Nur Termine/Abrechnungen bei denen im gewählten Monat Geld eingegangen ist
-  var einnTermine = [];
+  // Strategie: Monats-Abrechnungen als Ganzes nehmen — nicht pro Termin
+  // Damit wird MwSt korrekt aus der echten Abrechnung gezogen
+  var einnNetto = 0;
+  var einnUstEcht = 0; // echte MwSt aus Abrechnungen (wenn vorhanden)
+  var einnUstBerechnet = 0;
+  var gezaehlteDokIds = {}; // Monats-Abrechnungen nur einmal zählen
+  var gezaehltTerminIds = {};
+
   (db.termine||[]).forEach(function(t){
     var zahlDatum = null;
-    // 1. Zahlungsdatum aus verknüpfter Abrechnung (Holvi-Import)
+
+    // Zahlungsdatum ermitteln
     if(t.abId){
       var abRec=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(abRec && abRec.zahlungDatum) zahlDatum=abRec.zahlungDatum;
     }
-    // 2. Manueller Zahlungseingang aus db.zahlungen
+    if(!zahlDatum && t.zahlungDatum) zahlDatum = t.zahlungDatum;
     if(!zahlDatum){
       var z=(db.zahlungen||[]).find(function(z){return z.terminId===t.id;});
       if(z && z.datum) zahlDatum=z.datum;
     }
-    // 3. Fallback: status=bezahlt aber kein Datum → überspringen (kein Datum bekannt)
+    // Monats-Abrechnung: Zahlungsdatum aus Dok
+    if(!zahlDatum && t.dokIds){
+      t.dokIds.forEach(function(did){
+        if(zahlDatum) return;
+        var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
+        if(dok && dok.zahlungDatum) zahlDatum=dok.zahlungDatum;
+        if(!zahlDatum && dok && dok.bezahlt){
+          // Zahlung aus db.zahlungen per Monats-Abrechnung
+          var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+          if(mz && mz.datum) zahlDatum=mz.datum;
+        }
+      });
+    }
+
     if(!zahlDatum) return;
     if(!zahlDatum.startsWith(ym)) return;
-    einnTermine.push({t:t, zahlDatum:zahlDatum});
-  });
-  var einnNetto = 0;
-  einnTermine.forEach(function(e){
-    var t=e.t;
-    // Echten Abrechnungsbetrag nehmen wenn vorhanden, sonst Schätzung
+
+    // Monats-Abrechnung: Gesamtbetrag einmal zählen, nicht pro Termin
+    if(t.dokIds && t.dokIds.length){
+      var dokGezaehlt = false;
+      t.dokIds.forEach(function(did){
+        if(gezaehlteDokIds[did]) return;
+        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&(d.typ==='monats_abrechn')&&d.bestaetigt;});
+        if(dok){
+          gezaehlteDokIds[did] = true;
+          dokGezaehlt = true;
+          var bruttoMonat = parseFloat(dok.brutto)||0;
+          var mwstMonat   = parseFloat(dok.mwst)||0;
+          einnNetto += bruttoMonat;
+          if(mwstMonat>0) einnUstEcht += mwstMonat;
+          else einnUstBerechnet += bruttoMonat * urEinn;
+        }
+      });
+      if(dokGezaehlt) return; // Termin über Monats-Abrechnung gezählt
+    }
+
+    if(gezaehltTerminIds[t.id]) return;
+    gezaehltTerminIds[t.id] = true;
+
+    // Einzel-Abrechnung
     var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
     if(ab && ab.brutto && !ab.aufgeteilt){
-      einnNetto += parseFloat(ab.brutto)||0;
-    } else if(ab && ab.brutto && ab.aufgeteilt){
-      // Aufgeteilte: Summe der Teilabrechnungen
-      var teile=(db.abrechnungen||[]).filter(function(a){return a._aufgeteiltVon===ab.brutto&&a.terminId===t.id;});
-      if(teile.length) einnNetto += teile.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-      else einnNetto += parseFloat(ab.brutto)||0;
+      var bruttoAb = parseFloat(ab.brutto)||0;
+      einnNetto += bruttoAb;
+      if(ab.mwst) einnUstEcht += parseFloat(ab.mwst)||0;
+      else einnUstBerechnet += bruttoAb * urEinn;
     } else {
-      // Kein Abrechnungsobjekt — aus Termin-Feldern berechnen
+      // Schätzung aus Termin-Feldern
       var rawT=parseInt(t.takes)||0;
       var billT=rawT>0&&rawT<10?10:rawT;
-      einnNetto += (parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
+      var gesch=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
+      einnNetto += gesch;
+      einnUstBerechnet += gesch * urEinn;
     }
   });
-  var einnUst = einnNetto * urEinn;
+
+  // Gesamt-USt: echte Beträge + berechnete
+  var einnUst = Math.round((einnUstEcht + einnUstBerechnet)*100)/100;
 
   // ── AUSGABEN (Vorsteuer) ──────────────────────────────────
   var ausgaben = (db.ausgaben||[]).filter(function(a){
@@ -10098,6 +10224,70 @@ function runIntegrityCheck(silent){
 
   if(fixes > 0) save(db);
 
+  // ── 5. FINANZIELLE PLAUSIBILITÄTSPRÜFUNGEN ────────────────
+  var urSatz = (db.profil&&db.profil.ust!=null) ? db.profil.ust : 0.07;
+  var jahre = [...new Set((db.termine||[]).map(function(t){
+    return t.datum?t.datum.slice(0,4):null;
+  }).filter(Boolean))];
+
+  jahre.forEach(function(jahr){
+    var sumTerminGagen = 0;
+    var sumMonatsAbrGesamt = 0;
+    var sumEinzelAbr = 0;
+    var gezaehlteDoks = {};
+    var gezaehltTermine = {};
+
+    // Alle bestätigten Monats-Abrechnungen summieren
+    (db.dokumente||[]).forEach(function(d){
+      if(d.typ!=='monats_abrechn'||!d.bestaetigt) return;
+      if(!(d.datum||'').startsWith(jahr)) return;
+      if(gezaehlteDoks[d.id]) return;
+      gezaehlteDoks[d.id]=true;
+      sumMonatsAbrGesamt += parseFloat(d.brutto)||0;
+      // MwSt-Plausibilität
+      var mwst=parseFloat(d.mwst)||0;
+      var brutto=parseFloat(d.brutto)||0;
+      if(mwst>0 && brutto>0){
+        var mwstErw=Math.round(brutto*urSatz*100)/100;
+        if(Math.abs(mwst-mwstErw)>2.0){
+          warnings.push('⚠ Monats-GS '+esc(d.gutschrift_nr||d.beschr||'')+': MwSt '+fmtEur(mwst)+' ≠ erwartet '+fmtEur(mwstErw)+' ('+Math.round(urSatz*100)+'%)');
+        }
+      }
+    });
+
+    // Alle Einzel-Abrechnungen summieren (nicht aufgeteilt)
+    (db.abrechnungen||[]).forEach(function(a){
+      if(!(a.datum||'').startsWith(jahr)) return;
+      if(a.aufgeteilt) return;
+      sumEinzelAbr += parseFloat(a.brutto)||0;
+    });
+
+    // Termin-Gagen (Dispo-Werte)
+    (db.termine||[]).forEach(function(t){
+      if(!(t.datum||'').startsWith(jahr)) return;
+      var rawT=parseInt(t.takes)||0;
+      var billT=rawT>0&&rawT<10?10:rawT;
+      sumTerminGagen += (parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
+    });
+
+    // Bezahlte Termine ohne Zahlungsdatum
+    var bezahltOhneDatum=(db.termine||[]).filter(function(t){
+      if(!(t.datum||'').startsWith(jahr)) return false;
+      if(t.status!=='bezahlt') return false;
+      var hatDatum=t.zahlungDatum;
+      if(!hatDatum&&t.dokIds){
+        t.dokIds.forEach(function(did){
+          var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+          if(mz) hatDatum=true;
+        });
+      }
+      return !hatDatum;
+    }).length;
+    if(bezahltOhneDatum>0){
+      warnings.push('⚠ '+jahr+': '+bezahltOhneDatum+' Termin'+(bezahltOhneDatum>1?'e':'')+' als bezahlt markiert ohne Zahlungsdatum → USt-Voranmeldung unvollständig');
+    }
+  });
+
   // Ergebnis speichern
   db._lastIntegrityCheck = {
     datum: today(),
@@ -10134,16 +10324,28 @@ function runIntegrityCheckAndShow(){
     html+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px;text-align:center">'
       +'<div style="font-size:24px;margin-bottom:6px">✅</div>'
       +'<div style="font-size:14px;font-weight:700;color:#15803d">Alle Prüfungen bestanden</div>'
-      +'<div style="font-size:12px;color:#555;margin-top:4px">Keine Inkonsistenzen gefunden</div>'
+      +'<div style="font-size:12px;color:#555;margin-top:4px">Datenstruktur &amp; Finanzzahlen ok</div>'
       +'</div>';
   } else {
-    html+='<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px;margin-bottom:12px">'
-      +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:8px">'+warnings.length+' Problem'+(warnings.length>1?'e':'')+' gefunden</div>';
-    warnings.forEach(function(w){
-      html+='<div style="font-size:12px;color:#7f1d1d;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #fecaca">'+esc(w)+'</div>';
-    });
-    html+='</div>';
-    html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Auto-Fixes wurden bereits angewendet. Manuelle Korrekturen über Buch → Rückgängig.</div>';
+    // Kategorien trennen
+    var strukturFehler = warnings.filter(function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0; });
+    var finanzFehler = warnings.filter(function(w){ return w.indexOf('MwSt')>=0||w.indexOf('Zahlung')>=0||w.indexOf('zahlungsdatum')>=0||w.indexOf('bezahlt')>=0; });
+    var sonstige = warnings.filter(function(w){ return strukturFehler.indexOf(w)<0&&finanzFehler.indexOf(w)<0; });
+
+    function renderKat(titel, liste, farbe){
+      if(!liste.length) return '';
+      var r='<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px;margin-bottom:10px">'
+        +'<div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:8px">'+titel+' ('+liste.length+')</div>';
+      liste.forEach(function(w){
+        r+='<div style="font-size:12px;color:#7f1d1d;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #fecaca;line-height:1.4">'+esc(w)+'</div>';
+      });
+      return r+'</div>';
+    }
+
+    html+=renderKat('🔗 Datenstruktur', strukturFehler);
+    html+=renderKat('💶 Finanzzahlen', finanzFehler);
+    html+=renderKat('⚠ Sonstiges', sonstige);
+    html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Auto-Fixes wurden angewendet. Manuelle Korrekturen über Buch → Rückgängig.</div>';
   }
 
   html+='<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
@@ -10903,6 +11105,35 @@ function rZahlungen(){
       +(offenAll>0?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444"></div>Offen</div><div style="font-size:12px;font-weight:800;color:#ef4444">'+fmtEur(offenAll)+'</div></div>':'')
       +(abgAll>0?'<div style="display:flex;justify-content:space-between"><div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:10px;height:10px;border-radius:50%;background:#f97316"></div>Abgerechnet</div><div style="font-size:12px;font-weight:800;color:#f97316">'+fmtEur(abgAll)+'</div></div>':'')
       +'</div></div></div>';
+
+    // ── SENDER-STATISTIK ──────────────────────────────────
+    var senderMap={};
+    all.forEach(function(t){
+      if(!t.sender) return;
+      if(!senderMap[t.sender]) senderMap[t.sender]={net:0,count:0};
+      senderMap[t.sender].net+=calcNet(t);
+      senderMap[t.sender].count++;
+    });
+    var senderKeys=Object.keys(senderMap);
+    if(senderKeys.length){
+      senderKeys.sort(function(a,b){return senderMap[b].net-senderMap[a].net;});
+      var senderMax=senderMap[senderKeys[0]].net||1;
+      html+='<div style="padding:12px 16px;border-top:1px solid #f1f5f9">'
+        +'<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:12px">📡 NACH SENDER</div>';
+      senderKeys.forEach(function(k,i){
+        var v=senderMap[k].net; var w=Math.round((v/senderMax)*100);
+        html+='<div style="margin-bottom:10px">'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+          +'<div style="font-size:12px;font-weight:700">'+esc(k)+'</div>'
+          +'<div style="font-size:11px;color:#6d28d9;font-weight:800">'+fmtEur(v)
+          +' <span style="font-weight:400;color:#9ca3af">· '+senderMap[k].count+' T.</span></div></div>'
+          +'<div style="height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden">'
+          +'<div style="height:100%;width:'+w+'%;background:'+COLORS[(i+5)%COLORS.length]+';border-radius:4px"></div>'
+          +'</div></div>';
+      });
+      html+='</div>';
+    }
+
     el.innerHTML=html; return;
   }
 }
