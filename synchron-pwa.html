@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '291';
+  if(el) el.textContent = '293';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1920,11 +1920,11 @@ function rTermine(){
           return (t.titel||'').toLowerCase().indexOf(q)>=0||(t.studio||'').toLowerCase().indexOf(q)>=0||(t.rolle||'').toLowerCase().indexOf(q)>=0;
         }).sort(function(a,b){return(a.datum||'')>(b.datum||'')?-1:1;});
         searchRes.forEach(function(t){t._showMonth=true;});
-        restHtml=searchRes.map(function(t){return tCard(t);}).join('');
+        restHtml=searchRes.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
         searchRes.forEach(function(t){delete t._showMonth;});
       } else if(calSelectedDate){
         var dayItems=all.filter(function(t){return t.datum===calSelectedDate;});
-        restHtml=dayItems.map(function(t){return tCard(t);}).join('');
+        restHtml=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
       } else {
         var vy=calViewDate.getFullYear();var vm=calViewDate.getMonth();
         var monthItems=all.filter(function(t){if(!t.datum)return false;var p=t.datum.split('-');return parseInt(p[0])===vy&&parseInt(p[1])-1===vm;});
@@ -1948,7 +1948,7 @@ function rTermine(){
       list.innerHTML='<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">Keine Termine</div><div class="empty-sub">An diesem Tag keine Einträge.</div></div>';
       return;
     }
-    list.innerHTML=dayItems.map(function(t){return tCard(t);}).join('');
+    list.innerHTML=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
     return;
   }
 
@@ -1984,7 +1984,7 @@ function rTermine(){
 
   var html='';
   if(past.length)html+='<div class="section-label" style="margin:12px 16px 4px;color:var(--ink4)">Vergangene</div>'+past.map(function(t){return tCard(t);}).join('');
-  if(todayItems.length)html+='<div class="section-label" style="margin:12px 16px 4px;color:var(--blue)">Heute</div>'+todayItems.map(function(t){return tCard(t);}).join('');
+  if(todayItems.length)html+='<div class="section-label" style="margin:12px 16px 4px;color:var(--blue)">Heute</div>'+todayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
   if(future.length)html+='<div class="section-label" style="margin:12px 16px 4px">Kommende</div>'+future.map(function(t){return tCard(t);}).join('');
   list.innerHTML=html;
 }
@@ -2159,8 +2159,10 @@ function openDetail(id){
       +'</div>';
   }
   var zahlungDatumLabel = [];
-  if(t.zahlungDatum) zahlungDatumLabel=['Eingegangen: '+t.zahlungDatum.split('-').reverse().join('.')];
-  else if(zahlung&&zahlung.datum) zahlungDatumLabel=['Eingegangen: '+zahlung.datum.split('-').reverse().join('.')];
+  if(t.zahlungDatum) zahlungDatumLabel.push('Eingegangen: '+t.zahlungDatum.split('-').reverse().join('.'));
+  else if(zahlung&&zahlung.datum) zahlungDatumLabel.push('Eingegangen: '+zahlung.datum.split('-').reverse().join('.'));
+  if(t.gutschrift_nr) zahlungDatumLabel.push('Gutschrift-Nr.: '+t.gutschrift_nr);
+  else if(zahlung&&zahlung.betrag) zahlungDatumLabel.push(fmtEur(zahlung.betrag)+' eingegangen');
 
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
     +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
@@ -11955,25 +11957,99 @@ function abHolviImport(inp){
   else reader.readAsText(file,'ISO-8859-1');
 }
 function abHolviAbgleich(eingaenge){
-  if(!db.abrechnungen) db.abrechnungen=[];
-  var matched=0;var unmatched=[];
-  eingaenge.forEach(function(e){
-    var ab=db.abrechnungen.find(function(a){return Math.abs(a.auszahlung-e.betrag)<1&&!a.bezahlt;});
-    if(ab){
-      ab.bezahlt=true;ab.zahlungDatum=e.datum;ab.zahlungBeschreibung=e.beschreibung;
-      if(ab.terminId){var t=db.termine.find(function(x){return x.id===ab.terminId;});if(t)t.status='bezahlt';}
-      matched++;
-    } else {unmatched.push(e);}
+  // Nicht mehr direkt speichern — durch denselben Preview-Flow wie holviImport leiten
+  if(!db.holviImportIds) db.holviImportIds=[];
+
+  // Gage-Filter
+  var gageEingaenge=[];
+  var skippedEingaenge=[];
+  eingaenge.forEach(function(z){
+    var check=isGageEingang(z);
+    if(check.ja===true||check.ja==='maybe'){
+      z._gageGrund=check.grund; z._gageSicher=check.ja===true;
+      gageEingaenge.push(z);
+    } else {
+      z._skipGrund=check.grund; skippedEingaenge.push(z);
+    }
   });
-  save(db);
-  var html='<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px;margin-bottom:10px"><strong style="color:#15803d">'+matched+' Zahlungen zugeordnet</strong></div>';
-  if(unmatched.length){
-    html+='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px"><div style="font-weight:700;color:#b91c1c;margin-bottom:6px">'+unmatched.length+' nicht zugeordnet:</div>';
-    unmatched.forEach(function(e){html+='<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #fee2e2">'+esc(e.beschreibung)+' - '+fmtEur(e.betrag)+' - '+e.datum+'</div>';});
-    html+='</div>';
+
+  // Duplikate rausfiltern
+  var neu=gageEingaenge.filter(function(z){
+    return db.holviImportIds.indexOf(z.zahlungsId)<0;
+  });
+
+  if(!neu.length){
+    document.getElementById('ab-holvi-result').innerHTML=
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px;color:#15803d;font-weight:700">Alle Eingänge bereits importiert</div>';
+    return;
   }
-  document.getElementById('ab-holvi-result').innerHTML=html;
-  rAbrechnungen();showToast(matched+' Zahlungen zugeordnet');
+
+  window._holviSkipped=skippedEingaenge;
+
+  // Matching — gleiche Logik wie holviImport
+  var studioNorm=function(s){return (s||'').toLowerCase().replace(/\s+gmbh.*|synchron.*|film.*|berlin.*/,'').replace(/[^a-z0-9äöüß]/g,' ').trim();};
+  var matches=neu.map(function(z){
+    var zStudio=studioNorm(z.gegenpartei);
+
+    // 1. Monats-Abrechnung
+    var monatsMatch=(db.dokumente||[]).find(function(d){
+      if(d.typ!=='monats_abrechn'||!d.bestaetigt) return false;
+      var dAusz=parseFloat(d.auszahlung)||0;
+      if(dAusz<=0) return false;
+      if(Math.abs(dAusz-z.betrag)>Math.max(1.0,dAusz*0.01)) return false;
+      var dStudio=studioNorm(d.studio||'');
+      return dStudio&&zStudio&&(dStudio.indexOf(zStudio)>=0||zStudio.indexOf(dStudio)>=0);
+    });
+    if(monatsMatch){
+      var sessionTermine=[];
+      if(monatsMatch.sessions){
+        monatsMatch.sessions.forEach(function(s){
+          if(s.terminId){var t=(db.termine||[]).find(function(x){return x.id===s.terminId;});if(t)sessionTermine.push(t);}
+        });
+      }
+      return {zahlung:z,termin:sessionTermine[0]||null,termineAlle:sessionTermine,sessionsOhneTermin:[],gesamtSessions:sessionTermine.length,monatsAbrechn:monatsMatch,betragsAbweichung:0,terminKandidaten:[]};
+    }
+
+    // 2. Sammel-Match mehrere Einzel-Abrechnungen
+    var studioAbs=(db.dokumente||[]).filter(function(d){
+      if(d.typ!=='abrechn'||!d.bestaetigt) return false;
+      var dStudio=studioNorm(d.studio||'');
+      return dStudio&&zStudio&&(dStudio.indexOf(zStudio)>=0||zStudio.indexOf(dStudio)>=0);
+    });
+    var unbezahlteAbs=studioAbs.filter(function(d){
+      var t=d.terminId?(db.termine||[]).find(function(x){return x.id===d.terminId;}):null;
+      return t&&t.status!=='bezahlt';
+    });
+    if(unbezahlteAbs.length>0){
+      var sumAusz=unbezahlteAbs.reduce(function(s,d){return s+(parseFloat(d.auszahlung)||0);},0);
+      if(Math.abs(sumAusz-z.betrag)<=Math.max(1.0,sumAusz*0.01)){
+        var multiTermine=unbezahlteAbs.map(function(d){return d.terminId?(db.termine||[]).find(function(x){return x.id===d.terminId;}):null;}).filter(Boolean);
+        var pseudoMonats={id:'multi_'+Date.now(),typ:'monats_abrechn',studio:unbezahlteAbs[0].studio,auszahlung:sumAusz,beschr:'Sammelzahlung ('+unbezahlteAbs.length+' Abrechnungen)',sessions:unbezahlteAbs.map(function(d){return {terminId:d.terminId,datum:d.datum,titel:d.beschr||d.dateiname||''};}),_isMultiMatch:true,_abIds:unbezahlteAbs.map(function(d){return d.id;})};
+        return {zahlung:z,termin:multiTermine[0]||null,termineAlle:multiTermine,sessionsOhneTermin:[],gesamtSessions:multiTermine.length,monatsAbrechn:pseudoMonats,betragsAbweichung:0,terminKandidaten:[]};
+      }
+    }
+
+    // 3. Einzel-Termin
+    var kandidaten=(db.termine||[]).filter(function(t){
+      if(t.status==='bezahlt') return false;
+      var tStudio=studioNorm(t.studio||'');
+      if(!tStudio||!zStudio) return false;
+      return tStudio.indexOf(zStudio)>=0||zStudio.indexOf(tStudio)>=0;
+    });
+    var betrag=z.betrag;
+    function score(t){
+      var s=0;
+      if(t.abId){var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});if(ab&&Math.abs((parseFloat(ab.auszahlung)||0)-betrag)<1.0)s+=5;}
+      if(t.status!=='bezahlt')s+=2;
+      return s;
+    }
+    kandidaten.sort(function(a,b){return score(b)-score(a);});
+    return {zahlung:z,termin:kandidaten[0]||null,termineAlle:null,monatsAbrechn:null,terminKandidaten:kandidaten};
+  });
+
+  // Sheet schließen, Preview öffnen
+  abHolviClose();
+  holviShowPreview(matches, eingaenge.length);
 }
 
 function abMonatRender(){
