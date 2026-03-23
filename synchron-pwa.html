@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '287';
+  if(el) el.textContent = '291';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1928,7 +1928,7 @@ function rTermine(){
       } else {
         var vy=calViewDate.getFullYear();var vm=calViewDate.getMonth();
         var monthItems=all.filter(function(t){if(!t.datum)return false;var p=t.datum.split('-');return parseInt(p[0])===vy&&parseInt(p[1])-1===vm;});
-        restHtml=monthItems.map(function(t){return tCard(t);}).join('');
+        restHtml=monthItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
       }
       if(header) header.textContent='Termin antippen zum '+(window._dokLinkMulti.length?'Hinzufügen':'Wählen');
       list.innerHTML=selHtml+restHtml;
@@ -2019,7 +2019,7 @@ function tCard(t){
 
   // Zusatzinfos aus Dokumenten
   var extraLines='';
-  if(staffel||folge){
+  if((staffel||folge) && !t._hideGVL){
     extraLines+='<div style="font-size:11px;color:#6d28d9;margin-top:3px;font-weight:600">';
     if(staffel) extraLines+=esc(staffel);
     if(staffel&&folge) extraLines+=' · ';
@@ -2098,16 +2098,31 @@ function openDetail(id){
   var total=parseInt(t.takes)||0;
   var totalLabel=total>0&&total<10?total+' (→10)':String(total);
 
-  // Verknüpfte Dokumente
-  var allDoks=(db.dokumente||[]).filter(function(x){return x.terminId===id;});
-  var dispoDoks=allDoks.filter(function(x){return x.typ==='dispo';});
-  var abDoks=allDoks.filter(function(x){return x.typ==='abrechn';});
+  // Verknüpfte Dokumente — vorwärts (d.terminId) UND rückwärts (t.dokIds)
+  var allDoksIds = new Set();
+  // Vorwärts: Dokumente die auf diesen Termin zeigen
+  (db.dokumente||[]).filter(function(x){return x.terminId===id;}).forEach(function(x){allDoksIds.add(x.id);});
+  // Rückwärts: Dokumente die im Termin referenziert sind (t.dokIds)
+  if(t.dokIds) t.dokIds.forEach(function(did){allDoksIds.add(did);});
+  var allDoks=(db.dokumente||[]).filter(function(x){return allDoksIds.has(x.id);});
+
+  var dispoDoks=allDoks.filter(function(x){
+    return x.typ==='dispo'
+      // Auch: noch nicht analysiert aber aus Dispofotos-Ordner (Dateiname-Hint)
+      || (!x.typ && x.terminId===id && /dispo/i.test(x.dateiname||''));
+  });
+  var abDoks=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';});
   // Dateinamen für Ampel — auch bestätigte Dokumente (dataURL=null) einschließen
   var dispoDateinamen=dispoDoks.map(function(d){
     return d.dateiname||d.beschr||('Dispo '+fd(d.datum||t.datum));
   }).filter(Boolean);
   // Fallback: t.dispoImg existiert aber kein Dokument verknüpft (altes Format)
   if(!dispoDateinamen.length && t.dispoImg) dispoDateinamen=['Dispo (verknüpft)'];
+  // Fallback: Dispo zugeordnet aber noch nicht bestätigt (_pendingDelete)
+  if(!dispoDateinamen.length){
+    var pendDispo=(db.dokumente||[]).find(function(x){return x.terminId===id&&(x.typ==='dispo'||(!x.typ&&/dispo/i.test(x.dateiname||'')));});
+    if(pendDispo) dispoDateinamen=[pendDispo.dateiname||pendDispo.beschr||'Dispo (ausstehend)'];
+  }
   var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){
     return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
   }).filter(Boolean);
@@ -2402,14 +2417,13 @@ function openDetail(id){
   }
 
   // ── MONATS-ABRECH. TERMIN-ANTEIL ──────────────────────────
-  // Wenn dieser Termin Teil einer Monats-Abrechnung ist, MwSt-Anteil + Gutschrift-Nr. zeigen
   if(t.mwst_anteil!=null || t.gutschrift_nr){
     var ustProzent = t.ust_satz ? Math.round(t.ust_satz*100)+'%' : '7%';
     if(!abHtml){
       abHtml = '<div class="info-card" style="border-left:4px solid #22c55e">'
         +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
         +'<div style="padding:0 16px 14px">';
-      if(t.gutschrift_nr) abHtml+='<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(t.gutschrift_nr)+'</div></div>';
+      if(t.gutschrift_nr) abHtml+='<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val" style="font-weight:800">'+esc(t.gutschrift_nr)+'</div></div>';
       if(t.kommgage) abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(t.kommgage)+'</div></div>';
       if(t.mwst_anteil!=null) abHtml+='<div class="info-row"><div class="ir-key">MwSt '+ustProzent+' Anteil</div><div class="ir-val">'+fmtEur(t.mwst_anteil)+'</div></div>';
       if(t.mwst_anteil!=null && t.kommgage){
@@ -2417,6 +2431,14 @@ function openDetail(id){
         abHtml+='<div class="info-row" style="font-weight:800"><div class="ir-key">Auszahlung</div><div class="ir-val" style="color:#15803d">'+fmtEur(netto + t.mwst_anteil)+'</div></div>';
       }
       abHtml+='</div></div>';
+    } else if(t.gutschrift_nr){
+      // abHtml bereits vorhanden (von t.abId) — Gutschrift-Nr. dort ergänzen falls noch nicht drin
+      if(abHtml.indexOf(esc(t.gutschrift_nr))<0){
+        abHtml = abHtml.replace(
+          '<div style="padding:0 16px 14px">',
+          '<div style="padding:0 16px 14px"><div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val" style="font-weight:800">'+esc(t.gutschrift_nr)+'</div></div>'
+        );
+      }
     }
   }
 
@@ -2448,7 +2470,7 @@ function openDetail(id){
       +(t._hasPendingMerge?'<div style="font-size:11px;color:#78350f;margin-bottom:10px">Zurückgehen ohne Speichern verwirft alle Änderungen.</div>':'')
       +'<div style="display:flex;gap:8px;margin-top:8px">'
       +'<button type="button" onclick="saveMergeChanges()" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Änderungen speichern</button>'
-      +'<button type="button" onclick="discardMergeChanges()" style="background:#fff;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✗ Verwerfen</button>'
+      +'<button type="button" onclick="discardMergeChanges()" style="flex-shrink:0;background:#fff;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 14px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;min-width:90px">✗ Verwerfen</button>'
       +'</div>'
       +'</div>';
   }
@@ -3224,26 +3246,31 @@ function revertMergeField(terminId, field, oldVal){
 }
 
 function discardMergeChanges(){
-  if(!_mergeSnapshot || !_mergeTerminId) return;
-  var t=(db.termine||[]).find(function(x){return x.id===_mergeTerminId;});
-  if(t){
+  var t=(db.termine||[]).find(function(x){return x.id===(_mergeTerminId||ctid);});
+
+  if(_mergeSnapshot && _mergeTerminId){
     var idx=db.termine.indexOf(t);
-    if(idx>=0){
-      db.termine[idx]=_mergeSnapshot;
-      save(db);
-      rTermine();
-    }
+    if(idx>=0){ db.termine[idx]=_mergeSnapshot; }
+  } else if(t){
+    // Kein Snapshot — zumindest _hasPendingMerge und _mergeSuggestions löschen
+    t._hasPendingMerge=false;
+    t._mergeSuggestions=null;
   }
-  // Foto-Löschung abbrechen — _pendingDelete zurücksetzen
+
+  // Foto-Löschung abbrechen
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){ dok._pendingDelete=false; }
   });
+
+  save(db);
+  rTermine();
+
   var returnId=_returnToDokId;
   _mergeSnapshot=null;
   _mergeTerminId=null;
   _returnToDokId=null;
+
   if(returnId){
-    // Zurück zum Dispoblatt
     closeDetail();
     switchView('dokumente');
     setTimeout(function(){ dokOpenDetail(returnId); }, 100);
