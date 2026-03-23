@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '282';
+  if(el) el.textContent = '284';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2318,20 +2318,42 @@ function openDetail(id){
   }
 
   // ── DIFFERENZ-WARNUNG: Dispo vs. Abrechnung ─────────────────
-  // Vor der Anzeige prüfen: ist kommgage_differenz durch 1-10-Regel erklärbar?
-  if(t.kommgage_differenz && t.kommgage_differenz !== 0){
-    var rawTakes = parseInt(t.takes)||0;
-    var billTakes10 = rawTakes > 0 && rawTakes < 10 ? 10 : rawTakes;
-    var dispKomm = parseFloat(t.kommgage)||0;
-    var dispRate = parseFloat(t.rate)||0;
-    var erwartetMit1to10 = dispKomm + billTakes10 * dispRate;
-    var abgerechnet = parseFloat(t.kommgage_abgerechnet)||0;
-    if(abgerechnet > 0 && Math.abs(abgerechnet - erwartetMit1to10) < 1.0){
-      // Differenz ist durch 1-10-Regel erklärbar → automatisch klären
-      t.kommgage_differenz = 0;
-      save(db);
+  // Rückwirkend prüfen: sind Differenzen durch 1-10-Regel erklärbar?
+  (function(){
+    var tKomm = parseFloat(t.kommgage)||0;
+    var tRate = parseFloat(t.rate)||0;
+    var tTakes = parseInt(t.takes)||0;
+    var abGG = parseFloat(t.kommgage_abgerechnet)||0;
+    var abObj = t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
+    var abRate = parseFloat(t.rate_abgerechnet)||(abObj?parseFloat(abObj.take_gage)||0:0)||tRate;
+
+    // Rückwärts aus Take-Rate die erwartete Komm-Gage ableiten
+    var abgeleitetesProfile = abRate>0 ? kommGageFromRate(abRate) : null;
+    var erwartetKommGage = abgeleitetesProfile ? abgeleitetesProfile.komm : tKomm;
+
+    // Grundgage enthält 1-10 Regel wenn: abGG ≈ erwartetKommGage + 10×abRate
+    var ggHat1to10 = erwartetKommGage>0 && abRate>0 && abGG>0
+      && Math.abs(abGG-(erwartetKommGage+10*abRate))<1.5;
+    // Oder: dispTakes < 10 → billed as 10
+    var billT = tTakes>0&&tTakes<10?10:tTakes;
+    var erw1to10 = erwartetKommGage>0&&(abRate||tRate)>0
+      ? Math.round((erwartetKommGage+billT*(abRate||tRate))*100)/100 : 0;
+
+    var changed2 = false;
+    if(t.kommgage_differenz && t.kommgage_differenz!==0){
+      if(ggHat1to10 || (abGG>0 && Math.abs(abGG-erw1to10)<1.5)){
+        t.kommgage_differenz=0; changed2=true;
+      }
     }
-  }
+    if(t.takes_differenz && t.takes_differenz!==0){
+      if(ggHat1to10 && Math.abs(t.takes_differenz)<=10){ t.takes_differenz=0; changed2=true; }
+    }
+    // rate_differenz: wenn Take-Rate von Dispo abweicht aber Tarif-konform
+    if(t.rate_differenz && t.rate_differenz!==0 && abgeleitetesProfile){
+      if(Math.abs(abRate - abgeleitetesProfile.rate) < 0.05){ t.rate_differenz=0; changed2=true; }
+    }
+    if(changed2) save(db);
+  })();
 
   var diffWarnHtml = '';
   var hasDiff = (t.takes_differenz && t.takes_differenz !== 0)
@@ -3408,6 +3430,30 @@ function saveUst(){
 }
 
 // ── GAGENPROFILE ──────────────────────────────────────────────
+// ── GAGE-PROFIL AUS TAKE-RATE ABLEITEN ───────────────────────
+// Aus der abgerechneten Take-Rate die passende Komm-Gage rückwärts ermitteln
+function kommGageFromRate(takeGage){
+  // Standard Synchron-Tarife (können sich ändern)
+  var tarife = [
+    {rate:4.00, komm:80,  name:'TV'},
+    {rate:4.20, komm:85,  name:'Streaming'},
+    {rate:5.00, komm:100, name:'Kino'},
+    {rate:4.50, komm:90,  name:'Streaming+'},
+    {rate:3.50, komm:70,  name:'TV-klein'}
+  ];
+  // Auch aus db.gagenprofile suchen falls vorhanden
+  (db.gagenprofile||[]).forEach(function(gp){
+    if(gp.rate>0 && gp.kommgage>0) tarife.push({rate:gp.rate, komm:gp.kommgage, name:gp.name});
+  });
+  var best = null;
+  tarife.forEach(function(t){
+    if(Math.abs(t.rate - takeGage) < 0.05){
+      if(!best || Math.abs(t.rate-takeGage) < Math.abs(best.rate-takeGage)) best = t;
+    }
+  });
+  return best; // {rate, komm, name} oder null
+}
+
 function defaultGagenprofile(){
   return[
     {id:uid(),name:'Standard',takes:10,rate:12,kommgage:0},
@@ -6841,6 +6887,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    Zeile "Streaming 1-10 Ta | Film XY | 127,00€" bedeutet: grundgage=127.0 (Pauschale für ≤10 Takes)\n'
     +'    Der Betrag ist KORREKT — keine Differenz zur Dispo (die zeigt oft nur die Komm.-Gage ohne 1-10-Regel)\n'
     +'    Bei Einzelabrechnung (abrechn): grundgage = dieser Pauschalbetrag, takes=0, take_gage=0\n'
+    +'  ⚠ TV vs STREAMING erkennen aus Zeilenbeschriftung:\n'
+    +'    "Streaming" oder "AMAZ", "NFLX", "DISN", "APPLE" in Zeile → produktionstyp=streaming\n'
+    +'    "TV", "WARN", "PRO7", "ARD", "ZDF" oder kein Typ → produktionstyp=tv\n'
+    +'    Bei "Streaming 1-10 Ta" Zeile: grundgage aus Streaming-Satz (85€ Komm + 10×4,20€ = 127€)\n'
+    +'    Bei "TV 1-10 Ta" oder "Grundgage 1-10 T" Zeile: grundgage aus TV-Satz (80€ Komm + 10×4€ = 120€)\n'
     +'\n'
     +'Bei "monats_abrechn" — NUR wenn EINES dieser Kriterien zutrifft:\n'
     +'  1. Titel enthält "Monats-Gutschrift"\n'
@@ -8975,15 +9026,28 @@ function dokMergeIntoTermin(d, termin){
       if(takeGage) termin.rate_abgerechnet = takeGage;
       if(grundgage) termin.kommgage_abgerechnet = grundgage;
 
-      // Takes: Dispo hatte Wert → Differenz speichern, NICHT überschreiben
-      // ⚠ Takes aus Abrechnung NIE in Termin schreiben — Dispo/Kalender hat Vorrang
+      // ── 1-10 REGEL ERKENNUNG ─────────────────────────────────
+      // Wenn Grundgage = dispKomm + 10×dispRate → Grundgage enthält bereits die 10 Mindest-Takes
+      // Dann sind die "fehlenden" Takes (dispTakes - takes) = 10 → KEIN Fehler
+      var grundgageEnthält1to10 = dispKomm > 0 && dispRate > 0 && grundgage > 0
+        && Math.abs(grundgage - (dispKomm + 10*dispRate)) < 1.0;
+      // Effektive Takes: wenn Grundgage 1-10 enthält, sind echte Takes = takes_abgerechnet + 10
+      var effektiveTakes = grundgageEnthält1to10 ? takes + 10 : takes;
+
+      // Takes-Differenz: nur wenn nicht durch 1-10-Grundgage erklärbar
       if(dispTakes > 0 && takes > 0 && dispTakes !== takes){
-        termin.takes_differenz = dispTakes - takes;
-        changed.push('Differenz Takes: '+dispTakes+' vs '+takes);
+        if(grundgageEnthält1to10 && Math.abs(effektiveTakes - dispTakes) < 2){
+          // 1-10 Regel erklärt die Differenz → kein Flag
+          termin.takes_differenz = 0;
+          changed.push('Takes: 1-10 Regel erkannt ('+takes+' real + 10 in GG = '+effektiveTakes+')');
+        } else {
+          termin.takes_differenz = dispTakes - takes;
+          changed.push('Differenz Takes: '+dispTakes+' vs '+takes);
+        }
       } else {
-        // Kein Überschreiben mehr — Takes bleiben wie sie sind
         termin.takes_differenz = 0;
       }
+
       // Take-Gage: Differenz
       if(dispRate > 0 && takeGage > 0 && Math.abs(dispRate-takeGage)>0.01){
         termin.rate_differenz = Math.round((dispRate-takeGage)*100)/100;
@@ -8992,19 +9056,22 @@ function dokMergeIntoTermin(d, termin){
         if(takeGage) overwrite('rate', takeGage, 'Take-Gage ('+fmtEur(takeGage)+')');
         termin.rate_differenz = 0;
       }
+
       // Komm.-Gage: Differenz
-      // ⚠ 1-10 Take-Regel: Bei ≤10 Takes wird mind. 10 Takes abgerechnet
-      // → Erwarteter Brutto = dispKomm + max(dispTakes,10) × dispRate
+      // OK wenn: grundgage = dispKomm (exakt) ODER grundgage = dispKomm + 10×dispRate (1-10 Regel)
+      var kommGageExakt = Math.abs(grundgage - dispKomm) < 1.0;
+      var kommGage1to10 = grundgageEnthält1to10;
+      // Oder: dispTakes < 10 → billable = 10 → grundgage = dispKomm + 10×dispRate
       var billTakes10 = dispTakes > 0 && dispTakes < 10 ? 10 : dispTakes;
       var erwartetMit1to10 = dispKomm > 0 && dispRate > 0
-        ? Math.round((dispKomm + billTakes10 * dispRate)*100)/100
-        : 0;
-      var kommGageOk = Math.abs(grundgage - erwartetMit1to10) < 1.0;
+        ? Math.round((dispKomm + billTakes10 * dispRate)*100)/100 : 0;
+      var kommGageOk = kommGageExakt || kommGage1to10 || Math.abs(grundgage - erwartetMit1to10) < 1.0;
+
       if(dispKomm > 0 && grundgage > 0 && Math.abs(dispKomm-grundgage)>0.5 && !kommGageOk){
         termin.kommgage_differenz = Math.round((dispKomm-grundgage)*100)/100;
         changed.push('Differenz Komm.-Gage: '+dispKomm+'€ vs '+grundgage+'€');
       } else {
-        if(grundgage && !kommGageOk) overwrite('kommgage', grundgage, 'Komm.-Gage ('+fmtEur(grundgage)+')');
+        if(grundgage && !kommGageExakt) overwrite('kommgage', dispKomm||grundgage, 'Komm.-Gage');
         termin.kommgage_differenz = 0;
       }
       // USt aus Abrechnung erkennen
