@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '293';
+  if(el) el.textContent = '298';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2347,6 +2347,33 @@ function openDetail(id){
       +'</div></div>';
   }
 
+  // ── AUTO-FIX: ab.bezahlt=true aber t.status noch nicht bezahlt ──
+  if(t.status !== 'bezahlt' && t.abId){
+    var abFix=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+    if(abFix && abFix.bezahlt && abFix.zahlungDatum){
+      t.status='bezahlt';
+      if(!t.zahlungDatum) t.zahlungDatum=abFix.zahlungDatum;
+      save(db);
+    }
+  }
+  // Auch via dokIds prüfen (Monats-Abrechnung)
+  if(t.dokIds){
+    t.dokIds.forEach(function(did){
+      var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
+      if(!dok) return;
+      // Zahlungsdatum aus Dok oder aus db.zahlungen
+      var zahlDat = dok.zahlungDatum;
+      if(!zahlDat){
+        var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+        if(mz) zahlDat=mz.datum;
+      }
+      if(zahlDat){
+        if(t.status!=='bezahlt'){ t.status='bezahlt'; save(db); }
+        if(!t.zahlungDatum){ t.zahlungDatum=zahlDat; save(db); }
+      }
+    });
+  }
+
   // ── DIFFERENZ-WARNUNG: Dispo vs. Abrechnung ─────────────────
   // Rückwirkend prüfen: sind Differenzen durch 1-10-Regel erklärbar?
   (function(){
@@ -2426,7 +2453,8 @@ function openDetail(id){
         +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
         +'<div style="padding:0 16px 14px">';
       if(t.gutschrift_nr) abHtml+='<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val" style="font-weight:800">'+esc(t.gutschrift_nr)+'</div></div>';
-      if(t.kommgage) abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(t.kommgage)+'</div></div>';
+      var bruttoAnteil = t.brutto_termin || t.kommgage || 0;
+      if(bruttoAnteil) abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(bruttoAnteil)+'</div></div>';
       if(t.mwst_anteil!=null) abHtml+='<div class="info-row"><div class="ir-key">MwSt '+ustProzent+' Anteil</div><div class="ir-val">'+fmtEur(t.mwst_anteil)+'</div></div>';
       if(t.mwst_anteil!=null && t.kommgage){
         var netto = Math.round((t.kommgage - t.mwst_anteil)*100)/100;
@@ -3999,13 +4027,14 @@ function holviShowPreview(matches, gesamt){
       var istMonats = !!m.monatsAbrechn;
       var anzTermine = m.termineAlle ? m.termineAlle.length : 1;
 
-      html += '<div onclick="'+(istMonats?'':' holviTerminWechseln('+i+')')+'" '
-        +'style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(istMonats?'':'cursor:pointer;touch-action:manipulation')+'">'
+      html += '<div onclick="'+(istMonats||m._gutschriftMatch?'':' holviTerminWechseln('+i+')')+'" '
+        +'style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(istMonats||m._gutschriftMatch?'':'cursor:pointer;touch-action:manipulation')+'">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
         +'<div style="font-size:13px;font-weight:800">'+fmtEur(m.zahlung.betrag)+'</div>'
         +'<div style="font-size:11px;color:#888">'+m.zahlung.datum.split('-').reverse().join('.')+'</div>'
         +'</div>'
-        +'<div style="font-size:11px;color:#555;margin-bottom:4px">'+esc(m.zahlung.gegenpartei)+'</div>';
+        +'<div style="font-size:11px;color:#555;margin-bottom:4px">'+esc(m.zahlung.gegenpartei)+'</div>'
+        +(m._gutschriftMatch?'<div style="font-size:10px;color:#15803d;font-weight:700">✓ Gutschrift-Nr. erkannt — automatisch zugeordnet</div>':'');
 
       if(istMonats){
         var fehlend = m.sessionsOhneTermin ? m.sessionsOhneTermin.length : 0;
@@ -8738,9 +8767,9 @@ function dokBestaetigenMonat(dokId){
       if(s.takes && !t.takes) t.takes=s.takes;
       if(s.rolle && !t.rolle) t.rolle=s.rolle;
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
-      if(s.take_gage && !t.take_gage) t.take_gage=s.take_gage;
-      if(s.grundgage && !t.grundgage) t.grundgage=s.grundgage;
-      if(s.brutto_termin) t.kommgage=parseFloat(s.brutto_termin)||0;
+      if(s.take_gage && !t.rate) t.rate=s.take_gage;
+      if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage; // Komm-Gage = Grundgage aus Session
+      if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0; // Termin-Brutto separat
       // Sender aus Kürzel
       if(s.kuerzel && !t.sender){
         var senderName = erkenneSender(s.kuerzel);
@@ -10253,7 +10282,34 @@ function runIntegrityCheck(silent){
 
   if(fixes > 0) save(db);
 
-  // ── 5. FINANZIELLE PLAUSIBILITÄTSPRÜFUNGEN ────────────────
+  // 5. ab.bezahlt=true aber t.status nicht bezahlt → auto-fix
+  (db.termine||[]).forEach(function(t){
+    if(t.status==='bezahlt') return;
+    if(t.abId){
+      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(ab&&ab.bezahlt&&ab.zahlungDatum){
+        t.status='bezahlt';
+        if(!t.zahlungDatum) t.zahlungDatum=ab.zahlungDatum;
+        fixes++;
+        warnings.push('✓ Auto-Fix: '+esc(t.titel||t.datum||'?')+' → bezahlt (Abrechnung war schon bezahlt)');
+      }
+    }
+    if(t.dokIds){
+      t.dokIds.forEach(function(did){
+        if(t.status==='bezahlt'&&t.zahlungDatum) return;
+        var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
+        var zahlDat = dok&&dok.zahlungDatum;
+        if(!zahlDat){
+          var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+          if(mz) zahlDat=mz.datum;
+        }
+        if(zahlDat){
+          if(t.status!=='bezahlt'){ t.status='bezahlt'; fixes++; }
+          if(!t.zahlungDatum){ t.zahlungDatum=zahlDat; fixes++; }
+        }
+      });
+    }
+  });
   var urSatz = (db.profil&&db.profil.ust!=null) ? db.profil.ust : 0.07;
   var jahre = [...new Set((db.termine||[]).map(function(t){
     return t.datum?t.datum.slice(0,4):null;
@@ -12010,7 +12066,41 @@ function abHolviAbgleich(eingaenge){
       return {zahlung:z,termin:sessionTermine[0]||null,termineAlle:sessionTermine,sessionsOhneTermin:[],gesamtSessions:sessionTermine.length,monatsAbrechn:monatsMatch,betragsAbweichung:0,terminKandidaten:[]};
     }
 
-    // 2. Sammel-Match mehrere Einzel-Abrechnungen
+    // 2. Sammel-Match — mehrere Gutschrift-Nummern im Verwendungszweck
+    // z.B. "GAGE 2449/20260201 GAGE 2449/20260202 GAGE 2449/20260203"
+    var alleGutschriftNrn = (z.nachricht||'').match(/\d{3,6}\/\d{6,8}/g) || [];
+    if(alleGutschriftNrn.length > 1){
+      // Mehrere Gutschrift-Nrn → alle passenden Termine finden
+      var gutschriftTermine = [];
+      var gutschriftAbs = [];
+      alleGutschriftNrn.forEach(function(gn){
+        var t=(db.termine||[]).find(function(t){
+          return t.gutschrift_nr&&t.gutschrift_nr.replace(/\s/g,'')===gn.replace(/\s/g,'')&&t.status!=='bezahlt';
+        });
+        if(t){ gutschriftTermine.push(t); return; }
+        // Auch in db.abrechnungen suchen
+        var ab=(db.abrechnungen||[]).find(function(a){
+          return a.gutschrift_nr&&a.gutschrift_nr.replace(/\s/g,'')===gn.replace(/\s/g,'')&&!a.bezahlt;
+        });
+        if(ab&&ab.terminId){
+          var t2=(db.termine||[]).find(function(x){return x.id===ab.terminId;});
+          if(t2&&t2.status!=='bezahlt'){ gutschriftTermine.push(t2); gutschriftAbs.push(ab); }
+        }
+      });
+      if(gutschriftTermine.length>1){
+        var sumGut=gutschriftTermine.reduce(function(s,t){
+          var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+          return s+(parseFloat((ab&&ab.auszahlung)||0)||0);
+        },0);
+        var pseudoGut={id:'gutmulti_'+Date.now(),typ:'monats_abrechn',studio:gutschriftTermine[0].studio,auszahlung:sumGut,
+          beschr:'Sammelzahlung · '+alleGutschriftNrn.length+' Gutschriften',
+          sessions:gutschriftTermine.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};}),
+          _isMultiMatch:true,_abIds:gutschriftAbs.map(function(a){return a.id;})};
+        return {zahlung:z,termin:gutschriftTermine[0],termineAlle:gutschriftTermine,sessionsOhneTermin:[],gesamtSessions:gutschriftTermine.length,monatsAbrechn:pseudoGut,betragsAbweichung:Math.abs(sumGut-z.betrag),terminKandidaten:[]};
+      }
+    }
+
+    // 2b. Sammel-Match via Studio + Betragssumme
     var studioAbs=(db.dokumente||[]).filter(function(d){
       if(d.typ!=='abrechn'||!d.bestaetigt) return false;
       var dStudio=studioNorm(d.studio||'');
@@ -12029,7 +12119,28 @@ function abHolviAbgleich(eingaenge){
       }
     }
 
-    // 3. Einzel-Termin
+    // 3. Einzel-Termin — Gutschrift-Nr. hat höchste Priorität
+    // Verwendungszweck auf Gutschrift-Nr. prüfen
+    var verwendung = (z.nachricht||'').toLowerCase();
+    var gutschriftMatch = null;
+
+    // Gutschrift-Nr. aus Verwendungszweck extrahieren (z.B. "2559/202603" oder "GAGE 2449/20260201")
+    var gutNrMatch = (z.nachricht||'').match(/\d{3,6}\/\d{6,8}/g);
+    if(gutNrMatch){
+      gutNrMatch.forEach(function(gn){
+        if(gutschriftMatch) return;
+        // Termin mit dieser Gutschrift-Nr. suchen
+        var t=(db.termine||[]).find(function(t){
+          return t.gutschrift_nr && t.gutschrift_nr.replace(/\s/g,'')===gn.replace(/\s/g,'') && t.status!=='bezahlt';
+        });
+        if(t) gutschriftMatch=t;
+      });
+    }
+    if(gutschriftMatch){
+      return {zahlung:z,termin:gutschriftMatch,termineAlle:null,monatsAbrechn:null,terminKandidaten:[gutschriftMatch],_gutschriftMatch:true};
+    }
+
+    // Betrag + Studio Match — max 3 Vorschläge
     var kandidaten=(db.termine||[]).filter(function(t){
       if(t.status==='bezahlt') return false;
       var tStudio=studioNorm(t.studio||'');
@@ -12039,11 +12150,17 @@ function abHolviAbgleich(eingaenge){
     var betrag=z.betrag;
     function score(t){
       var s=0;
-      if(t.abId){var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});if(ab&&Math.abs((parseFloat(ab.auszahlung)||0)-betrag)<1.0)s+=5;}
-      if(t.status!=='bezahlt')s+=2;
+      if(t.abId){
+        var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+        if(ab&&Math.abs((parseFloat(ab.auszahlung)||0)-betrag)<1.0) s+=10; // Betrag passt exakt
+        else if(ab&&Math.abs((parseFloat(ab.auszahlung)||0)-betrag)<betrag*0.05) s+=5;
+      }
+      if(t.status!=='bezahlt') s+=2;
       return s;
     }
     kandidaten.sort(function(a,b){return score(b)-score(a);});
+    // Nur Top-3 anbieten
+    kandidaten=kandidaten.slice(0,3);
     return {zahlung:z,termin:kandidaten[0]||null,termineAlle:null,monatsAbrechn:null,terminKandidaten:kandidaten};
   });
 
