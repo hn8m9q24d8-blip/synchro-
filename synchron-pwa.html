@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '298';
+  if(el) el.textContent = '302';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2166,6 +2166,7 @@ function openDetail(id){
 
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
     +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
+    +(!hasDispo && hasAbrechn ? '<div style="font-size:10px;color:#9ca3af;align-self:center">📋 Dispo fehlt — kein Vergleich möglich</div>' : '')
     +ampelDot('Abrechnung',hasAbrechn,'#f5c518',abDateinamen)
     +ampelDot('Zahlung',hasZahlung,'#22c55e',zahlungDatumLabel)
     +'</div>';
@@ -2310,8 +2311,10 @@ function openDetail(id){
     var _billT = _tTakes>0&&_tTakes<10?10:_tTakes;
     var _erw = _erwartetKomm>0&&(_abRate||_tRate)>0 ? Math.round((_erwartetKomm+_billT*(_abRate||_tRate))*100)/100 : 0;
     var _kommOk = _gg1to10 || (_erw>0 && Math.abs(_abGG-_erw)<1.5);
-    var takesDiff = ab.takes && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
-    var gageDiff = ab.grundgage && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
+    var hasDispo2 = !!(t.dispoImg || dispoDoks.length || t.dokIds);
+    // Differenz nur anzeigen wenn Dispo vorhanden — sonst kein Vergleichswert
+    var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
+    var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     var matchCol=netBruttoOk?'#15803d':'#c2410c';
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
       +'<div class="info-card-header"><span>💶 Abrechnung</span>'
@@ -6977,7 +6980,17 @@ function dokAnalyseDoc(d, key, cb){
     +'  MEHRERE TERMINE PRO FOLGE: Takes werden später pro Folge addiert (nicht ersetzen).\n'
     +'  Falls nicht vorhanden: null\n'
     +'\n'
-    +'  Staffel/Folge im KOPF der Dispo (nicht Tabelle):\n'
+    +'  LAYOUT F: FFS-Format — EPS-Spalte enthält nur Folgennummer, Staffel steht im Kopf\n'
+    +'    Kopf der Dispo: "Chicago Medical S11 Staffel 11" → gvl_staffel_header="11"\n'
+    +'    Tims Zeile: Rolle=HALSTEAD, EPS=17, Takes=53\n'
+    +'    Folgencode = Staffel(11) × 100 + Folge(17) = 1117\n'
+    +'    → gvl_takes_detail=[{"folge":1117,"takes":53}]\n'
+    +'    Wenn EPS-Spalte mehrere Nummern enthält z.B. "17, 1112":\n'
+    +'      17 = Folge 17 der aktuellen Staffel → Folgencode = 1117\n'
+    +'      1112 = bereits kodiert = Staffel 11 Folge 12 → direkt als 1112\n'
+    +'    Takes gleichmäßig aufteilen wenn mehrere Folgen!\n'
+    +'    ⚠ Wenn EPS-Spalte einen vierstelligen Code enthält wie "1112" → direkt als Folgencode verwenden!\n'
+    +'    ⚠ Wenn EPS-Spalte eine zweistellige Zahl enthält wie "17" + Staffel aus Kopf "11" → 1117\n'
     +'  "S3E5" → gvl_staffel_header="3", gvl_episode_header="5"\n'
     +'  Falls nicht im Kopf: null\n'
     +'\n'
@@ -7102,7 +7115,7 @@ function dokAnalyseDoc(d, key, cb){
   var mime = d.mime||'image/jpeg';
   if(!d.dataURL){ if(cb) cb(); return; }
 
-  // Passwortgeschütztes PDF: mit PDF.js entschlüsseln → als Bild-Screenshot an KI
+  // Passwortgeschütztes PDF: mit PDF.js entschlüsseln → alle Seiten als Bild an KI
   function _renderPdfPageAsImage(dataURL, password, onDone, onPwNeeded){
     if(typeof pdfjsLib==='undefined'){ onDone(dataURL); return; }
     var b64 = dataURL.split(',')[1];
@@ -7112,18 +7125,51 @@ function dokAnalyseDoc(d, key, cb){
     var params = {data: arr};
     if(password) params.password = password;
     pdfjsLib.getDocument(params).promise.then(function(pdf){
-      return pdf.getPage(1);
-    }).then(function(page){
-      var vp = page.getViewport({scale:2.0});
-      var cv = document.createElement('canvas');
-      cv.width = vp.width; cv.height = vp.height;
-      var ctx = cv.getContext('2d');
-      return page.render({canvasContext:ctx, viewport:vp}).promise.then(function(){
-        onDone(cv.toDataURL('image/jpeg', 0.92));
+      var numPages = pdf.numPages;
+      // Max 4 Seiten rendern (Anthropic API Limit + Performance)
+      var pagesToRender = Math.min(numPages, 4);
+      var pagePromises = [];
+      for(var p=1; p<=pagesToRender; p++){
+        pagePromises.push(pdf.getPage(p));
+      }
+      return Promise.all(pagePromises).then(function(pages){
+        // Alle Seiten auf Canvas zeichnen und zu einem Bild zusammenfügen
+        var scale = numPages > 1 ? 1.5 : 2.0; // kleinere Skalierung bei mehreren Seiten
+        var pageImages = [];
+        var renders = pages.map(function(page){
+          var vp = page.getViewport({scale: scale});
+          var cv = document.createElement('canvas');
+          cv.width = vp.width; cv.height = vp.height;
+          var ctx = cv.getContext('2d');
+          return page.render({canvasContext:ctx, viewport:vp}).promise.then(function(){
+            pageImages.push({canvas:cv, width:vp.width, height:vp.height});
+          });
+        });
+        return Promise.all(renders).then(function(){
+          if(pageImages.length === 1){
+            onDone(pageImages[0].canvas.toDataURL('image/jpeg', 0.92));
+            return;
+          }
+          // Alle Seiten untereinander auf einem großen Canvas
+          var totalHeight = pageImages.reduce(function(s,p){return s+p.height+4;},0);
+          var maxWidth = Math.max.apply(null, pageImages.map(function(p){return p.width;}));
+          var combined = document.createElement('canvas');
+          combined.width = maxWidth;
+          combined.height = totalHeight;
+          var ctx2 = combined.getContext('2d');
+          ctx2.fillStyle = '#fff';
+          ctx2.fillRect(0,0,maxWidth,totalHeight);
+          var y = 0;
+          pageImages.forEach(function(p){
+            ctx2.drawImage(p.canvas, 0, y);
+            y += p.height + 4;
+          });
+          onDone(combined.toDataURL('image/jpeg', 0.88));
+        });
       });
     }).catch(function(e){
       if(e && e.name==='PasswordException') onPwNeeded();
-      else onDone(dataURL); // Fallback: Original senden
+      else onDone(dataURL);
     });
   }
 
@@ -7287,30 +7333,27 @@ function dokAnalyseDoc(d, key, cb){
 
   // PDF: zuerst bekanntes Passwort versuchen — Studio aus Dateinamen als Fallback
   if(mime==='application/pdf'){
-    // d.studio ist bei Erstanalyse noch leer → Dateinamen als Fallback nutzen
     var pwStudio = d.studio || d.dateiname || '';
     var autoPw = _findPdfPassword(pwStudio);
     if(autoPw){
-      // Bekanntes Passwort → als Bild-Screenshot an KI
+      // Passwortgeschütztes PDF → als Bild-Screenshot (entschlüsselt) an KI
       _renderPdfPageAsImage(d.dataURL, autoPw, function(imgDataURL){
         var origMime = mime;
         mime = 'image/jpeg';
         _sendToAPI(imgDataURL);
         mime = origMime;
       }, function(){
-        // Passwort falsch → User fragen
         _askPdfPassword(d, key, cb);
       });
     } else {
-      // Kein Passwort gespeichert → erst ungeschützt versuchen, bei Fehler fragen
+      // Ungeschütztes PDF → direkt als PDF-Dokument an KI schicken
+      // Kein Canvas-Rendering, keine Seitenbegrenzung — KI liest alle Seiten
       _renderPdfPageAsImage(d.dataURL, null, function(imgDataURL){
-        // Kein Passwort nötig — als Bild senden
-        var origMime = mime;
-        mime = 'image/jpeg';
-        _sendToAPI(imgDataURL);
-        mime = origMime;
+        // Erfolgreich gerendert = kein Passwort nötig
+        // Statt Bild: Original-PDF als document-Block schicken
+        _sendToAPI(d.dataURL); // mime ist noch 'application/pdf' → document-Block
       }, function(){
-        // PDF ist passwortgeschützt, kein Passwort bekannt → User fragen
+        // PDF ist passwortgeschützt
         _askPdfPassword(d, key, cb);
       });
     }
