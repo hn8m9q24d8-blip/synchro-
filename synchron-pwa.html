@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '311';
+  if(el) el.textContent = '315';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2137,7 +2137,25 @@ function openDetail(id){
   }
   // Letzter Fallback: GVL-Daten am Termin = Dispo war mal da
   if(!dispoDateinamen.length && (t.gvl_staffel||t.gvl_folge||t.gvl_takes_detail)){
-    dispoDateinamen=['Dispo (bestätigt · Foto gelöscht)'];
+    // Echten Dateinamen aus archivierten Dispos suchen (dataURL=null aber dateiname noch da)
+    var archivedDispo = (db.dokumente||[]).find(function(x){
+      return x.typ==='dispo' && !x.dataURL && (
+        x.terminId===id ||
+        (x.datum===t.datum && x.studio && t.studio &&
+         x.studio.toLowerCase().indexOf((t.studio||'').toLowerCase().slice(0,4))>=0)
+      );
+    });
+    var dispName = archivedDispo
+      ? (archivedDispo.dateiname||archivedDispo.beschr||null)
+      : null;
+    // Auch im Archiv-Log suchen
+    if(!dispName && db._archivLog){
+      var archEntry = db._archivLog.find(function(e){
+        return e.terminId===id && /dispo/i.test(e.dateiname||'');
+      });
+      if(archEntry) dispName = archEntry.dateiname;
+    }
+    dispoDateinamen=[dispName || ('Dispo (bestätigt · Foto gelöscht)')];
   }
   var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){
     return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
@@ -7114,10 +7132,19 @@ function dokAnalyseDoc(d, key, cb){
     +'  mwst = MwSt-Betrag in Euro\n'
     +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
     +'  auszahlung = Auszahlungsbetrag\n'
-    +'  sessions = Array aller Einzeltermine aus der Tabelle:\n'
-    +'    ⚠⚠ KRITISCH: Pro Termin(tag+film) EINE session — auch wenn die Tabelle mehrere Zeilen für denselben Tag+Film hat!\n'
-    +'    EINFACHE REGEL: Gleicher Filmtitel + gleiches Studio = IMMER derselbe Termin. Egal ob Datum leicht abweicht oder andere Zeilentypen!\n'
-    +'    ZUSAMMENFASSEN wenn: gleicher Filmcode (z.B. T7182) ODER gleicher Filmtitel → eine session, Takes+Brutto addieren\n'
+    +'  sessions = Array aller Einzeltermine:\n'
+    +'    ⚠⚠⚠ REGEL JE NACH PDF-TYP:\n'
+    +'\n'
+    +'    FALL A — PDF hat MEHRERE SEITEN (erkennbar an mehreren "GAGE / Gutschrift" Überschriften oder mehreren "AUSZAHLUNG" Blöcken):\n'
+    +'    → JEDE SEITE = GENAU EINE session. 2 Seiten = 2 sessions. 7 Seiten = 7 sessions.\n'
+    +'    → NIEMALS zwei Seiten zusammenfassen, egal ob gleicher Filmtitel oder gleiche Rolle!\n'
+    +'    → Jede Seite hat ihr eigenes Datum, eigene Takes, eigenen Bruttobetrag.\n'
+    +'    → Innerhalb EINER Seite: Grundgage-Zeile + Takegage-Zeile → zusammenfassen (das ist eine session).\n'
+    +'\n'
+    +'    FALL B — PDF hat EINE SEITE mit einer Tabelle mit mehreren Terminen (z.B. Arena Monats-Gutschrift):\n'
+    +'    → Nach DATUM aufteilen: jedes Datum = eigene session.\n'
+    +'    → Gleicher Filmtitel + gleiches Datum → zusammenfassen (Grundgage + Takes = eine session).\n'
+    +'    → Verschiedene Daten auch bei gleichem Filmtitel → separate sessions!\n'
     +'    ⚠ "Grundgage 1-10" oder "Grundgage TV" gehört IMMER zur Takes-Zeile desselben Films — NIEMALS als eigene Session!\n'
     +'    ⚠ Datum der Grundgage-Zeile IGNORIEREN — Datum der Takes-Zeile übernehmen!\n'
     +'    ⚠ Wenn du unsicher bist welches Datum richtig ist: nimm das FRÜHESTE Datum der zusammengehörigen Zeilen!\n'
