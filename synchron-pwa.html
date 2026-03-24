@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '308';
+  if(el) el.textContent = '309';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2123,6 +2123,22 @@ function openDetail(id){
     var pendDispo=(db.dokumente||[]).find(function(x){return x.terminId===id&&(x.typ==='dispo'||(!x.typ&&/dispo/i.test(x.dateiname||'')));});
     if(pendDispo) dispoDateinamen=[pendDispo.dateiname||pendDispo.beschr||'Dispo (ausstehend)'];
   }
+  // Fallback: Dispo bestätigt aber terminId nicht gesetzt — über Datum+Studio suchen
+  if(!dispoDateinamen.length){
+    var linkedDispo=(db.dokumente||[]).find(function(x){
+      return x.typ==='dispo' && x.bestaetigt && x.datum===t.datum && x.studio && t.studio &&
+        x.studio.toLowerCase().indexOf(t.studio.toLowerCase().slice(0,4))>=0;
+    });
+    if(linkedDispo){
+      // terminId nachträglich setzen
+      if(!linkedDispo.terminId){ linkedDispo.terminId=id; save(db); }
+      dispoDateinamen=[linkedDispo.dateiname||linkedDispo.beschr||'Dispo '+fd(linkedDispo.datum)];
+    }
+  }
+  // Letzter Fallback: GVL-Daten am Termin = Dispo war mal da
+  if(!dispoDateinamen.length && (t.gvl_staffel||t.gvl_folge||t.gvl_takes_detail)){
+    dispoDateinamen=['Dispo (bestätigt · Foto gelöscht)'];
+  }
   var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){
     return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
   }).filter(Boolean);
@@ -2140,7 +2156,11 @@ function openDetail(id){
   }
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
-  var hasDispo=!!(t.dispoImg||dispoDoks.length);
+  var hasDispo=!!(t.dispoImg||dispoDoks.length
+    // Auch: GVL-Daten am Termin = Dispo wurde mal zugeordnet (auch wenn Foto weg)
+    || t.gvl_staffel || t.gvl_folge || t.gvl_takes_detail
+    // Pendente Dispo aus Dateinamen-Fallback
+    || dispoDateinamen.length);
   var hasAbrechn=!!(t.abId||abDoks.length);
   var hasZahlung=!!(zahlung||t.status==='bezahlt');
 
