@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '315';
+  if(el) el.textContent = '316';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7424,13 +7424,27 @@ function dokAnalyseDoc(d, key, cb){
       });
     } else {
       // Ungeschütztes PDF → direkt als PDF-Dokument an KI schicken
-      // Kein Canvas-Rendering, keine Seitenbegrenzung — KI liest alle Seiten
+      // Zuerst Seitenanzahl ermitteln, dann mit Seitenzahl im Prompt senden
       _renderPdfPageAsImage(d.dataURL, null, function(imgDataURL){
-        // Erfolgreich gerendert = kein Passwort nötig
-        // Statt Bild: Original-PDF als document-Block schicken
-        _sendToAPI(d.dataURL); // mime ist noch 'application/pdf' → document-Block
+        // Seitenanzahl aus PDF.js lesen
+        var b64x=d.dataURL.split(',')[1];
+        var binx=atob(b64x);
+        var arrx=new Uint8Array(binx.length);
+        for(var ix=0;ix<binx.length;ix++) arrx[ix]=binx.charCodeAt(ix);
+        pdfjsLib.getDocument({data:arrx}).promise.then(function(pdfDoc){
+          var nPages = pdfDoc.numPages;
+          if(nPages > 1){
+            // Seitenzahl in Prompt injizieren
+            prompt = prompt.replace(
+              'FALL A — PDF hat MEHRERE SEITEN',
+              'DIESES PDF HAT '+nPages+' SEITEN → sessions MUSS GENAU '+nPages+' EINTRÄGE HABEN!\n    FALL A — PDF hat MEHRERE SEITEN'
+            );
+          }
+          _sendToAPI(d.dataURL);
+        }).catch(function(){
+          _sendToAPI(d.dataURL);
+        });
       }, function(){
-        // PDF ist passwortgeschützt
         _askPdfPassword(d, key, cb);
       });
     }
