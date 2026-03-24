@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '310';
+  if(el) el.textContent = '311';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7232,7 +7232,7 @@ function dokAnalyseDoc(d, key, cb){
     
     var bodyStr;
     try {
-      bodyStr = JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,
+      bodyStr = JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,
         messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
     } catch(e) {
       showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
@@ -8495,11 +8495,17 @@ function _previewTouchMove(e){
     var curMy=(e.touches[0].clientY+e.touches[1].clientY)/2;
     var dx=curMx-p.startMx;
     var dy=curMy-p.startMy;
+
+    // Zoom-Mittelpunkt relativ zum Element berechnen — verhindert Springen
+    var rect=p.img.parentNode.getBoundingClientRect();
+    var originX=p.startMx-rect.left;
+    var originY=p.startMy-rect.top;
+
     p.img._pScale=newScale;
     p.img._pTx=p.startTx+dx;
     p.img._pTy=p.startTy+dy;
+    p.img.style.transformOrigin=originX+'px '+originY+'px';
     p.img.style.transform='translate('+p.img._pTx+'px,'+p.img._pTy+'px) scale('+p.img._pScale+')';
-    p.img.style.transformOrigin='center center';
   }
 }
 
