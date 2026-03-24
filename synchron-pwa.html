@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '316';
+  if(el) el.textContent = '318';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3158,6 +3158,35 @@ function dokSessionPeek(elOrId, sessionIdx){
   var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
   if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden'); return; }
   var s = d.sessions[si];
+
+  // Gespeicherte terminId validieren — Datum muss passen, Titel darf nicht komplett falsch sein
+  if(s.terminId){
+    var tCheck = (db.termine||[]).find(function(x){ return x.id===s.terminId; });
+    if(!tCheck){
+      s.terminId = null; // Termin gelöscht
+    } else {
+      // Datum muss übereinstimmen
+      var datumOk = s.datum && tCheck.datum && tCheck.datum===s.datum;
+      // Titel-Check: wenn beide Titel bekannt und komplett verschieden → zurücksetzen
+      var titelOk = true;
+      if(s.titel && tCheck.titel){
+        var simil = _studioScore(s.titel, tCheck.titel);
+        if(simil < 0.2) titelOk = false;
+      }
+      if(!datumOk || !titelOk){
+        // Falsche Zuordnung — neu suchen
+        s.terminId = null;
+        var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'');
+        if(neuMatch) s.terminId = neuMatch.id;
+        save(db);
+      }
+    }
+  } else if(s.datum){
+    // Noch keine Zuordnung — jetzt suchen
+    var neuMatch2 = dokFindTermin(s.datum, d.studio||'', s.titel||'');
+    if(neuMatch2){ s.terminId = neuMatch2.id; save(db); }
+  }
+
   var t = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
 
   if(!t){
@@ -7702,7 +7731,10 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit){
     // Titel/Produktion-Überlapp
     if(titel && t.titel){
       var ov=_studioScore(titel,t.titel);
-      sc+=Math.round(ov*10);
+      if(ov > 0.3) sc+=Math.round(ov*10);
+      else sc-=12; // Titel klar verschieden → stark bestrafen
+    } else if(titel && !t.titel){
+      // Termin hat keinen Titel — kein Bonus, kein Abzug
     }
     // Uhrzeit im Von-Bis-Fenster
     if(uhrzeit && _uhrzeitTrifft(t.uhrzeit,uhrzeit,bis_uhrzeit)) sc+=6;
