@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '309';
+  if(el) el.textContent = '310';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7083,17 +7083,27 @@ function dokAnalyseDoc(d, key, cb){
     +'  2. Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten\n'
     +'  3. PDF enthält MEHRERE SEPARATE GUTSCHRIFTEN hintereinander\n'
     +'     Erkennbar an: "GAGE / Gutschrift März 2026,1" gefolgt von "GAGE / Gutschrift März 2026,2" etc.\n'
-    +'     ODER: "Gutschrifts-Nr.: 3298/20260301" auf Seite 1 und "Gutschrifts-Nr.: 3298/20260302" auf Seite 2\n'
-    +'     ⚠⚠ AUCH WENN VERSCHIEDENE DATEN: z.B. Seite 1 = 26.02.2026, Seite 2 = 10.03.2026 → TROTZDEM monats_abrechn!\n'
-    +'     ⚠⚠ NIEMALS bei mehreren Gutscheinen als "abrechn" klassifizieren!\n'
-    +'     → brutto = Summe ALLER Brutto-Gagen (z.B. 290,80 + 383,20 = 674,00)\n'
-    +'     → auszahlung = Summe ALLER Auszahlungen\n'
-    +'     → kv_abzug/rv_abzug/pv_abzug = Summe aller SV-Abzüge\n'
-    +'     → mwst = Summe aller MwSt-Beträge\n'
-    +'     → gutschrift_nr = ERSTE Gutschrift-Nr.\n'
-    +'     → sessions = eine session PRO Gutschein:\n'
-    +'       Gutschein 1: {"datum":"2026-02-26","titel":"Silo","rolle":"Knox","takes":49,"take_gage":4.20,"grundgage":85.0,"brutto_termin":290.80,"kuerzel":"..."}\n'
-    +'       Gutschein 2: {"datum":"2026-03-10","titel":"Silo","rolle":"Knox","takes":71,"take_gage":4.20,"grundgage":85.0,"brutto_termin":383.20,"kuerzel":"..."}\n'
+    +'     ODER: Verschiedene "Gutschrifts-Nr.:" Nummern im Dokument (z.B. 3298/20260301 und 3298/20260302)\n'
+    +'     ODER: Mehrere separate "BRUTTO GAGE" Blöcke mit je eigenem Datum und Auszahlungsbetrag\n'
+    +'\n'
+    +'  ⚠⚠⚠ KRITISCHSTE REGEL — NIEMALS VERLETZEN:\n'
+    +'  Wenn das PDF ZWEI GETRENNTE GUTSCHRIFT-DOKUMENTE enthält (erkennbar an zwei "GAGE / Gutschrift" Überschriften\n'
+    +'  oder zwei "AUSZAHLUNG" Zeilen oder zwei "Gutschrifts-Nr."), DANN:\n'
+    +'  → typ = "monats_abrechn"\n'
+    +'  → sessions MUSS GENAU SO VIELE EINTRÄGE haben wie es Gutschriften gibt — NIEMALS zusammenfassen!\n'
+    +'  → Jede Gutschrift = EINE session mit IHREM Datum, IHREN Takes, IHREM brutto_termin\n'
+    +'  → NIEMALS Takes addieren (49+71=120 ist FALSCH — korrekt: session1.takes=49, session2.takes=71)\n'
+    +'  → NIEMALS Beträge addieren in einer session (290,80+383,20=674 als eine session ist FALSCH)\n'
+    +'\n'
+    +'  Beispiel für dieses PDF (FFS, 2 Gutschriften):\n'
+    +'  sessions: [\n'
+    +'    {"datum":"2026-02-26","titel":"Silo","rolle":"Knox","takes":49,"take_gage":4.20,"grundgage":85.0,"brutto_termin":290.80},\n'
+    +'    {"datum":"2026-03-10","titel":"Silo","rolle":"Knox","takes":71,"take_gage":4.20,"grundgage":85.0,"brutto_termin":383.20}\n'
+    +'  ]\n'
+    +'  brutto = 674.00 (Summe beider), auszahlung = Summe beider Auszahlungen\n'
+    +'  gutschrift_nr = "3298/20260301" (erste)\n'
+    +'\n'
+    +'  AUCH WENN VERSCHIEDENE DATEN (26.02. und 10.03.) → TROTZDEM monats_abrechn mit 2 sessions!\n'
     +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum und nur EINE Gutschrift\n'
     +'  studio = der KURZNAME des Synchronstudios (z.B. "FFS", "VSI", "Arena", "TNT", "Interopa") — NICHT der Atelierraum\n'
     +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
