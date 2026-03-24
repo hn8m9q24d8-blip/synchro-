@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '302';
+  if(el) el.textContent = '305';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2609,8 +2609,28 @@ function saveMergeChanges(){
     var dp=document.getElementById('detail-panel');
     if(dp) dp.classList.remove('open');
     ctid=null;
+
+    // Prüfen ob noch offene Sessions in diesem Dok
+    var dok=(db.dokumente||[]).find(function(x){return x.id===returnId;});
+    if(dok && dok.sessions){
+      dok.sessions.forEach(function(s){
+        if(s.terminId===ctid) s._done=true;
+      });
+      save(db);
+    }
+    var offeneSessions = dok && dok.sessions
+      ? dok.sessions.filter(function(s){return !s._done;}).length
+      : 0;
+
     switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+    if(offeneSessions > 0){
+      // Noch offene Sessions → Dok wieder öffnen damit nächste Session bearbeitet werden kann
+      setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+    } else {
+      // Alle Sessions erledigt → direkt in Dokumentübersicht bleiben
+      rDokumente();
+      showToast('✓ Alle Sessions bestätigt');
+    }
   } else {
     openDetail(ctid);
   }
@@ -7050,11 +7070,20 @@ function dokAnalyseDoc(d, key, cb){
     +'Bei "monats_abrechn" — NUR wenn EINES dieser Kriterien zutrifft:\n'
     +'  1. Titel enthält "Monats-Gutschrift"\n'
     +'  2. Tabelle hat Datum-Spalte mit MINDESTENS 2 VERSCHIEDENEN Aufnahmedaten\n'
-    +'  3. PDF enthält MEHRERE SEPARATE GUTSCHRIFTEN hintereinander (z.B. "GAGE / Gutschrift März 2026,1", "GAGE / Gutschrift März 2026,2" etc.)\n'
-    +'     → Alle Gutschriften zusammenfassen: brutto = Summe aller Brutto-Gagen, auszahlung = Summe aller Auszahlungen\n'
-    +'     → Jede Gutschrift = eine session mit ihrem Datum, Titel und Betrag\n'
-    +'     → gutschrift_nr = erste Gutschrift-Nr. (z.B. "101/20260301")\n'
-    +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum, oder "Bisherige Jahressummen" am Ende\n'
+    +'  3. PDF enthält MEHRERE SEPARATE GUTSCHRIFTEN hintereinander\n'
+    +'     Erkennbar an: "GAGE / Gutschrift März 2026,1" gefolgt von "GAGE / Gutschrift März 2026,2" etc.\n'
+    +'     ODER: "Gutschrifts-Nr.: 3298/20260301" auf Seite 1 und "Gutschrifts-Nr.: 3298/20260302" auf Seite 2\n'
+    +'     ⚠⚠ AUCH WENN VERSCHIEDENE DATEN: z.B. Seite 1 = 26.02.2026, Seite 2 = 10.03.2026 → TROTZDEM monats_abrechn!\n'
+    +'     ⚠⚠ NIEMALS bei mehreren Gutscheinen als "abrechn" klassifizieren!\n'
+    +'     → brutto = Summe ALLER Brutto-Gagen (z.B. 290,80 + 383,20 = 674,00)\n'
+    +'     → auszahlung = Summe ALLER Auszahlungen\n'
+    +'     → kv_abzug/rv_abzug/pv_abzug = Summe aller SV-Abzüge\n'
+    +'     → mwst = Summe aller MwSt-Beträge\n'
+    +'     → gutschrift_nr = ERSTE Gutschrift-Nr.\n'
+    +'     → sessions = eine session PRO Gutschein:\n'
+    +'       Gutschein 1: {"datum":"2026-02-26","titel":"Silo","rolle":"Knox","takes":49,"take_gage":4.20,"grundgage":85.0,"brutto_termin":290.80,"kuerzel":"..."}\n'
+    +'       Gutschein 2: {"datum":"2026-03-10","titel":"Silo","rolle":"Knox","takes":71,"take_gage":4.20,"grundgage":85.0,"brutto_termin":383.20,"kuerzel":"..."}\n'
+    +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum und nur EINE Gutschrift\n'
     +'  studio = der KURZNAME des Synchronstudios (z.B. "FFS", "VSI", "Arena", "TNT", "Interopa") — NICHT der Atelierraum\n'
     +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
     +'  brutto = BRUTTO GAGE gesamt (z.B. 4687.60)\n'
@@ -8312,13 +8341,42 @@ function renderPDFCanvas(canvasId, dataURL, password){
   }
   if(password) params.password = password;
   pdfjsLib.getDocument(params).promise.then(function(pdf){
-    return pdf.getPage(1);
-  }).then(function(page){
-    var viewport=page.getViewport({scale:1.5});
-    var ctx=canvas.getContext("2d");
-    canvas.width=viewport.width;
-    canvas.height=viewport.height;
-    page.render({canvasContext:ctx, viewport:viewport});
+    var numPages = pdf.numPages;
+    var pageNums = [];
+    for(var p=1; p<=numPages; p++) pageNums.push(p);
+    return Promise.all(pageNums.map(function(p){ return pdf.getPage(p); }));
+  }).then(function(pages){
+    var scale = pages.length > 1 ? 1.2 : 1.5;
+    var rendered = [];
+    return pages.reduce(function(chain, page){
+      return chain.then(function(){
+        var vp = page.getViewport({scale:scale});
+        var cv = document.createElement('canvas');
+        cv.width=vp.width; cv.height=vp.height;
+        return page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise.then(function(){
+          rendered.push({canvas:cv, width:vp.width, height:vp.height});
+        });
+      });
+    }, Promise.resolve()).then(function(){
+      if(rendered.length===1){
+        canvas.width=rendered[0].width;
+        canvas.height=rendered[0].height;
+        canvas.getContext('2d').drawImage(rendered[0].canvas,0,0);
+      } else {
+        var gap=6;
+        var totalH=rendered.reduce(function(s,r){return s+r.height+gap;},0)-gap;
+        var maxW=Math.max.apply(null,rendered.map(function(r){return r.width;}));
+        canvas.width=maxW; canvas.height=totalH;
+        var ctx=canvas.getContext('2d');
+        ctx.fillStyle='#e5e7eb'; ctx.fillRect(0,0,maxW,totalH);
+        var y=0;
+        rendered.forEach(function(r,i){
+          ctx.fillStyle='#fff'; ctx.fillRect(0,y,maxW,r.height);
+          ctx.drawImage(r.canvas,0,y);
+          y+=r.height+gap;
+        });
+      }
+    });
   }).catch(function(e){
     if(e && e.name==='PasswordException'){
       // Passwortgeschützt — Eingabefeld anzeigen
