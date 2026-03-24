@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '305';
+  if(el) el.textContent = '308';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2166,7 +2166,6 @@ function openDetail(id){
 
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
     +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
-    +(!hasDispo && hasAbrechn ? '<div style="font-size:10px;color:#9ca3af;align-self:center">📋 Dispo fehlt — kein Vergleich möglich</div>' : '')
     +ampelDot('Abrechnung',hasAbrechn,'#f5c518',abDateinamen)
     +ampelDot('Zahlung',hasZahlung,'#22c55e',zahlungDatumLabel)
     +'</div>';
@@ -2315,36 +2314,28 @@ function openDetail(id){
     // Differenz nur anzeigen wenn Dispo vorhanden — sonst kein Vergleichswert
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
-    var matchCol=netBruttoOk?'#15803d':'#c2410c';
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
       +'<div class="info-card-header"><span>💶 Abrechnung</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
       +'<div style="padding:0 16px 14px">'
+      +(!hasDispo2?'<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;padding:6px 8px;background:#f9fafb;border-radius:6px">📋 Dispo fehlt — kein Vergleich möglich</div>':'')
       +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
-      // Takes: rot + Vergleich wenn abweichend
       +(ab.takes?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(takesDiff?'color:#c2410c;font-weight:700':'')+'">Takes (abgr.)</div>'+
         '<div class="ir-val" style="'+(takesDiff?'color:#c2410c;font-weight:900':netBruttoOk?'color:#15803d;font-weight:700':'')+'">'+
         ab.takes+(takesDiff?' <span style="font-size:10px;font-weight:700;color:#c2410c">≠ Dispo: '+t.takes+'</span>':'')+'</div></div>':'')
-      // Grundgage: rot + Vergleich wenn abweichend
       +(ab.grundgage?'<div class="info-row"'+(gageDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(gageDiff?'color:#c2410c;font-weight:700':'')+'">Grundgage</div>'+
         '<div class="ir-val" style="'+(gageDiff?'color:#c2410c;font-weight:900':netBruttoOk?'color:#15803d;font-weight:700':'')+'">'+
         fmtEur(ab.grundgage)+(gageDiff?' <span style="font-size:10px;font-weight:700;color:#c2410c">≠ Dispo: '+fmtEur(t.kommgage)+'</span>':'')+'</div></div>':'')
-      // Take-Gage
       +(ab.take_gage?'<div class="info-row"><div class="ir-key" style="color:#888">Take-Gage</div><div class="ir-val" style="color:#888">'+fmtEur(ab.take_gage)+' / Take</div></div>':'')
-      // Brutto (Studio) = Netto (App) — Kernzeile
       +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
         '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto = App-Netto</div>'+
         '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+fmtEur(ab.brutto)+'</div></div>'
-      // SV-Abzüge: KV, RV, PV — nur wenn vorhanden
       +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
         (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
-      // Netto nach SV-Abzug
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
-      // MwSt
       +(ab.mwst?'<div class="info-row"><div class="ir-key" style="color:#888">MwSt ('+Math.round(ur*100)+'%)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.mwst)+'</div></div>':'')
-      // Auszahlung — Endergebnis
       +'<div class="info-row" style="font-weight:800;font-size:15px;border-top:1px solid #eee;padding-top:8px;margin-top:4px"><div class="ir-key">Auszahlung</div><div class="ir-val">'+fmtEur(ab.auszahlung)+'</div></div>'
       +(!netBruttoOk?'<div style="font-size:12px;color:#c2410c;padding-top:6px;font-weight:700;border-top:1px solid #fecaca;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+'</div>':'')
       +'</div></div>';
@@ -9647,10 +9638,11 @@ function rUstVoranmeldung(){
   // Strategie: Monats-Abrechnungen als Ganzes nehmen — nicht pro Termin
   // Damit wird MwSt korrekt aus der echten Abrechnung gezogen
   var einnNetto = 0;
-  var einnUstEcht = 0; // echte MwSt aus Abrechnungen (wenn vorhanden)
+  var einnUstEcht = 0;
   var einnUstBerechnet = 0;
-  var gezaehlteDokIds = {}; // Monats-Abrechnungen nur einmal zählen
+  var gezaehlteDokIds = {};
   var gezaehltTerminIds = {};
+  var einnZeilen = []; // für Anzeige UND Berechnung — ein Loop, eine Quelle
 
   (db.termine||[]).forEach(function(t){
     var zahlDatum = null;
@@ -9660,68 +9652,84 @@ function rUstVoranmeldung(){
       var abRec=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(abRec && abRec.zahlungDatum) zahlDatum=abRec.zahlungDatum;
     }
-    if(!zahlDatum && t.zahlungDatum) zahlDatum = t.zahlungDatum;
+    if(!zahlDatum && t.zahlungDatum) zahlDatum=t.zahlungDatum;
     if(!zahlDatum){
       var z=(db.zahlungen||[]).find(function(z){return z.terminId===t.id;});
       if(z && z.datum) zahlDatum=z.datum;
     }
-    // Monats-Abrechnung: Zahlungsdatum aus Dok
     if(!zahlDatum && t.dokIds){
       t.dokIds.forEach(function(did){
         if(zahlDatum) return;
         var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
-        if(dok && dok.zahlungDatum) zahlDatum=dok.zahlungDatum;
-        if(!zahlDatum && dok && dok.bezahlt){
-          // Zahlung aus db.zahlungen per Monats-Abrechnung
-          var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
-          if(mz && mz.datum) zahlDatum=mz.datum;
-        }
+        if(dok && dok.zahlungDatum){ zahlDatum=dok.zahlungDatum; return; }
+        var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
+        if(mz && mz.datum) zahlDatum=mz.datum;
       });
     }
 
-    if(!zahlDatum) return;
-    if(!zahlDatum.startsWith(ym)) return;
+    if(!zahlDatum || !zahlDatum.startsWith(ym)) return;
 
-    // Monats-Abrechnung: Gesamtbetrag einmal zählen, nicht pro Termin
+    // Monats-Abrechnung: Gesamtbetrag EINMAL zählen
     if(t.dokIds && t.dokIds.length){
       var dokGezaehlt = false;
       t.dokIds.forEach(function(did){
         if(gezaehlteDokIds[did]) return;
-        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&(d.typ==='monats_abrechn')&&d.bestaetigt;});
-        if(dok){
-          gezaehlteDokIds[did] = true;
-          dokGezaehlt = true;
-          var bruttoMonat = parseFloat(dok.brutto)||0;
-          var mwstMonat   = parseFloat(dok.mwst)||0;
-          einnNetto += bruttoMonat;
-          if(mwstMonat>0) einnUstEcht += mwstMonat;
-          else einnUstBerechnet += bruttoMonat * urEinn;
-        }
+        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&d.typ==='monats_abrechn'&&d.bestaetigt;});
+        if(!dok) return;
+        gezaehlteDokIds[did]=true;
+        dokGezaehlt=true;
+        var brutto=parseFloat(dok.brutto)||0;
+        var mwst=parseFloat(dok.mwst)||0;
+        var ust=mwst>0?mwst:Math.round(brutto*urEinn*100)/100;
+        einnNetto+=brutto;
+        if(mwst>0) einnUstEcht+=mwst; else einnUstBerechnet+=ust;
+        einnZeilen.push({
+          label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
+          sub:'Monats-GS',
+          zahlDatum:zahlDatum,
+          netto:brutto, ust:ust
+        });
       });
-      if(dokGezaehlt) return; // Termin über Monats-Abrechnung gezählt
+      if(dokGezaehlt) return;
     }
 
+    // Termin bereits gezählt?
     if(gezaehltTerminIds[t.id]) return;
-    gezaehltTerminIds[t.id] = true;
+    gezaehltTerminIds[t.id]=true;
 
     // Einzel-Abrechnung
     var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
     if(ab && ab.brutto && !ab.aufgeteilt){
-      var bruttoAb = parseFloat(ab.brutto)||0;
-      einnNetto += bruttoAb;
-      if(ab.mwst) einnUstEcht += parseFloat(ab.mwst)||0;
-      else einnUstBerechnet += bruttoAb * urEinn;
-    } else {
-      // Schätzung aus Termin-Feldern
+      var bruttoAb=parseFloat(ab.brutto)||0;
+      var mwstAb=parseFloat(ab.mwst)||0;
+      var ustAb=mwstAb>0?mwstAb:Math.round(bruttoAb*urEinn*100)/100;
+      einnNetto+=bruttoAb;
+      if(mwstAb>0) einnUstEcht+=mwstAb; else einnUstBerechnet+=ustAb;
+      einnZeilen.push({
+        label:esc(t.titel||t.studio||''),
+        sub:(ab.gutschrift_nr||''),
+        zahlDatum:zahlDatum,
+        netto:bruttoAb, ust:ustAb
+      });
+    } else if(!ab || ab.aufgeteilt) {
+      // Schätzung nur wenn keine echte Abrechnung
       var rawT=parseInt(t.takes)||0;
       var billT=rawT>0&&rawT<10?10:rawT;
-      var gesch=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
-      einnNetto += gesch;
-      einnUstBerechnet += gesch * urEinn;
+      var gesch=Math.round(((parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0))*100)/100;
+      if(gesch>0){
+        var ustGesch=Math.round(gesch*urEinn*100)/100;
+        einnNetto+=gesch;
+        einnUstBerechnet+=ustGesch;
+        einnZeilen.push({
+          label:esc(t.titel||t.studio||''),
+          sub:'Schätzung',
+          zahlDatum:zahlDatum,
+          netto:gesch, ust:ustGesch
+        });
+      }
     }
   });
 
-  // Gesamt-USt: echte Beträge + berechnete
   var einnUst = Math.round((einnUstEcht + einnUstBerechnet)*100)/100;
 
   // ── AUSGABEN (Vorsteuer) ──────────────────────────────────
@@ -9754,17 +9762,16 @@ function rUstVoranmeldung(){
     +'</div></div>';
 
   html += '<div style="padding:0 16px;margin-bottom:4px">'
-    +'<div style="font-size:12px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Einnahmen ('+einnTermine.length+' Zahlungseingänge)</div>';
-  if(einnTermine.length){
+    +'<div style="font-size:12px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Einnahmen ('+einnZeilen.length+' Zahlungseingänge)</div>';
+  if(einnZeilen.length){
     html += '<div style="background:#fff;border:1.5px solid #fecaca;border-radius:10px;overflow:hidden">';
-    einnTermine.forEach(function(e, i){
-      var t=e.t;
-      var n = (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-      var u = n * urEinn;
+    einnZeilen.forEach(function(e, i){
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i>0?'border-top:1px solid #fef2f2':'')+'">'
-        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.titel||t.studio||'')+'</div>'
-        +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+'  ·  Leistung '+fd(t.datum)+'  ·  Netto '+fmtEur(n)+'  ·  USt '+Math.round(urEinn*100)+'%</div></div>'
-        +'<div style="font-size:13px;font-weight:800;color:#c2410c;flex-shrink:0;margin-left:8px">+'+fmtEur(u)+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.label+'</div>'
+        +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+(e.sub?' · '+esc(e.sub):'')+'  ·  Netto '+fmtEur(e.netto)+'  ·  USt '+Math.round(urEinn*100)+'%</div>'
+        +'</div>'
+        +'<div style="font-size:13px;font-weight:800;color:#c2410c;flex-shrink:0;margin-left:8px">+'+fmtEur(e.ust)+'</div>'
         +'</div>';
     });
     html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:#fef2f2;border-top:1.5px solid #fecaca">'
