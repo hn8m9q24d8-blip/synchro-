@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '318';
+  if(el) el.textContent = '320';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7221,9 +7221,9 @@ function dokAnalyseDoc(d, key, cb){
   var mime = d.mime||'image/jpeg';
   if(!d.dataURL){ if(cb) cb(); return; }
 
-  // Passwortgeschütztes PDF: mit PDF.js entschlüsseln → alle Seiten als Bild an KI
+  // PDF → alle Seiten als Bild rendern, numPages an Callback übergeben
   function _renderPdfPageAsImage(dataURL, password, onDone, onPwNeeded){
-    if(typeof pdfjsLib==='undefined'){ onDone(dataURL); return; }
+    if(typeof pdfjsLib==='undefined'){ onDone(dataURL, 1); return; }
     var b64 = dataURL.split(',')[1];
     var bin = atob(b64);
     var arr = new Uint8Array(bin.length);
@@ -7232,50 +7232,39 @@ function dokAnalyseDoc(d, key, cb){
     if(password) params.password = password;
     pdfjsLib.getDocument(params).promise.then(function(pdf){
       var numPages = pdf.numPages;
-      // Max 4 Seiten rendern (Anthropic API Limit + Performance)
-      var pagesToRender = Math.min(numPages, 4);
+      var pagesToRender = Math.min(numPages, 6);
       var pagePromises = [];
-      for(var p=1; p<=pagesToRender; p++){
-        pagePromises.push(pdf.getPage(p));
-      }
+      for(var p=1; p<=pagesToRender; p++) pagePromises.push(pdf.getPage(p));
       return Promise.all(pagePromises).then(function(pages){
-        // Alle Seiten auf Canvas zeichnen und zu einem Bild zusammenfügen
-        var scale = numPages > 1 ? 1.5 : 2.0; // kleinere Skalierung bei mehreren Seiten
+        var scale = numPages > 1 ? 1.5 : 2.0;
         var pageImages = [];
         var renders = pages.map(function(page){
           var vp = page.getViewport({scale: scale});
           var cv = document.createElement('canvas');
           cv.width = vp.width; cv.height = vp.height;
-          var ctx = cv.getContext('2d');
-          return page.render({canvasContext:ctx, viewport:vp}).promise.then(function(){
+          return page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise.then(function(){
             pageImages.push({canvas:cv, width:vp.width, height:vp.height});
           });
         });
         return Promise.all(renders).then(function(){
           if(pageImages.length === 1){
-            onDone(pageImages[0].canvas.toDataURL('image/jpeg', 0.92));
+            onDone(pageImages[0].canvas.toDataURL('image/jpeg', 0.92), numPages);
             return;
           }
-          // Alle Seiten untereinander auf einem großen Canvas
           var totalHeight = pageImages.reduce(function(s,p){return s+p.height+4;},0);
           var maxWidth = Math.max.apply(null, pageImages.map(function(p){return p.width;}));
           var combined = document.createElement('canvas');
-          combined.width = maxWidth;
-          combined.height = totalHeight;
+          combined.width = maxWidth; combined.height = totalHeight;
           var ctx2 = combined.getContext('2d');
-          ctx2.fillStyle = '#fff';
-          ctx2.fillRect(0,0,maxWidth,totalHeight);
-          var y = 0;
-          pageImages.forEach(function(p){
-            ctx2.drawImage(p.canvas, 0, y);
-            y += p.height + 4;
-          });
-          onDone(combined.toDataURL('image/jpeg', 0.88));
+          ctx2.fillStyle='#fff'; ctx2.fillRect(0,0,maxWidth,totalHeight);
+          var y=0;
+          pageImages.forEach(function(p){ ctx2.drawImage(p.canvas,0,y); y+=p.height+4; });
+          onDone(combined.toDataURL('image/jpeg', 0.88), numPages);
         });
       });
     }).catch(function(e){
       if(e && e.name==='PasswordException') onPwNeeded();
-      else onDone(dataURL);
+      else onDone(dataURL, 1);
     });
   }
 
@@ -7452,27 +7441,17 @@ function dokAnalyseDoc(d, key, cb){
         _askPdfPassword(d, key, cb);
       });
     } else {
-      // Ungeschütztes PDF → direkt als PDF-Dokument an KI schicken
-      // Zuerst Seitenanzahl ermitteln, dann mit Seitenzahl im Prompt senden
-      _renderPdfPageAsImage(d.dataURL, null, function(imgDataURL){
-        // Seitenanzahl aus PDF.js lesen
-        var b64x=d.dataURL.split(',')[1];
-        var binx=atob(b64x);
-        var arrx=new Uint8Array(binx.length);
-        for(var ix=0;ix<binx.length;ix++) arrx[ix]=binx.charCodeAt(ix);
-        pdfjsLib.getDocument({data:arrx}).promise.then(function(pdfDoc){
-          var nPages = pdfDoc.numPages;
-          if(nPages > 1){
-            // Seitenzahl in Prompt injizieren
-            prompt = prompt.replace(
-              'FALL A — PDF hat MEHRERE SEITEN',
-              'DIESES PDF HAT '+nPages+' SEITEN → sessions MUSS GENAU '+nPages+' EINTRÄGE HABEN!\n    FALL A — PDF hat MEHRERE SEITEN'
-            );
-          }
-          _sendToAPI(d.dataURL);
-        }).catch(function(){
-          _sendToAPI(d.dataURL);
-        });
+      // Ungeschütztes PDF → numPages per _renderPdfPageAsImage ermitteln, dann als PDF an KI
+      _renderPdfPageAsImage(d.dataURL, null, function(imgDataURL, numPages){
+        // numPages direkt aus Callback — kein zweiter Parse nötig
+        if(numPages > 1){
+          prompt = '⚠⚠⚠ DIESES PDF HAT ' + numPages + ' SEITEN.\n'
+            + 'Das bedeutet: ' + numPages + ' SEPARATE ABRECHNUNGSBLÄTTER.\n'
+            + 'sessions MUSS GENAU ' + numPages + ' EINTRÄGE HABEN — eines pro Blatt!\n'
+            + 'NIEMALS Blätter zusammenfassen, auch nicht bei gleichem Filmtitel!\n\n'
+            + prompt;
+        }
+        _sendToAPI(d.dataURL); // Original-PDF als document-Block, alle Seiten für KI
       }, function(){
         _askPdfPassword(d, key, cb);
       });
@@ -7770,21 +7749,24 @@ function dokOpenDetail(id){
   var d = (db.dokumente||[]).find(function(x){return x.id===id;});
   if(!d) return;
 
-  // Monats-Abrechnung: doppelte Sessions (gleicher Tag + gleicher Film) zusammenführen
+  // Monats-Abrechnung: doppelte Sessions (gleicher Tag UND gleicher Film) zusammenführen
+  // NICHT zusammenführen wenn verschiedene Daten (verschiedene Abrechnungsblätter!)
   if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length > 1){
     var merged = [];
     d.sessions.forEach(function(s){
       var sTitel = (s.titel||'').toLowerCase().trim();
+      var sDatum = (s.datum||'').trim();
       var existing = merged.find(function(m){
         var mTitel = (m.titel||'').toLowerCase().trim();
-        // Gleicher Filmtitel = gleicher Termin (Grundgage-Zeilen haben immer denselben Filmtitel)
+        var mDatum = (m.datum||'').trim();
+        // BEIDE müssen übereinstimmen: Datum UND Titel
+        var gleichesDatum = sDatum && mDatum && sDatum===mDatum;
         var gleicherTitel = sTitel && mTitel && sTitel===mTitel;
-        // Oder gleicher Filmcode
         var gleicherCode = s.filmcode && m.filmcode && s.filmcode===m.filmcode;
-        return gleicherTitel || gleicherCode;
+        // Nur zusammenfassen wenn GLEICHES DATUM — verschiedene Blätter nie!
+        return gleichesDatum && (gleicherTitel || gleicherCode);
       });
       if(existing){
-        // Zusammenführen
         existing.takes = (parseInt(existing.takes)||0) + (parseInt(s.takes)||0);
         existing.brutto_termin = Math.round(((parseFloat(existing.brutto_termin)||0) + (parseFloat(s.brutto_termin)||0))*100)/100;
         if(s.grundgage && !existing.grundgage) existing.grundgage = s.grundgage;
