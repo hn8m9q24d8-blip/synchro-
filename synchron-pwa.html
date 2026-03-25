@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '334';
+  if(el) el.textContent = '338';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2623,12 +2623,33 @@ function saveMergeChanges(){
   save(db);
   showToast('✓ Gespeichert');
 
-  // Wenn aus Session-Peek: Session als done markieren + zurück zum Dok
   var returnId=_returnToDokId;
   _returnToDokId=null;
   if(returnId){
-    // Session _done setzen
     var dok=(db.dokumente||[]).find(function(x){return x.id===returnId;});
+
+    // Split-Queue: automatisch zum nächsten Split-Dokument
+    if(dok && dok._splitGroup && dok._splitTotal > 1){
+      var naechstesIdx = (dok._splitIdx||0) + 1;
+      var naechstesDok = (db.dokumente||[]).find(function(x){
+        return x._splitGroup===dok._splitGroup && x._splitIdx===naechstesIdx && !x.bestaetigt;
+      });
+      var dp2=document.getElementById('detail-panel');
+      if(dp2) dp2.classList.remove('open');
+      ctid=null;
+      if(naechstesDok){
+        showToast('✓ '+(naechstesIdx)+' von '+dok._splitTotal+' — weiter');
+        switchView('dokumente');
+        setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 200);
+      } else {
+        showToast('✓ Alle '+dok._splitTotal+' Abrechnungen bestätigt');
+        switchView('dokumente');
+        rDokumente();
+      }
+      return;
+    }
+
+    // Session _done setzen
     if(dok && dok.sessions){
       dok.sessions.forEach(function(s){
         if(s.terminId===ctid) s._done=true;
@@ -2639,24 +2660,14 @@ function saveMergeChanges(){
     if(dp) dp.classList.remove('open');
     ctid=null;
 
-    // Prüfen ob noch offene Sessions in diesem Dok
-    var dok=(db.dokumente||[]).find(function(x){return x.id===returnId;});
-    if(dok && dok.sessions){
-      dok.sessions.forEach(function(s){
-        if(s.terminId===ctid) s._done=true;
-      });
-      save(db);
-    }
     var offeneSessions = dok && dok.sessions
       ? dok.sessions.filter(function(s){return !s._done;}).length
       : 0;
 
     switchView('dokumente');
     if(offeneSessions > 0){
-      // Noch offene Sessions → Dok wieder öffnen damit nächste Session bearbeitet werden kann
       setTimeout(function(){ dokOpenDetail(returnId); }, 80);
     } else {
-      // Alle Sessions erledigt → direkt in Dokumentübersicht bleiben
       rDokumente();
       showToast('✓ Alle Sessions bestätigt');
     }
@@ -3241,27 +3252,21 @@ function dokSessionPeek(elOrId, sessionIdx){
 }
 
 function dokPeekTermin(terminId){
-  // Nur anschauen — kein Bestätigen, kein Foto löschen
-  // Rücknavigation merken: zurück = wieder Dokument öffnen
   _returnToDokId = _dokCurrentId;
-  // Dok-Panel schließen
   dokDetailClose();
-  // Termin-Panel explizit schließen + ctid löschen (kein closeDetail wegen Merge-Revert)
   var dp = document.getElementById('detail-panel');
   if(dp) dp.classList.remove('open');
   ctid = null;
-  // Zur Termine-View wechseln
   switchView('termine');
-  // Dann den richtigen Termin öffnen — direkt, ohne Verzögerung
-  // (detail-panel ist jetzt definitiv zu, kein falscher alter Termin sichtbar)
-  // Lock setzen: verhindert Ghost-Tap auf alten Termin während Transition
   _openDetailLock = true;
-  setTimeout(function(){
+  var _tryOpen = function(){
     _openDetailLock = false;
     var t = (db.termine||[]).find(function(x){ return x.id===terminId; });
     if(!t){ showToast('Termin nicht gefunden'); return; }
     openDetail(terminId);
-  }, 350); // 350ms reicht um iOS Touch-Buffer zu leeren
+  };
+  // Erst nach 500ms — iOS braucht manchmal länger nach switchView
+  setTimeout(_tryOpen, 500);
 }
 
 function saveMemoFromDetail(terminId){
@@ -7393,9 +7398,12 @@ function dokAnalyseDoc(d, key, cb){
         });
 
         if(alleHabenFinanzen){
-          // FFS-Stil: jede Session = eigenständige abrechn
-          d.typ = 'abrechn'; // erstes Blatt
+          d.typ = 'abrechn';
           d.sessions = null;
+          // Einmal vor dem Loop alle bereits belegten Termine sammeln
+          var splitBelegteIds = [];
+          (db.dokumente||[]).forEach(function(x){if(x.terminId) splitBelegteIds.push(x.terminId);});
+
           j.sessions.forEach(function(s, si2){
             var isFirst = si2 === 0;
             var zielDok = isFirst ? d : {
@@ -7427,15 +7435,17 @@ function dokAnalyseDoc(d, key, cb){
             zielDok.gutschrift_nr = s.gutschrift_nr||d.gutschrift_nr||'';
             zielDok.beschr = (zielDok.gutschrift_nr||zielDok.titel||'Abrechnung')+' ('+(zielDok.datum||'').split('-').reverse().join('.')+')';
             zielDok._splitFromPdf = d.id;
-            zielDok._splitGroup = d.id; // Gemeinsame Gruppen-ID für alle Splits
+            zielDok._splitGroup = d.id;
             zielDok._splitTotal = j.sessions.length;
-            zielDok._splitIdx = si2; // 0-basiert
+            zielDok._splitIdx = si2;
+            zielDok._splitPageNr = si2 + 1; // 1-basierte Seitennummer
             zielDok.awaitConfirm = true;
-            // Termin-Match — bereits belegte ausschließen
-            var belegteIds = [];
-            (db.dokumente||[]).forEach(function(x){if(x.terminId)belegteIds.push(x.terminId);});
-            var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, belegteIds);
-            if(tm) zielDok.terminId = tm.id;
+            // Termin-Match mit akkumulierten IDs — verhindert Doppelzuweisung
+            var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds);
+            if(tm){
+              zielDok.terminId = tm.id;
+              splitBelegteIds.push(tm.id); // Sofort für nächste Session sperren
+            }
             if(!isFirst){
               if(!db.dokumente) db.dokumente=[];
               db.dokumente.push(zielDok);
@@ -7942,6 +7952,19 @@ function dokOpenDetail(id){
         body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">🔍 Tippen = Vollbild</div>';
         body+='</div>';
         body+='</div>';
+      } else if(d._splitFromPdf && d._splitPageNr){
+        // Split-Dokument: zugehörige Seite aus Original-PDF rendern
+        var origDok=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+        if(origDok && origDok.dataURL){
+          body+='<div style="margin-bottom:12px">';
+          body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Seite '+d._splitPageNr+' von '+d._splitTotal+' — PDF-Vorschau</div>';
+          body+='<div id="pdf-wrap-'+d.id+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#e8e8e8;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\'__pdf__'+d.id+'\')">';
+          body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block;transform-origin:center center"></canvas>';
+          body+='</div>';
+          body+='</div>';
+        } else {
+          body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 Seite '+d._splitPageNr+' · '+(d.gutschrift_nr||d.dateiname||'')+'</div>';
+        }
       } else {
         body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
       }
@@ -8302,11 +8325,19 @@ function dokOpenDetail(id){
   document.getElementById('dok-detail-body').innerHTML = body;
 
   // PDF-Canvas rendern falls vorhanden
-  if(d && d.mime==='application/pdf' && d.dataURL && document.getElementById('pdf-canvas-'+d.id)){
+  if(d && d.mime==='application/pdf' && document.getElementById('pdf-canvas-'+d.id)){
     setTimeout(function(){
-      // Bekanntes Passwort automatisch versuchen
       var autoPw = _findPdfPassword(d.studio||'');
-      renderPDFCanvas('pdf-canvas-'+d.id, d.dataURL, autoPw||undefined);
+      if(d.dataURL){
+        // Normales Dokument — alle Seiten
+        renderPDFCanvas('pdf-canvas-'+d.id, d.dataURL, autoPw||undefined);
+      } else if(d._splitFromPdf && d._splitPageNr){
+        // Split-Dokument — nur die zugehörige Seite aus Original-PDF
+        var origDok=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+        if(origDok && origDok.dataURL){
+          renderPDFCanvasPage('pdf-canvas-'+d.id, origDok.dataURL, d._splitPageNr, autoPw||undefined);
+        }
+      }
     }, 50);
   }
   var panel=document.getElementById('dok-detail-panel');
@@ -8584,6 +8615,27 @@ function renderPDFCanvas(canvasId, dataURL, password){
       }
     } else { console.warn('PDF render:', e); }
   });
+}
+
+// Rendert eine einzelne Seite eines PDFs — für Split-Dokumente
+function renderPDFCanvasPage(canvasId, dataURL, pageNr, password){
+  if(typeof pdfjsLib==='undefined') return;
+  var canvas=document.getElementById(canvasId);
+  if(!canvas) return;
+  var b64=dataURL.split(',')[1];
+  var bin=atob(b64);
+  var arr=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  var params={data:arr};
+  if(password) params.password=password;
+  pdfjsLib.getDocument(params).promise.then(function(pdf){
+    var pg=Math.min(pageNr, pdf.numPages);
+    return pdf.getPage(pg);
+  }).then(function(page){
+    var vp=page.getViewport({scale:1.5});
+    canvas.width=vp.width; canvas.height=vp.height;
+    return page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
+  }).catch(function(e){ console.warn('PDF page render:', e); });
 }
 
 function dokOpenPDF(id){
@@ -8924,7 +8976,7 @@ function _buildMergePreview(d, t){
   check('Takes', 'takes', d.takes);
   check('Staffel', 'gvl_staffel', d.gvl_staffel||d.gvl_staffel_header);
   check('Folge', 'gvl_folge', d.gvl_folge||d.gvl_episode_header);
-  if(d.typ==='abrechn') check('Notizen', 'notizen', d.auszahlung ? 'Abgerechnet: €'+fmtEur(d.auszahlung) : null);
+  // Abrechnung: notizen nicht überschreiben — Atelier steht dort
 
   // ── GAGE-ABGLEICH: Kommgage, Take-Gage, Takes gegen Kalender-Termin ──
   // Nur wenn Abrechnung (nicht Dispo) und Termin hat bereits Werte
