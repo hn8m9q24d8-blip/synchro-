@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '333';
+  if(el) el.textContent = '334';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7421,6 +7421,9 @@ function dokAnalyseDoc(d, key, cb){
             zielDok.kv_abzug = s.kv_abzug||0;
             zielDok.rv_abzug = s.rv_abzug||0;
             zielDok.pv_abzug = s.pv_abzug||0;
+            // Netto IMMER selbst berechnen — KI addiert hier oft blattübergreifend falsch
+            var _sv = Math.abs(parseFloat(s.kv_abzug)||0)+Math.abs(parseFloat(s.rv_abzug)||0)+Math.abs(parseFloat(s.pv_abzug)||0);
+            zielDok.netto = Math.round(((parseFloat(s.brutto_termin)||0) - _sv)*100)/100;
             zielDok.gutschrift_nr = s.gutschrift_nr||d.gutschrift_nr||'';
             zielDok.beschr = (zielDok.gutschrift_nr||zielDok.titel||'Abrechnung')+' ('+(zielDok.datum||'').split('-').reverse().join('.')+')';
             zielDok._splitFromPdf = d.id;
