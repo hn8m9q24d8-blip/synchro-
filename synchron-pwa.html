@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '328';
+  if(el) el.textContent = '330';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2225,7 +2225,7 @@ function openDetail(id){
     +'<div class="info-card-header"><span>Stammdaten</span></div>'
     +_inlineField(id,'regie','Regie',t.regie||'')
     +(t.sender?'<div class="info-row"><div class="ir-key" style="color:#6d28d9">Sender</div><div class="ir-val" style="color:#6d28d9;font-weight:700">'+esc(t.sender)+(t.sender_kuerzel&&t.sender_kuerzel!==t.sender?' <span style="font-size:10px;color:#9ca3af">('+esc(t.sender_kuerzel)+')</span>':'')+'</div></div>':'')
-    +_inlineField(id,'notizen','Atelier',t.notizen||'')
+    +_inlineField(id,'atelier','Atelier',t.atelier||t.notizen||'')
     +_inlineField(id,'episode','Episode',t.episode||'')
     +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time')
     +'<div class="info-row"><div class="ir-key">Status</div><div class="ir-val">'+tlabel(t.status)+'</div></div>'
@@ -4657,7 +4657,8 @@ function autoCreate(parsed){
     uhrzeit:parsed.uhrzeit||'',
     studio:parsed.studio||'',
     regie:parsed.regie||'',
-    notizen:parsed.notizen||'',
+    atelier:parsed.atelier||parsed.notizen||'',
+    notizen:'',
     takes:parsed.takes||'',
     rate:parsed.rate||0,
     kommgage:parsed.kommgage||0,
@@ -4682,7 +4683,7 @@ function scanOneFile(file){
         max_tokens:800,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}},
-          {type:'text',text:'Lies diese Synchrondispo und extrahiere: titel (Produktionstitel), datum (YYYY-MM-DD), uhrzeit (HH:MM), studio, regie, notizen (Atelier/Raum). Antworte NUR mit JSON: {"titel":"...","datum":"...","uhrzeit":"...","studio":"...","regie":"...","notizen":"..."}'}
+          {type:'text',text:'Lies diese Synchrondispo und extrahiere: titel (Produktionstitel), datum (YYYY-MM-DD), uhrzeit (HH:MM), studio (Produktionsfirma/Synchronstudio), regie, atelier (physischer Aufnahmeort — steht oft unten ausgegraut, z.B. "Moabit Atelier 5", "BLN Studio 2 (-52)", "Reuchlin Atelier Grün 1" — NICHT die Produktionsfirma!). Antworte NUR mit JSON: {"titel":"...","datum":"...","uhrzeit":"...","studio":"...","regie":"...","atelier":"..."}'}
         ]}]
       })
     }).then(function(r){return r.json();}).then(function(data){
@@ -6981,6 +6982,9 @@ function dokAnalyseDoc(d, key, cb){
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
+    +'  atelier: Physischer Aufnahmeort/Raum — steht oft unten ausgegraut auf dem Zettel (z.B. "Moabit Atelier 5", "BLN Studio 2 (-52)", "Reuchlin Atelier Grün 1", "HZD Atelier X")\n'
+    +'    NICHT die Produktionsfirma oder das Synchronstudio — sondern der konkrete Raum wo aufgenommen wird!\n'
+    +'    Falls nicht vorhanden: null\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
     +'    Wenn "Trailer", "TR", "Trailer-Aufnahme" o.ä. im Titel oder in der Zeile steht:\n'
     +'    → produktionstyp_kino=false, takes=0, take_gage=0 (Trailer werden pauschal abgerechnet)\n'
@@ -7212,7 +7216,7 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
-    +'"rolle":null,"uhrzeit":null,"bis_uhrzeit":null,"takes":null,"episode":null,'
+    +'"rolle":null,"uhrzeit":null,"bis_uhrzeit":null,"atelier":null,"takes":null,"episode":null,'
     +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
     +'"brutto":null,"netto":null,"mwst":null,"auszahlung":null,'
@@ -9581,6 +9585,7 @@ function dokLinkMultiConfirm(){
       if(d.rolle&&!t.rolle) t.rolle=d.rolle;
       if(d.regie&&!t.regie) t.regie=d.regie;
       if(d.titel&&!t.titel) t.titel=d.titel;
+      if((d.atelier||d.notizen)&&!t.atelier) t.atelier=d.atelier||d.notizen;
     });
   }
 
