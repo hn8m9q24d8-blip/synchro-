@@ -8,7 +8,6 @@
 
 <title>Synchron</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
 
@@ -1746,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '342';
+  if(el) el.textContent = '345';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3248,7 +3247,8 @@ function dokSessionPeek(elOrId, sessionIdx){
     pv_abzug: s.pv_abzug||0,
     gutschrift_nr: s.gutschrift_nr||d.gutschrift_nr||'',
     kuerzel: s.kuerzel||'',
-    _sessionIdx: si
+    _sessionIdx: si,
+    _skipAbCreate: true  // Keine neue Abrechnung anlegen — nur Vergleich
   };
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
   _mergeSnapshot._fromDokId = dokId;
@@ -7211,14 +7211,21 @@ function dokAnalyseDoc(d, key, cb){
     +'    FALL A — PDF hat MEHRERE SEITEN (erkennbar an mehreren "GAGE / Gutschrift" Überschriften oder mehreren "AUSZAHLUNG" Blöcken):\n'
     +'    → JEDE SEITE = GENAU EINE session. 2 Seiten = 2 sessions. 7 Seiten = 7 sessions.\n'
     +'    → NIEMALS zwei Seiten zusammenfassen, egal ob gleicher Filmtitel oder gleiche Rolle!\n'
-    +'    → Jede Seite hat ihr eigenes Datum, eigene Takes, eigenen Bruttobetrag.\n'
-    +'    → Innerhalb EINER Seite: Grundgage-Zeile + Takegage-Zeile → zusammenfassen (das ist eine session).\n'
-    +'    → Jede session MUSS enthalten: datum, titel, rolle, takes, take_gage, grundgage, brutto_termin,\n'
+    +'    → Jede Seite hat ihre eigene gutschrift_nr, eigenes brutto_termin, eigene Abzüge/Auszahlung.\n'
+    +'    → page_nr = Seitennummer dieser Gutschrift im PDF (1-basiert: erste Seite=1, zweite=2 usw.)\n'
+    +'    → Innerhalb EINER Seite können MEHRERE AUFNAHMETAGE stehen (z.B. 20.01. + 21.01. auf Seite 1).\n'
+    +'       In diesem Fall: "termine"-Array mit einem Eintrag pro Aufnahmetag:\n'
+    +'         termine: [{"datum":"2026-01-20","titel":"...","rolle":"...","takes":110,"grundgage":100,"take_gage":5.0},\n'
+    +'                   {"datum":"2026-01-21","titel":"...","rolle":"...","takes":124,"grundgage":100,"take_gage":5.0}]\n'
+    +'       Wenn NUR EIN Aufnahmetag auf der Seite: termine-Array mit einem Eintrag ODER datum direkt auf der session.\n'
+    +'    → Jede session MUSS enthalten: datum (erster Aufnahmetag), page_nr, titel, rolle, takes (Summe), take_gage, grundgage, brutto_termin,\n'
     +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
     +'    → netto NICHT aus "Bisherige Jahressummen" nehmen — nur aus der NETTO GAGE Zeile dieser Seite!\n'
-    +'    → Beispiel session: {"datum":"2026-02-26","titel":"Silo","rolle":"Knox","takes":49,"take_gage":4.20,\n'
-    +'      "grundgage":85.0,"brutto_termin":290.80,"gutschrift_nr":"3298/20260301",\n'
-    +'      "mwst":20.36,"auszahlung":255.34,"kv_abzug":24.27,"rv_abzug":27.04,"pv_abzug":4.51}\n'
+    +'    → Beispiel session (2 Aufnahmetage auf einer Seite): {"datum":"2026-01-20","page_nr":1,"titel":"Project Hail Mary","rolle":"Rocky",\n'
+    +'      "takes":234,"take_gage":5.0,"grundgage":200.0,"brutto_termin":1370.0,"gutschrift_nr":"677/20260301",\n'
+    +'      "mwst":95.90,"auszahlung":1202.92,"kv_abzug":114.33,"rv_abzug":127.41,"pv_abzug":21.24,\n'
+    +'      "termine":[{"datum":"2026-01-20","takes":110,"grundgage":100,"take_gage":5.0},\n'
+    +'                 {"datum":"2026-01-21","takes":124,"grundgage":100,"take_gage":5.0}]}\n'
     +'\n'
     +'    FALL B — PDF hat EINE SEITE mit einer Tabelle mit mehreren Terminen (z.B. Arena Monats-Gutschrift):\n'
     +'    → Nach DATUM aufteilen: jedes Datum = eigene session.\n'
@@ -7462,14 +7469,45 @@ function dokAnalyseDoc(d, key, cb){
             zielDok._splitGroup = d.id;
             zielDok._splitTotal = j.sessions.length;
             zielDok._splitIdx = si2;
-            zielDok._splitPageNr = si2 + 1; // 1-basierte Seitennummer
+            // page_nr vom KI nutzen wenn vorhanden, sonst Fallback auf Session-Index
+            zielDok._splitPageNr = s.page_nr || (si2 + 1);
             zielDok.awaitConfirm = true;
-            // Termin-Match mit akkumulierten IDs — verhindert Doppelzuweisung
-            var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds);
-            if(tm){
-              zielDok.terminId = tm.id;
-              splitBelegteIds.push(tm.id); // Sofort für nächste Session sperren
+
+            // ── Multi-Termin pro Gutschrift: termine-Array vom KI ──
+            var subTermine = (s.termine && s.termine.length > 1) ? s.termine : null;
+            if(subTermine){
+              // Mehrere Aufnahmetage auf dieser Gutschrift-Seite
+              // → Als sessions speichern, damit der bewährte monats_abrechn-Flow greift
+              // Jede Session = ein Aufnahmetag, mit eigenem Termin-Match
+              var gutNr = zielDok.gutschrift_nr || '';
+              var gesamtBrutto = parseFloat(zielDok.brutto)||0;
+              zielDok.sessions = subTermine.map(function(st){
+                var stm = dokFindTermin(st.datum||s.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds);
+                if(stm) splitBelegteIds.push(stm.id);
+                return {
+                  datum:       st.datum || s.datum || null,
+                  titel:       st.titel || zielDok.titel || '',
+                  rolle:       st.rolle || zielDok.rolle || '',
+                  takes:       st.takes || 0,
+                  take_gage:   st.take_gage || zielDok.take_gage || 0,
+                  grundgage:   st.grundgage || 0,
+                  // Brutto pro Sub-Termin: aus KI oder gleichmäßig aufteilen
+                  brutto_termin: st.brutto_termin || (subTermine.length > 0
+                    ? Math.round(gesamtBrutto / subTermine.length * 100) / 100 : 0),
+                  gutschrift_nr: gutNr,
+                  terminId: stm ? stm.id : null
+                };
+              });
+              // KV/RV/PV/MwSt/Auszahlung gehören zur Gutschrift gesamt (bleiben auf zielDok)
+              // Primärer terminId für Rückwärtskompatibilität = erster gefundener
+              var firstSession = zielDok.sessions.find(function(ss){ return ss.terminId; });
+              if(firstSession) zielDok.terminId = firstSession.terminId;
+            } else {
+              // Einzelner Aufnahmetag — wie bisher, kein sessions-Array nötig
+              var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds);
+              if(tm){ zielDok.terminId = tm.id; splitBelegteIds.push(tm.id); }
             }
+
             if(!isFirst){
               if(!db.dokumente) db.dokumente=[];
               db.dokumente.push(zielDok);
@@ -7968,27 +8006,26 @@ function dokOpenDetail(id){
           +'Die erkannten Daten sind noch vorhanden. Bitte prüfen und bei Bedarf neu hochladen.</div>';
       }
     } else if(d.mime==='application/pdf'){
-      if(d.dataURL){
+      // ── PDF Vorschau: Bei Split-Dok immer NUR die eigene Seite zeigen ──
+      var _pdfPreviewSrc = d.dataURL;
+      var _pdfPreviewPage = null;
+      if(d._splitPageNr){
+        // Split-Dokument (egal ob dataURL vorhanden oder nicht): immer Seite N aus Original
+        var _splitOrig = (db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+        if(_splitOrig && _splitOrig.dataURL) _pdfPreviewSrc = _splitOrig.dataURL;
+        _pdfPreviewPage = d._splitPageNr;
+      }
+      if(_pdfPreviewSrc){
+        var _pageLabel = _pdfPreviewPage
+          ? 'Gutschrift '+_pdfPreviewPage+' von '+(d._splitTotal||'?')+' · PDF-Vorschau'
+          : 'PDF-Vorschau zum Abgleichen';
         body+='<div style="margin-bottom:12px">';
-        body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">PDF-Vorschau zum Abgleichen</div>';
+        body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">'+_pageLabel+'</div>';
         body+='<div id="pdf-wrap-'+d.id+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#e8e8e8;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\'__pdf__'+d.id+'\')">';
         body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block;transform-origin:center center"></canvas>';
-        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">🔍 Tippen = Vollbild</div>';
+        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">🔍 Vollbild</div>';
         body+='</div>';
         body+='</div>';
-      } else if(d._splitFromPdf && d._splitPageNr){
-        // Split-Dokument: zugehörige Seite aus Original-PDF rendern
-        var origDok=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
-        if(origDok && origDok.dataURL){
-          body+='<div style="margin-bottom:12px">';
-          body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Seite '+d._splitPageNr+' von '+d._splitTotal+' — PDF-Vorschau</div>';
-          body+='<div id="pdf-wrap-'+d.id+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid #e0e0e0;background:#e8e8e8;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\'__pdf__'+d.id+'\')">';
-          body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block;transform-origin:center center"></canvas>';
-          body+='</div>';
-          body+='</div>';
-        } else {
-          body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 Seite '+d._splitPageNr+' · '+(d.gutschrift_nr||d.dateiname||'')+'</div>';
-        }
       } else {
         body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
       }
@@ -8172,8 +8209,8 @@ function dokOpenDetail(id){
         +'</div>';
     }
 
-    // ── MONATS-ABRECHNUNG: Sessions-Block ──
-    if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length){
+    // ── SESSIONS-BLOCK: monats_abrechn ODER abrechn mit mehreren Aufnahmetagen ──
+    if((d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length){
       var allDone = d.sessions.every(function(s){return s._done;});
       body+='<div style="margin-bottom:12px">';
       body+='<div style="font-size:11px;font-weight:800;color:#1d6fa8;letter-spacing:.5px;margin-bottom:8px">📋 ERKANNTE TERMINE ('+d.sessions.length+')</div>';
@@ -8358,15 +8395,14 @@ function dokOpenDetail(id){
   if(d && d.mime==='application/pdf' && document.getElementById('pdf-canvas-'+d.id)){
     setTimeout(function(){
       var autoPw = _findPdfPassword(d.studio||'');
-      if(d.dataURL){
+      if(d._splitPageNr){
+        // Split-Dokument: immer nur die zugehörige Seite (auch wenn d.dataURL vorhanden)
+        var origDokR = (db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+        var pdfSrc = (origDokR && origDokR.dataURL) || d.dataURL;
+        if(pdfSrc) renderPDFCanvasPage('pdf-canvas-'+d.id, pdfSrc, d._splitPageNr, autoPw||undefined);
+      } else if(d.dataURL){
         // Normales Dokument — alle Seiten
         renderPDFCanvas('pdf-canvas-'+d.id, d.dataURL, autoPw||undefined);
-      } else if(d._splitFromPdf && d._splitPageNr){
-        // Split-Dokument — nur die zugehörige Seite aus Original-PDF
-        var origDok=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
-        if(origDok && origDok.dataURL){
-          renderPDFCanvasPage('pdf-canvas-'+d.id, origDok.dataURL, d._splitPageNr, autoPw||undefined);
-        }
       }
     }, 50);
   }
@@ -9175,15 +9211,39 @@ function dokBestaetigenMonat(dokId){
 
   // Log für Undo
   var linkedTerminIds = (d.sessions||[]).filter(function(s){return s.terminId;}).map(function(s){return s.terminId;});
+  var logLabel = d.typ==='abrechn'
+    ? 'Abrechnung (mehrere Termine) bestätigt · '
+    : 'Monats-Abrechnung bestätigt · ';
   logAction('dok_bestaetigt',
-    'Monats-Abrechnung bestätigt · '+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),
-    {dokId:d.id, typVorher:'monats_abrechn', terminIds:linkedTerminIds}
+    logLabel+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),
+    {dokId:d.id, typVorher:d.typ, terminIds:linkedTerminIds}
   );
+
+  // Wenn Split-Dok: nächste Gutschrift automatisch öffnen
+  if(d._splitGroup && d._splitTotal > 1){
+    var naechstesIdx = (d._splitIdx||0) + 1;
+    var naechstesDok = (db.dokumente||[]).find(function(x){
+      return x._splitGroup===d._splitGroup && x._splitIdx===naechstesIdx && !x.bestaetigt;
+    });
+    save(db);
+    var msg2=linked+' Termin'+(linked!==1?'e':'')+' verknüpft';
+    if(notFound.length) msg2+=' · '+notFound.length+' nicht gefunden';
+    if(naechstesDok){
+      showToast('\u2713 Gutschrift '+(d._splitIdx+1)+' von '+d._splitTotal+' \u00b7 Weiter: '+(naechstesIdx+1));
+      dokDetailClose();
+      setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 200);
+    } else {
+      showToast('\u2713 Alle '+d._splitTotal+' Abrechnungen bestätigt \u00b7 '+msg2);
+      dokDetailClose();
+      rDokumente();
+    }
+    return;
+  }
 
   save(db);
   var msg=linked+' Termin'+(linked!==1?'e':'')+' verknüpft';
   if(notFound.length) msg+=' · '+notFound.length+' nicht gefunden';
-  showToast('✓ Monats-Abrechnung bestätigt · '+msg);
+  showToast('\u2713 '+logLabel+msg);
   dokDetailClose();
   rDokumente();
 }
@@ -9490,6 +9550,35 @@ function dokMergeIntoTermin(d, termin){
     var takeGage=parseFloat(d.take_gage)||0;
     var takes=parseInt(d.takes)||0;
     var auszahlung=parseFloat(d.auszahlung)||brutto||0;
+
+    // Session-Vergleich: keine neue Abrechnung anlegen — nur Diff zeigen
+    if(d._skipAbCreate){
+      // Diff-Check gegen bestehende Dispo-Werte
+      var dispTakes2 = parseInt(termin.takes)||0;
+      var dispRate2  = parseFloat(termin.rate)||0;
+      var dispKomm2  = parseFloat(termin.kommgage)||0;
+      if(takes && dispTakes2 && takes !== dispTakes2){
+        termin.takes_differenz = dispTakes2 - takes;
+        changed.push('Differenz Takes: '+dispTakes2+' Dispo vs '+takes+' abgerechnet');
+      }
+      if(grundgage && dispKomm2 && Math.abs(grundgage-dispKomm2)>1){
+        termin.kommgage_differenz = dispKomm2 - grundgage;
+        changed.push('Differenz Komm-Gage: '+fmtEur(dispKomm2)+' Dispo vs '+fmtEur(grundgage)+' abger.');
+      }
+      // Gutschrift-Nr. + Brutto-Anteil am Termin speichern
+      if(d.gutschrift_nr) termin.gutschrift_nr = d.gutschrift_nr;
+      if(brutto) termin.brutto_termin = brutto;
+      if(d.mwst) termin.mwst_anteil = parseFloat(d.mwst)||0;
+      if(takes) termin.takes_abgerechnet = takes;
+      if(takeGage) termin.rate_abgerechnet = takeGage;
+      if(grundgage) termin.kommgage_abgerechnet = grundgage;
+      if(d.kuerzel && !termin.sender){
+        var sn=erkenneSender(d.kuerzel);
+        if(sn){termin.sender=sn;termin.sender_kuerzel=d.kuerzel;}
+      }
+      changed.push('Abrechnung: '+fmtEur(brutto)+(d.gutschrift_nr?' · '+d.gutschrift_nr:''));
+      return changed;
+    }
 
     // Grundgage aus Netto – Takes×TakeGage ableiten
     if(!grundgage && netto>0 && takes>0 && takeGage>0){
@@ -10382,7 +10471,7 @@ function rAbrechnungen(){
       var zuviel=d.diff>0;
       var tid=d.t.id;
       html+='<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
-        +'<div onclick="openDetail(\''+tid+'\')" style="cursor:pointer">'
+        +'<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+tid+'\');},400);" style="cursor:pointer">'
         +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(d.t.titel||d.t.studio||'')+'</div>'
@@ -10439,7 +10528,7 @@ function rAbrechnungen(){
         var tnet=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
         var sc=t.status==='bezahlt'?'#5d8a3c':t.status==='abrechnung'?'#e65100':'#c0392b';
         var hasDot=t.abId?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e65100;margin-left:4px;vertical-align:middle"></span>':'';
-        return '<div onclick="openDetail(\''+t.id+'\')" style="padding:9px 16px 9px 28px;background:#fafafa;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'
+        return '<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\');},400);" style="padding:9px 16px 9px 28px;background:#fafafa;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.titel||'')+hasDot+'</div>'
           +'<div style="font-size:11px;color:#999">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div>'
@@ -11399,7 +11488,7 @@ function rZahlungen(){
         +g.termine.map(function(t){
           var tnet=calcNet(t);
           var sc=t.status==='bezahlt'?'#22c55e':t.status==='abrechnung'?'#f97316':'#ef4444';
-          return '<div onclick="openDetail(\''+t.id+'\')" style="padding:9px 16px 9px 30px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;cursor:pointer;touch-action:manipulation">'
+          return '<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\');},400);" style="padding:9px 16px 9px 30px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;cursor:pointer;touch-action:manipulation">'
             +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||'')+'</div>'
             +'<div style="font-size:11px;color:#9ca3af">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div></div>'
             +'<div style="text-align:right;flex-shrink:0;margin-left:8px"><div style="font-size:13px;font-weight:700">'+fmtEur(tnet)+'</div>'
@@ -11487,7 +11576,7 @@ function rZahlungen(){
         +g.termine.map(function(t){
           var tnet=calcNet(t);
           var sc=t.status==='bezahlt'?'#22c55e':t.status==='abrechnung'?'#f97316':'#ef4444';
-          return '<div onclick="openDetail(\''+t.id+'\')" style="padding:9px 16px 9px 26px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;cursor:pointer;touch-action:manipulation">'
+          return '<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\');},400);" style="padding:9px 16px 9px 26px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;cursor:pointer;touch-action:manipulation">'
             +'<div style="font-size:12px;color:#374151">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div>'
             +'<div style="text-align:right"><div style="font-size:13px;font-weight:700">'+fmtEur(tnet)+'</div>'
             +'<div style="font-size:11px;color:'+sc+'">'+tlabel2(t.status)+'</div></div></div>';
@@ -12748,8 +12837,13 @@ function suchHL(text,q){
   try {
     var params = new URLSearchParams(window.location.search);
     var dokB64 = params.get('dok');
-    var dokMime = params.get('mime') || 'image/jpeg';
-    var dokName = params.get('name') || 'Kurzbefehl-Foto';
+    // Sicherheit: Nur erlaubte MIME-Typen akzeptieren (Whitelist)
+    var ALLOWED_MIMES = ['image/jpeg','image/png','image/heic','image/heif','image/webp','application/pdf'];
+    var rawMime = params.get('mime') || 'image/jpeg';
+    var dokMime = ALLOWED_MIMES.indexOf(rawMime) >= 0 ? rawMime : 'image/jpeg';
+    // Sicherheit: Dateiname auf erlaubte Zeichen beschränken
+    var rawName = params.get('name') || 'Kurzbefehl-Foto';
+    var dokName = rawName.replace(/[^a-zA-Z0-9äöüÄÖÜß\s\-_.()]/g, '').slice(0, 100) || 'Kurzbefehl-Foto';
     if(dokB64 && dokB64.length > 100){
       var dataURL = 'data:'+dokMime+';base64,'+dokB64;
       if(!db.dokumente) db.dokumente=[];
