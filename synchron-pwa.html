@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '321';
+  if(el) el.textContent = '328';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3159,23 +3159,17 @@ function dokSessionPeek(elOrId, sessionIdx){
   if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden'); return; }
   var s = d.sessions[si];
 
-  // Gespeicherte terminId validieren — Datum muss passen, Titel darf nicht komplett falsch sein
+  // Gespeicherte terminId validieren — Datum ist hartes Kriterium
   if(s.terminId){
     var tCheck = (db.termine||[]).find(function(x){ return x.id===s.terminId; });
     if(!tCheck){
-      s.terminId = null; // Termin gelöscht
+      s.terminId = null;
     } else {
-      // Datum muss übereinstimmen
       var datumOk = s.datum && tCheck.datum && tCheck.datum===s.datum;
-      // Titel-Check: wenn beide Titel bekannt und komplett verschieden → zurücksetzen
-      var titelOk = true;
-      if(s.titel && tCheck.titel){
-        var simil = _studioScore(s.titel, tCheck.titel);
-        if(simil < 0.2) titelOk = false;
-      }
-      if(!datumOk || !titelOk){
+      // Konflikt: andere Session hat dieselbe terminId
+      var konflikt = (d.sessions||[]).some(function(x,xi){ return xi!==si && x.terminId===s.terminId; });
+      if(!datumOk || konflikt){
         s.terminId = null;
-        // Bereits von anderen Sessions belegte Termine ausschließen
         var andereIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
         var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds);
         if(neuMatch) s.terminId = neuMatch.id;
@@ -7010,14 +7004,14 @@ function dokAnalyseDoc(d, key, cb){
     +'  LAYOUT A: Takes-Spalte von Tim enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
     +'    → IMMER als gvl_takes_detail auslesen, auch wenn nur eine Folge und nur 1 Take!\n'
     +'    "809:1" → [{"folge":809,"takes":1}] — 809 = Staffel 8 Folge 09, 1 Take\n'
-    +'  LAYOUT D: Separate Spalte "Episode:Takes" oder "EPS:Takes" oder "Folge:Takes" — z.B. "304:10"\n'
+    +'  LAYOUT D: Separate Spalte "Episode:Takes" oder "EPS:Takes" oder "Folge:Takes" — z.B. "304:10" oder "05:32"\n'
     +'    Diese Spalte enthält direkt Folgennummer DOPPELPUNKT Takes — genau wie Layout A behandeln!\n'
     +'    ⚠ AUCH wenn Tims Takes-Spalte dieselbe Zahl zeigt: Die Episode:Takes-Spalte hat VORRANG!\n'
+    +'    Zweistellige Folgencodes MIT führender Null: "05:32" → folge=5, takes=32\n'
+    +'    "05:32" bedeutet NICHT Staffel 0 Folge 5 — sondern einfach Folge 5, Takes 32!\n'
+    +'    Beispiel: Tim Zeile hat Takes=32, letzte Spalte="05:32" → gvl_takes_detail=[{"folge":5,"takes":32}]\n'
     +'    Beispiel: Tim Zeile hat Takes=10, Episode:Takes="304:10" → gvl_takes_detail=[{"folge":304,"takes":10}]\n'
     +'    Beispiel: Tim Zeile hat Takes=100, Episode:Takes="604:100" → gvl_takes_detail=[{"folge":604,"takes":100}]\n'
-    +'      → 604 = Staffel 6 Folge 04, takes=100 — NICHT takes=604 oder folge=100!\n'
-    +'    Mehrere Einträge in Episode:Takes-Spalte (übereinander oder kommagetrennt):\n'
-    +'      "604:100" und darunter "604:1" → BEIDE auslesen: [{"folge":604,"takes":100},{"folge":604,"takes":1}]\n'
     +'    Mehrere kommagetrennt: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
     +'    ⚠ WICHTIG: Diese Spalte hat VORRANG vor der normalen Takes-Spalte für gvl_takes_detail!\n'
     +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Notiz", "Notes", "Remarks")\n'
@@ -7171,6 +7165,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    → NIEMALS zwei Seiten zusammenfassen, egal ob gleicher Filmtitel oder gleiche Rolle!\n'
     +'    → Jede Seite hat ihr eigenes Datum, eigene Takes, eigenen Bruttobetrag.\n'
     +'    → Innerhalb EINER Seite: Grundgage-Zeile + Takegage-Zeile → zusammenfassen (das ist eine session).\n'
+    +'    → Jede session MUSS enthalten: datum, titel, rolle, takes, take_gage, grundgage, brutto_termin,\n'
+    +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
+    +'    → Beispiel session: {"datum":"2026-02-26","titel":"Silo","rolle":"Knox","takes":49,"take_gage":4.20,\n'
+    +'      "grundgage":85.0,"brutto_termin":290.80,"gutschrift_nr":"3298/20260301",\n'
+    +'      "mwst":20.36,"auszahlung":255.34,"kv_abzug":24.27,"rv_abzug":27.04,"pv_abzug":4.51}\n'
     +'\n'
     +'    FALL B — PDF hat EINE SEITE mit einer Tabelle mit mehreren Terminen (z.B. Arena Monats-Gutschrift):\n'
     +'    → Nach DATUM aufteilen: jedes Datum = eigene session.\n'
@@ -7234,7 +7233,7 @@ function dokAnalyseDoc(d, key, cb){
     if(password) params.password = password;
     pdfjsLib.getDocument(params).promise.then(function(pdf){
       var numPages = pdf.numPages;
-      var pagesToRender = Math.min(numPages, 6);
+      var pagesToRender = Math.min(numPages, 15);
       var pagePromises = [];
       for(var p=1; p<=pagesToRender; p++) pagePromises.push(pdf.getPage(p));
       return Promise.all(pagePromises).then(function(pages){
@@ -7279,7 +7278,7 @@ function dokAnalyseDoc(d, key, cb){
     
     var bodyStr;
     try {
-      bodyStr = JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,
+      bodyStr = JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8000,
         messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
     } catch(e) {
       showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
@@ -7367,17 +7366,68 @@ function dokAnalyseDoc(d, key, cb){
       }
       // Sessions für Monats-Abrechnung
       if(d.typ==='monats_abrechn' && j.sessions && Array.isArray(j.sessions)){
-        d.sessions = j.sessions;
-        // Auto-Link: bereits belegte terminIds ausschließen
-        var belegteIds = [];
-        d.sessions.forEach(function(s){
-          if(s.datum && d.studio){
-            var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds);
-            if(tm){ s.terminId=tm.id; belegteIds.push(tm.id); }
-          }
+        // Prüfen ob jede Session eigene vollständige Finanzdaten hat (FFS-Stil, mehrere Seiten)
+        // In dem Fall: aufteilen in separate abrechn-Dokumente statt monats_abrechn
+        var alleHabenFinanzen = j.sessions.length > 1 && j.sessions.every(function(s){
+          return s.brutto_termin && s.auszahlung;
         });
-        // datum = erstes Session-Datum
-        if(d.sessions.length && !d.datum) d.datum=d.sessions[0].datum;
+
+        if(alleHabenFinanzen){
+          // FFS-Stil: jede Session = eigenständige abrechn
+          d.typ = 'abrechn'; // erstes Blatt
+          d.sessions = null;
+          j.sessions.forEach(function(s, si2){
+            var isFirst = si2 === 0;
+            var zielDok = isFirst ? d : {
+              id: uid(),
+              dateiname: d.dateiname,
+              mime: 'application/pdf',
+              dataURL: null, thumb: null,
+              addedAt: d.addedAt||new Date().toISOString(),
+              typ: 'abrechn',
+              bestaetigt: false, awaitConfirm: true
+            };
+            zielDok.typ = 'abrechn';
+            zielDok.datum = s.datum||d.datum||null;
+            zielDok.studio = d.studio||'';
+            zielDok.titel = s.titel||d.titel||'';
+            zielDok.rolle = s.rolle||'';
+            zielDok.takes = s.takes||0;
+            zielDok.take_gage = s.take_gage||0;
+            zielDok.grundgage = s.grundgage||0;
+            zielDok.brutto = s.brutto_termin||0;
+            zielDok.mwst = s.mwst||0;
+            zielDok.auszahlung = s.auszahlung||0;
+            zielDok.kv_abzug = s.kv_abzug||0;
+            zielDok.rv_abzug = s.rv_abzug||0;
+            zielDok.pv_abzug = s.pv_abzug||0;
+            zielDok.gutschrift_nr = s.gutschrift_nr||d.gutschrift_nr||'';
+            zielDok.beschr = (zielDok.gutschrift_nr||zielDok.titel||'Abrechnung')+' ('+(zielDok.datum||'').split('-').reverse().join('.')+')';
+            zielDok._splitFromPdf = d.id;
+            zielDok.awaitConfirm = true;
+            // Termin-Match — bereits belegte ausschließen
+            var belegteIds = [];
+            (db.dokumente||[]).forEach(function(x){if(x.terminId)belegteIds.push(x.terminId);});
+            var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, belegteIds);
+            if(tm) zielDok.terminId = tm.id;
+            if(!isFirst){
+              if(!db.dokumente) db.dokumente=[];
+              db.dokumente.push(zielDok);
+            }
+          });
+          showToast('✓ '+j.sessions.length+' separate Abrechnungen erkannt');
+        } else {
+          // Arena-Stil: bleibt monats_abrechn mit sessions
+          d.sessions = j.sessions;
+          var belegteIds2 = [];
+          d.sessions.forEach(function(s){
+            if(s.datum && d.studio){
+              var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds2);
+              if(tm){ s.terminId=tm.id; belegteIds2.push(tm.id); }
+            }
+          });
+          if(d.sessions.length && !d.datum) d.datum=d.sessions[0].datum;
+        }
       } else {
         d.sessions = null;
       }
@@ -7711,13 +7761,11 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds){
     var ss=studio?bestStudioScore(t):0;
     if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
     else sc+=Math.round(ss*15);
-    // Titel/Produktion-Überlapp
+    // Titel/Produktion-Überlapp — nur Bonus, nie Strafe (Arbeitstitel!)
     if(titel && t.titel){
       var ov=_studioScore(titel,t.titel);
-      if(ov > 0.3) sc+=Math.round(ov*10);
-      else sc-=12; // Titel klar verschieden → stark bestrafen
-    } else if(titel && !t.titel){
-      // Termin hat keinen Titel — kein Bonus, kein Abzug
+      if(ov > 0.3) sc+=Math.round(ov*10); // Bonus wenn ähnlich
+      // Kein Abzug bei verschiedenem Titel — könnte Arbeitstitel sein
     }
     // Uhrzeit im Von-Bis-Fenster
     if(uhrzeit && _uhrzeitTrifft(t.uhrzeit,uhrzeit,bis_uhrzeit)) sc+=6;
