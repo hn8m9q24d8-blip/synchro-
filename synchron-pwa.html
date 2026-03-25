@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '345';
+  if(el) el.textContent = '346';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7491,9 +7491,20 @@ function dokAnalyseDoc(d, key, cb){
                   takes:       st.takes || 0,
                   take_gage:   st.take_gage || zielDok.take_gage || 0,
                   grundgage:   st.grundgage || 0,
-                  // Brutto pro Sub-Termin: aus KI oder gleichmäßig aufteilen
-                  brutto_termin: st.brutto_termin || (subTermine.length > 0
-                    ? Math.round(gesamtBrutto / subTermine.length * 100) / 100 : 0),
+                  // Brutto pro Sub-Termin: aus KI direkt, sonst aus Takes × Take-Gage + Grundgage berechnen
+                  // NIEMALS gleichmäßig aufteilen — jeder Tag hat andere Takes!
+                  brutto_termin: (function(){
+                    if(st.brutto_termin) return parseFloat(st.brutto_termin);
+                    var _t  = parseInt(st.takes)||0;
+                    var _tg = parseFloat(st.take_gage||zielDok.take_gage)||0;
+                    var _gg = parseFloat(st.grundgage)||0;
+                    if(_t && _tg) return Math.round((_gg + _t * _tg)*100)/100;
+                    // Letzter Fallback: anteilig nach Takes
+                    var gesamtTakes = subTermine.reduce(function(sum,x){ return sum+(parseInt(x.takes)||0); },0);
+                    return gesamtTakes > 0
+                      ? Math.round(gesamtBrutto * (_t/gesamtTakes) * 100) / 100
+                      : Math.round(gesamtBrutto / subTermine.length * 100) / 100;
+                  })(),
                   gutschrift_nr: gutNr,
                   terminId: stm ? stm.id : null
                 };
