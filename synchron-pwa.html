@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '330';
+  if(el) el.textContent = '333';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4683,7 +4683,7 @@ function scanOneFile(file){
         max_tokens:800,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}},
-          {type:'text',text:'Lies diese Synchrondispo und extrahiere: titel (Produktionstitel), datum (YYYY-MM-DD), uhrzeit (HH:MM), studio (Produktionsfirma/Synchronstudio), regie, atelier (physischer Aufnahmeort — steht oft unten ausgegraut, z.B. "Moabit Atelier 5", "BLN Studio 2 (-52)", "Reuchlin Atelier Grün 1" — NICHT die Produktionsfirma!). Antworte NUR mit JSON: {"titel":"...","datum":"...","uhrzeit":"...","studio":"...","regie":"...","atelier":"..."}'}
+          {type:'text',text:'Lies diese Synchrondispo und extrahiere: titel (Produktionstitel), datum (YYYY-MM-DD), uhrzeit (HH:MM), studio (Produktionsfirma/Synchronstudio), regie. Antworte NUR mit JSON: {"titel":"...","datum":"...","uhrzeit":"...","studio":"...","regie":"..."}'}
         ]}]
       })
     }).then(function(r){return r.json();}).then(function(data){
@@ -6898,6 +6898,23 @@ function dokBestaetigen(){
   logAction('dok_bestaetigt','Dok bestätigt · '+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),undoSnap);
   save(db); rDokumente();
   if(d.terminId && ctid===d.terminId) openDetail(d.terminId);
+
+  // Split-Queue: automatisch zum nächsten Dokument
+  if(d._splitGroup && d._splitTotal > 1){
+    var naechstesIdx = (d._splitIdx||0) + 1;
+    var naechstesDok = (db.dokumente||[]).find(function(x){
+      return x._splitGroup===d._splitGroup && x._splitIdx===naechstesIdx;
+    });
+    if(naechstesDok && !naechstesDok.bestaetigt){
+      showToast('✓ Bestätigt · Weiter: '+(naechstesIdx+1)+' von '+d._splitTotal);
+      setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 300);
+      return;
+    } else {
+      showToast('✓ Alle '+d._splitTotal+' Abrechnungen bestätigt');
+      return;
+    }
+  }
+
   dokOpenDetail(d.id);
   showToast('✓ Bestätigt · Felder übertragen');
 }
@@ -6982,9 +6999,6 @@ function dokAnalyseDoc(d, key, cb){
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
-    +'  atelier: Physischer Aufnahmeort/Raum — steht oft unten ausgegraut auf dem Zettel (z.B. "Moabit Atelier 5", "BLN Studio 2 (-52)", "Reuchlin Atelier Grün 1", "HZD Atelier X")\n'
-    +'    NICHT die Produktionsfirma oder das Synchronstudio — sondern der konkrete Raum wo aufgenommen wird!\n'
-    +'    Falls nicht vorhanden: null\n'
     +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
     +'    Wenn "Trailer", "TR", "Trailer-Aufnahme" o.ä. im Titel oder in der Zeile steht:\n'
     +'    → produktionstyp_kino=false, takes=0, take_gage=0 (Trailer werden pauschal abgerechnet)\n'
@@ -7107,7 +7121,8 @@ function dokAnalyseDoc(d, key, cb){
     +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12)\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
-    +'  netto = NETTO GAGE (nach Abzügen, VOR MwSt)\n'
+    +'  netto = NETTO GAGE dieser Abrechnung (nach SV-Abzügen, VOR MwSt) — steht in der Zeile "NETTO GAGE"\n'
+    +'    ⚠ NICHT die "Bisherige Jahressummen" am Fuß des Dokuments — diese ignorieren!\n'
     +'  mwst = Mehrwertsteuer-Betrag in Euro (z.B. 22.75)\n'
     +'  ust_satz = USt-Satz als Dezimalzahl (0.07 oder 0.19)\n'
     +'  auszahlung = Auszahlungsbetrag (Netto + MwSt)\n'
@@ -7171,6 +7186,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    → Innerhalb EINER Seite: Grundgage-Zeile + Takegage-Zeile → zusammenfassen (das ist eine session).\n'
     +'    → Jede session MUSS enthalten: datum, titel, rolle, takes, take_gage, grundgage, brutto_termin,\n'
     +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
+    +'    → netto NICHT aus "Bisherige Jahressummen" nehmen — nur aus der NETTO GAGE Zeile dieser Seite!\n'
     +'    → Beispiel session: {"datum":"2026-02-26","titel":"Silo","rolle":"Knox","takes":49,"take_gage":4.20,\n'
     +'      "grundgage":85.0,"brutto_termin":290.80,"gutschrift_nr":"3298/20260301",\n'
     +'      "mwst":20.36,"auszahlung":255.34,"kv_abzug":24.27,"rv_abzug":27.04,"pv_abzug":4.51}\n'
@@ -7216,7 +7232,7 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
     +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
-    +'"rolle":null,"uhrzeit":null,"bis_uhrzeit":null,"atelier":null,"takes":null,"episode":null,'
+    +'"rolle":null,"uhrzeit":null,"bis_uhrzeit":null,"takes":null,"episode":null,'
     +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
     +'"brutto":null,"netto":null,"mwst":null,"auszahlung":null,'
@@ -7408,6 +7424,9 @@ function dokAnalyseDoc(d, key, cb){
             zielDok.gutschrift_nr = s.gutschrift_nr||d.gutschrift_nr||'';
             zielDok.beschr = (zielDok.gutschrift_nr||zielDok.titel||'Abrechnung')+' ('+(zielDok.datum||'').split('-').reverse().join('.')+')';
             zielDok._splitFromPdf = d.id;
+            zielDok._splitGroup = d.id; // Gemeinsame Gruppen-ID für alle Splits
+            zielDok._splitTotal = j.sessions.length;
+            zielDok._splitIdx = si2; // 0-basiert
             zielDok.awaitConfirm = true;
             // Termin-Match — bereits belegte ausschließen
             var belegteIds = [];
@@ -7419,7 +7438,13 @@ function dokAnalyseDoc(d, key, cb){
               db.dokumente.push(zielDok);
             }
           });
-          showToast('✓ '+j.sessions.length+' separate Abrechnungen erkannt');
+          save(db);
+          rDokumente();
+          // Ersten Dokument der Queue öffnen
+          setTimeout(function(){
+            dokOpenDetail(d.id);
+          }, 200);
+          showToast('✓ '+j.sessions.length+' Abrechnungen — bitte einzeln bestätigen');
         } else {
           // Arena-Stil: bleibt monats_abrechn mit sessions
           d.sessions = j.sessions;
@@ -7840,7 +7865,12 @@ function dokOpenDetail(id){
   }
   var t = DOK_TYPES[d.typ||'sonstig']||DOK_TYPES.sonstig;
 
-  document.getElementById('dok-detail-title').textContent = d.beschr||d.dateiname||'Dokument';
+  var titleEl = document.getElementById('dok-detail-title');
+  if(d._splitGroup && d._splitTotal > 1){
+    titleEl.textContent = (d._splitIdx+1)+' von '+d._splitTotal+' · '+(d.gutschrift_nr||d.beschr||d.dateiname||'Abrechnung');
+  } else {
+    titleEl.textContent = d.beschr||d.dateiname||'Dokument';
+  }
   var img = document.getElementById('dok-detail-img');
   var isNotAnalysed = !d.typ || d.typ==='offen' || d.typ==='sonstig';
   if(d.dataURL && d.mime!=='application/pdf' && isNotAnalysed){
