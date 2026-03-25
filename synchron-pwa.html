@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '346';
+  if(el) el.textContent = '347';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9194,13 +9194,63 @@ function dokBestaetigenMonat(dokId){
       }
       if(s._mwst_anteil!=null) t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz!=null)    t.ust_satz     = s._ust_satz;
-      // Gutschrift-Nr.: session-eigene hat Vorrang, sonst Dok-Gutschrift
+      // Gutschrift-Nr. — session-eigene hat Vorrang, sonst Dok-Gutschrift
       var sessionGutNr = s.gutschrift_nr||gutschriftNr;
       if(sessionGutNr) t.gutschrift_nr = sessionGutNr;
       // MwSt-Anteil aus Brutto berechnen falls noch nicht gesetzt
       if(!t.mwst_anteil && t.brutto_termin && t.ust_satz){
         t.mwst_anteil = Math.round(t.brutto_termin * t.ust_satz / (1+t.ust_satz) * 100)/100;
       }
+
+      // ── Takes-Abgleich: abgerechnet vs. Dispo ─────────────────
+      var sTakes = parseInt(s.takes)||0;
+      var dispTakes = parseInt(t.takes)||0;
+      if(sTakes) t.takes_abgerechnet = sTakes;
+      if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
+      if(s.grundgage) t.kommgage_abgerechnet = parseFloat(s.grundgage)||0;
+      if(sTakes && dispTakes && sTakes !== dispTakes){
+        t.takes_differenz = dispTakes - sTakes;
+      } else {
+        t.takes_differenz = 0;
+      }
+
+      // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
+      // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
+      if(!t.abId){
+        var sessionAuszahlung = parseFloat(s.auszahlung||s.brutto_termin)||0;
+        var sessionBrutto = parseFloat(s.brutto_termin)||0;
+        var sessionNetto = Math.round((sessionBrutto
+          - Math.abs(parseFloat(s.kv_abzug)||0)
+          - Math.abs(parseFloat(s.rv_abzug)||0)
+          - Math.abs(parseFloat(s.pv_abzug)||0))*100)/100;
+        var newAbId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+        var newAb = {
+          id: newAbId,
+          dokId: dokId,
+          datum: s.datum||d.datum||'',
+          studio: d.studio||t.studio||'',
+          produktion: s.titel||d.titel||t.titel||'',
+          gutschrift_nr: sessionGutNr||'',
+          brutto: sessionBrutto,
+          netto: sessionNetto,
+          mwst: s._mwst_anteil||0,
+          auszahlung: sessionAuszahlung,
+          takes: sTakes,
+          take_gage: parseFloat(s.take_gage)||0,
+          grundgage: parseFloat(s.grundgage)||0,
+          kv: Math.abs(parseFloat(s.kv_abzug)||0),
+          rv: Math.abs(parseFloat(s.rv_abzug)||0),
+          pv: Math.abs(parseFloat(s.pv_abzug)||0),
+          terminId: t.id,
+          bezahlt: false,
+          erstelltAm: new Date().toISOString()
+        };
+        if(!db.abrechnungen) db.abrechnungen=[];
+        db.abrechnungen.push(newAb);
+        t.abId = newAbId;
+        t.status = 'abrechnung';
+      }
+
       if(!t.dokIds) t.dokIds=[];
       if(t.dokIds.indexOf(dokId)<0) t.dokIds.push(dokId);
       t.abgerechnet=true;
