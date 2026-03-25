@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '348';
+  if(el) el.textContent = '350';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2643,7 +2643,7 @@ function saveMergeChanges(){
     if(dok._pendingDelete){
       deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||''});
       dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
-      _archiveDateiname(dok.dateiname||dok.beschr);
+      _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null);
     }
   });
 
@@ -2674,17 +2674,37 @@ function saveMergeChanges(){
   if(returnId){
     var dok=(db.dokumente||[]).find(function(x){return x.id===returnId;});
 
-    // Split-Queue: automatisch zum nächsten Split-Dokument
+    // Session _done setzen (immer zuerst — auch bei Split-Docs mit Sessions)
+    if(dok && dok.sessions){
+      dok.sessions.forEach(function(s){
+        if(s.terminId===ctid) s._done=true;
+      });
+      save(db);
+    }
+
+    var offeneSessions = dok && dok.sessions
+      ? dok.sessions.filter(function(s){return !s._done;}).length
+      : 0;
+
+    var dp2=document.getElementById('detail-panel');
+    if(dp2) dp2.classList.remove('open');
+    ctid=null;
+
+    // Noch offene Sessions in diesem Dok? → zurück zum Session-Menü, NICHT zur nächsten Gutschrift
+    if(offeneSessions > 0){
+      switchView('dokumente');
+      setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+      return;
+    }
+
+    // Split-Queue: alle Sessions erledigt → automatisch zum nächsten Split-Dokument
     if(dok && dok._splitGroup && dok._splitTotal > 1){
       var naechstesIdx = (dok._splitIdx||0) + 1;
       var naechstesDok = (db.dokumente||[]).find(function(x){
         return x._splitGroup===dok._splitGroup && x._splitIdx===naechstesIdx && !x.bestaetigt;
       });
-      var dp2=document.getElementById('detail-panel');
-      if(dp2) dp2.classList.remove('open');
-      ctid=null;
       if(naechstesDok){
-        showToast('✓ '+(naechstesIdx)+' von '+dok._splitTotal+' — weiter');
+        showToast('✓ Gutschrift '+(dok._splitIdx+1)+' fertig · Weiter '+(naechstesIdx+1)+' von '+dok._splitTotal);
         switchView('dokumente');
         setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 200);
       } else {
@@ -2695,28 +2715,10 @@ function saveMergeChanges(){
       return;
     }
 
-    // Session _done setzen
-    if(dok && dok.sessions){
-      dok.sessions.forEach(function(s){
-        if(s.terminId===ctid) s._done=true;
-      });
-      save(db);
-    }
-    var dp=document.getElementById('detail-panel');
-    if(dp) dp.classList.remove('open');
-    ctid=null;
-
-    var offeneSessions = dok && dok.sessions
-      ? dok.sessions.filter(function(s){return !s._done;}).length
-      : 0;
-
+    // Kein Split, keine offenen Sessions → Dok-Liste
     switchView('dokumente');
-    if(offeneSessions > 0){
-      setTimeout(function(){ dokOpenDetail(returnId); }, 80);
-    } else {
-      rDokumente();
-      showToast('✓ Alle Sessions bestätigt');
-    }
+    rDokumente();
+    showToast('✓ Alle Sessions bestätigt');
   } else {
     openDetail(ctid);
   }
@@ -6933,7 +6935,7 @@ function dokBestaetigen(){
   _applyEditedFields(d);
   var undoSnap={dokId:d.id,typVorher:d.typ,terminId:d.terminId||null};
   d.bestaetigt=true; d.awaitConfirm=false; d.dataURL=null;
-  _archiveDateiname(d.dateiname||d.beschr);
+  _archiveDateiname(d.dateiname||d.beschr, d.terminId||null);
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
     if(t2){
@@ -9299,10 +9301,13 @@ function dokBestaetigenMonat(dokId){
     d.dataURL=null;
     d.thumb=null;
   }
-  _archiveDateiname(d.dateiname||d.beschr);
+  // _archivLog: Dateiname für JEDEN verknüpften Termin loggen → Dispoampel findet ihn wieder
+  var _archTerminIds = (d.sessions||[]).filter(function(s){return s.terminId;}).map(function(s){return s.terminId;});
+  _archTerminIds.forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid); });
+  if(!_archTerminIds.length) _archiveDateiname(d.dateiname||d.beschr, null);
 
   // Log für Undo
-  var linkedTerminIds = (d.sessions||[]).filter(function(s){return s.terminId;}).map(function(s){return s.terminId;});
+  var linkedTerminIds = _archTerminIds;
   var logLabel = d.typ==='abrechn'
     ? 'Abrechnung (mehrere Termine) bestätigt · '
     : 'Monats-Abrechnung bestätigt · ';
@@ -9343,13 +9348,24 @@ function dokBestaetigenMonat(dokId){
 // Liest alle dedit-* Eingabefelder zurück ins Dokument-Objekt
 // Muss vor jedem Bestätigen aufgerufen werden
 // Dateiname dauerhaft als "bereits importiert" markieren
-function _archiveDateiname(dateiname){
+function _archiveDateiname(dateiname, terminId){
   if(!dateiname) return;
+  // importedFiles: einfache String-Liste gegen Duplikat-Import
   if(!db.importedFiles) db.importedFiles = [];
   if(db.importedFiles.indexOf(dateiname) < 0){
     db.importedFiles.push(dateiname);
-    // Archiv auf max. 2000 Einträge begrenzen (älteste raus)
     if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
+  }
+  // _archivLog: mit terminId — damit Dispoampel den Dateinamen wiederfindet
+  if(terminId){
+    if(!db._archivLog) db._archivLog = [];
+    // Kein Duplikat für gleiche terminId + dateiname
+    var exists = db._archivLog.find(function(e){ return e.terminId===terminId && e.dateiname===dateiname; });
+    if(!exists){
+      db._archivLog.push({ terminId: terminId, dateiname: dateiname, ts: new Date().toISOString() });
+      // Max 3000 Einträge
+      if(db._archivLog.length > 3000) db._archivLog = db._archivLog.slice(-3000);
+    }
   }
 }
 
@@ -9525,6 +9541,8 @@ function dokBestaetigenMitTermin(dokId, terminId){
   }
   d.bestaetigt = true;
   d.awaitConfirm = false;
+  // _archivLog jetzt schon — Foto-Löschung kommt später via _pendingDelete
+  _archiveDateiname(d.dateiname||d.beschr, terminId);
   // Foto + Archivierung erst wenn Kalendertermin gespeichert wird (_pendingDelete)
   d._pendingDelete = true;
   save(db);
@@ -9966,7 +9984,9 @@ function dokLinkMultiConfirm(){
       d.awaitConfirm=false;
       d.dataURL=null;
       d.thumb=null;
-      _archiveDateiname(d.dateiname||d.beschr);
+      // Archiv-Log für alle aufgeteilten Termine
+      (terminIds||[]).forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid); });
+      if(!(terminIds&&terminIds.length)) _archiveDateiname(d.dateiname||d.beschr, null);
 
       var methode = useTakes ? 'nach Takes' : 'gleichmäßig (÷'+n+')';
       var teilAbIds = termine.map(function(t){ return t.abId; }).filter(Boolean);
