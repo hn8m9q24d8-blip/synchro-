@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '340';
+  if(el) el.textContent = '342';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2136,26 +2136,42 @@ function openDetail(id){
     }
   }
   // Letzter Fallback: GVL-Daten am Termin = Dispo war mal da
-  if(!dispoDateinamen.length && (t.gvl_staffel||t.gvl_folge||t.gvl_takes_detail)){
-    // Echten Dateinamen aus archivierten Dispos suchen (dataURL=null aber dateiname noch da)
+  if(!dispoDateinamen.length && (t.gvl_staffel||t.gvl_folge||t.gvl_takes_detail||t.regie||t.atelier)){
+    // Suche 1: direkt via terminId (zuverlässigste Methode)
     var archivedDispo = (db.dokumente||[]).find(function(x){
-      return x.typ==='dispo' && !x.dataURL && (
-        x.terminId===id ||
-        (x.datum===t.datum && x.studio && t.studio &&
-         x.studio.toLowerCase().indexOf((t.studio||'').toLowerCase().slice(0,4))>=0)
-      );
+      return (x.typ==='dispo'||(!x.typ&&/dispo/i.test(x.dateiname||''))) && x.terminId===id;
     });
+    // Suche 2: via Datum + Studio (Fallback)
+    if(!archivedDispo){
+      archivedDispo = (db.dokumente||[]).find(function(x){
+        if(x.typ!=='dispo' && !(!x.typ&&/dispo/i.test(x.dateiname||''))) return false;
+        var studioMatch = x.studio && t.studio &&
+          (x.studio.toLowerCase().indexOf((t.studio||'').toLowerCase().slice(0,4))>=0 ||
+           (t.studio||'').toLowerCase().indexOf((x.studio||'').toLowerCase().slice(0,4))>=0);
+        return studioMatch && x.datum===t.datum;
+      });
+    }
     var dispName = archivedDispo
       ? (archivedDispo.dateiname||archivedDispo.beschr||null)
       : null;
-    // Auch im Archiv-Log suchen
+    // Suche 3: importedFiles Log
     if(!dispName && db._archivLog){
       var archEntry = db._archivLog.find(function(e){
         return e.terminId===id && /dispo/i.test(e.dateiname||'');
       });
       if(archEntry) dispName = archEntry.dateiname;
     }
-    dispoDateinamen=[dispName || ('Dispo (bestätigt · Foto gelöscht)')];
+    // Suche 4: dateiname aus _importedFiles enthält Datum oder Studio
+    if(!dispName && db.importedFiles){
+      var tDat = (t.datum||'').replace(/-/g,'');
+      var tStudio = (t.studio||'').toLowerCase().slice(0,4);
+      var found = db.importedFiles.find(function(f){
+        var fl = (f||'').toLowerCase();
+        return /dispo|dispatch/i.test(fl) && (fl.indexOf(tStudio)>=0 || fl.indexOf(tDat)>=0);
+      });
+      if(found) dispName = found;
+    }
+    dispoDateinamen=[dispName || 'Dispo (bestätigt · Foto gelöscht)'];
   }
   var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){
     return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
@@ -11346,7 +11362,7 @@ function rZahlungen(){
       diffTermine.forEach(function(d){
         var zuviel=d.diff>0;
         html+='<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
-          +'<div onclick="openDetail(\''+d.t.id+'\')" style="cursor:pointer">'
+          +'<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+d.t.id+'\');},400);" style="cursor:pointer">'
           +'<div style="display:flex;justify-content:space-between">'
           +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(d.t.titel||d.t.studio||'')+'</div>'
           +'<div style="font-size:11px;color:#999">'+esc(d.t.studio||'')+' · '+fd(d.t.datum)+'</div></div>'
