@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '320';
+  if(el) el.textContent = '321';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3174,16 +3174,17 @@ function dokSessionPeek(elOrId, sessionIdx){
         if(simil < 0.2) titelOk = false;
       }
       if(!datumOk || !titelOk){
-        // Falsche Zuordnung — neu suchen
         s.terminId = null;
-        var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'');
+        // Bereits von anderen Sessions belegte Termine ausschließen
+        var andereIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
+        var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds);
         if(neuMatch) s.terminId = neuMatch.id;
         save(db);
       }
     }
   } else if(s.datum){
-    // Noch keine Zuordnung — jetzt suchen
-    var neuMatch2 = dokFindTermin(s.datum, d.studio||'', s.titel||'');
+    var andereIds2 = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
+    var neuMatch2 = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds2);
     if(neuMatch2){ s.terminId = neuMatch2.id; save(db); }
   }
 
@@ -3222,7 +3223,7 @@ function dokSessionPeek(elOrId, sessionIdx){
     _sessionIdx: si
   };
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
-  _mergeSnapshot._fromDokId = dokId;   // Rückgängig braucht Dok-Referenz
+  _mergeSnapshot._fromDokId = dokId;
   _mergeSnapshot._fromSessionIdx = si;
   _mergeTerminId = t.id;
   dokMergeIntoTermin(pseudoDok, t);
@@ -3236,11 +3237,12 @@ function dokSessionPeek(elOrId, sessionIdx){
   ctid = null;
   switchView('termine');
   _openDetailLock = true;
-  var _sessionTerminId = s.terminId;
+  var _sessionTerminId = t.id; // t.id statt s.terminId — sicher auch nach Validierung
   setTimeout(function(){
     _openDetailLock = false;
     var tx = (db.termine||[]).find(function(x){ return x.id===_sessionTerminId; });
     if(tx) openDetail(_sessionTerminId);
+    else showToast('Termin nicht gefunden');
   }, 350);
 }
 
@@ -7366,11 +7368,12 @@ function dokAnalyseDoc(d, key, cb){
       // Sessions für Monats-Abrechnung
       if(d.typ==='monats_abrechn' && j.sessions && Array.isArray(j.sessions)){
         d.sessions = j.sessions;
-        // Auto-Link jede Session zu passendem Termin
+        // Auto-Link: bereits belegte terminIds ausschließen
+        var belegteIds = [];
         d.sessions.forEach(function(s){
           if(s.datum && d.studio){
-            var tm=dokFindTermin(s.datum, d.studio, s.titel);
-            if(tm) s.terminId=tm.id;
+            var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds);
+            if(tm){ s.terminId=tm.id; belegteIds.push(tm.id); }
           }
         });
         // datum = erstes Session-Datum
@@ -7677,8 +7680,9 @@ function _uhrzeitTrifft(terminUhr, dokVon, dokBis){
   var bisMin=dokBis?toMin(dokBis):vonMin+60;
   return tMin>=vonMin-15 && tMin<=bisMin+15;
 }
-function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit){
+function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds){
   if(!datum) return null;
+  excludeIds = excludeIds || [];
   // Alle Termin-Felder als Suchraum
   function terminSearchText(t){
     return [t.studio||'',t.titel||'',t.regie||'',t.beschr||''].join(' ');
@@ -7720,6 +7724,7 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit){
     return sc;
   }
   var best=(db.termine||[])
+    .filter(function(t){ return excludeIds.indexOf(t.id)<0; }) // bereits belegte ausschließen
     .map(function(t){return {t:t,sc:score(t)};})
     .filter(function(x){return x.sc>=8;})
     .sort(function(a,b){return b.sc-a.sc;});
@@ -7976,13 +7981,28 @@ function dokOpenDetail(id){
     if(d.typ==='monats_abrechn'){
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
       body+=_editRow('brutto','Brutto gesamt €',d.brutto||'');
+      // Pro-Session Aufschlüsselung wenn mehrere Sessions
+      if(d.sessions && d.sessions.length > 1){
+        body+='<div style="margin:6px 0;border-top:1px solid #e5e7eb;padding-top:8px">';
+        body+='<div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pro Gutschrift</div>';
+        d.sessions.forEach(function(s, si2){
+          var sDatum = s.datum ? s.datum.split('-').reverse().join('.') : '?';
+          var sBrutto = parseFloat(s.brutto_termin)||0;
+          body+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:#f9fafb;border-radius:6px;margin-bottom:4px">'
+            +'<div style="font-size:11px;color:#374151"><span style="font-weight:700">'+sDatum+'</span>'
+            +(s.titel?' · '+esc(s.titel.slice(0,20)):'')
+            +(s.takes?' · '+s.takes+' T':'')+'</div>'
+            +'<div style="font-size:12px;font-weight:800;color:#1d6fa8">'+fmtEur(sBrutto)+'</div>'
+            +'</div>';
+        });
+        body+='</div>';
+      }
       body+=_editRow('kv_abzug','Krankenvers. (KV) €',d.kv_abzug||'');
       body+=_editRow('rv_abzug','Rentenvers. (RV) €',d.rv_abzug||'');
       body+=_editRow('pv_abzug','Pflegevers. (PV) €',d.pv_abzug||'');
       var mwstLabel2='MwSt €';
       if(d.ustSatz) mwstLabel2='MwSt '+Math.round(d.ustSatz*100)+'% €';
       else if(d.mwst&&d.auszahlung&&d.brutto&&parseFloat(d.brutto)>0){
-        // Netto = Auszahlung - MwSt, Satz = MwSt/Netto
         var netto2=parseFloat(d.auszahlung)-parseFloat(d.mwst);
         if(netto2>0) mwstLabel2='MwSt '+Math.round((parseFloat(d.mwst)/netto2)*100)+'% €';
       }
