@@ -1746,7 +1746,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '338';
+  if(el) el.textContent = '340';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3225,6 +3225,13 @@ function dokSessionPeek(elOrId, sessionIdx){
     take_gage: s.take_gage||0,
     grundgage: s.grundgage||0,
     brutto: s.brutto_termin||0,
+    mwst: s.mwst||s._mwst_anteil||0,
+    auszahlung: s.auszahlung||s.brutto_termin||0,
+    kv_abzug: s.kv_abzug||0,
+    rv_abzug: s.rv_abzug||0,
+    pv_abzug: s.pv_abzug||0,
+    gutschrift_nr: s.gutschrift_nr||d.gutschrift_nr||'',
+    kuerzel: s.kuerzel||'',
     _sessionIdx: si
   };
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
@@ -7173,7 +7180,8 @@ function dokAnalyseDoc(d, key, cb){
     +'  AUCH WENN VERSCHIEDENE DATEN (26.02. und 10.03.) → TROTZDEM monats_abrechn mit 2 sessions!\n'
     +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum und nur EINE Gutschrift\n'
     +'  studio = der KURZNAME des Synchronstudios (z.B. "FFS", "VSI", "Arena", "TNT", "Interopa") — NICHT der Atelierraum\n'
-    +'  gutschrift_nr = Gutschrifts-Nr. (z.B. "528/202512")\n'
+    +'  gutschrift_nr = Gutschrifts-Nr. EXAKT wie auf dem Dokument (z.B. "528/202512", "2449/202603", "3298/20260301")\n'
+    +'    → Niemals kürzen oder umformatieren — exakt übernehmen!\n'
     +'  brutto = BRUTTO GAGE gesamt (z.B. 4687.60)\n'
     +'  kv_abzug = Krankenversicherungs-Abzug\n'
     +'  rv_abzug = Rentenversicherungs-Abzug\n'
@@ -8184,8 +8192,14 @@ function dokOpenDetail(id){
         body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle bestätigt — Foto löschen & abschließen</button>';
       } else {
         var doneCount = d.sessions.filter(function(s){return s._done;}).length;
+        // Nächste offene Session finden
+        var nextOpenIdx = -1;
+        d.sessions.forEach(function(s,si){ if(!s._done && nextOpenIdx<0) nextOpenIdx=si; });
         body+='<div style="font-size:11px;color:#888;text-align:center;margin-top:8px">'+doneCount+' von '+d.sessions.length+' Sessions abgehakt</div>';
-        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle Termine übernehmen & bestätigen</button>';
+        if(nextOpenIdx >= 0){
+          // Nächste Session mit Diff-Check öffnen
+          body+='<button type="button" onclick="dokSessionPeek(\''+d.id+'\','+nextOpenIdx+')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">→ Nächste Session prüfen & zuordnen</button>';
+        }
       }
       body+='</div>';
     } else {
@@ -9108,8 +9122,8 @@ function dokBestaetigenMonat(dokId){
       if(s.rolle && !t.rolle) t.rolle=s.rolle;
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
       if(s.take_gage && !t.rate) t.rate=s.take_gage;
-      if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage; // Komm-Gage = Grundgage aus Session
-      if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0; // Termin-Brutto separat
+      if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage;
+      if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
       // Sender aus Kürzel
       if(s.kuerzel && !t.sender){
         var senderName = erkenneSender(s.kuerzel);
@@ -9117,7 +9131,13 @@ function dokBestaetigenMonat(dokId){
       }
       if(s._mwst_anteil!=null) t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz!=null)    t.ust_satz     = s._ust_satz;
-      if(gutschriftNr) t.gutschrift_nr = gutschriftNr;
+      // Gutschrift-Nr.: session-eigene hat Vorrang, sonst Dok-Gutschrift
+      var sessionGutNr = s.gutschrift_nr||gutschriftNr;
+      if(sessionGutNr) t.gutschrift_nr = sessionGutNr;
+      // MwSt-Anteil aus Brutto berechnen falls noch nicht gesetzt
+      if(!t.mwst_anteil && t.brutto_termin && t.ust_satz){
+        t.mwst_anteil = Math.round(t.brutto_termin * t.ust_satz / (1+t.ust_satz) * 100)/100;
+      }
       if(!t.dokIds) t.dokIds=[];
       if(t.dokIds.indexOf(dokId)<0) t.dokIds.push(dokId);
       t.abgerechnet=true;
