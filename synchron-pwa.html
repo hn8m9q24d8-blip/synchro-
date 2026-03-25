@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '347';
+  if(el) el.textContent = '348';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2496,17 +2496,48 @@ function openDetail(id){
   if(t.mwst_anteil!=null || t.gutschrift_nr){
     var ustProzent = t.ust_satz ? Math.round(t.ust_satz*100)+'%' : '7%';
     if(!abHtml){
+      var bruttoAnteil = parseFloat(t.brutto_termin)||0;
+      var mwstAnteil   = t.mwst_anteil!=null ? parseFloat(t.mwst_anteil) : 0;
+      var nettoAnteil  = Math.round((bruttoAnteil - mwstAnteil)*100)/100;
+      var auszAnteil   = Math.round((nettoAnteil + mwstAnteil)*100)/100;
+
+      // Takes-Abgleich: abgerechnet vs. Dispo
+      var takesAbger  = parseInt(t.takes_abgerechnet)||0;
+      var takesDispo  = parseInt(t.takes)||0;
+      var takeGageAbg = parseFloat(t.rate_abgerechnet||t.rate)||0;
+      var kommgageAbg = parseFloat(t.kommgage_abgerechnet||t.kommgage)||0;
+      var takesDiff   = t.takes_differenz||0;
+
       abHtml = '<div class="info-card" style="border-left:4px solid #22c55e">'
         +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
         +'<div style="padding:0 16px 14px">';
-      if(t.gutschrift_nr) abHtml+='<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val" style="font-weight:800">'+esc(t.gutschrift_nr)+'</div></div>';
-      var bruttoAnteil = t.brutto_termin || t.kommgage || 0;
-      if(bruttoAnteil) abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(bruttoAnteil)+'</div></div>';
-      if(t.mwst_anteil!=null) abHtml+='<div class="info-row"><div class="ir-key">MwSt '+ustProzent+' Anteil</div><div class="ir-val">'+fmtEur(t.mwst_anteil)+'</div></div>';
-      if(t.mwst_anteil!=null && t.kommgage){
-        var netto = Math.round((t.kommgage - t.mwst_anteil)*100)/100;
-        abHtml+='<div class="info-row" style="font-weight:800"><div class="ir-key">Auszahlung</div><div class="ir-val" style="color:#15803d">'+fmtEur(netto + t.mwst_anteil)+'</div></div>';
+
+      if(t.gutschrift_nr)
+        abHtml+='<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val" style="font-weight:800">'+esc(t.gutschrift_nr)+'</div></div>';
+
+      // Komm-Gage
+      if(kommgageAbg)
+        abHtml+='<div class="info-row"><div class="ir-key">Komm.-Gage</div><div class="ir-val">'+fmtEur(kommgageAbg)+'</div></div>';
+
+      // Takes abgerechnet — mit Differenz-Warnung falls vorhanden
+      if(takesAbger){
+        var takesLabel = takesAbger+' Takes × '+fmtEur(takeGageAbg);
+        var diffBadge  = '';
+        if(takesDiff !== 0){
+          var diffColor = '#c2410c';
+          diffBadge = ' <span style="background:#fef2f2;color:'+diffColor+';font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px">Dispo: '+takesDispo+'</span>';
+        }
+        abHtml+='<div class="info-row"><div class="ir-key">Takes abger.</div><div class="ir-val">'+takesLabel+diffBadge+'</div></div>';
       }
+
+      // Brutto, MwSt, Auszahlung
+      if(bruttoAnteil)
+        abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(bruttoAnteil)+'</div></div>';
+      if(t.mwst_anteil!=null)
+        abHtml+='<div class="info-row"><div class="ir-key">MwSt '+ustProzent+' Anteil</div><div class="ir-val">'+fmtEur(mwstAnteil)+'</div></div>';
+      if(bruttoAnteil)
+        abHtml+='<div class="info-row" style="font-weight:800"><div class="ir-key">Auszahlung</div><div class="ir-val" style="color:#15803d">'+fmtEur(auszAnteil)+'</div></div>';
+
       abHtml+='</div></div>';
     } else if(t.gutschrift_nr){
       // abHtml bereits vorhanden (von t.abId) — Gutschrift-Nr. dort ergänzen falls noch nicht drin
