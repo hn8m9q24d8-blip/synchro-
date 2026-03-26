@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '356';
+  if(el) el.textContent = '358';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2705,10 +2705,83 @@ function saveMergeChanges(){
       return;
     }
 
-    // Kein Split, keine offenen Sessions → Dok-Liste
+    // Normales abrechn-Dok (kein Split, keine Sessions) → Abschluss nötig
+    if(dok && dok.typ==='abrechn' && !dok.bestaetigt && !dok.sessions){
+      // terminId auf Dok setzen falls noch nicht
+      if(!dok.terminId) dok.terminId = ctid;
+      // Abrechnung formal anlegen (abId, status, etc.)
+      var _abT = (db.termine||[]).find(function(x){ return x.id===ctid; });
+      if(_abT && !_abT.abId){
+        var _abBrutto = parseFloat(dok.brutto)||0;
+        var _abMwst   = parseFloat(dok.mwst)||0;
+        var _abNetto  = parseFloat(dok.netto)||(_abBrutto - Math.abs(parseFloat(dok.kv_abzug)||0)
+                          - Math.abs(parseFloat(dok.rv_abzug)||0)
+                          - Math.abs(parseFloat(dok.pv_abzug)||0));
+        var _abAusz   = parseFloat(dok.auszahlung)||0;
+        if(_abBrutto || _abAusz){
+          var _newAbId = 'ab'+Date.now();
+          var _newAb = {
+            id:_newAbId, dokId:dok.id,
+            datum:dok.datum||_abT.datum||'',
+            studio:dok.studio||_abT.studio||'',
+            produktion:dok.titel||_abT.titel||'',
+            gutschrift_nr:dok.gutschrift_nr||'',
+            brutto:_abBrutto, netto:_abNetto,
+            mwst:_abMwst,
+            auszahlung:_abAusz,
+            takes:parseInt(dok.takes)||0,
+            take_gage:parseFloat(dok.take_gage)||0,
+            grundgage:parseFloat(dok.grundgage)||0,
+            kv:Math.abs(parseFloat(dok.kv_abzug)||0),
+            rv:Math.abs(parseFloat(dok.rv_abzug)||0),
+            pv:Math.abs(parseFloat(dok.pv_abzug)||0),
+            terminId:ctid, bezahlt:false,
+            erstelltAm:new Date().toISOString()
+          };
+          if(!db.abrechnungen) db.abrechnungen=[];
+          db.abrechnungen.push(_newAb);
+          _abT.abId = _newAbId;
+          _abT.status = 'abrechnung';
+          if(dok.gutschrift_nr) _abT.gutschrift_nr = dok.gutschrift_nr;
+          if(_abBrutto) _abT.brutto_termin = _abBrutto;
+          if(_abMwst) _abT.mwst_anteil = _abMwst;
+          if(dok.takes) _abT.takes_abgerechnet = parseInt(dok.takes)||0;
+          if(dok.take_gage) _abT.rate_abgerechnet = parseFloat(dok.take_gage)||0;
+          if(dok.grundgage) _abT.kommgage_abgerechnet = parseFloat(dok.grundgage)||0;
+        }
+      }
+      dok.bestaetigt = true;
+      dok.awaitConfirm = false;
+      dok._pendingDelete = true; // Foto löschen wenn Termin gespeichert
+      _archiveDateiname(dok.dateiname||dok.beschr, ctid);
+      if(!_abT.dokIds) _abT.dokIds=[];
+      if(_abT.dokIds.indexOf(dok.id)<0) _abT.dokIds.push(dok.id);
+      save(db);
+    }
+    // ── Split-Navigation: nächste Gutschrift automatisch öffnen ──────────
+    // (gilt für alle Split-Docs — mit und ohne Sub-Sessions)
+    if(dok && dok._splitGroup && dok._splitTotal > 1 && dok.bestaetigt){
+      var naechstesIdx2 = (dok._splitIdx||0) + 1;
+      var naechstesDok2 = (db.dokumente||[]).find(function(x){
+        return x._splitGroup===dok._splitGroup && x._splitIdx===naechstesIdx2 && !x.bestaetigt;
+      });
+      save(db);
+      if(naechstesDok2){
+        showToast('✓ Gutschrift '+(dok._splitIdx+1)+' von '+dok._splitTotal+' · Weiter: '+(naechstesIdx2+1));
+        switchView('dokumente');
+        setTimeout(function(){ dokOpenDetail(naechstesDok2.id); }, 200);
+        return;
+      } else {
+        showToast('✓ Alle '+dok._splitTotal+' Abrechnungen bestätigt');
+        switchView('dokumente');
+        rDokumente();
+        return;
+      }
+    }
+
     switchView('dokumente');
     rDokumente();
-    showToast('✓ Alle Sessions bestätigt');
+    showToast('✓ Abrechnung bestätigt');
   } else {
     openDetail(ctid);
   }
@@ -3182,11 +3255,21 @@ function terminBackBtn(){
   if(_returnToDokId){
     var returnId = _returnToDokId;
     _returnToDokId = null;
-    // Merge-Snapshot verwerfen — User hat nicht gespeichert, aber Merge-Felder
-    // bleiben am Termin (Session-Peek ist informativ, kein harter Revert nötig)
+    // Merge-Snapshot: Termin zurücksetzen wenn User ohne Speichern zurückgeht
     if(_mergeSnapshot && _mergeTerminId){
       var tRevert=(db.termine||[]).find(function(x){return x.id===_mergeTerminId;});
-      if(tRevert) tRevert._hasPendingMerge=false;
+      if(tRevert && tRevert._hasPendingMerge){
+        var revertIdx=db.termine.indexOf(tRevert);
+        if(revertIdx>=0){
+          // Snapshot zurückspielen — aber _mergeSuggestions behalten (kosmetisch)
+          var _snap = JSON.parse(JSON.stringify(_mergeSnapshot));
+          delete _snap._fromDokId;
+          delete _snap._fromSessionIdx;
+          _snap._hasPendingMerge = false;
+          db.termine[revertIdx] = _snap;
+          save(db);
+        }
+      }
     }
     _mergeSnapshot=null;
     _mergeTerminId=null;
@@ -3319,6 +3402,25 @@ function dokSessionPeek(elOrId, sessionIdx){
 }
 
 function dokPeekTermin(terminId){
+  var d = (db.dokumente||[]).find(function(x){ return x.id===_dokCurrentId; });
+  var t = (db.termine||[]).find(function(x){ return x.id===terminId; });
+  if(!t){ showToast('Termin nicht gefunden'); return; }
+
+  // Merge vorbereiten — Snapshot sichern damit Verwerfen möglich ist
+  _mergeSnapshot = JSON.parse(JSON.stringify(t));
+  _mergeSnapshot._fromDokId = _dokCurrentId;
+  _mergeTerminId = terminId;
+
+  // Dokument-Daten in Termin eintragen — mit _skipAbCreate=true
+  // (kein abId anlegen bis User explizit speichert — verhindert verwaiste Einträge bei "Zurück")
+  if(d){
+    var _peekDok = JSON.parse(JSON.stringify(d));
+    _peekDok._skipAbCreate = true;
+    dokMergeIntoTermin(_peekDok, t);
+    t._hasPendingMerge = true;
+    save(db);
+  }
+
   _returnToDokId = _dokCurrentId;
   dokDetailClose();
   var dp = document.getElementById('detail-panel');
@@ -3326,14 +3428,14 @@ function dokPeekTermin(terminId){
   ctid = null;
   switchView('termine');
   _openDetailLock = true;
+  var _terminId = terminId;
   var _tryOpen = function(){
     _openDetailLock = false;
-    var t = (db.termine||[]).find(function(x){ return x.id===terminId; });
-    if(!t){ showToast('Termin nicht gefunden'); return; }
-    openDetail(terminId);
+    var tx = (db.termine||[]).find(function(x){ return x.id===_terminId; });
+    if(!tx){ showToast('Termin nicht gefunden'); return; }
+    openDetail(_terminId);
   };
-  // Erst nach 500ms — iOS braucht manchmal länger nach switchView
-  setTimeout(_tryOpen, 500);
+  setTimeout(_tryOpen, 350);
 }
 
 function saveMemoFromDetail(terminId){
