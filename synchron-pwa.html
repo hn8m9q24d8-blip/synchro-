@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '360';
+  if(el) el.textContent = '361';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3309,11 +3309,11 @@ function dokSessionPeek(elOrId, sessionIdx){
     if(!tCheck){
       s.terminId = null;
     } else {
-      // Datum-Check: max. 1 Tag Abstand (wie dokFindTermin)
+      // Datum-Check: Abrechnungen müssen exakt dasselbe Datum haben
       var datumDiff = (s.datum && tCheck.datum)
         ? Math.abs(new Date(tCheck.datum) - new Date(s.datum)) / (1000*60*60*24)
         : 999;
-      var datumOk = datumDiff <= 1;
+      var datumOk = datumDiff === 0; // Abrechnung: EXAKT — kein ±1 Tag!
       // Studio-Check: wenn Studio vorhanden, muss es grob passen
       var studioOk = true;
       if(d.studio && tCheck.studio){
@@ -3329,14 +3329,14 @@ function dokSessionPeek(elOrId, sessionIdx){
         s.terminId = null;
         // Neu suchen: nur andere Sessions dieser Abrechnung sperren
         var andereIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
-        var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds);
+        var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds, true);
         if(neuMatch) s.terminId = neuMatch.id;
         save(db);
       }
     }
   } else if(s.datum){
     var andereIds2 = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
-    var neuMatch2 = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds2);
+    var neuMatch2 = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds2, true);
     if(neuMatch2){ s.terminId = neuMatch2.id; save(db); }
   }
 
@@ -7669,7 +7669,7 @@ function dokAnalyseDoc(d, key, cb){
               var gutNr = zielDok.gutschrift_nr || '';
               var gesamtBrutto = parseFloat(zielDok.brutto)||0;
               zielDok.sessions = subTermine.map(function(st){
-                var stm = dokFindTermin(st.datum||s.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds);
+                var stm = dokFindTermin(st.datum||s.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds, true);
                 if(stm) splitBelegteIds.push(stm.id);
                 return {
                   datum:       st.datum || s.datum || null,
@@ -7702,7 +7702,7 @@ function dokAnalyseDoc(d, key, cb){
               if(firstSession) zielDok.terminId = firstSession.terminId;
             } else {
               // Einzelner Aufnahmetag — wie bisher, kein sessions-Array nötig
-              var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds);
+              var tm = dokFindTermin(zielDok.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds, true);
               if(tm){ zielDok.terminId = tm.id; splitBelegteIds.push(tm.id); }
             }
 
@@ -7732,7 +7732,7 @@ function dokAnalyseDoc(d, key, cb){
           d.sessions.forEach(function(s){
             s.terminId = null; // alten Stand zurücksetzen vor Neusuche
             if(s.datum && d.studio){
-              var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds2);
+              var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds2, true);
               if(tm){ s.terminId=tm.id; belegteIds2.push(tm.id); }
             }
           });
@@ -7745,7 +7745,9 @@ function dokAnalyseDoc(d, key, cb){
       d.awaitConfirm = true;
       // Auto-link to termin if dispo or abrechn — alle Felder übergeben für bestes Matching
       if((d.typ==='dispo'||d.typ==='abrechn') && d.datum){
-        var match = dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'');
+        // abrechn: nur exaktes Datum — Abrechnungen dürfen nie ±1 Tag matchen
+        var _strictForMatch = d.typ==='abrechn';
+        var match = dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'', null, _strictForMatch);
         if(match) d.terminId = match.id;
       }
       // Auto-create ausgabe if ausgabe type
@@ -8040,9 +8042,10 @@ function _uhrzeitTrifft(terminUhr, dokVon, dokBis){
   var bisMin=dokBis?toMin(dokBis):vonMin+60;
   return tMin>=vonMin-15 && tMin<=bisMin+15;
 }
-function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds){
+function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, strictDate){
   if(!datum) return null;
   excludeIds = excludeIds || [];
+  // strictDate=true: nur exaktes Datum (für Abrechnungen — nie ±1 Tag!)
   // Alle Termin-Felder als Suchraum
   function terminSearchText(t){
     return [t.studio||'',t.titel||'',t.regie||'',t.beschr||''].join(' ');
@@ -8065,7 +8068,8 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds){
   function score(t){
     if(!t.datum) return -1;
     var diff=Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
-    if(diff>1) return -1; // max 1 Tag Abstand
+    if(strictDate && diff!==0) return -1; // Abrechnung: nur exaktes Datum
+    if(diff>1) return -1; // Dispo etc.: max 1 Tag Abstand
     var sc=diff===0?20:8;
     // Studio/Firma
     var ss=studio?bestStudioScore(t):0;
@@ -8160,7 +8164,7 @@ function dokOpenDetail(id){
 
   // Termin holen — falls noch nicht verknüpft, jetzt noch versuchen
   if(!d.terminId && (d.typ==='dispo'||d.typ==='abrechn') && d.datum){
-    var _m=dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'');
+    var _m=dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'', null, d.typ==='abrechn');
     if(_m){ d.terminId=_m.id; save(db); }
   }
   var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
