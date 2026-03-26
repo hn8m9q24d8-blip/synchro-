@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '354';
+  if(el) el.textContent = '356';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3215,21 +3215,31 @@ function dokSessionPeek(elOrId, sessionIdx){
   if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden'); return; }
   var s = d.sessions[si];
 
-  // Gespeicherte terminId validieren — Datum ist hartes Kriterium
+  // Gespeicherte terminId validieren — Datum UND Studio müssen passen
   if(s.terminId){
     var tCheck = (db.termine||[]).find(function(x){ return x.id===s.terminId; });
     if(!tCheck){
       s.terminId = null;
     } else {
-      // Datum-Check: wie dokFindTermin max. 1 Tag Abstand erlauben
+      // Datum-Check: max. 1 Tag Abstand (wie dokFindTermin)
       var datumDiff = (s.datum && tCheck.datum)
         ? Math.abs(new Date(tCheck.datum) - new Date(s.datum)) / (1000*60*60*24)
         : 999;
       var datumOk = datumDiff <= 1;
+      // Studio-Check: wenn Studio vorhanden, muss es grob passen
+      var studioOk = true;
+      if(d.studio && tCheck.studio){
+        var dSt = d.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+        var tSt = tCheck.studio.toLowerCase().replace(/[^a-z0-9]/g,'');
+        // Mindest-Überlappung: eines enthält das andere (mind. 3 Zeichen)
+        studioOk = dSt.length>=3 && tSt.length>=3 &&
+          (dSt.indexOf(tSt.slice(0,4))>=0 || tSt.indexOf(dSt.slice(0,4))>=0);
+      }
       // Konflikt: andere Session hat dieselbe terminId
       var konflikt = (d.sessions||[]).some(function(x,xi){ return xi!==si && x.terminId===s.terminId; });
-      if(!datumOk || konflikt){
+      if(!datumOk || !studioOk || konflikt){
         s.terminId = null;
+        // Neu suchen: nur andere Sessions dieser Abrechnung sperren
         var andereIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
         var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds);
         if(neuMatch) s.terminId = neuMatch.id;
@@ -7481,9 +7491,18 @@ function dokAnalyseDoc(d, key, cb){
         if(alleHabenFinanzen){
           d.typ = 'abrechn';
           d.sessions = null;
-          // Einmal vor dem Loop alle bereits belegten Termine sammeln
+          // Bereits belegte TerminIds sammeln — ABER:
+          // Eigene Split-Geschwister AUSSCHLIESSEN (bei Neu-Analyse würden sonst die
+          // alten terminIds die neuen Matches blockieren → falsche Verknüpfungen!)
           var splitBelegteIds = [];
-          (db.dokumente||[]).forEach(function(x){if(x.terminId) splitBelegteIds.push(x.terminId);});
+          (db.dokumente||[]).forEach(function(x){
+            if(!x.terminId) return;
+            if(x.id === d.id) return;                      // dieses Dok selbst
+            if(x._splitFromPdf === d.id) return;           // Split-Kinder dieses PDFs
+            if(x._splitGroup === d.id) return;             // Split-Gruppe dieses PDFs
+            if(x.id === d._splitFromPdf) return;           // Original-PDF falls d ein Split ist
+            splitBelegteIds.push(x.terminId);
+          });
 
           j.sessions.forEach(function(s, si2){
             var isFirst = si2 === 0;
@@ -7584,10 +7603,11 @@ function dokAnalyseDoc(d, key, cb){
         } else {
           // Arena-Stil: bleibt monats_abrechn mit sessions
           d.sessions = j.sessions;
-          // Alle bereits vergebenen terminIds aus anderen Dokumenten sammeln
-          // (wie splitBelegteIds im alleHabenFinanzen-Pfad)
+          // Bereits belegte TerminIds sammeln — eigenes Dokument ausschliessen
+          // (bei Neu-Analyse sonst alte terminIds blockieren → falsche Verknüpfungen)
           var belegteIds2 = [];
           (db.dokumente||[]).forEach(function(x){
+            if(x.id === d.id) return; // dieses Dok selbst ausschliessen
             if(x.terminId) belegteIds2.push(x.terminId);
             if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) belegteIds2.push(ss.terminId); });
           });
@@ -8707,7 +8727,9 @@ function renderPDFCanvas(canvasId, dataURL, password){
       if(rendered.length===1){
         canvas.width=rendered[0].width;
         canvas.height=rendered[0].height;
-        canvas.getContext('2d').drawImage(rendered[0].canvas,0,0);
+        var ctx0=canvas.getContext('2d');
+        ctx0.setTransform(1,0,0,1,0,0); // Transform-Reset vor drawImage
+        ctx0.drawImage(rendered[0].canvas,0,0);
       } else {
         var gap=6;
         var totalH=rendered.reduce(function(s,r){return s+r.height+gap;},0)-gap;
@@ -8752,6 +8774,8 @@ function renderPDFCanvas(canvasId, dataURL, password){
 }
 
 // Rendert eine einzelne Seite eines PDFs — für Split-Dokumente
+// Wichtig: Offscreen-Canvas nutzen damit kein Transform-State vom vorherigen Render
+// übrig bleibt (iOS-Bug bei schneller Queue-Verarbeitung → gespiegeltes Bild)
 function renderPDFCanvasPage(canvasId, dataURL, pageNr, password){
   if(typeof pdfjsLib==='undefined') return;
   var canvas=document.getElementById(canvasId);
@@ -8767,8 +8791,19 @@ function renderPDFCanvasPage(canvasId, dataURL, pageNr, password){
     return pdf.getPage(pg);
   }).then(function(page){
     var vp=page.getViewport({scale:1.5});
-    canvas.width=vp.width; canvas.height=vp.height;
-    return page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
+    // Offscreen-Canvas: PDF.js rendert hier sauber ohne Transform-Pollution
+    var offscreen=document.createElement('canvas');
+    offscreen.width=vp.width; offscreen.height=vp.height;
+    var offCtx=offscreen.getContext('2d');
+    // Sicherheitshalber Transform zurücksetzen
+    offCtx.setTransform(1,0,0,1,0,0);
+    return page.render({canvasContext:offCtx, viewport:vp}).promise.then(function(){
+      // Ziel-Canvas sauber beschreiben
+      canvas.width=vp.width; canvas.height=vp.height;
+      var ctx=canvas.getContext('2d');
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.drawImage(offscreen,0,0);
+    });
   }).catch(function(e){ console.warn('PDF page render:', e); });
 }
 
