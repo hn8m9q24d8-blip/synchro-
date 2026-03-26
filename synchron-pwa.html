@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '350';
+  if(el) el.textContent = '354';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2697,21 +2697,11 @@ function saveMergeChanges(){
       return;
     }
 
-    // Split-Queue: alle Sessions erledigt → automatisch zum nächsten Split-Dokument
-    if(dok && dok._splitGroup && dok._splitTotal > 1){
-      var naechstesIdx = (dok._splitIdx||0) + 1;
-      var naechstesDok = (db.dokumente||[]).find(function(x){
-        return x._splitGroup===dok._splitGroup && x._splitIdx===naechstesIdx && !x.bestaetigt;
-      });
-      if(naechstesDok){
-        showToast('✓ Gutschrift '+(dok._splitIdx+1)+' fertig · Weiter '+(naechstesIdx+1)+' von '+dok._splitTotal);
-        switchView('dokumente');
-        setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 200);
-      } else {
-        showToast('✓ Alle '+dok._splitTotal+' Abrechnungen bestätigt');
-        switchView('dokumente');
-        rDokumente();
-      }
+    // Alle Sessions erledigt → Dok formal abschließen (abId anlegen, bestaetigt setzen)
+    // dokBestaetigenMonat erledigt auch die Split-Navigation zum nächsten Dok
+    if(dok && (dok.typ==='monats_abrechn' || (dok.typ==='abrechn' && dok.sessions && dok.sessions.length > 1))){
+      switchView('dokumente');
+      setTimeout(function(){ dokBestaetigenMonat(returnId); }, 80);
       return;
     }
 
@@ -3192,11 +3182,18 @@ function terminBackBtn(){
   if(_returnToDokId){
     var returnId = _returnToDokId;
     _returnToDokId = null;
-    // Termin-Panel schließen (ohne Merge-Revert — war nur Peek)
+    // Merge-Snapshot verwerfen — User hat nicht gespeichert, aber Merge-Felder
+    // bleiben am Termin (Session-Peek ist informativ, kein harter Revert nötig)
+    if(_mergeSnapshot && _mergeTerminId){
+      var tRevert=(db.termine||[]).find(function(x){return x.id===_mergeTerminId;});
+      if(tRevert) tRevert._hasPendingMerge=false;
+    }
+    _mergeSnapshot=null;
+    _mergeTerminId=null;
+    // Termin-Panel schließen
     var dp = document.getElementById('detail-panel');
     if(dp) dp.classList.remove('open');
     ctid = null;
-    // Direkt Dok-Panel öffnen — kein switchView nötig falls schon auf dok-view
     switchView('dokumente');
     setTimeout(function(){ dokOpenDetail(returnId); }, 80);
   } else {
@@ -3224,7 +3221,11 @@ function dokSessionPeek(elOrId, sessionIdx){
     if(!tCheck){
       s.terminId = null;
     } else {
-      var datumOk = s.datum && tCheck.datum && tCheck.datum===s.datum;
+      // Datum-Check: wie dokFindTermin max. 1 Tag Abstand erlauben
+      var datumDiff = (s.datum && tCheck.datum)
+        ? Math.abs(new Date(tCheck.datum) - new Date(s.datum)) / (1000*60*60*24)
+        : 999;
+      var datumOk = datumDiff <= 1;
       // Konflikt: andere Session hat dieselbe terminId
       var konflikt = (d.sessions||[]).some(function(x,xi){ return xi!==si && x.terminId===s.terminId; });
       if(!datumOk || konflikt){
@@ -4464,81 +4465,85 @@ function doExportCSV(){
   var rows=[];
 
   // ── EINNAHMEN ──────────────────────────────────────────────
+  // Basis: db.dokumente (typ=abrechn/monats_abrechn, bestaetigt)
+  // Jedes Dokument = eine Gutschrift = eine CSV-Zeile — keine Doppelungen durch Termine
   rows.push(['=== EINNAHMEN '+jahr+' ===','','','','','','','','']);
   rows.push(['Zahlungsdatum','Leistungsdatum','Studio','Produktion','Gutschrift-Nr.','Brutto €','SV-Abzüge €','USt '+Math.round(ur*100)+'% €','Auszahlung €']);
 
   var einnahmenGesamt=0, einnahmenUst=0;
-  var csvGezaehlteDoks={};
-  var csvGezaehltTermine={};
 
-  (db.termine||[]).filter(function(t){
-    var zDat=t.zahlungDatum||(t.status==='bezahlt'?t.datum:null);
-    if(!zDat||!zDat.startsWith(jahr)) return false;
-    // Zahlungsdatum auch aus Dokument
-    if(!zDat && t.dokIds){
-      t.dokIds.forEach(function(did){
-        var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
-        if(mz) zDat=mz.datum;
+  // Alle bestätigten Abrechnungs-Dokumente des Jahres
+  var csvDoks = (db.dokumente||[]).filter(function(dok){
+    if(!dok.bestaetigt) return false;
+    if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn') return false;
+    // Zahlungsdatum ermitteln — aus verknüpftem Termin oder direkt am Dok
+    var zDat = dok.zahlungDatum || null;
+    if(!zDat && dok.terminId){
+      var tLink = (db.termine||[]).find(function(x){ return x.id===dok.terminId; });
+      if(tLink) zDat = tLink.zahlungDatum || (tLink.status==='bezahlt' ? tLink.datum : null);
+    }
+    if(!zDat && dok.sessions){
+      dok.sessions.forEach(function(s){
+        if(zDat) return;
+        var tS = s.terminId ? (db.termine||[]).find(function(x){ return x.id===s.terminId; }) : null;
+        if(tS) zDat = tS.zahlungDatum || (tS.status==='bezahlt' ? tS.datum : null);
       });
     }
+    dok._csvZahlDat = zDat || '';
     return zDat && zDat.startsWith(jahr);
   }).sort(function(a,b){
-    var za=a.zahlungDatum||a.datum||'';
-    var zb=b.zahlungDatum||b.datum||'';
-    return za>zb?1:-1;
-  }).forEach(function(t){
-    // Monats-Abrechnung: einmal als Ganzes ausgeben
-    if(t.dokIds&&t.dokIds.length){
-      var handled=false;
-      t.dokIds.forEach(function(did){
-        if(csvGezaehlteDoks[did]) return;
-        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&d.typ==='monats_abrechn'&&d.bestaetigt;});
-        if(!dok) return;
-        csvGezaehlteDoks[did]=true;
-        handled=true;
-        var brutto=parseFloat(dok.brutto)||0;
-        var auszahlung=parseFloat(dok.auszahlung)||0;
-        var mwst=parseFloat(dok.mwst)||(brutto?Math.round(brutto*ur/(1+ur)*100)/100:0);
-        var kv=Math.abs(parseFloat(dok.kv_abzug)||0);
-        var rv=Math.abs(parseFloat(dok.rv_abzug)||0);
-        var pv=Math.abs(parseFloat(dok.pv_abzug)||0);
-        var sv=kv+rv+pv;
-        var zahlDok=null;
-        var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
-        if(mz) zahlDok=mz.datum; else zahlDok=dok.zahlungDatum||t.zahlungDatum||'';
-        if(!brutto&&!auszahlung) return;
-        rows.push([zahlDok||'',dok.datum||'',dok.studio||'','Monats-Gutschrift ('+((dok.sessions||[]).length)+' Termine)',dok.gutschrift_nr||'',
-          brutto.toFixed(2).replace('.',','),
-          sv?('-'+sv.toFixed(2).replace('.',',')):'-',
-          mwst.toFixed(2).replace('.',','),
-          auszahlung?auszahlung.toFixed(2).replace('.',','):''
-        ]);
-        einnahmenGesamt+=brutto;
-        einnahmenUst+=mwst;
-      });
-      if(handled) return;
+    return (a._csvZahlDat||a.datum||'') > (b._csvZahlDat||b.datum||'') ? 1 : -1;
+  });
+
+  // Duplikate via Gutschrift-Nr. verhindern (selbe Nr. kann auf Original+Split stehen)
+  var csvGesehenGutNr = {};
+
+  csvDoks.forEach(function(dok){
+    var gutNr = dok.gutschrift_nr || '';
+    // Split-Dok: Original-Dok (dataURL vorhanden) ignorieren wenn Split-Docs da sind
+    // Original-Dok hat _splitGroup=undefined; Split-Docs haben _splitFromPdf
+    // → nur Split-Docs ausgeben wenn vorhanden, NICHT das Original
+    if(!dok._splitFromPdf && dok._splitGroup){
+      // Das ist das Original-Dok das in Sub-Docs gesplittet wurde — überspringen
+      return;
+    }
+    // Gutschrift-Nr. Duplikat-Schutz
+    if(gutNr && csvGesehenGutNr[gutNr]) return;
+    if(gutNr) csvGesehenGutNr[gutNr] = true;
+
+    var brutto     = parseFloat(dok.brutto)||0;
+    var mwst       = parseFloat(dok.mwst)||(brutto ? Math.round(brutto*ur/(1+ur)*100)/100 : 0);
+    var auszahlung = parseFloat(dok.auszahlung)||0;
+    var kv = Math.abs(parseFloat(dok.kv_abzug)||0);
+    var rv = Math.abs(parseFloat(dok.rv_abzug)||0);
+    var pv = Math.abs(parseFloat(dok.pv_abzug)||0);
+    var sv = kv + rv + pv;
+
+    if(!brutto && !auszahlung) return;
+
+    // Produktionsname: bei Monats-Abrechn mit mehreren Sessions anreichern
+    var prod = dok.titel || '';
+    if(dok.typ==='monats_abrechn' && dok.sessions && dok.sessions.length > 1){
+      var prodNames = [...new Set(dok.sessions.map(function(s){ return s.titel||''; }).filter(Boolean))];
+      if(prodNames.length) prod = prodNames.join(' / ');
+      else prod = 'Monats-Gutschrift ('+dok.sessions.length+' Termine)';
     }
 
-    if(csvGezaehltTermine[t.id]) return;
-    csvGezaehltTermine[t.id]=true;
-    var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-    var brutto=parseFloat((ab&&ab.brutto)||t.abrechnungBrutto||0)||0;
-    var auszahlung=parseFloat((ab&&ab.auszahlung)||0)||0;
-    var mwst=parseFloat((ab&&ab.mwst)||0)||(brutto?Math.round(brutto*ur/(1+ur)*100)/100:0);
-    var netto=Math.round((brutto-mwst)*100)/100;
-    var kv=parseFloat((ab&&ab.kv)||0);var rv=parseFloat((ab&&ab.rv)||0);var pv=parseFloat((ab&&ab.pv)||0);
-    var sv=Math.abs(kv)+Math.abs(rv)+Math.abs(pv);
-    var gutschrift=(ab&&ab.gutschrift_nr)||t.gutschrift_nr||'';
-    if(!brutto&&!auszahlung) return;
-    rows.push([t.zahlungDatum||'',t.datum||'',t.studio||'',t.titel||'',gutschrift,
+    rows.push([
+      dok._csvZahlDat||'',
+      dok.datum||'',
+      dok.studio||'',
+      prod,
+      gutNr,
       brutto.toFixed(2).replace('.',','),
-      sv?('-'+sv.toFixed(2).replace('.',',')):'-',
+      sv ? ('-'+sv.toFixed(2).replace('.',',')) : '-',
       mwst.toFixed(2).replace('.',','),
-      auszahlung?auszahlung.toFixed(2).replace('.',','):netto.toFixed(2).replace('.',',')
+      auszahlung ? auszahlung.toFixed(2).replace('.',',') : ''
     ]);
-    einnahmenGesamt+=brutto;
-    einnahmenUst+=mwst;
+    einnahmenGesamt += brutto;
+    einnahmenUst    += mwst;
   });
+
   rows.push(['SUMME Einnahmen','','','','',einnahmenGesamt.toFixed(2).replace('.',','),'','',einnahmenUst.toFixed(2).replace('.',',')]);
   rows.push(['','','','','','','','','']);
 
@@ -7147,6 +7152,18 @@ function dokAnalyseDoc(d, key, cb){
     +'  "S3E5" → gvl_staffel_header="3", gvl_episode_header="5"\n'
     +'  Falls nicht im Kopf: null\n'
     +'\n'
+    +'  LAYOUT G: RC-Production / Hermes-Format — Episodenbereich im Dokumentkopf, KEINE EPS-Spalte\n'
+    +'    Erkennbar an: "Ep. 403-404" oder "Ep. 403, 404" in der Kopfzeile der Dispo (Datum-Zeile)\n'
+    +'    Beispiel Kopf: "Mittwoch, 25. März 2026, Ep. 403-404, 13. Tag"\n'
+    +'    → Episoden im Bereich einzeln auflisten: 403 UND 404 (Staffel 4, Folgen 03 und 04)\n'
+    +'    → Tims Takes gleichmäßig aufteilen auf alle Folgen im Bereich (Rest zur ersten Folge)\n'
+    +'    → Beispiel: "Ep. 403-404", Tim 81 Takes → [{"folge":403,"takes":41},{"folge":404,"takes":40}]\n'
+    +'    → Beispiel: "Ep. 201-203", Tim 90 Takes → [{"folge":201,"takes":30},{"folge":202,"takes":30},{"folge":203,"takes":30}]\n'
+    +'    → gvl_staffel_header = erste Ziffer(n) des Folgencodes (403 → "4")\n'
+    +'    ⚠ Bindestrich zwischen Folgennummern = BEREICH → ALLE Folgen einzeln aufführen!\n'
+    +'    ⚠ "Ep. 403-404" = ZWEI Folgen — NICHT eine Folge "403404"!\n'
+    +'    ⚠ Wenn nur eine Folge: "Ep. 403" → [{"folge":403,"takes":81}]\n'
+    +'\n'
     +'TITEL BEREINIGEN — Staffel/Episoden-Angaben aus Titel entfernen:\n'
     +'  "ROOKIE BLUE S5" → titel="ROOKIE BLUE", gvl_staffel_header="5"\n'
     +'  "Dark S2 EP3" → titel="Dark", gvl_staffel_header="2", gvl_episode_header="3"\n'
@@ -7567,8 +7584,15 @@ function dokAnalyseDoc(d, key, cb){
         } else {
           // Arena-Stil: bleibt monats_abrechn mit sessions
           d.sessions = j.sessions;
+          // Alle bereits vergebenen terminIds aus anderen Dokumenten sammeln
+          // (wie splitBelegteIds im alleHabenFinanzen-Pfad)
           var belegteIds2 = [];
+          (db.dokumente||[]).forEach(function(x){
+            if(x.terminId) belegteIds2.push(x.terminId);
+            if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) belegteIds2.push(ss.terminId); });
+          });
           d.sessions.forEach(function(s){
+            s.terminId = null; // alten Stand zurücksetzen vor Neusuche
             if(s.datum && d.studio){
               var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds2);
               if(tm){ s.terminId=tm.id; belegteIds2.push(tm.id); }
@@ -9250,12 +9274,22 @@ function dokBestaetigenMonat(dokId){
       // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
       // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
       if(!t.abId){
-        var sessionAuszahlung = parseFloat(s.auszahlung||s.brutto_termin)||0;
         var sessionBrutto = parseFloat(s.brutto_termin)||0;
-        var sessionNetto = Math.round((sessionBrutto
-          - Math.abs(parseFloat(s.kv_abzug)||0)
-          - Math.abs(parseFloat(s.rv_abzug)||0)
-          - Math.abs(parseFloat(s.pv_abzug)||0))*100)/100;
+        // KV/RV/PV: session-eigene haben Vorrang; sonst proportional vom Dok verteilen
+        var _sesKV = parseFloat(s.kv_abzug)||0;
+        var _sesRV = parseFloat(s.rv_abzug)||0;
+        var _sesPV = parseFloat(s.pv_abzug)||0;
+        if(!_sesKV && !_sesRV && !_sesPV && gesamtBrutto > 0 && sessionBrutto > 0){
+          var _anteil = sessionBrutto / gesamtBrutto;
+          _sesKV = Math.round(Math.abs(parseFloat(d.kv_abzug)||0) * _anteil * 100)/100;
+          _sesRV = Math.round(Math.abs(parseFloat(d.rv_abzug)||0) * _anteil * 100)/100;
+          _sesPV = Math.round(Math.abs(parseFloat(d.pv_abzug)||0) * _anteil * 100)/100;
+        }
+        var sessionNetto = Math.round((sessionBrutto - _sesKV - _sesRV - _sesPV)*100)/100;
+        // Auszahlung: netto + mwst-anteil
+        var sessionAuszahlung = s.auszahlung
+          ? parseFloat(s.auszahlung)
+          : Math.round((sessionNetto + (s._mwst_anteil||0))*100)/100;
         var newAbId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
         var newAb = {
           id: newAbId,
@@ -9271,9 +9305,9 @@ function dokBestaetigenMonat(dokId){
           takes: sTakes,
           take_gage: parseFloat(s.take_gage)||0,
           grundgage: parseFloat(s.grundgage)||0,
-          kv: Math.abs(parseFloat(s.kv_abzug)||0),
-          rv: Math.abs(parseFloat(s.rv_abzug)||0),
-          pv: Math.abs(parseFloat(s.pv_abzug)||0),
+          kv: _sesKV,
+          rv: _sesRV,
+          pv: _sesPV,
           terminId: t.id,
           bezahlt: false,
           erstelltAm: new Date().toISOString()
