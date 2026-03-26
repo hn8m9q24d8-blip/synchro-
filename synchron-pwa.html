@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '361';
+  if(el) el.textContent = '364';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3301,6 +3301,8 @@ function dokSessionPeek(elOrId, sessionIdx){
   }
   var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
   if(!d || !d.sessions || !d.sessions[si]){ showToast('Session nicht gefunden'); return; }
+  // Eingabefelder übernehmen bevor Merge — Nutzer-Korrekturen am Dok sollen wirken
+  _applyEditedFields(d);
   var s = d.sessions[si];
 
   // Gespeicherte terminId validieren — Datum UND Studio müssen passen
@@ -3323,19 +3325,40 @@ function dokSessionPeek(elOrId, sessionIdx){
         studioOk = dSt.length>=3 && tSt.length>=3 &&
           (dSt.indexOf(tSt.slice(0,4))>=0 || tSt.indexOf(dSt.slice(0,4))>=0);
       }
-      // Konflikt: andere Session hat dieselbe terminId
+      // Konflikt: andere Session ODER Geschwister-Doc hat dieselbe terminId
       var konflikt = (d.sessions||[]).some(function(x,xi){ return xi!==si && x.terminId===s.terminId; });
+      if(!konflikt && d._splitGroup){
+        konflikt = (db.dokumente||[]).some(function(x){
+          if(x._splitGroup!==d._splitGroup || x.id===d.id) return false;
+          if(x.terminId===s.terminId) return true;
+          return (x.sessions||[]).some(function(ss){ return ss.terminId===s.terminId; });
+        });
+      }
       if(!datumOk || !studioOk || konflikt){
         s.terminId = null;
         // Neu suchen: nur andere Sessions dieser Abrechnung sperren
+        // Auch Termine von Geschwister-Docs (selbe Split-Gruppe) ausschliessen
         var andereIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
+        if(d._splitGroup){
+          (db.dokumente||[]).forEach(function(x){
+            if(x._splitGroup===d._splitGroup && x.id!==d.id && x.terminId) andereIds.push(x.terminId);
+            if(x._splitGroup===d._splitGroup && x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) andereIds.push(ss.terminId); });
+          });
+        }
         var neuMatch = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds, true);
         if(neuMatch) s.terminId = neuMatch.id;
         save(db);
       }
     }
   } else if(s.datum){
+    // Auch Termine von Geschwister-Docs ausschliessen
     var andereIds2 = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
+    if(d._splitGroup){
+      (db.dokumente||[]).forEach(function(x){
+        if(x._splitGroup===d._splitGroup && x.id!==d.id && x.terminId) andereIds2.push(x.terminId);
+        if(x._splitGroup===d._splitGroup && x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) andereIds2.push(ss.terminId); });
+      });
+    }
     var neuMatch2 = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, andereIds2, true);
     if(neuMatch2){ s.terminId = neuMatch2.id; save(db); }
   }
@@ -3410,6 +3433,9 @@ function dokPeekTermin(terminId){
   var d = (db.dokumente||[]).find(function(x){ return x.id===_dokCurrentId; });
   var t = (db.termine||[]).find(function(x){ return x.id===terminId; });
   if(!t){ showToast('Termin nicht gefunden'); return; }
+
+  // Eingabefelder übernehmen BEVOR der Merge — sonst gehen Nutzer-Korrekturen verloren!
+  if(d) _applyEditedFields(d);
 
   // Merge vorbereiten — Snapshot sichern damit Verwerfen möglich ist
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
@@ -7405,25 +7431,43 @@ function dokAnalyseDoc(d, key, cb){
     +'      "termine":[{"datum":"2026-01-20","takes":110,"grundgage":100,"take_gage":5.0},\n'
     +'                 {"datum":"2026-01-21","takes":124,"grundgage":100,"take_gage":5.0}]}\n'
     +'\n'
-    +'    FALL B — PDF hat EINE SEITE mit einer Tabelle mit mehreren Terminen (z.B. Arena Monats-Gutschrift):\n'
-    +'    → Nach DATUM aufteilen: jedes Datum = eigene session.\n'
-    +'    → Gleicher Filmtitel + gleiches Datum → zusammenfassen (Grundgage + Takes = eine session).\n'
-    +'    → Verschiedene Daten auch bei gleichem Filmtitel → separate sessions!\n'
-    +'    ⚠ "Grundgage 1-10" oder "Grundgage TV" gehört IMMER zur Takes-Zeile desselben Films — NIEMALS als eigene Session!\n'
-    +'    ⚠ Datum der Grundgage-Zeile IGNORIEREN — Datum der Takes-Zeile übernehmen!\n'
-    +'    ⚠ Wenn du unsicher bist welches Datum richtig ist: nimm das FRÜHESTE Datum der zusammengehörigen Zeilen!\n'
-    +'    Beispiel Arena-Abrechnung (EXAKT SO MACHEN):\n'
-    +'      Zeile 1: Di 17.03.26 | 2 | 95 Takes TV | T7182 | Navy CIS -23- | 380,00€\n'
-    +'      Zeile 2: Di 17.03.26 | 18 | Grundgage 1-10 | T7182 | Navy CIS -23- | 120,00€\n'
-    +'      → EINE session: {"datum":"2026-03-17","titel":"Navy CIS -23-","takes":105,"grundgage":120.0,"take_gage":4.0,"brutto_termin":500.0}\n'
-    +'      → takes = 95 + 10 (Grundgage zählt als 1-10 Paket = 10 Takes) = 105\n'
-    +'      → brutto_termin = 380 + 120 = 500\n'
-    +'      → grundgage = der Grundgage-Betrag (120€)\n'
-    +'      → take_gage = Takes-Betrag ÷ Takes-Anzahl (380÷95 = 4,00€)\n'
-    +'    AUCH wenn die Grundgage-Zeile ein anderes Datum hat — wenn Filmcode gleich → ZUSAMMENFASSEN und das Datum der Takes-Zeile nehmen!\n'
-    +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\n'
-    +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0,"kuerzel":"WARN"}\n'
-    +'    kuerzel = Senderkürzel aus der Tabelle (z.B. "WARN", "AMAZ", "PRO", "ZDF") — IMMER aus der Zeile übernehmen!\n'
+    +'    FALL B — PDF hat EINE SEITE mit einer Tabelle mit mehreren Terminen:\\n'
+    +'    → Nach DATUM aufteilen: jedes Datum = eigene session.\\n'
+    +'    → Gleicher Filmtitel + gleiches Datum → zusammenfassen (Grundgage + Takes = eine session).\\n'
+    +'    → Verschiedene Daten auch bei gleichem Filmtitel → separate sessions!\\n'
+    +'    ⚠ Grundgage gehört IMMER zur Takes-Zeile desselben Films — NIEMALS als eigene Session!\\n'
+    +'\\n'
+    +'    INTEROPA / SESAM-GS FORMAT (Monats-Gutschrift mit LA-Spalte):\\n'
+    +'    Tabellenspalten: Datum | LA | [N] Grundgage/Takegage [Typ] | Filmcode | Filmtitel | Typ | Betrag | MwSt | Personal\\n'
+    +'    ⚠⚠⚠ LA-Spalte enthält 2-stellige Zeilennummern (60, 61, 10, 20, ...) — NIEMALS als Takes verwenden!\\n'
+    +'    ⚠⚠⚠ Die Zahl VOR "Takegage" = echte Take-Anzahl — z.B. "6 Takegage" → 6 Takes\\n'
+    +'    ⚠⚠⚠ Die Zahl VOR "Grundgage" ist IMMER 1 (= 1× Grundgage-Pauschale) — KEINE Takes!\\n'
+    +'    ⚠⚠⚠ take_gage IMMER berechnen: Betrag der Takegage-Zeile ÷ Anzahl vor "Takegage"\\n'
+    +'    Beispiel Interopa (EXAKT SO LESEN):\\n'
+    +'      Zeile 1: Do 26.02.26 | LA=60 | 1 Grundgage ST-SE | 49790 | Daredevil S2 | ST-S | 200,00\\n'
+    +'      Zeile 2: Do 26.02.26 | LA=61 | 6 Takegage ST-SE  | 49790 | Daredevil S2 | ST-S |  60,00\\n'
+    +'      → LA=61 IGNORIEREN, "6" VOR Takegage = 6 Takes\\n'
+    +'      → take_gage = 60,00 ÷ 6 = 10,00€\\n'
+    +'      → session: datum=2026-02-26, titel=Daredevil S2, takes=6, take_gage=10.0, grundgage=200.0, brutto_termin=260.0\\n'
+    +'      Zeile 3: Fr 27.02.26 | LA=10 | 1 Grundgage KINO | 49372 | Disclosure Day VT | KINO | 150,00\\n'
+    +'      Zeile 4: Fr 27.02.26 | LA=20 | 12 Takegage KINO | 49372 | Disclosure Day VT | KINO | 120,00\\n'
+    +'      → LA=20 IGNORIEREN, "12" VOR Takegage = 12 Takes\\n'
+    +'      → take_gage = 120,00 ÷ 12 = 10,00€\\n'
+    +'      → session: datum=2026-02-27, titel=Disclosure Day, takes=12, take_gage=10.0, grundgage=150.0, brutto_termin=270.0\\n'
+    +'    MERKSATZ: [LA] | [N] Takegage → N = Takes, LA-Nummer nie als Takes!\\n'
+    +'\\n'
+    +'    ARENA FORMAT (Monats-Gutschrift ohne LA-Spalte):\\n'
+    +'    Beispiel Arena-Abrechnung (EXAKT SO MACHEN):\\n'
+    +'      Zeile 1: Di 17.03.26 | 2 | 95 Takes TV | T7182 | Navy CIS -23- | 380,00€\\n'
+    +'      Zeile 2: Di 17.03.26 | 18 | Grundgage 1-10 | T7182 | Navy CIS -23- | 120,00€\\n'
+    +'      → EINE session: {"datum":"2026-03-17","titel":"Navy CIS -23-","takes":105,"grundgage":120.0,"take_gage":4.0,"brutto_termin":500.0}\\n'
+    +'      → takes = 95 + 10 (Grundgage zählt als 1-10 Paket = 10 Takes) = 105\\n'
+    +'      → brutto_termin = 380 + 120 = 500\\n'
+    +'      → grundgage = 120€, take_gage = 380÷95 = 4,00€\\n'
+    +'    AUCH wenn die Grundgage-Zeile ein anderes Datum hat — wenn Filmcode gleich → ZUSAMMENFASSEN\\n'
+    +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\\n'
+    +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0,"kuerzel":"WARN"}\\n'
+    +'    kuerzel = Senderkürzel aus der Tabelle (z.B. "WARN", "AMAZ", "PRO", "ZDF") — IMMER aus der Zeile übernehmen!\\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
     +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'
@@ -9355,6 +9399,9 @@ function dokBestaetigenMonat(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions) return;
 
+  // Alle Eingabefelder übernehmen — Nutzer-Korrekturen am Dok (Titel, Studio etc.)
+  _applyEditedFields(d);
+
   // KV/RV/PV/MwSt aus Eingabefeldern übernehmen (vor Berechnung!)
   var mFields=['kv_abzug','rv_abzug','pv_abzug','mwst','brutto','auszahlung'];
   mFields.forEach(function(f){
@@ -9520,6 +9567,11 @@ function dokBestaetigenMonat(dokId){
     logLabel+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),
     {dokId:d.id, typVorher:d.typ, terminIds:linkedTerminIds}
   );
+
+  // State aufräumen bevor Navigation — verhindert Leak in nächste Gutschrift
+  _mergeSnapshot=null;
+  _mergeTerminId=null;
+  _returnToDokId=null;
 
   // Wenn Split-Dok: nächste Gutschrift automatisch öffnen
   if(d._splitGroup && d._splitTotal > 1){
