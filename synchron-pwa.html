@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '358';
+  if(el) el.textContent = '360';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2642,7 +2642,12 @@ function saveMergeChanges(){
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){
       deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||''});
-      dok.dataURL=null; dok.thumb=null; dok._pendingDelete=false;
+      // dataURL nur löschen wenn kein unbestätigtes Split-Dok noch drauf verweist
+      var nochGebraucht = (db.dokumente||[]).some(function(x){
+        return x.id !== dok.id && x._splitFromPdf === dok.id && !x.bestaetigt;
+      });
+      if(!nochGebraucht){ dok.dataURL=null; dok.thumb=null; }
+      dok._pendingDelete=false;
       _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null);
     }
   });
@@ -6479,7 +6484,13 @@ function syncAnalyseNew(ids,cb){
         typ:d.typ,beschr:d.beschr,datum:d.datum,studio:d.studio,brutto:d.brutto});
       if(done===docs.length){
         // Strip full images after analysis - keep only thumbnails
-        docs.forEach(function(d){ d.dataURL=null; });
+        // ABER: Split-Original-Docs behalten dataURL solange Kinder noch unbestätigt sind
+        docs.forEach(function(d){
+          var nochGebrauchtNachAnalyse = (db.dokumente||[]).some(function(x){
+            return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
+          });
+          if(!nochGebrauchtNachAnalyse) d.dataURL=null;
+        });
         save(db);cb(results);showSyncReview(ids);
       }
     });
@@ -7051,7 +7062,12 @@ function dokBestaetigen(){
   if(!d) return;
   _applyEditedFields(d);
   var undoSnap={dokId:d.id,typVorher:d.typ,terminId:d.terminId||null};
-  d.bestaetigt=true; d.awaitConfirm=false; d.dataURL=null;
+  d.bestaetigt=true; d.awaitConfirm=false;
+  // dataURL nur löschen wenn kein Split-Dok mehr drauf verweist
+  var _dokNochGebraucht = (db.dokumente||[]).some(function(x){
+    return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
+  });
+  if(!_dokNochGebraucht){ d.dataURL=null; d.thumb=null; }
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null);
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
@@ -9464,13 +9480,27 @@ function dokBestaetigenMonat(dokId){
     }
   });
 
+  // Primären terminId auf Dok setzen (erster verknüpfter Termin)
+  // Wichtig für Dispoampel, CSV-Export und openDetail-Anzeige
+  if(!d.terminId){
+    var _firstLinked = d.sessions.find(function(s){ return s.terminId; });
+    if(_firstLinked) d.terminId = _firstLinked.terminId;
+  }
+
   // Abrechnung als Ganzes bestätigen
   d.bestaetigt=true;
   d.awaitConfirm=false;
   var allSessionsDone = d.sessions.every(function(s){return s._done;});
   if(allSessionsDone){
-    d.dataURL=null;
-    d.thumb=null;
+    // dataURL NUR löschen wenn kein anderes Split-Dok mehr drauf verweist
+    // (andere Gutschriften brauchen dataURL für ihre PDF-Vorschau via _splitFromPdf)
+    var istNochReferenziert = (db.dokumente||[]).some(function(x){
+      return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
+    });
+    if(!istNochReferenziert){
+      d.dataURL=null;
+      d.thumb=null;
+    }
   }
   // _archivLog: Dateiname für JEDEN verknüpften Termin loggen → Dispoampel findet ihn wieder
   var _archTerminIds = (d.sessions||[]).filter(function(s){return s.terminId;}).map(function(s){return s.terminId;});
@@ -10153,8 +10183,11 @@ function dokLinkMultiConfirm(){
       d.aufgeteiltIn=terminIds;
       d.bestaetigt=true;
       d.awaitConfirm=false;
-      d.dataURL=null;
-      d.thumb=null;
+      // dataURL nur löschen wenn kein Split-Dok mehr drauf verweist
+      var _multiNochGebraucht = (db.dokumente||[]).some(function(x){
+        return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
+      });
+      if(!_multiNochGebraucht){ d.dataURL=null; d.thumb=null; }
       // Archiv-Log für alle aufgeteilten Termine
       (terminIds||[]).forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid); });
       if(!(terminIds&&terminIds.length)) _archiveDateiname(d.dateiname||d.beschr, null);
@@ -10171,6 +10204,25 @@ function dokLinkMultiConfirm(){
       );
       showToast('✓ '+n+' Termine · Betrag '+methode+' aufgeteilt');
     }
+  }
+
+  // Split-Navigation: wenn dieses Dok Teil einer PDF-Gruppe ist → nächste öffnen
+  if(d && d._splitGroup && d._splitTotal > 1 && d.bestaetigt){
+    var _multiNextIdx = (d._splitIdx||0) + 1;
+    var _multiNextDok = (db.dokumente||[]).find(function(x){
+      return x._splitGroup===d._splitGroup && x._splitIdx===_multiNextIdx && !x.bestaetigt;
+    });
+    save(db); rDokumente();
+    _pendingDokLink=null; _pendingSessionIdx=null;
+    window._dokLinkMulti=[];
+    dokLinkCancel();
+    if(_multiNextDok){
+      showToast('✓ '+(d._splitIdx+1)+' von '+d._splitTotal+' · Weiter: '+(_multiNextIdx+1));
+      setTimeout(function(){ dokOpenDetail(_multiNextDok.id); }, 200);
+    } else {
+      showToast('✓ Alle '+d._splitTotal+' Abrechnungen bestätigt');
+    }
+    return;
   }
 
   _pendingDokLink=null;
