@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '377';
+  if(el) el.textContent = '380';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2395,15 +2395,39 @@ function openDetail(id){
       var rateMismatch  = ab && abRate > 0 && Math.abs(abRate - (parseFloat(t.rate)||0)) > 0.01;
       var kommMismatch  = ab && abGG > 0 && Math.abs(abGG - (parseFloat(t.kommgage)||0)) > 0.5;
 
-      // Farben: grün wenn Abrechnung passt, rot wenn Abweichung, grau wenn keine Abrechnung
-      var cKomm = ab ? (kommMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
-      var cTakes= ab ? (takesMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
-      var cNet  = ab ? (netBruttoOk ? '#15803d' : '#c2410c') : 'inherit';
-      var bgNet = ab ? (netBruttoOk ? 'background:#f0fdf4;border-radius:8px;padding:4px 6px' : 'background:#fff5f5;border-radius:8px;padding:4px 6px') : '';
+      // Fallback: wenn kein abId aber t.brutto_termin vorhanden (monats_abrechn session)
+      var abBruttoFallback = (!ab && t.brutto_termin) ? parseFloat(t.brutto_termin)||0 : 0;
+      var abTakesFallback  = (!ab && t.takes_abgerechnet) ? parseInt(t.takes_abgerechnet)||0 : 0;
+      var abGGFallback     = (!ab && t.kommgage_abgerechnet) ? parseFloat(t.kommgage_abgerechnet)||0 : 0;
+      var abRateFallback   = (!ab && t.rate_abgerechnet) ? parseFloat(t.rate_abgerechnet)||0 : 0;
+      var hasAbrFallback   = abBruttoFallback > 0;
+
+      // Effektive Vergleichswerte (abId hat Vorrang, dann t.brutto_termin)
+      var _effBrutto = abBrutto || abBruttoFallback;
+      var _effTakes  = abTakes  || abTakesFallback;
+      var _effGG     = abGG     || abGGFallback;
+      var _effRate   = abRate   || abRateFallback;
+      var hasVergleich = !!(ab || hasAbrFallback);
+
+      // netBruttoOk neu berechnen mit Fallback
+      if(hasAbrFallback && !ab){
+        netBruttoOk = Math.abs(net - _effBrutto) < 0.02;
+        if(_effTakes > 0) takesMismatch = Math.abs(_effTakes - total) > 0 ? (_effTakes - total) : 0;
+        if(_effGG > 0)    kommMismatch  = Math.abs(_effGG - (parseFloat(t.kommgage)||0)) > 0.5;
+        if(_effRate > 0)  rateMismatch  = Math.abs(_effRate - (parseFloat(t.rate)||0)) > 0.01;
+      }
+
+      // Farben: grün wenn passt, rot wenn Abweichung, grau wenn kein Vergleich
+      var cKomm = hasVergleich ? (kommMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
+      var cTakes= hasVergleich ? (takesMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
+      var cNet  = hasVergleich ? (netBruttoOk ? '#15803d' : '#c2410c') : 'inherit';
+      var bgNet = hasVergleich ? (netBruttoOk ? 'background:#f0fdf4;border-radius:8px;padding:4px 6px' : 'background:#fff5f5;border-radius:8px;padding:4px 6px') : '';
 
       var html = '<div class="info-card" style="margin-top:0">'
-        +'<div class="info-card-header"><span>GAGEUST '+Math.round(ur*100)+'%</span>'
-        +(ab ? '<span style="font-size:11px;font-weight:700;color:'+(netBruttoOk?'#15803d':'#c2410c')+'">'+(netBruttoOk?'✓ passt':'⚠ Differenz')+'</span>' : '<span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span>')
+        +'<div class="info-card-header"><span>GAGE</span>'
+        +(hasVergleich
+          ? '<span style="font-size:11px;font-weight:700;color:'+(netBruttoOk?'#15803d':'#c2410c')+'">'+(netBruttoOk?'✓ passt':'⚠ Differenz')+'</span>'
+          : '<span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span>')
         +'</div>';
 
       // Komm. Gage Zeile
@@ -2444,6 +2468,7 @@ function openDetail(id){
   if(ab){
     var abBrutto=parseFloat(ab.brutto)||0;
     var netBruttoOk=Math.abs(net-abBrutto)<0.02;
+    var matchCol=netBruttoOk?'#15803d':'#c2410c';
     // 1-10 Regel: Grundgage = dispKomm + 10×dispRate → kein Fehler
     var _tRate = parseFloat(t.rate)||0;
     var _tKomm = parseFloat(t.kommgage)||0;
@@ -7350,6 +7375,13 @@ function dokAnalyseDoc(d, key, cb){
   if(confirmed.length) lernEx='\n\nBekannte Studios in diesem Kontext: '+confirmed.map(function(x){return x.studio;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
 
   var prompt='Du analysierst ein Dokument von Synchronsprecher TIM KNAUER.\n'
+    +'\n'
+    +'⛔ BUCHHALTUNGSREGEL — ABSOLUT VERBINDLICH:\n'
+    +'  ERFINDE NIEMALS Werte. Jede Zahl im JSON MUSS direkt und wörtlich aus dem Dokument lesbar sein.\n'
+    +'  Wenn ein Wert nicht eindeutig im Dokument steht: null setzen, NICHT rechnen, NICHT schätzen, NICHT ableiten.\n'
+    +'  Rechenoperationen sind NUR als VERIFIKATION erlaubt (prüfen ob takes×take_gage=brutto), nie zur Wert-Ermittlung.\n'
+    +'  Unsichere Werte → lieber null als falsche Zahl. Der Nutzer korrigiert manuell.\n'
+    +'\n'
     +'Bestimme typ:\n'
     +'  "dispo" = Synchron-Dispoblatt\n'
     +'  "abrechn" = EINZEL-Gagenabrechnung/Gutschrift für GENAU EINEN Aufnahmetag\n'
@@ -7616,7 +7648,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    1. Jede Datum-Gruppe = eigene Session (26.02, 27.02, 12.03 = 3 separate Sessions)\\n'
     +'    2. Takes = die Zahl DIREKT VOR "Takegage" in der Beschreibungsspalte dieser einen Zeile\\n'
     +'    3. PFLICHT-VERIFIKATION: takes × take_gage = Betrag der Takegage-Zeile\\n'
-    +'       Wenn nicht: takes falsch gelesen oder fälschlicherweise addiert!\\n'
+    +'       Wenn nicht: takes NOCHMAL direkt aus der Beschreibungsspalte lesen — NIEMALS rechnerisch ableiten!\\n'
     +'\\n'
     +'    DIESES DOKUMENT — EXAKT DIESE 3 SESSIONS (nicht mehr, nicht weniger):\\n'
     +'      Do 26.02.26 | 60 | 1 Grundgage ST-SE | 49790 | Daredevil S2 | 200,00\\n'
@@ -7638,15 +7670,25 @@ function dokAnalyseDoc(d, key, cb){
     +'    TROTZDEM ZWEI SEPARATE SESSIONS mit EIGENEN TAKES — NIEMALS zusammenfassen oder takes addieren!\\n'
     +'    LA-Nummern (60, 61, 10, 20, ...) sind Zeilennummern — NIEMALS als Takes verwenden!\\n'
     +'\\n'
-    +'    ARENA FORMAT (Monats-Gutschrift ohne LA-Spalte):\\n'
-    +'    Beispiel Arena-Abrechnung (EXAKT SO MACHEN):\\n'
-    +'      Zeile 1: Di 17.03.26 | 2 | 95 Takes TV | T7182 | Navy CIS -23- | 380,00€\\n'
-    +'      Zeile 2: Di 17.03.26 | 18 | Grundgage 1-10 | T7182 | Navy CIS -23- | 120,00€\\n'
-    +'      → EINE session: {"datum":"2026-03-17","titel":"Navy CIS -23-","takes":105,"grundgage":120.0,"take_gage":4.0,"brutto_termin":500.0}\\n'
-    +'      → takes = 95 + 10 (Grundgage zählt als 1-10 Paket = 10 Takes) = 105\\n'
-    +'      → brutto_termin = 380 + 120 = 500\\n'
-    +'      → grundgage = 120€, take_gage = 380÷95 = 4,00€\\n'
-    +'    AUCH wenn die Grundgage-Zeile ein anderes Datum hat — wenn Filmcode gleich → ZUSAMMENFASSEN\\n'
+    +'    ARENA FORMAT (Monats-Gutschrift):\\n'
+    +'    Spalten: Datum | Zeilennr | Beschreibung | Filmcode | Titel | Sender | Betrag\\n'
+    +'    ⚠⚠⚠ Die 2. Spalte (2, 18, 40 ...) ist eine ZEILENNUMMER — NIEMALS als Take-Anzahl verwenden!\\n'
+    +'    ⚠⚠⚠ Take-Anzahl steht IN der Beschreibung: "95 Takes TV" → takes=95\\n'
+    +'    ⚠⚠⚠ PFLICHT-CHECK: takes × take_gage + grundgage = brutto_termin\\n'
+    +'    ⚠⚠⚠ Wenn CHECK fehlschlägt → Werte nochmal direkt aus dem Dokument lesen, NICHT rechnerisch ableiten\\n'
+    +'\\n'
+    +'    Beispiel Arena (EXAKT SO LESEN):\\n'
+    +'      Zeile 1: Di 17.03.26 | 2  | 95 Takes TV      | T7182 | Navy CIS -23- | PRO | 380,00€\\n'
+    +'      Zeile 2: Di 17.03.26 | 18 | Grundgage 1-10 T | T7182 | Navy CIS -23- | PRO | 120,00€\\n'
+    +'      → Zeilennr 2 und 18 ignorieren — sind KEINE Takes!\\n'
+    +'      → takes = 95 (steht vor "Takes" in Zeile 1, nicht 95+18=113!)\\n'
+    +'      → take_gage = 380÷95 = 4,00€\\n'
+    +'      → grundgage = 120,00€ (Betrag der Grundgage-1-10-Zeile)\\n'
+    +'      → CHECK: 95 × 4,00 + 120,00 = 380 + 120 = 500 ✓\\n'
+    +'      → session: {datum:2026-03-17, titel:"Navy CIS -23-", takes:95, take_gage:4.0, grundgage:120.0, brutto_termin:500.0}\\n'
+    +'    WICHTIG: grundgage = Gesamtbetrag der "Grundgage 1-10"-Zeile (enthält KG + erste 10 Takes)\\n'
+    +'    takes = NUR die explizit genannten Takes der Takes-Zeile (NICHT +10 addieren!)\\n'
+    +'    AUCH wenn Grundgage-Zeile anderes Datum hat — wenn Filmcode gleich → zusammenfassen\\n'
     +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\\n'
     +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0,"kuerzel":"WARN"}\\n'
     +'    kuerzel = Senderkürzel aus der Tabelle (z.B. "WARN", "AMAZ", "PRO", "ZDF") — IMMER aus der Zeile übernehmen!\\n'
@@ -12791,7 +12833,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
