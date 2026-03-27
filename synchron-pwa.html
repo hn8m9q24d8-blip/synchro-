@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '387';
+  if(el) el.textContent = '388';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7847,7 +7847,7 @@ function dokAnalyseDoc(d, key, cb){
     
     var bodyStr;
     try {
-      bodyStr = JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8000,
+      bodyStr = JSON.stringify({model:'claude-sonnet-4-5-20251001',max_tokens:8000,
         messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
     } catch(e) {
       showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
@@ -7866,8 +7866,9 @@ function dokAnalyseDoc(d, key, cb){
       var data;
       try { data = JSON.parse(xhr.responseText); } catch(e){ showToast('Parse Fehler: '+e.message); if(cb) cb(); return; }
       if(!data.content||!data.content[0]){
-        var rawErr=JSON.stringify(data).slice(0,200);
-        showToast('API: '+rawErr); if(cb) cb(); return;
+        var rawErr = (data.error&&data.error.message) || JSON.stringify(data).slice(0,200);
+        showToast('API Fehler: '+rawErr);
+        if(cb) cb(); return;
       }
     try{
       var txt = data.content[0].text;
@@ -8115,13 +8116,14 @@ function dokAnalyseDoc(d, key, cb){
       }
     }catch(e){ 
       d.typ='sonstig'; d.beschr=d.dateiname; 
-      showToast('Parse-Fehler: '+e.message.slice(0,40));
+      showToast('Parse-Fehler: '+e.message.slice(0,60));
+      console.error('dokAnalyseDoc parse error:', e, 'raw:', txt&&txt.slice(0,200));
     }
     // Recherche nur auf Knopfdruck im Termin — nicht automatisch
     if(cb) cb();
     };
     xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; if(cb) cb(); };
-    xhr.timeout = 30000;
+    xhr.timeout = 60000;
     xhr.ontimeout = function(){ showToast('Timeout'); d.typ='sonstig'; if(cb) cb(); };
     try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
   } // end _sendToAPI
