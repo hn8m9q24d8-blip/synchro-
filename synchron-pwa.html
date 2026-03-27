@@ -1754,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '396';
+  if(el) el.textContent = '397';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4729,6 +4729,8 @@ function holviImport(inp){
           sessionsOhneTermin:[], gesamtSessions:0, monatsAbrechn:null, betragsAbweichung:0,
           _konfidenz:'MANUELL', terminKandidaten:kandidaten
         };
+      });  // end gageEingaenge.map
+
       holviShowPreview(matches, eingaenge.length);
     } catch(err){
       showToast('⚠ Fehler beim Lesen: '+err.message);
