@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '388';
+  if(el) el.textContent = '389';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7847,7 +7847,7 @@ function dokAnalyseDoc(d, key, cb){
     
     var bodyStr;
     try {
-      bodyStr = JSON.stringify({model:'claude-sonnet-4-5-20251001',max_tokens:8000,
+      bodyStr = JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
         messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
     } catch(e) {
       showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
