@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '374';
+  if(el) el.textContent = '377';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2098,7 +2098,10 @@ function openDetail(id){
   var d=new Date(t.datum+'T00:00:00');
   calViewDate=new Date(d.getFullYear(),d.getMonth(),1);
   calSelectedDate=t.datum;
-  rWeekStrip();rTermine();
+  rWeekStrip();
+  // rTermine VERZÖGERT: verhindert dass iOS touchend auf falschen Termin feuert
+  // (Re-render während laufendem Touch-Event verschiebt DOM-Positionen → Ghost-Tap)
+  setTimeout(function(){ rTermine(); }, 50);
 
   var monthNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var dayNames=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
@@ -6050,6 +6053,16 @@ function fmtEur(v){
 
 // ── switchView overrides ──────────────────────────────────────
 function switchView(v){
+  // Wenn aktiver Split-Flow (aus Termin-Peek) und User verlässt die View:
+  // Flow-State bewahren → User kann über Dokumente-View fortfahren
+  // Aber wenn er explizit zu 'termine' ohne _pendingDokLink wechselt
+  // und _returnToDokId noch gesetzt ist → sanft aufräumen um Geister zu vermeiden
+  if(_returnToDokId && v!=='termine' && v!=='dokumente' && !_mergeSnapshot){
+    // User navigiert weg ohne zu speichern (z.B. zu Buch/Profil)
+    // _returnToDokId aufheben, aber dok-State (sessions._done) bleibt erhalten
+    _returnToDokId=null;
+    _mergeTerminId=null;
+  }
   // deactivate all views and nav
   document.querySelectorAll('.view').forEach(function(el){el.classList.remove('active');el.style.removeProperty('display');});
   document.querySelectorAll('.nav-btn').forEach(function(el){el.classList.remove('active');});
@@ -8671,7 +8684,16 @@ function dokOpenDetail(id){
         // Nächste offene Session finden
         var nextOpenIdx = -1;
         d.sessions.forEach(function(s,si){ if(!s._done && nextOpenIdx<0) nextOpenIdx=si; });
-        body+='<div style="font-size:11px;color:#888;text-align:center;margin-top:8px">'+doneCount+' von '+d.sessions.length+' Sessions abgehakt</div>';
+        var brokenFlow = doneCount > 0 && doneCount < d.sessions.length;
+        if(brokenFlow){
+          body+='<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px">'
+            +'<div style="font-size:18px">⚡</div>'
+            +'<div style="font-size:12px;color:#92400e;font-weight:700">Flow unterbrochen · '+doneCount+' von '+d.sessions.length+' erledigt<br>'
+            +'<span style="font-weight:400">Nächste Session antippen um fortzufahren</span></div>'
+            +'</div>';
+        } else {
+          body+='<div style="font-size:11px;color:#888;text-align:center;margin-top:8px">'+doneCount+' von '+d.sessions.length+' Sessions abgehakt</div>';
+        }
         if(nextOpenIdx >= 0){
           // Nächste Session mit Diff-Check öffnen
           body+='<button type="button" onclick="dokSessionPeek(\''+d.id+'\','+nextOpenIdx+')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">→ Nächste Session prüfen & zuordnen</button>';
@@ -9486,11 +9508,11 @@ function _buildMergePreview(d, t){
   // Nur wenn Abrechnung (nicht Dispo) und Termin hat bereits Werte
   var gageWarnungen = [];
   if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
-    // Brutto aus Dok vs. Kommgage am Termin
-    var dokBrutto = parseFloat(d.brutto||d.grundgage||0);
-    var tBrutto   = parseFloat(t.kommgage||0);
-    if(dokBrutto && tBrutto && Math.abs(dokBrutto - tBrutto) > 0.5){
-      gageWarnungen.push({label:'Brutto/Kommgage', termin: tBrutto+'€', dok: dokBrutto+'€'});
+    // Komm.-Gage (Grundgage aus Dok vs. kommgage am Termin)
+    var dokGrundgage = parseFloat(d.grundgage||0);
+    var tKommgage    = parseFloat(t.kommgage||0);
+    if(dokGrundgage && tKommgage && Math.abs(dokGrundgage - tKommgage) > 0.5){
+      gageWarnungen.push({label:'Komm.-Gage', termin: tKommgage+'€', dok: dokGrundgage+'€'});
     }
     // Take-Gage
     var dokTakeGage = parseFloat(d.take_gage||0);
