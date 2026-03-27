@@ -1710,18 +1710,27 @@ function save(d){
 }
 var db=load();
 
-// ── MIGRATION: bereits bestätigte Dokumente ins importedFiles-Archiv ────────
+// ── MIGRATION: bestätigte Dokumente + _archivLog → importedFiles ────────
+// Läuft bei jedem Start — stellt sicher dass gelöschte bestätigte Docs
+// beim nächsten Ordner-Scan nicht wieder auftauchen
 (function(){
-  if(!db._importedFilesMigrated && db.dokumente){
-    if(!db.importedFiles) db.importedFiles = [];
-    db.dokumente.forEach(function(d){
-      if(d.bestaetigt && d.dateiname){
-        if(db.importedFiles.indexOf(d.dateiname) < 0) db.importedFiles.push(d.dateiname);
-      }
-    });
-    db._importedFilesMigrated = true;
-    try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
-  }
+  if(!db.importedFiles) db.importedFiles = [];
+  // Schritt 1: alle bestätigten Docs in db.dokumente eintragen
+  (db.dokumente||[]).forEach(function(d){
+    if(d.bestaetigt && d.dateiname && db.importedFiles.indexOf(d.dateiname) < 0){
+      db.importedFiles.push(d.dateiname);
+    }
+  });
+  // Schritt 2: _archivLog-Dateinamen ebenfalls eintragen
+  // (für bereits gelöschte bestätigte Docs — die einzige verbleibende Spur)
+  (db._archivLog||[]).forEach(function(e){
+    if(e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
+      db.importedFiles.push(e.dateiname);
+    }
+  });
+  if(db.importedFiles.length > 3000) db.importedFiles = db.importedFiles.slice(-3000);
+  db._importedFilesMigrated = true;
+  try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
 })();
 
 // ── API-KEY SYNC: db.profil.apiKey ↔ localStorage ────────────────
@@ -1745,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '389';
+  if(el) el.textContent = '396';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2143,7 +2152,17 @@ function openDetail(id){
   });
   var abDoks=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';});
   // Dateinamen für Ampel — auch bestätigte Dokumente (dataURL=null) einschließen
-  var dispoDateinamen=dispoDoks.map(function(d){
+  // Erweiterte Dispo-Dok-Suche: auch bestaetigt+dataURL=null Dokumente einschliessen
+  // und Dokumente die via t.dokIds verknüpft sind (auch ohne terminId direkt)
+  var allDispoDoks = (db.dokumente||[]).filter(function(x){
+    var istDispo = x.typ==='dispo' || (!x.typ && /dispo/i.test(x.dateiname||''));
+    var istLinked = x.terminId===id
+      || (t.dokIds && t.dokIds.indexOf(x.id)>=0)
+      || (!x.terminId && x.bestaetigt && x.datum===t.datum && x.studio && t.studio
+          && x.studio.toLowerCase().slice(0,4)===t.studio.toLowerCase().slice(0,4));
+    return istDispo && istLinked;
+  });
+  var dispoDateinamen = allDispoDoks.map(function(d){
     return d.dateiname||d.beschr||('Dispo '+fd(d.datum||t.datum));
   }).filter(Boolean);
   // Direkt gespeicherter Dateiname — überlebt dokDeleteAll()
@@ -2169,9 +2188,19 @@ function openDetail(id){
   }
   // Frühzeitiger _archivLog-Fallback: vor dem GVL-Block prüfen
   if(!dispoDateinamen.length && db._archivLog){
+    // Prio 1: Einträge mit explizitem typ='dispo' oder 'dispo' im Dateinamen
     var dispArchEntry = db._archivLog.find(function(e){
       return e.terminId===id && (e.typ==='dispo' || /dispo/i.test(e.dateiname||''));
     });
+    // Prio 2: Einträge für diesen Termin die KEIN abrechn-Typ haben
+    // (UUID-Dateinamen aus iOS haben keinen 'dispo'-String, aber sind trotzdem Dispos)
+    if(!dispArchEntry){
+      dispArchEntry = db._archivLog.find(function(e){
+        return e.terminId===id
+          && e.typ!=='abrechn' && e.typ!=='monats_abrechn'
+          && e.dateiname && e.dateiname.length > 3;
+      });
+    }
     if(dispArchEntry && dispArchEntry.dateiname) dispoDateinamen=[dispArchEntry.dateiname];
   }
   // Direkter Dateiname-Fallback (nach dokDeleteAll)
@@ -2214,7 +2243,15 @@ function openDetail(id){
     }
     dispoDateinamen=[dispName || 'Dispo (bestätigt · Foto gelöscht)'];
   }
-  var abDateinamen=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';}).map(function(d){
+  // Erweiterte Abrechn-Dok-Suche: auch bestaetigt+dataURL=null einschliessen
+  var allAbDoks = (db.dokumente||[]).filter(function(x){
+    var istAb = x.typ==='abrechn'||x.typ==='monats_abrechn';
+    var istLinked = x.terminId===id
+      || (t.dokIds && t.dokIds.indexOf(x.id)>=0)
+      || (x.sessions && x.sessions.some(function(s){ return s.terminId===id; }));
+    return istAb && istLinked;
+  });
+  var abDateinamen = allAbDoks.map(function(d){
     return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
   }).filter(Boolean);
   // Direkt gespeicherter Dateiname — überlebt dokDeleteAll()
@@ -2235,12 +2272,17 @@ function openDetail(id){
   }
   // _archivLog: Dateiname der Abrechnung aus Archiv holen
   if(!abDateinamen.length && db._archivLog){
-    // Priorität: Einträge mit typ=abrechn/monats_abrechn
+    // Prio 1: explizit typisierte Abrechn-Einträge
     var abArchEntries = db._archivLog.filter(function(e){
-      return e.terminId===id && (e.typ==='abrechn'||e.typ==='monats_abrechn'||
-        (!/dispo/i.test(e.dateiname||'') && !e.typ));
+      return e.terminId===id && (e.typ==='abrechn'||e.typ==='monats_abrechn');
     });
-    // Typ-gesicherte Einträge bevorzugen
+    // Prio 2: Einträge ohne Typ die kein Dispo-Signal haben
+    if(!abArchEntries.length){
+      abArchEntries = db._archivLog.filter(function(e){
+        return e.terminId===id && e.typ!=='dispo' && !/dispo/i.test(e.dateiname||'')
+          && e.dateiname && e.dateiname.length > 3;
+      });
+    }
     var abArchEntry = abArchEntries.find(function(e){
       return e.typ==='abrechn'||e.typ==='monats_abrechn';
     }) || abArchEntries.find(function(e){
@@ -2827,7 +2869,7 @@ function saveMergeChanges(){
       });
       if(!nochGebraucht){ dok.dataURL=null; dok.thumb=null; }
       dok._pendingDelete=false;
-      _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null);
+      _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null, dok.typ||null);
     }
   });
 
@@ -3410,8 +3452,12 @@ function showDateinamen(el){
   var firstName = namen[0];
   var ordner = /abrechn|abrechnung/i.test(label) ? 'Gagenabrechnungen' : 'Dispofotos';
 
-  // Sofort in Clipboard kopieren
-  if(navigator.clipboard){
+  // Generische Fallback-Texte erkennen — kein echter Dateiname
+  var isFallbackText = /bestätigt|Foto gelöscht|verknüpft|ausstehend|Abrechnung \d|Dispo \d/i.test(firstName)
+    || firstName.length < 5 || firstName.indexOf(' ') > 0 && !firstName.match(/\.(pdf|jpg|jpeg|png|heic)$/i);
+
+  // Sofort in Clipboard kopieren — nur wenn echter Dateiname
+  if(!isFallbackText && navigator.clipboard){
     navigator.clipboard.writeText(firstName).catch(function(){});
   }
 
@@ -3422,10 +3468,19 @@ function showDateinamen(el){
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 40px;width:100%;max-width:480px';
 
   var html='<div style="font-size:15px;font-weight:800;margin-bottom:4px">📎 '+esc(label)+'</div>';
-  html+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:10px">'
-    +'<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:3px">📋 IN ZWISCHENABLAGE KOPIERT</div>'
-    +'<div style="font-size:13px;font-weight:700;color:#374151;word-break:break-all">'+esc(firstName)+'</div>'
-    +'</div>';
+  if(isFallbackText){
+    // Kein echter Dateiname vorhanden — hilfreiche Meldung zeigen
+    html+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+      +'<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:3px">⚠ Dateiname nicht gespeichert</div>'
+      +'<div style="font-size:12px;color:#78350f;line-height:1.4">Das Dokument wurde vor der Dateiname-Speicherung bestätigt. '
+      +'Bitte in den Dokumenten-Ordner schauen — die Daten sind korrekt eingetragen.</div>'
+      +'</div>';
+  } else {
+    html+='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+      +'<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:3px">📋 IN ZWISCHENABLAGE KOPIERT</div>'
+      +'<div style="font-size:13px;font-weight:700;color:#374151;word-break:break-all">'+esc(firstName)+'</div>'
+      +'</div>';
+  }
   if(namen.length>1){
     namen.slice(1).forEach(function(name){
       html+='<div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;margin-bottom:6px">'
@@ -4370,16 +4425,158 @@ function holviImport(inp){
         var studioNorm = function(s){ return (s||'').toLowerCase().replace(/\s+gmbh.*|synchron.*|film.*|berlin.*/,'').replace(/[^a-z0-9äöüß]/g,' ').trim(); };
         var zStudio = studioNorm(z.gegenpartei);
 
-        // ★ ZUERST: Monats-Abrechnung suchen (Toleranz 1% für Korrekturen)
+        // ══════════════════════════════════════════════════════════════
+        // HOLVI MATCHING ENGINE — Bombensicher für Steuer
+        // Priorität: GutNr > Datum > Betrag-Summe > Lohn/Gehalt
+        // ══════════════════════════════════════════════════════════════
+
+        // ── Hilfsfunktionen ──
+        var studioNorm2 = function(s){
+          return (s||'').toLowerCase()
+            .replace(/gmbh|ag|kg|mbh|synchron|film|fernseh|sound|studios?|production|productions|gesellschaft|und|fur|für|\+/gi,' ')
+            .replace(/[^a-z0-9äöüß]/g,' ').replace(/\s+/g,' ').trim();
+        };
+        var zStudio = studioNorm2(z.gegenpartei);
+
+        // Studio-Plausibilität: mind. 4 Zeichen aus Studioname in Gegenpartei
+        var studioPasst = function(terminStudio){
+          var ts = studioNorm2(terminStudio);
+          if(!ts || !zStudio) return false;
+          // Kürzestes Token (mind. 4 Zeichen) muss im anderen vorkommen
+          var tsTokens = ts.split(' ').filter(function(t){ return t.length >= 4; });
+          var zsTokens = zStudio.split(' ').filter(function(t){ return t.length >= 4; });
+          return tsTokens.some(function(t){ return zStudio.indexOf(t)>=0; }) ||
+                 zsTokens.some(function(t){ return ts.indexOf(t)>=0; });
+        };
+
+        // Betrag-Check: Summe der Auszahlungen ±(N × 0,05€)
+        var betragsCheck = function(termine, toleranzProTermin){
+          var n = termine.length;
+          var tol = Math.max(0.50, n * (toleranzProTermin||0.05));
+          // Variante A: Summe ab.auszahlung (wenn abId vorhanden)
+          var sumAusz = 0; var alleHabenAb = true;
+          termine.forEach(function(t){
+            var ab = t.abId ? (db.abrechnungen||[]).find(function(a){ return a.id===t.abId; }) : null;
+            if(ab && parseFloat(ab.auszahlung)) sumAusz += parseFloat(ab.auszahlung);
+            else alleHabenAb = false;
+          });
+          if(alleHabenAb && sumAusz > 0) return Math.abs(sumAusz - z.betrag) <= tol;
+          // Variante B: Summe auszahlung aus Split-Abrechnungen via gutschrift_nr
+          var sumAb2 = 0; var foundAny = false;
+          termine.forEach(function(t){
+            // Versuche ab via gutschrift_nr zu finden
+            var ab2 = (db.abrechnungen||[]).find(function(a){
+              return a.gutschrift_nr && t.gutschrift_nr && a.gutschrift_nr===t.gutschrift_nr && a.terminId===t.id;
+            });
+            if(ab2 && parseFloat(ab2.auszahlung)){ sumAb2 += parseFloat(ab2.auszahlung); foundAny=true; }
+          });
+          if(foundAny) return Math.abs(sumAb2 - z.betrag) <= tol;
+          // Keine Auszahlungs-Daten verfügbar → Betrag-Check überspringen (true = unsicher)
+          return null; // null = unbekannt
+        };
+
+        // Konfidenz-Score berechnen
+        var konfidenz = function(gutNrMatch, studioOk, betragsOk, zeitraumOk){
+          if(gutNrMatch && studioOk && betragsOk===true) return 'AUTO';   // Bombensicher
+          if(gutNrMatch && studioOk && betragsOk===null) return 'AUTO';   // Gut (Betrag unbekannt)
+          if(gutNrMatch && studioOk && betragsOk===false) return 'WARN';  // GutNr passt, Betrag weicht ab
+          if(studioOk && betragsOk===true && zeitraumOk) return 'AUTO';   // Betrag exakt, Studio ok
+          if(gutNrMatch && !studioOk) return 'WARN';                      // GutNr passt, Studio unklar
+          return 'MANUELL';
+        };
+
+        // ── STUFE 1: Gutschrift-Nummern aus Nachricht ──
+        var gutschriftNummern = [];
+        // Format 1: "2449/20260201" (mit Slash)
+        var gutRex = /(\d{3,6}\/\d{6,12})/g;
+        var gm;
+        while((gm = gutRex.exec(z.nachricht)) !== null){
+          // Personalnummern (5-stellig ohne Monats-Format) herausfiltern
+          var gnr = gm[1];
+          var parts = gnr.split('/');
+          if(parts[1] && parts[1].length >= 6) {  // mind. YYYYMM
+            if(gutschriftNummern.indexOf(gnr)<0) gutschriftNummern.push(gnr);
+          }
+        }
+        // Format 2: Referenz-Spalte (falls vorhanden und separate)
+
+        if(gutschriftNummern.length > 0){
+          var gnTermine = [];
+          var gnAbIds = [];
+          gutschriftNummern.forEach(function(gnr){
+            // Suche 1: Termin direkt via t.gutschrift_nr (monats_abrechn flow)
+            (db.termine||[]).forEach(function(t){
+              if(t.gutschrift_nr===gnr && t.status!=='bezahlt' && gnTermine.indexOf(t)<0)
+                gnTermine.push(t);
+            });
+            // Suche 2: Via db.abrechnungen (split/einzel flow)
+            (db.abrechnungen||[]).forEach(function(ab){
+              if(ab.gutschrift_nr===gnr){
+                var tAb=(db.termine||[]).find(function(x){ return x.id===ab.terminId && x.status!=='bezahlt'; });
+                if(tAb && gnTermine.indexOf(tAb)<0) gnTermine.push(tAb);
+                if(gnAbIds.indexOf(ab.id)<0) gnAbIds.push(ab.id);
+              }
+            });
+          });
+
+          if(gnTermine.length > 0){
+            var studioOk = gnTermine.some(function(t){ return studioPasst(t.studio); });
+            var bCheck = betragsCheck(gnTermine, 0.05);
+            var bWeicht = bCheck===false;
+            var kScore = konfidenz(true, studioOk, bCheck, true);
+
+            // Zeitraum: Valuta nach frühestem Aufnahmetag
+            var fruehestesDatum = gnTermine.reduce(function(min,t){
+              return (!min||t.datum<min)?t.datum:min; }, null);
+            var zeitraumOk = !fruehestesDatum || z.datum >= fruehestesDatum;
+            if(!zeitraumOk) kScore = 'WARN';
+
+            // Doppelter Schutz: kein Termin der bereits bezahlt ist
+            var bereitsGezahlt = gnTermine.some(function(t){ return t.status==='bezahlt'; });
+            if(bereitsGezahlt) kScore = 'DOPPELT';
+
+            var betrDiff = bCheck!==null ? Math.abs(
+              (gnTermine.reduce(function(s,t){
+                var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+                return s+(ab?parseFloat(ab.auszahlung)||0:0);
+              },0)) - z.betrag
+            ) : 0;
+
+            return {
+              zahlung: z,
+              termin: gnTermine[0]||null,
+              termineAlle: gnTermine,
+              sessionsOhneTermin: [],
+              gesamtSessions: gnTermine.length,
+              monatsAbrechn: gnTermine.length>1 ? {
+                id:'gn_'+Date.now(), typ:'abrechn',
+                studio: (gnTermine[0]&&gnTermine[0].studio)||z.gegenpartei,
+                auszahlung: z.betrag,
+                beschr: gutschriftNummern.join(' / '),
+                gutschrift_nr: gutschriftNummern.join(', '),
+                sessions: gnTermine.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};}),
+                _isMultiGutschrift: true, _gutschriftNummern: gutschriftNummern,
+                _abIds: gnAbIds
+              } : null,
+              betragsAbweichung: bWeicht ? (z.betrag - (gnTermine.reduce(function(s,t){
+                var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+                return s+(ab?parseFloat(ab.auszahlung)||0:0);
+              },0))) : 0,
+              _konfidenz: kScore,
+              _gutschriftNummern: gutschriftNummern,
+              terminKandidaten: []
+            };
+          }
+        }
+
+        // ── STUFE 2: Monats-Abrechnung in DB (Betrag + Studio) ──
         var monatsMatch = (db.dokumente||[]).find(function(d){
           if(d.typ !== 'monats_abrechn') return false;
           if(!d.bestaetigt) return false;
           var dAusz = parseFloat(d.auszahlung)||0;
           if(dAusz <= 0) return false;
-          var diff = Math.abs(dAusz - z.betrag);
-          if(diff > Math.max(1.0, dAusz * 0.01)) return false;
-          var dStudio = studioNorm(d.studio||'');
-          return dStudio && zStudio && (dStudio.indexOf(zStudio)>=0 || zStudio.indexOf(dStudio)>=0);
+          if(Math.abs(dAusz - z.betrag) > Math.max(0.50, dAusz*0.01)) return false;
+          return studioPasst(d.studio);
         });
 
         if(monatsMatch){
@@ -4390,95 +4587,148 @@ function holviImport(inp){
             monatsMatch.sessions.forEach(function(s){
               if(s.terminId){
                 var t=(db.termine||[]).find(function(x){return x.id===s.terminId;});
-                if(t) sessionTermine.push(t);
-                else sessionsOhneTermin.push(s);
-              } else {
-                sessionsOhneTermin.push(s);
-              }
+                if(t) sessionTermine.push(t); else sessionsOhneTermin.push(s);
+              } else { sessionsOhneTermin.push(s); }
             });
           }
           if(!sessionTermine.length){
-            sessionTermine = (db.termine||[]).filter(function(t){
+            sessionTermine=(db.termine||[]).filter(function(t){
               return t.dokIds && t.dokIds.indexOf(monatsMatch.id)>=0;
             });
           }
-          var auszAlt = parseFloat(monatsMatch.auszahlung)||0;
-          var betragsAbweichung = Math.abs(auszAlt - z.betrag) > 0.02 ? (z.betrag - auszAlt) : 0;
+          var bereitsGezahlt2 = sessionTermine.some(function(t){ return t.status==='bezahlt'; });
           return {
-            zahlung: z,
-            termin: sessionTermine[0]||null,
-            termineAlle: sessionTermine,
-            sessionsOhneTermin: sessionsOhneTermin,
-            gesamtSessions: gesamtSessions,
-            monatsAbrechn: monatsMatch,
-            betragsAbweichung: betragsAbweichung,
-            terminKandidaten: []
+            zahlung:z, termin:sessionTermine[0]||null, termineAlle:sessionTermine,
+            sessionsOhneTermin:sessionsOhneTermin, gesamtSessions:gesamtSessions,
+            monatsAbrechn:monatsMatch,
+            betragsAbweichung: Math.abs((parseFloat(monatsMatch.auszahlung)||0)-z.betrag)>0.02?(z.betrag-(parseFloat(monatsMatch.auszahlung)||0)):0,
+            _konfidenz: bereitsGezahlt2?'DOPPELT':'AUTO',
+            terminKandidaten:[]
           };
         }
 
-        // ★ ZWEITENS: Mehrere Einzel-Abrechnungen desselben Studios deren Summe passt
-        if(!monatsMatch){
-          var studioAbs = (db.dokumente||[]).filter(function(d){
-            if(d.typ !== 'abrechn') return false;
-            if(!d.bestaetigt) return false;
-            var dStudio = studioNorm(d.studio||'');
-            return dStudio && zStudio && (dStudio.indexOf(zStudio)>=0 || zStudio.indexOf(dStudio)>=0);
+        // ── STUFE 3: Mehrere Einzel-Abrechnungen desselben Studios (Summe passt) ──
+        var studioAbs = (db.dokumente||[]).filter(function(d){
+          if(d.typ!=='abrechn'||!d.bestaetigt) return false;
+          return studioPasst(d.studio);
+        });
+        var unbezahlteAbs = studioAbs.filter(function(d){
+          var t=d.terminId?(db.termine||[]).find(function(x){return x.id===d.terminId;}):null;
+          return t && t.status!=='bezahlt';
+        });
+        if(unbezahlteAbs.length > 0){
+          // Versuche Teilmengen die den Betrag exakt treffen
+          var sumAusz = unbezahlteAbs.reduce(function(s,d){ return s+(parseFloat(d.auszahlung)||0); },0);
+          var tol3 = Math.max(0.50, unbezahlteAbs.length * 0.05);
+          if(Math.abs(sumAusz - z.betrag) <= tol3){
+            var multiTermine = unbezahlteAbs.map(function(d){
+              return d.terminId?(db.termine||[]).find(function(x){return x.id===d.terminId;}):null;
+            }).filter(Boolean);
+            var pseudoMonats = {
+              id:'multi_'+Date.now(), typ:'monats_abrechn',
+              studio:unbezahlteAbs[0].studio, auszahlung:sumAusz,
+              beschr:'Sammelzahlung '+esc(unbezahlteAbs[0].studio||'')+' ('+unbezahlteAbs.length+' Abrechnungen)',
+              sessions:unbezahlteAbs.map(function(d){return {terminId:d.terminId,datum:d.datum,titel:d.beschr||d.dateiname||''};}),
+              _isMultiMatch:true, _abIds:unbezahlteAbs.map(function(d){return d.id;})
+            };
+            return {
+              zahlung:z, termin:multiTermine[0]||null, termineAlle:multiTermine,
+              sessionsOhneTermin:[], gesamtSessions:multiTermine.length,
+              monatsAbrechn:pseudoMonats, betragsAbweichung:0,
+              _konfidenz: multiTermine.length===1?'AUTO':'MANUELL',
+              terminKandidaten:[]
+            };
+          }
+          // Einzelner Treffer per Auszahlung-Betrag (Studio Hamburg-Fall)
+          var einzelTreffer = unbezahlteAbs.filter(function(d){
+            return Math.abs((parseFloat(d.auszahlung)||0) - z.betrag) <= 0.02;
           });
-          // Nur unbezahlte Termine dazu
-          var unbezahlteAbs = studioAbs.filter(function(d){
-            var t = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
-            return t && t.status !== 'bezahlt';
-          });
-          if(unbezahlteAbs.length > 0){
-            var sumAusz = unbezahlteAbs.reduce(function(s,d){ return s+(parseFloat(d.auszahlung)||0); },0);
-            if(Math.abs(sumAusz - z.betrag) <= Math.max(1.0, sumAusz * 0.01)){
-              // Treffer — alle Termine sammeln
-              var multiTermine = unbezahlteAbs.map(function(d){
-                return d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
-              }).filter(Boolean);
-              // Pseudo-monatsAbrechn Objekt erstellen
-              var pseudoMonats = {
-                id: 'multi_'+Date.now(),
-                typ: 'monats_abrechn',
-                studio: unbezahlteAbs[0].studio,
-                auszahlung: sumAusz,
-                beschr: 'Sammelzahlung '+esc(unbezahlteAbs[0].studio||'')
-                  +' ('+unbezahlteAbs.length+' Abrechnungen)',
-                sessions: unbezahlteAbs.map(function(d){
-                  return {terminId: d.terminId, datum: d.datum, titel: d.beschr||d.dateiname||''};
-                }),
-                _isMultiMatch: true,
-                _abIds: unbezahlteAbs.map(function(d){return d.id;})
-              };
-              return {
-                zahlung: z,
-                termin: multiTermine[0]||null,
-                termineAlle: multiTermine,
-                sessionsOhneTermin: [],
-                gesamtSessions: multiTermine.length,
-                monatsAbrechn: pseudoMonats,
-                betragsAbweichung: 0,
-                terminKandidaten: []
-              };
-            }
+          if(einzelTreffer.length === 1){
+            var et = (db.termine||[]).find(function(x){return x.id===einzelTreffer[0].terminId;});
+            if(et) return {
+              zahlung:z, termin:et, termineAlle:[et], sessionsOhneTermin:[],
+              gesamtSessions:1, monatsAbrechn:null, betragsAbweichung:0,
+              _konfidenz:'AUTO', terminKandidaten:[]
+            };
           }
         }
+
+        // ── STUFE 4: Datum-Referenz aus Nachricht (GAGE 20260301) ──
+        var datRef = z.nachricht.match(/(?:^|\s)(?:GAGE|Gage)\s+(\d{4})(\d{2})(\d{2})(?:\s|$)/i);
+        if(datRef){
+          var datISO = datRef[1]+'-'+datRef[2]+'-'+datRef[3];
+          var datTermin = (db.termine||[]).find(function(t){
+            return t.datum===datISO && studioPasst(t.studio) && t.status!=='bezahlt';
+          });
+          if(datTermin){
+            var ab3 = datTermin.abId?(db.abrechnungen||[]).find(function(a){return a.id===datTermin.abId;}):null;
+            var betrOk = ab3 ? Math.abs((parseFloat(ab3.auszahlung)||0)-z.betrag)<=0.50 : null;
+            return {
+              zahlung:z, termin:datTermin, termineAlle:[datTermin], sessionsOhneTermin:[],
+              gesamtSessions:1, monatsAbrechn:null, betragsAbweichung:0,
+              _konfidenz: betrOk===true?'AUTO':betrOk===null?'MANUELL':'WARN',
+              terminKandidaten:[]
+            };
+          }
+        }
+
+        // ── STUFE 5: Zeitraum (Gage 20260301 bis 20260304) ──
+        var zeitraumRef = z.nachricht.match(/(\d{4})(\d{2})(\d{2})\s+bis\s+(\d{4})(\d{2})(\d{2})/i);
+        if(zeitraumRef){
+          var vonISO = zeitraumRef[1]+'-'+zeitraumRef[2]+'-'+zeitraumRef[3];
+          var bisISO = zeitraumRef[4]+'-'+zeitraumRef[5]+'-'+zeitraumRef[6];
+          var zeitraumTermine = (db.termine||[]).filter(function(t){
+            return t.datum>=vonISO && t.datum<=bisISO && studioPasst(t.studio) && t.status!=='bezahlt';
+          });
+          if(zeitraumTermine.length > 0){
+            var bCheck2 = betragsCheck(zeitraumTermine, 0.10);
+            return {
+              zahlung:z, termin:zeitraumTermine[0], termineAlle:zeitraumTermine,
+              sessionsOhneTermin:[], gesamtSessions:zeitraumTermine.length,
+              monatsAbrechn:zeitraumTermine.length>1?{
+                id:'zr_'+Date.now(), typ:'abrechn', studio:zeitraumTermine[0].studio,
+                auszahlung:z.betrag, beschr:'Zeitraum '+vonISO+' – '+bisISO,
+                sessions:zeitraumTermine.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};})
+              }:null,
+              betragsAbweichung:0,
+              _konfidenz: bCheck2===true?'MANUELL':'MANUELL',  // Zeitraum immer manuell
+              terminKandidaten:[]
+            };
+          }
+        }
+
+        // ── STUFE 6: Lohn/Gehalt — immer manuell ──
+        var lohnRef = z.nachricht.match(/Lohn.*Gehalt|Gehalt.*Lohn/i);
+        if(lohnRef){
+          // Kandidaten sammeln aber nie auto-confirm
+          var lohnKandidaten = (db.termine||[]).filter(function(t){
+            return studioPasst(t.studio) && t.status!=='bezahlt';
+          }).sort(function(a,b){ return a.datum>b.datum?-1:1; }).slice(0,5);
+          return {
+            zahlung:z, termin:lohnKandidaten[0]||null, termineAlle:null,
+            sessionsOhneTermin:[], gesamtSessions:0, monatsAbrechn:null, betragsAbweichung:0,
+            _konfidenz:'LOHN_GEHALT', _lohnHinweis:true,
+            terminKandidaten:lohnKandidaten
+          };
+        }
+
+        // ── STUFE 7: Nur Studio-Kandidaten ──
         var kandidaten = (db.termine||[]).filter(function(t){
           if(t.status==='bezahlt') return false;
-          var tStudio = studioNorm(t.studio||'');
-          if(!tStudio || !zStudio) return false;
-          if(tStudio.indexOf(zStudio)<0 && zStudio.indexOf(tStudio)<0) return false;
+          if(!studioPasst(t.studio)) return false;
           if(t.datum && z.datum && z.datum < t.datum) return false;
           return true;
         });
         kandidaten.sort(function(a,b){
-          var da = Math.abs(new Date(z.datum)-new Date(a.datum));
-          var db2 = Math.abs(new Date(z.datum)-new Date(b.datum));
+          var da=Math.abs(new Date(z.datum)-new Date(a.datum));
+          var db2=Math.abs(new Date(z.datum)-new Date(b.datum));
           return da-db2;
         });
-        return { zahlung: z, termin: kandidaten[0]||null, termineAlle: null, monatsAbrechn: null, terminKandidaten: kandidaten };
-      });
-
+        return {
+          zahlung:z, termin:kandidaten[0]||null, termineAlle:null,
+          sessionsOhneTermin:[], gesamtSessions:0, monatsAbrechn:null, betragsAbweichung:0,
+          _konfidenz:'MANUELL', terminKandidaten:kandidaten
+        };
       holviShowPreview(matches, eingaenge.length);
     } catch(err){
       showToast('⚠ Fehler beim Lesen: '+err.message);
@@ -4511,6 +4761,10 @@ function holviShowPreview(matches, gesamt){
         +'style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(istMonats||m._gutschriftMatch?'':'cursor:pointer;touch-action:manipulation')+'">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
         +'<div style="font-size:13px;font-weight:800">'+fmtEur(m.zahlung.betrag)+'</div>'
+        +(m._konfidenz==='AUTO'?'<div style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚡ AUTO</div>':
+          m._konfidenz==='WARN'?'<div style="background:#fff7ed;color:#c2410c;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚠ Prüfen</div>':
+          m._konfidenz==='DOPPELT'?'<div style="background:#fef2f2;color:#991b1b;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">🔴 Bereits bezahlt</div>':
+          m._konfidenz==='LOHN_GEHALT'?'<div style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">📝 Manuell</div>':'')
         +'<div style="font-size:11px;color:#888">'+m.zahlung.datum.split('-').reverse().join('.')+'</div>'
         +'</div>'
         +'<div style="font-size:11px;color:#555;margin-bottom:4px">'+esc(m.zahlung.gegenpartei)+'</div>'
@@ -4715,6 +4969,19 @@ function holviBestaetigen(){
     undoZahlungsIds.push(z.zahlungsId);
 
     var zid = 'z'+Date.now()+importiert;
+    // Vorsteuer: MwSt-Summe aller verknüpften Termine
+    var mwstSumme = 0;
+    var termineForMwst = (m.termineAlle && m.termineAlle.length) ? m.termineAlle : (m.termin ? [m.termin] : []);
+    termineForMwst.forEach(function(t){
+      mwstSumme += parseFloat(t.mwst_anteil)||0;
+      // Fallback: aus abrechnung
+      if(!t.mwst_anteil && t.abId){
+        var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+        if(ab) mwstSumme += parseFloat(ab.mwst)||0;
+      }
+    });
+    mwstSumme = Math.round(mwstSumme*100)/100;
+
     var zahlung = {
       id: zid,
       datum: z.datum,
@@ -4723,13 +4990,19 @@ function holviBestaetigen(){
       nachricht: z.nachricht,
       zahlungsId: z.zahlungsId,
       terminId: m.termin ? m.termin.id : null,
-      monatsAbrechnId: m.monatsAbrechn ? m.monatsAbrechn.id : null
+      monatsAbrechnId: m.monatsAbrechn ? m.monatsAbrechn.id : null,
+      mwst: mwstSumme,  // Vorsteuer für USt-Voranmeldung
+      _konfidenz: m._konfidenz || 'MANUELL'
     };
     db.zahlungen.push(zahlung);
     undoZahlungIds.push(zid);
 
-    if(m.monatsAbrechn && m.termineAlle && m.termineAlle.length){
+    if(m._konfidenz==='DOPPELT'){
+      // Schutz: Termin bereits bezahlt — überspringen
+      importiert--; // wird unten wieder erhöht
+    } else if(m.monatsAbrechn && m.termineAlle && m.termineAlle.length){
       m.termineAlle.forEach(function(t){
+        if(t.status==='bezahlt') return; // Doppelzählungsschutz
         undoSnapshots.push({id:t.id, status:t.status, zahlungDatum:t.zahlungDatum||null});
         t.status = 'bezahlt';
         t.zahlungDatum = z.datum;
@@ -7870,14 +8143,21 @@ function dokAnalyseDoc(d, key, cb){
         showToast('API Fehler: '+rawErr);
         if(cb) cb(); return;
       }
+      if(data.stop_reason === 'max_tokens'){
+        showToast('⚠ Antwort abgeschnitten — bitte nochmal analysieren');
+      }
     try{
       var txt = data.content[0].text;
+      console.log('[KI RAW]', txt && txt.slice(0,500));
       // Alles vor { und nach } entfernen, Markdown-Reste bereinigen
       txt = txt.replace(/```json/gi,'').replace(/```/g,'');
       // Ersten { bis letzten } extrahieren
       var start = txt.indexOf('{');
       var end = txt.lastIndexOf('}');
-      if(start<0||end<0){ d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return; }
+      if(start<0||end<0){
+        showToast('KI: kein JSON (' + (txt||'').slice(0,60) + ')');
+        d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return;
+      }
       txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
       d.typ     = j.typ || 'sonstig';
@@ -10703,6 +10983,12 @@ function dokDeleteOne(){
   var d = (db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
   if(!confirm((d.beschr||'Dokument')+' löschen?')) return;
+  // Wenn noch NICHT bestätigt: Dateiname aus importedFiles entfernen
+  // → kann beim nächsten Ordner-Scan neu eingelesen werden
+  // Wenn bestätigt: Dateiname IN importedFiles lassen (nicht erneut importieren)
+  if(!d.bestaetigt && d.dateiname && db.importedFiles){
+    db.importedFiles = db.importedFiles.filter(function(n){ return n !== d.dateiname; });
+  }
   db.dokumente = (db.dokumente||[]).filter(function(x){return x.id!==_dokCurrentId;});
   save(db); dokDetailClose(); rDokumente();
   showToast('Gelöscht');
