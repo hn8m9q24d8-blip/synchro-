@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '365';
+  if(el) el.textContent = '369';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1998,7 +1998,7 @@ function tCard(t){
   var docs=(db.dokumente||[]).filter(function(dk){return dk.terminId===t.id;});
   var dispoDok=docs.find(function(dk){return dk.typ==='dispo';});
   var hasDispo=!!(t.dispoImg||dispoDok);
-  var hasAbrechnung=!!(t.abId);
+  var hasAbrechnung=!!(t.abId||t.abgerechnet);
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
 
   // Multi-Select Modus — Haken anzeigen wenn gewählt
@@ -2179,12 +2179,36 @@ function openDetail(id){
   if(t.abId){
     var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
     if(abRec){
-      var abName=abRec.dateiname||abRec.gutschrift_nr||('Abrechnung '+fd(abRec.datum||t.datum));
+      // Priorität: 1) abRec.dateiname direkt, 2) Quell-Dok dateiname, 3) Gutschrift-Nr.
+      var abName = abRec.dateiname || '';
+      if(!abName && abRec.dokId){
+        var _srcDok=(db.dokumente||[]).find(function(x){return x.id===abRec.dokId;});
+        if(_srcDok) abName = _srcDok.dateiname||_srcDok.beschr||'';
+      }
+      if(!abName) abName = abRec.gutschrift_nr||('Abrechnung '+fd(abRec.datum||t.datum));
       if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
     }
   }
+  // _archivLog: Dateiname der Abrechnung aus Archiv holen (wie bei Dispo)
+  if(!abDateinamen.length && db._archivLog){
+    var abArchEntry = db._archivLog.find(function(e){
+      return e.terminId===id && !/dispo/i.test(e.dateiname||'');
+    });
+    if(abArchEntry && abArchEntry.dateiname) abDateinamen.push(abArchEntry.dateiname);
+  }
+  // Suche auch in Dokumenten deren sessions auf diesen Termin zeigen
+  if(!abDateinamen.length){
+    var sessionDok = (db.dokumente||[]).find(function(x){
+      return (x.typ==='monats_abrechn'||x.typ==='abrechn') &&
+             x.sessions && x.sessions.some(function(s){ return s.terminId===id; });
+    });
+    if(sessionDok){
+      var sName = sessionDok.dateiname||sessionDok.beschr||'';
+      if(sName) abDateinamen.push(sName);
+    }
+  }
   // Letzter Fallback: Abrechnung verknüpft aber kein Name
-  if(!abDateinamen.length && (t.abId||abDoks.length)){
+  if(!abDateinamen.length && (t.abId||abDoks.length||t.abgerechnet)){
     abDateinamen=['Abrechnung '+fd(t.datum)];
   }
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
@@ -2194,7 +2218,7 @@ function openDetail(id){
     || t.gvl_staffel || t.gvl_folge || t.gvl_takes_detail
     // Pendente Dispo aus Dateinamen-Fallback
     || dispoDateinamen.length);
-  var hasAbrechn=!!(t.abId||abDoks.length);
+  var hasAbrechn=!!(t.abId||abDoks.length||t.abgerechnet);
   var hasZahlung=!!(zahlung||t.status==='bezahlt');
 
   var dpScroll=document.getElementById('dp-scroll');
@@ -2698,7 +2722,7 @@ function saveMergeChanges(){
     // Noch offene Sessions in diesem Dok? → zurück zum Session-Menü, NICHT zur nächsten Gutschrift
     if(offeneSessions > 0){
       switchView('dokumente');
-      setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+      setTimeout(function(){ dokOpenDetail(returnId); }, 200);
       return;
     }
 
@@ -2706,7 +2730,7 @@ function saveMergeChanges(){
     // dokBestaetigenMonat erledigt auch die Split-Navigation zum nächsten Dok
     if(dok && (dok.typ==='monats_abrechn' || (dok.typ==='abrechn' && dok.sessions && dok.sessions.length > 1))){
       switchView('dokumente');
-      setTimeout(function(){ dokBestaetigenMonat(returnId); }, 80);
+      setTimeout(function(){ dokBestaetigenMonat(returnId); }, 200);
       return;
     }
 
@@ -2727,6 +2751,7 @@ function saveMergeChanges(){
           var _newAbId = 'ab'+Date.now();
           var _newAb = {
             id:_newAbId, dokId:dok.id,
+            dateiname:dok.dateiname||dok.beschr||'',
             datum:dok.datum||_abT.datum||'',
             studio:dok.studio||_abT.studio||'',
             produktion:dok.titel||_abT.titel||'',
@@ -3209,7 +3234,7 @@ function showDateinamen(el){
     var panelClose = document.querySelector('[data-namen-ov]');
     if(panelClose) panelClose.remove();
     switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(firstDoc.id); }, 80);
+    setTimeout(function(){ dokOpenDetail(firstDoc.id); }, 200);
     return;
   }
 
@@ -3283,7 +3308,7 @@ function terminBackBtn(){
     if(dp) dp.classList.remove('open');
     ctid = null;
     switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(returnId); }, 80);
+    setTimeout(function(){ dokOpenDetail(returnId); }, 200);
   } else {
     // Normaler Zurück — mit Merge-Revert wenn nötig
     closeDetail();
@@ -3585,7 +3610,7 @@ function discardMergeChanges(){
   if(returnId){
     closeDetail();
     switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(returnId); }, 100);
+    setTimeout(function(){ dokOpenDetail(returnId); }, 200);
     showToast('Verworfen — zurück zum Dispoblatt');
   } else {
     openDetail(ctid);
@@ -7438,38 +7463,43 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ Grundgage gehört IMMER zur Takes-Zeile desselben Films — NIEMALS als eigene Session!\\n'
     +'\\n'
     +'    INTEROPA / SESAM-GS FORMAT (Monats-Gutschrift mit LA-Spalte):\\n'
-    +'    Spalten: Datum | LA | [N] Grundgage/Takegage Typ | Filmcode | Titel | Typ | Betrag | MwSt | KK | PG\\n'
+    +'    Spalten: Datum | LA | [N] Grundgage/Takegage Typ | Filmcode | Titel | Typ | Betrag | MwSt\\n'
     +'\\n'
-    +'    ⚠⚠⚠ HÄUFIGSTER FEHLER: takes = Betrag + Anzahl addiert!\\n'
-    +'    BEISPIEL FEHLER: "6 Takegage, Betrag=60" → 6+60=66 Takes — KOMPLETT FALSCH!\\n'
-    +'    BEISPIEL FEHLER: "3 Takegage, Betrag=30" → 3+30=33 Takes — KOMPLETT FALSCH!\\n'
-    +'    BEISPIEL FEHLER: LA-Nummer=61 als 61 Takes — KOMPLETT FALSCH!\\n'
+    +'    ⚠⚠⚠ KRITISCHE REGEL: JEDE DATUM-ZEILE = EIGENE SESSION — NIEMALS TAKES VERSCHIEDENER DATEN ADDIEREN!\\n'
+    +'    Auch wenn Film und Filmcode identisch: 26.02 und 12.03 sind ZWEI SEPARATE SESSIONS mit EIGENEN Takes!\\n'
+    +'\\n'
+    +'    ⚠⚠⚠ HÄUFIGSTER FEHLER 1: Takes verschiedener Daten addieren\\n'
+    +'    BEISPIEL FEHLER: Daredevil 26.02 (6 Takes) + Daredevil 12.03 (3 Takes) = 9 Takes — FALSCH!\\n'
+    +'    KORREKT: Session 26.02 → takes=6, Session 12.03 → takes=3 (getrennte Sessions!)\\n'
+    +'\\n'
+    +'    ⚠⚠⚠ HÄUFIGSTER FEHLER 2: Betrag + Anzahl addieren\\n'
+    +'    BEISPIEL FEHLER: 6 Takes + 60€ Betrag = 66 Takes — KOMPLETT FALSCH!\\n'
     +'\\n'
     +'    EINZIGE KORREKTE METHODE:\\n'
-    +'    1. Lies die kleine Zahl DIREKT VOR "Takegage" in der Beschreibungsspalte → das sind die Takes\\n'
-    +'    2. Teile den Betrag der Takegage-Zeile durch diese Zahl → das ist take_gage\\n'
+    +'    1. Jede Datum-Gruppe = eigene Session (26.02, 27.02, 12.03 = 3 separate Sessions)\\n'
+    +'    2. Takes = die Zahl DIREKT VOR "Takegage" in der Beschreibungsspalte dieser einen Zeile\\n'
     +'    3. PFLICHT-VERIFIKATION: takes × take_gage = Betrag der Takegage-Zeile\\n'
-    +'       Wenn nicht: du hast takes falsch gelesen. Nochmal lesen!\\n'
+    +'       Wenn nicht: takes falsch gelesen oder fälschlicherweise addiert!\\n'
     +'\\n'
-    +'    BEISPIEL (aus realem Dokument, EXAKT DIESE WERTE):\\n'
-    +'      Zeile: Do 26.02.26 | LA=60 | 1 Grundgage ST-SE | 49790 | Daredevil S2 | 200,00\\n'
-    +'      Zeile: Do 26.02.26 | LA=61 | 6 Takegage ST-SE  | 49790 | Daredevil S2 |  60,00\\n'
-    +'      → takes=6 (steht vor "Takegage"), take_gage=60÷6=10,00\\n'
-    +'      → VERIFIKATION: 6×10=60 ✓ → korrekt\\n'
-    +'      → session: {datum:2026-02-26, takes:6, take_gage:10.0, grundgage:200.0, brutto_termin:260.0}\\n'
+    +'    DIESES DOKUMENT — EXAKT DIESE 3 SESSIONS (nicht mehr, nicht weniger):\\n'
+    +'      Do 26.02.26 | 60 | 1 Grundgage ST-SE | 49790 | Daredevil S2 | 200,00\\n'
+    +'      Do 26.02.26 | 61 | 6 Takegage ST-SE  | 49790 | Daredevil S2 |  60,00\\n'
+    +'      → SESSION 1: datum=2026-02-26, takes=6, take_gage=10.0, grundgage=200.0, brutto_termin=260.0\\n'
+    +'      CHECK: 6×10=60 ✓\\n'
     +'\\n'
-    +'      Zeile: Fr 27.02.26 | LA=10 | 1 Grundgage KINO | 49372 | Disclosure Day | 150,00\\n'
-    +'      Zeile: Fr 27.02.26 | LA=20 | 12 Takegage KINO | 49372 | Disclosure Day |  60,00\\n'
-    +'      → takes=12 (steht vor "Takegage"), take_gage=60÷12=5,00\\n'
-    +'      → VERIFIKATION: 12×5=60 ✓ → korrekt\\n'
-    +'      → session: {datum:2026-02-27, takes:12, take_gage:5.0, grundgage:150.0, brutto_termin:210.0}\\n'
+    +'      Fr 27.02.26 | 10 | 1 Grundgage KINO | 49372 | Disclosure Day VT | 150,00\\n'
+    +'      Fr 27.02.26 | 20 | 12 Takegage KINO | 49372 | Disclosure Day VT |  60,00\\n'
+    +'      → SESSION 2: datum=2026-02-27, takes=12, take_gage=5.0, grundgage=150.0, brutto_termin=210.0\\n'
+    +'      CHECK: 12×5=60 ✓\\n'
     +'\\n'
-    +'      Zeile: Do 12.03.26 | LA=60 | 1 Grundgage ST-SE | 49790 | Daredevil S2 | 200,00\\n'
-    +'      Zeile: Do 12.03.26 | LA=61 | 3 Takegage ST-SE  | 49790 | Daredevil S2 |  30,00\\n'
-    +'      → takes=3 (steht vor "Takegage"), take_gage=30÷3=10,00\\n'
-    +'      → VERIFIKATION: 3×10=30 ✓ → korrekt\\n'
-    +'      → session: {datum:2026-03-12, takes:3, take_gage:10.0, grundgage:200.0, brutto_termin:230.0}\\n'
-    +'    MERKSATZ: takes × take_gage = Betrag — geht die Rechnung nicht auf, ist takes falsch!\\n'
+    +'      Do 12.03.26 | 60 | 1 Grundgage ST-SE | 49790 | Daredevil S2 | 200,00\\n'
+    +'      Do 12.03.26 | 61 | 3 Takegage ST-SE  | 49790 | Daredevil S2 |  30,00\\n'
+    +'      → SESSION 3: datum=2026-03-12, takes=3, take_gage=10.0, grundgage=200.0, brutto_termin=230.0\\n'
+    +'      CHECK: 3×10=30 ✓\\n'
+    +'\\n'
+    +'    ACHTUNG: Session 1 (26.02, Daredevil) und Session 3 (12.03, Daredevil) haben gleichen Filmcode 49790\\n'
+    +'    TROTZDEM ZWEI SEPARATE SESSIONS mit EIGENEN TAKES — NIEMALS zusammenfassen oder takes addieren!\\n'
+    +'    LA-Nummern (60, 61, 10, 20, ...) sind Zeilennummern — NIEMALS als Takes verwenden!\\n'
     +'\\n'
     +'    ARENA FORMAT (Monats-Gutschrift ohne LA-Spalte):\\n'
     +'    Beispiel Arena-Abrechnung (EXAKT SO MACHEN):\\n'
@@ -9513,6 +9543,7 @@ function dokBestaetigenMonat(dokId){
         var newAb = {
           id: newAbId,
           dokId: dokId,
+          dateiname: d.dateiname||d.beschr||'',  // PDF-Dateiname für Ampel-Klick
           datum: s.datum||d.datum||'',
           studio: d.studio||t.studio||'',
           produktion: s.titel||d.titel||t.titel||'',
@@ -10454,21 +10485,42 @@ function rUstVoranmeldung(){
       var dokGezaehlt = false;
       t.dokIds.forEach(function(did){
         if(gezaehlteDokIds[did]) return;
-        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&d.typ==='monats_abrechn'&&d.bestaetigt;});
+        var dok=(db.dokumente||[]).find(function(d){return d.id===did&&d.bestaetigt;});
         if(!dok) return;
-        gezaehlteDokIds[did]=true;
-        dokGezaehlt=true;
-        var brutto=parseFloat(dok.brutto)||0;
-        var mwst=parseFloat(dok.mwst)||0;
-        var ust=mwst>0?mwst:Math.round(brutto*urEinn*100)/100;
-        einnNetto+=brutto;
-        if(mwst>0) einnUstEcht+=mwst; else einnUstBerechnet+=ust;
-        einnZeilen.push({
-          label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
-          sub:'Monats-GS',
-          zahlDatum:zahlDatum,
-          netto:brutto, ust:ust
-        });
+
+        // Fall A: klassische monats_abrechn (Arena, Interopa)
+        if(dok.typ==='monats_abrechn'){
+          gezaehlteDokIds[did]=true;
+          dokGezaehlt=true;
+          var brutto=parseFloat(dok.brutto)||0;
+          var mwst=parseFloat(dok.mwst)||0;
+          var ust=mwst>0?mwst:Math.round(brutto*urEinn*100)/100;
+          einnNetto+=brutto;
+          if(mwst>0) einnUstEcht+=mwst; else einnUstBerechnet+=ust;
+          einnZeilen.push({
+            label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
+            sub:'Monats-GS',
+            zahlDatum:zahlDatum,
+            netto:brutto, ust:ust
+          });
+
+        // Fall B: Split-PDF (Iyuno 7-seitige PDF etc.) — jede Gutschrift ist ein eigenes abrechn-Dok
+        // Hier MwSt direkt aus dem Dok-Objekt nehmen — NICHT aus aufgeteilten Terminen errechnen!
+        } else if(dok.typ==='abrechn' && dok._splitFromPdf){
+          gezaehlteDokIds[did]=true;
+          dokGezaehlt=true;
+          var bruttoS=parseFloat(dok.brutto)||0;
+          var mwstS=parseFloat(dok.mwst)||0;
+          var ustS=mwstS>0?mwstS:Math.round(bruttoS*urEinn*100)/100;
+          einnNetto+=bruttoS;
+          if(mwstS>0) einnUstEcht+=mwstS; else einnUstBerechnet+=ustS;
+          einnZeilen.push({
+            label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
+            sub:'Gutschrift '+(dok._splitIdx!=null?(dok._splitIdx+1)+'/'+dok._splitTotal:''),
+            zahlDatum:zahlDatum,
+            netto:bruttoS, ust:ustS
+          });
+        }
       });
       if(dokGezaehlt) return;
     }
