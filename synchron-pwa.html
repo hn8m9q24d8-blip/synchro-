@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '380';
+  if(el) el.textContent = '381';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9621,9 +9621,23 @@ function dokSessionSkip(dokId, si){
   if(!d||!d.sessions||!d.sessions[si]) return;
   d.sessions[si]._done=true;
   save(db);
+  // State aufräumen — verhindert Geister-Navigation
+  _returnToDokId=null;
+  _mergeSnapshot=null;
+  _mergeTerminId=null;
   // Overlay schließen
   document.querySelectorAll('[style*="z-index:3000"]').forEach(function(el){el.remove();});
-  showToast('✓ Session gespeichert');
+  // Prüfen ob alle Sessions erledigt → ggf. direkt abschließen
+  var offeneSessions = d.sessions.filter(function(s){return !s._done;}).length;
+  if(offeneSessions === 0){
+    // Alle erledigt → formal abschließen (abId, bestaetigt, split-nav)
+    if(d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions.length > 1)){
+      switchView('dokumente');
+      setTimeout(function(){ dokBestaetigenMonat(dokId); }, 200);
+      return;
+    }
+  }
+  showToast('✓ Session übersprungen');
   // Zurück zum Dok
   dokOpenDetail(dokId);
 }
