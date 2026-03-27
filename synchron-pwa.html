@@ -1745,7 +1745,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '369';
+  if(el) el.textContent = '374';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -1997,7 +1997,9 @@ function tCard(t){
   var sc=t.status==='bezahlt'?'#43a047':t.status==='storno'?'#aaa':t.status==='ausstehend'?'#fb8c00':'#e53935';
   var docs=(db.dokumente||[]).filter(function(dk){return dk.terminId===t.id;});
   var dispoDok=docs.find(function(dk){return dk.typ==='dispo';});
-  var hasDispo=!!(t.dispoImg||dispoDok);
+  var hasDispo=!!(t.dispoImg||dispoDok||
+    (t.gvl_takes_detail&&t.gvl_takes_detail.length>0)||
+    (db._archivLog&&db._archivLog.find(function(e){return e.terminId===t.id&&/dispo/i.test(e.dateiname||'');})));
   var hasAbrechnung=!!(t.abId||t.abgerechnet);
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
 
@@ -2010,9 +2012,20 @@ function tCard(t){
   var folge=dispoDok&&dispoDok.gvl_episode_header||t.gvl_folge||t.episode||'';
   var produktion=dispoDok&&dispoDok.produktion||t.produktion||'';
 
+  var hasZahlung=!!(t.status==='bezahlt'||t.zahlungDatum||
+    (db.zahlungen||[]).find(function(z){return z.terminId===t.id;}));
+
+  // Ampel-Dots: Dispo=rot, Abrechnung=gelb, Zahlung=grün
+  var ampelDots='';
+  if(hasDispo||hasAbrechnung||hasZahlung){
+    ampelDots='<div style="display:flex;gap:4px;margin-top:4px;align-items:center">';
+    ampelDots+='<div style="width:8px;height:8px;border-radius:50%;background:'+(hasDispo?'#e53935':'#e5e7eb')+'"></div>';
+    ampelDots+='<div style="width:8px;height:8px;border-radius:50%;background:'+(hasAbrechnung?'#f5c518':'#e5e7eb')+'"></div>';
+    ampelDots+='<div style="width:8px;height:8px;border-radius:50%;background:'+(hasZahlung?'#22c55e':'#e5e7eb')+'"></div>';
+    ampelDots+='</div>';
+  }
+
   var badges='';
-  if(hasDispo) badges+='<span style="background:#fde8e6;color:#c0392b;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">📋 Dispo</span>';
-  if(hasAbrechnung) badges+='<span style="background:#fff9e0;color:#92400e;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">🧾 Abrechn.</span>';
   if(t.memo) badges+='<span style="background:#fff7ed;color:#c2410c;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">📝</span>';
   if(t._merkliste) badges+='<span style="background:#fefce8;color:#92400e;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px">⭐</span>';
 
@@ -2052,6 +2065,7 @@ function tCard(t){
     +tlabel(t.status)
     +'</div>'
     +extraLines
+    +ampelDots
     +(badges?'<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px">'+badges+'</div>':'')
     +'</div>'
     +'<div class="t-chevron">›</div>'
@@ -2134,6 +2148,13 @@ function openDetail(id){
       dispoDateinamen=[linkedDispo.dateiname||linkedDispo.beschr||'Dispo '+fd(linkedDispo.datum)];
     }
   }
+  // Frühzeitiger _archivLog-Fallback: vor dem GVL-Block prüfen
+  if(!dispoDateinamen.length && db._archivLog){
+    var dispArchEntry = db._archivLog.find(function(e){
+      return e.terminId===id && /dispo/i.test(e.dateiname||'');
+    });
+    if(dispArchEntry && dispArchEntry.dateiname) dispoDateinamen=[dispArchEntry.dateiname];
+  }
   // Letzter Fallback: GVL-Daten am Termin = Dispo war mal da
   if(!dispoDateinamen.length && (t.gvl_staffel||t.gvl_folge||t.gvl_takes_detail||t.regie||t.atelier)){
     // Suche 1: direkt via terminId (zuverlässigste Methode)
@@ -2189,11 +2210,16 @@ function openDetail(id){
       if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
     }
   }
-  // _archivLog: Dateiname der Abrechnung aus Archiv holen (wie bei Dispo)
+  // _archivLog: Dateiname der Abrechnung aus Archiv holen
   if(!abDateinamen.length && db._archivLog){
-    var abArchEntry = db._archivLog.find(function(e){
+    // Alle Einträge für diesen Termin, die KEINE Dispos sind
+    var abArchEntries = db._archivLog.filter(function(e){
       return e.terminId===id && !/dispo/i.test(e.dateiname||'');
     });
+    // Priorität: Abrechnungs-Dateien (PDF/Monats) zuerst
+    var abArchEntry = abArchEntries.find(function(e){
+      return /abrechn|gutschrift|monats|abr_/i.test(e.dateiname||'');
+    }) || abArchEntries[0];
     if(abArchEntry && abArchEntry.dateiname) abDateinamen.push(abArchEntry.dateiname);
   }
   // Suche auch in Dokumenten deren sessions auf diesen Termin zeigen
@@ -2213,11 +2239,15 @@ function openDetail(id){
   }
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
-  var hasDispo=!!(t.dispoImg||dispoDoks.length
-    // Auch: GVL-Daten am Termin = Dispo wurde mal zugeordnet (auch wenn Foto weg)
-    || t.gvl_staffel || t.gvl_folge || t.gvl_takes_detail
-    // Pendente Dispo aus Dateinamen-Fallback
-    || dispoDateinamen.length);
+  // hasDispo: Dispo-Dokument vorhanden ODER Archiv-Spuren (Dateiname, _archivLog)
+  // gvl_staffel allein reicht NICHT — kann auch vom Kalender-Import kommen
+  // gvl_takes_detail = konkrete Take-Einträge → sicheres Dispo-Signal
+  var _hasDispoDoc = !!(t.dispoImg || dispoDoks.length || dispoDateinamen.length);
+  var _hasDispoGVL = !!(t.gvl_takes_detail && t.gvl_takes_detail.length > 0);
+  var _hasDispoArchiv = !!(db._archivLog && db._archivLog.find(function(e){
+    return e.terminId===id && /dispo/i.test(e.dateiname||'');
+  }));
+  var hasDispo = _hasDispoDoc || _hasDispoGVL || _hasDispoArchiv;
   var hasAbrechn=!!(t.abId||abDoks.length||t.abgerechnet);
   var hasZahlung=!!(zahlung||t.status==='bezahlt');
 
@@ -2351,22 +2381,58 @@ function openDetail(id){
     +'<div id="gage-recherche-result" style="margin-top:8px;display:none"></div>'
     +'<div id="gage-mapping-hint"></div>'
     +'</div>'
-    +'<div class="info-card">'
-    +'<div class="info-card-header"><span>Gage</span><span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span></div>'
-    +'<div class="gage-row"><span>Komm. Gage</span><span>'+((t.kommgage||0).toFixed(2).replace('.',','))+' €</span></div>'
-    +(t.rate?'<div class="gage-row"><span>'+totalLabel+' Takes × '+parseFloat(t.rate||0).toFixed(2).replace('.',',')+' €</span><span>'+(t.rate||0)+' €</span></div>':'')
     +(function(){
-      var netBruttoOk=!ab||Math.abs(net-(parseFloat(ab.brutto)||0))<0.02;
-      var col=ab?(netBruttoOk?'#15803d':'#c2410c'):'inherit';
-      var fw=ab?'800':'inherit';
-      return '<div class="gage-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">'
-        +'<span style="color:'+col+';font-weight:'+fw+'">Netto'+(ab?' = Studio-Brutto':'')+'</span>'
-        +'<span style="color:'+col+';font-weight:'+fw+'">'+net.toFixed(2).replace('.',',')+' €</span>'
+      // Vergleich mit Abrechnung
+      var abBrutto = ab ? (parseFloat(ab.brutto)||0) : 0;
+      var abTakes  = ab ? (parseInt(ab.takes)||0) : 0;
+      var abGG     = ab ? (parseFloat(ab.grundgage)||0) : 0;
+      var abRate   = ab ? (parseFloat(ab.take_gage)||0) : 0;
+      var netBruttoOk = !ab || Math.abs(net - abBrutto) < 0.02;
+      var takesMismatch = ab && abTakes > 0 && Math.abs(abTakes - total) > 0 ? (abTakes - total) : 0;
+      var rateMismatch  = ab && abRate > 0 && Math.abs(abRate - (parseFloat(t.rate)||0)) > 0.01;
+      var kommMismatch  = ab && abGG > 0 && Math.abs(abGG - (parseFloat(t.kommgage)||0)) > 0.5;
+
+      // Farben: grün wenn Abrechnung passt, rot wenn Abweichung, grau wenn keine Abrechnung
+      var cKomm = ab ? (kommMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
+      var cTakes= ab ? (takesMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
+      var cNet  = ab ? (netBruttoOk ? '#15803d' : '#c2410c') : 'inherit';
+      var bgNet = ab ? (netBruttoOk ? 'background:#f0fdf4;border-radius:8px;padding:4px 6px' : 'background:#fff5f5;border-radius:8px;padding:4px 6px') : '';
+
+      var html = '<div class="info-card" style="margin-top:0">'
+        +'<div class="info-card-header"><span>GAGEUST '+Math.round(ur*100)+'%</span>'
+        +(ab ? '<span style="font-size:11px;font-weight:700;color:'+(netBruttoOk?'#15803d':'#c2410c')+'">'+(netBruttoOk?'✓ passt':'⚠ Differenz')+'</span>' : '<span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span>')
         +'</div>';
-    })()
-    +'<div class="gage-row"><span>USt ('+Math.round(ur*100)+'%)</span><span>'+ust.toFixed(2).replace('.',',')+' €</span></div>'
-    +'<div class="gage-row gage-total" style="margin-top:6px;padding-top:6px;border-top:1.5px solid #ccc"><span style="font-weight:800">Brutto</span><span style="font-weight:900;font-size:16px">'+brut.toFixed(2).replace('.',',')+' €</span></div>'
-    +'</div>';
+
+      // Komm. Gage Zeile
+      html += '<div class="gage-row">'
+        +'<span style="color:'+cKomm+'">Komm. Gage'+(kommMismatch?' ⚠':'')+'</span>'
+        +'<span style="color:'+cKomm+';font-weight:'+(kommMismatch?'800':'400')+'">'
+        +(t.kommgage||0).toFixed(2).replace('.',',')+' €'
+        +(kommMismatch?' <span style="font-size:10px">(Abrechn: '+fmtEur(abGG)+')</span>':'')
+        +'</span></div>';
+
+      // Takes × Rate Zeile
+      if(t.rate){
+        html += '<div class="gage-row">'
+          +'<span style="color:'+cTakes+'">'
+          +totalLabel+' Takes × '+parseFloat(t.rate||0).toFixed(2).replace('.',',')+' €'
+          +(takesMismatch?' ⚠ <span style="font-size:10px">(Abrechn: '+abTakes+' Takes)</span>':'')
+          +'</span>'
+          +'<span style="color:'+cTakes+';font-weight:'+(takesMismatch?'800':'400')+'">'
+          +((t.rate||0)*total).toFixed(2).replace('.',',')+' €'+(rateMismatch?' <span style="font-size:10px">('+fmtEur(abRate)+'/T)</span>':'')
+          +'</span></div>';
+      }
+
+      // Netto = Studio-Brutto (Hauptzeile, grün/rot)
+      html += '<div class="gage-row" style="margin-top:8px;padding-top:8px;border-top:1.5px solid #e5e7eb">'
+        +'<span style="color:'+cNet+';font-weight:800;'+bgNet+'">Brutto'+(ab?' = Abrechn.-Brutto':'')+'</span>'
+        +'<span style="color:'+cNet+';font-weight:900;font-size:16px;'+bgNet+'">'+net.toFixed(2).replace('.',',')+' €'
+        +(ab&&!netBruttoOk?' <span style="font-size:11px">(Diff: '+fmtEur(Math.abs(net-abBrutto))+')</span>':'')
+        +'</span></div>';
+
+      html += '</div>';
+      return html;
+    })();
 
   // ── ABRECHNUNG ─────────────────────────────────────────────
   // Kernvergleich: App-Netto muss Studio-Brutto entsprechen (gleiche Zahl, verschiedene Bezeichnung).
@@ -3225,12 +3291,19 @@ function showDateinamen(el){
 
   // Erstmal: Dokument noch in App? Dann direkt öffnen
   var firstDoc = null;
+  // Prio 1: noch mit Bild (dataURL vorhanden)
   for(var ni=0; ni<namen.length; ni++){
     var found = (db.dokumente||[]).find(function(d){ return d.dateiname===namen[ni] && d.dataURL; });
     if(found){ firstDoc=found; break; }
   }
+  // Prio 2: bestätigt aber Bild gelöscht — Erkannte-Daten trotzdem anzeigbar
+  if(!firstDoc){
+    for(var ni=0; ni<namen.length; ni++){
+      var found2 = (db.dokumente||[]).find(function(d){ return d.dateiname===namen[ni]; });
+      if(found2){ firstDoc=found2; break; }
+    }
+  }
   if(firstDoc){
-    // Noch in App und hat Bild → direkt öffnen
     var panelClose = document.querySelector('[data-namen-ov]');
     if(panelClose) panelClose.remove();
     switchView('dokumente');
@@ -3680,6 +3753,9 @@ function deleteCurrentTermin(){
   var name=t?(esc(t.titel||t.studio||'Termin')):'Termin';
   var d=t?(' vom '+fd(t.datum)):'';
   if(!confirm(name+d+' wirklich löschen?')) return;
+  // Snapshot für Undo
+  if(t) logAction('termin_geloescht', 'Termin gelöscht · '+esc(t.titel||t.studio||'')+(t.datum?' · '+fd(t.datum):''),
+    {terminSnap: JSON.parse(JSON.stringify(t))});
   db.termine=db.termine.filter(function(x){return x.id!==ctid;});
   save(db);
   closeDetail();
@@ -3719,6 +3795,8 @@ function saveTermin(){
   var id=fidEl?fidEl.value:'';
   var isNew=!id;
   var t=id?db.termine.find(function(x){return x.id===id;}):null;
+  // Snapshot VOR Änderung für Undo
+  var _terminSnapVorher = (!isNew && t) ? JSON.parse(JSON.stringify(t)) : null;
   if(!t){t={id:uid(),status:'offen',doneTakes:[],createdAt:new Date().toISOString()};db.termine.push(t);}
   var el;
   el=document.getElementById('f-titel'); if(el) t.titel=el.value;
@@ -6120,10 +6198,19 @@ function undoAction(actionId){
         if(dTyp){ dTyp.typ=action.undoData.typVorher; dTyp.bestaetigt=false; dTyp.awaitConfirm=false; }
         showToast('↩ Dokumenttyp zurückgesetzt');
         break;
+
+      case 'multi_link':
         // Verknüpfung mehrerer Termine mit Abrechnung rückgängig
         (action.undoData.terminSnapshots||[]).forEach(function(snap){
           var t4=(db.termine||[]).find(function(x){return x.id===snap.id;});
-          if(t4){ t4.abId=snap.abId||null; t4.status=snap.status||'ausstehend'; t4.titel=snap.titel||t4.titel; }
+          if(t4){
+            t4.abId=snap.abId||null;
+            t4.status=snap.status||'ausstehend';
+            t4.brutto_termin=snap.brutto_termin||0;
+            t4.mwst_anteil=snap.mwst_anteil||0;
+            t4.gutschrift_nr=snap.gutschrift_nr||'';
+            if(!snap.abId){ t4.status='ausstehend'; delete t4.abId; }
+          }
         });
         // Teil-Abrechnungen entfernen
         (action.undoData.teilAbIds||[]).forEach(function(aid){
@@ -6131,8 +6218,42 @@ function undoAction(actionId){
         });
         // Dok zurücksetzen
         var dLink=(db.dokumente||[]).find(function(x){return x.id===action.undoData.dokId;});
-        if(dLink){ dLink.terminId=null; dLink.aufgeteilt=false; dLink.bestaetigt=false; dLink.awaitConfirm=false; }
+        if(dLink){ dLink.terminId=null; dLink.aufgeteilt=false; dLink.aufgeteiltIn=null; dLink.bestaetigt=false; dLink.awaitConfirm=true; }
         showToast('↩ Verknüpfung aufgehoben');
+        break;
+
+      case 'termin_erstellt':
+        if(action.undoData.terminId){
+          db.termine=(db.termine||[]).filter(function(x){return x.id!==action.undoData.terminId;});
+        }
+        showToast('↩ Termin gelöscht');
+        break;
+
+      case 'termin_bearbeitet':
+        if(action.undoData.terminSnap){
+          var tBearb=(db.termine||[]).findIndex(function(x){return x.id===action.undoData.terminSnap.id;});
+          if(tBearb>=0) db.termine[tBearb]=action.undoData.terminSnap;
+        }
+        showToast('↩ Termin-Änderungen zurückgesetzt');
+        break;
+
+      case 'termin_geloescht':
+        if(action.undoData.terminSnap){
+          if(!db.termine) db.termine=[];
+          var alreadyEx=(db.termine||[]).find(function(x){return x.id===action.undoData.terminSnap.id;});
+          if(!alreadyEx) db.termine.push(action.undoData.terminSnap);
+        }
+        showToast('↩ Termin wiederhergestellt');
+        break;
+
+      case 'session_link':
+        if(action.undoData.dokId && action.undoData.sessionIdx!=null){
+          var dSess=(db.dokumente||[]).find(function(x){return x.id===action.undoData.dokId;});
+          if(dSess && dSess.sessions && dSess.sessions[action.undoData.sessionIdx]){
+            dSess.sessions[action.undoData.sessionIdx].terminId=action.undoData.altesTerminId||null;
+          }
+        }
+        showToast('↩ Session-Zuordnung zurückgesetzt');
         break;
     }
 
@@ -7373,9 +7494,12 @@ function dokAnalyseDoc(d, key, cb){
     +'  gutschrift_nr = Gutschrifts-Nummer (z.B. "839/20260201")\n'
     +'  takes = Gesamtzahl Takes (z.B. 45 bei "45 x 5,00")\n'
     +'  take_gage = Preis pro Take in Euro (z.B. 5.00)\n'
-    +'  grundgage = Grundgage/Pauschale in Euro (z.B. 100.00)\n'
-    +'  brutto = BRUTTO GAGE gesamt\n'
-    +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12)\n'
+    +'  grundgage = Grundgage/Pauschale in Euro (z.B. 100.00) = der Betrag der "+ Grundgage"-Zeile in der Positionstabelle\n'
+    +'    ⚠⚠⚠ NIEMALS "BBGrundlage KV/RV/AV/PV" als grundgage nehmen! Das sind Sozialversicherungs-Bemessungsgrundlagen, KEINE Gage!\n'
+    +'    ⚠⚠⚠ Beispiel IYUNO: "BBGrundlage KV: 1.284,00" → grundgage ist NICHT 1284! Das ist die SV-Bemessungsgrundlage!\n'
+    +'    ⚠⚠⚠ Die echte grundgage steht in der Positionstabelle: "+ Grundgage Streaming  17.03.2026  1x 150,00 = 150,00" → grundgage=150.0\n'
+    +'  brutto = BRUTTO GAGE gesamt (= Summe aller Positions-Zeilen)\n'
+    +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12) — "- Krankenversicherung" Zeile\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
     +'  netto = NETTO GAGE dieser Abrechnung (nach SV-Abzügen, VOR MwSt) — steht in der Zeile "NETTO GAGE"\n'
@@ -9631,10 +9755,12 @@ function dokBestaetigenMonat(dokId){
     if(naechstesDok){
       showToast('\u2713 Gutschrift '+(d._splitIdx+1)+' von '+d._splitTotal+' \u00b7 Weiter: '+(naechstesIdx+1));
       dokDetailClose();
+      switchView('dokumente'); // sicherstellen dass wir auf der richtigen View sind
       setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 200);
     } else {
       showToast('\u2713 Alle '+d._splitTotal+' Abrechnungen bestätigt \u00b7 '+msg2);
       dokDetailClose();
+      switchView('dokumente');
       rDokumente();
     }
     return;
@@ -10075,7 +10201,8 @@ function dokMergeIntoTermin(d, termin){
         termin.rate_differenz = Math.round((dispRate-takeGage)*100)/100;
         changed.push('Differenz Take-Gage: '+dispRate+'€ vs '+takeGage+'€');
       } else {
-        if(takeGage) overwrite('rate', takeGage, 'Take-Gage ('+fmtEur(takeGage)+')');
+        // rate NUR aus Dispo übernehmen — NICHT aus Abrechnung setzen
+        if(dispRate > 0 && takeGage) overwrite('rate', dispRate, 'Take-Gage ('+fmtEur(dispRate)+')');
         termin.rate_differenz = 0;
       }
 
@@ -10093,7 +10220,9 @@ function dokMergeIntoTermin(d, termin){
         termin.kommgage_differenz = Math.round((dispKomm-grundgage)*100)/100;
         changed.push('Differenz Komm.-Gage: '+dispKomm+'€ vs '+grundgage+'€');
       } else {
-        if(grundgage && !kommGageExakt) overwrite('kommgage', dispKomm||grundgage, 'Komm.-Gage');
+        // kommgage NUR aus Dispo übernehmen — NICHT aus Abrechnung!
+        // Wenn dispKomm > 0: Dispo-Wert bestätigen; wenn dispKomm = 0: leer lassen
+        if(dispKomm > 0 && grundgage && !kommGageExakt) overwrite('kommgage', dispKomm, 'Komm.-Gage');
         termin.kommgage_differenz = 0;
       }
       // USt aus Abrechnung erkennen
@@ -10166,10 +10295,13 @@ function _checkPendingDokLink(terminId){
 
   // Session-Zuordnung: sofort verknüpfen (kein Multi-Select)
   if(si!==null && d.sessions && d.sessions[si]){
+    var _altesTerminId = d.sessions[si].terminId || null;
     _pendingDokLink=null;
     _pendingSessionIdx=null;
     dokLinkCancel();
     d.sessions[si].terminId=terminId;
+    logAction('session_link', 'Session manuell zugeordnet · '+(d.beschr||d.dateiname||''),
+      {dokId: d.id, sessionIdx: si, altesTerminId: _altesTerminId, neuesTerminId: terminId});
     save(db);
     showToast('✓ Session mit Termin verknüpft');
     dokSessionPeek(d.id, si);
