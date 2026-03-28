@@ -856,7 +856,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <strong>Holvi:</strong> Konto → Transaktionen → Export → Excel (CSV)<br>
     <strong>Haspa / Sparkasse:</strong> Umsätze → Exportieren → Excel (CSV - gefilterte Einträge)
   </div>
-  <input id="ab-holvi-file" type="file" accept=".csv,.xls,.xlsx,text/csv" style="display:none" onchange="abHolviImport(this)">
+  <input id="ab-holvi-file" type="file" accept=".csv,.xls,.xlsx,text/csv" style="display:none" onchange="holviImport(this)">
   <div onclick="document.getElementById('ab-holvi-file').click()" style="border:2px dashed #86efac;border-radius:12px;padding:24px;text-align:center;cursor:pointer;background:#f0fdf4;margin-bottom:14px">
     <div style="font-size:28px">📂</div>
     <div style="font-size:13px;font-weight:700;color:#15803d;margin-top:6px">CSV oder Excel hochladen</div>
@@ -1754,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '403';
+  if(el) el.textContent = '405';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4562,12 +4562,30 @@ function holviImport(inp){
               },0)) - z.betrag
             ) : 0;
 
+            // Betrag-Summe berechnen für Checkliste
+            var gnSumAusz = 0; var gnAlleHabenAb = true;
+            gnTermine.forEach(function(t){
+              var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+              if(ab && parseFloat(ab.auszahlung)) gnSumAusz += parseFloat(ab.auszahlung);
+              else gnAlleHabenAb = false;
+            });
+            var gnBetrPasst = gnAlleHabenAb && gnSumAusz > 0 ? Math.abs(gnSumAusz - z.betrag) <= Math.max(0.50, gnTermine.length*0.05) : null;
+            var gnZeitraumOk = gnTermine.every(function(t){ return !t.datum || z.datum >= t.datum; });
             return {
               zahlung: z,
               termin: gnTermine[0]||null,
               termineAlle: gnTermine,
               sessionsOhneTermin: [],
               gesamtSessions: gnTermine.length,
+              _checklist: {
+                gutnr: true,
+                gutnrListe: gutschriftNummern,
+                studio: studioOk,
+                betrag: gnBetrPasst,
+                betragSoll: gnSumAusz,
+                zeitraum: gnZeitraumOk,
+                doppelt: bereitsGezahlt
+              },
               monatsAbrechn: gnTermine.length>1 ? {
                 id:'gn_'+Date.now(), typ:'abrechn',
                 studio: (gnTermine[0]&&gnTermine[0].studio)||z.gegenpartei,
@@ -4840,6 +4858,46 @@ function holviShowPreview(matches, gesamt){
         +'</div>'
         +'<div style="font-size:11px;color:#555;margin-bottom:4px">'+esc(m.zahlung.gegenpartei)+'</div>'
         +(m._gutschriftMatch?'<div style="font-size:10px;color:#15803d;font-weight:700">✓ Gutschrift-Nr. erkannt — automatisch zugeordnet</div>':'');
+
+      // ── CHECKLISTE ──
+      if(m._checklist){
+        var cl = m._checklist;
+        var clRows = '';
+        var ck = function(ok, label){
+          var col = ok===true?'#15803d':ok===false?'#dc2626':'#92400e';
+          var sym = ok===true?'✓':ok===false?'✗':'?';
+          return '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'
+            +'<div style="width:14px;height:14px;border-radius:3px;background:'+(ok===true?'#dcfce7':ok===false?'#fef2f2':'#fef3c7')+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:'+col+'">'+sym+'</div>'
+            +'<div style="font-size:10px;color:#374151">'+label+'</div>'
+            +'</div>';
+        };
+        // Gutschrift-Nummern
+        if(cl.gutnr && cl.gutnrListe && cl.gutnrListe.length){
+          clRows += ck(true, 'Gutschrift-Nr.: '+cl.gutnrListe.join(', '));
+        }
+        // Studio
+        clRows += ck(cl.studio, 'Studio: '+esc(m.zahlung.gegenpartei||''));
+        // Betrag
+        if(cl.betrag===true){
+          clRows += ck(true, 'Betrag: '+fmtEur(m.zahlung.betrag)+(cl.betragSoll&&Math.abs(cl.betragSoll-m.zahlung.betrag)>0.01?' (Abrechn. '+fmtEur(cl.betragSoll)+')':''));
+        } else if(cl.betrag===false){
+          clRows += ck(false, 'Betrag weicht ab: '+fmtEur(m.zahlung.betrag)+' ≠ '+fmtEur(cl.betragSoll||0));
+        } else {
+          clRows += ck(null, 'Betrag: '+fmtEur(m.zahlung.betrag)+' (Abrechnung nicht eingepflegt)');
+        }
+        // Zeitraum
+        clRows += ck(cl.zeitraum, 'Valutadatum nach Aufnahme');
+        // Doppelt
+        if(cl.doppelt) clRows += ck(false, 'Bereits bezahlt!');
+        // Termine
+        if(m.termineAlle && m.termineAlle.length > 0){
+          clRows += ck(true, m.termineAlle.length+' Termin'+(m.termineAlle.length>1?' gefunden':''));
+        }
+        html += '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:7px 9px;margin-bottom:5px">'
+          +'<div style="font-size:9px;font-weight:800;color:#6b7280;letter-spacing:.6px;margin-bottom:5px">PRÜF-CHECKLISTE</div>'
+          +clRows
+          +'</div>';
+      }
 
       if(istMonats){
         var fehlend = m.sessionsOhneTermin ? m.sessionsOhneTermin.length : 0;
