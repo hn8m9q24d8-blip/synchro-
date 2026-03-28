@@ -1754,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '398';
+  if(el) el.textContent = '400';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4534,7 +4534,8 @@ function holviImport(inp){
             var studioOk = gnTermine.some(function(t){ return studioPasst(t.studio); });
             var bCheck = betragsCheck(gnTermine, 0.05);
             var bWeicht = bCheck===false;
-            var kScore = konfidenz(true, studioOk, bCheck, true);
+            // Kein Betrag-Vergleich möglich → WARN statt AUTO (Sicherheit geht vor)
+            var kScore = konfidenz(true, studioOk, bCheck===null ? false : bCheck, true);
 
             // Zeitraum: Valuta nach frühestem Aufnahmetag
             var fruehestesDatum = gnTermine.reduce(function(min,t){
@@ -4721,13 +4722,44 @@ function holviImport(inp){
         // ── STUFE 6: Lohn/Gehalt — immer manuell ──
         var lohnRef = z.nachricht.match(/Lohn.*Gehalt|Gehalt.*Lohn/i);
         if(lohnRef){
+          // Monat aus Nachricht extrahieren: "Lohn/Gehalt 03/2026" → 2026-03
+          var lohnMonat = z.nachricht.match(/(\d{2})\/(\d{4})/);
+          var lohnMonatISO = lohnMonat ? (lohnMonat[2]+'-'+lohnMonat[1]) : null;
           // Zeitfenster: Valutadatum - 6 Monate bis Valutadatum
           var lohnVon = new Date(z.datum); lohnVon.setMonth(lohnVon.getMonth()-6);
           var lohnVonISO = lohnVon.toISOString().slice(0,10);
+          // Kandidaten: bevorzugt exakter Monat, sonst ±6 Monate
           var lohnKandidaten = (db.termine||[]).filter(function(t){
-            return studioPasst(t.studio) && t.status!=='bezahlt'
-              && t.datum >= lohnVonISO && t.datum <= z.datum;
-          }).sort(function(a,b){ return a.datum>b.datum?-1:1; }).slice(0,5);
+            if(!studioPasst(t.studio) || t.status==='bezahlt') return false;
+            if(t.datum < lohnVonISO || t.datum > z.datum) return false;
+            return true;
+          });
+          // Sortierung: Terme aus dem genannten Monat zuerst, dann nach Datum
+          lohnKandidaten.sort(function(a,b){
+            var aInMonat = lohnMonatISO && a.datum && a.datum.slice(0,7)===lohnMonatISO;
+            var bInMonat = lohnMonatISO && b.datum && b.datum.slice(0,7)===lohnMonatISO;
+            if(aInMonat && !bInMonat) return -1;
+            if(!aInMonat && bInMonat) return 1;
+            return a.datum>b.datum?-1:1;
+          });
+          // Betrag-Match: Termin mit ab.auszahlung ≈ z.betrag priorisieren
+          var lohnBetragMatch = lohnKandidaten.find(function(t){
+            var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+            return ab && Math.abs((parseFloat(ab.auszahlung)||0)-z.betrag)<=0.02;
+          });
+          if(lohnBetragMatch){
+            // Exakter Betrag-Treffer → Auto-Confirm
+            var lbAb = (db.abrechnungen||[]).find(function(a){return a.id===lohnBetragMatch.abId;});
+            return {
+              zahlung:z, termin:lohnBetragMatch, termineAlle:[lohnBetragMatch],
+              sessionsOhneTermin:[], gesamtSessions:1, monatsAbrechn:null,
+              betragsAbweichung:0,
+              _konfidenz:'AUTO',
+              _lohnHinweis:true,
+              terminKandidaten:lohnKandidaten.slice(0,5)
+            };
+          }
+          lohnKandidaten = lohnKandidaten.slice(0,5);
           return {
             zahlung:z, termin:lohnKandidaten[0]||null, termineAlle:null,
             sessionsOhneTermin:[], gesamtSessions:0, monatsAbrechn:null, betragsAbweichung:0,
@@ -5021,8 +5053,11 @@ function holviBestaetigen(){
       nachricht: z.nachricht,
       zahlungsId: z.zahlungsId,
       terminId: m.termin ? m.termin.id : null,
+      terminIds: (m.termineAlle && m.termineAlle.length > 1)
+        ? m.termineAlle.map(function(t){ return t.id; })
+        : (m.termin ? [m.termin.id] : []),
       monatsAbrechnId: m.monatsAbrechn ? m.monatsAbrechn.id : null,
-      mwst: mwstSumme,  // Vorsteuer für USt-Voranmeldung
+      mwst: mwstSumme,
       _konfidenz: m._konfidenz || 'MANUELL'
     };
     db.zahlungen.push(zahlung);
@@ -11072,8 +11107,11 @@ function rUstVoranmeldung(){
     }
     if(!zahlDatum && t.zahlungDatum) zahlDatum=t.zahlungDatum;
     if(!zahlDatum){
-      var z=(db.zahlungen||[]).find(function(z){return z.terminId===t.id;});
-      if(z && z.datum) zahlDatum=z.datum;
+      var zMatch=(db.zahlungen||[]).find(function(zz){
+        return zz.terminId===t.id
+          || (zz.terminIds && zz.terminIds.indexOf(t.id)>=0);
+      });
+      if(zMatch && zMatch.datum) zahlDatum=zMatch.datum;
     }
     if(!zahlDatum && t.dokIds){
       t.dokIds.forEach(function(did){
