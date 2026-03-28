@@ -1754,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '397';
+  if(el) el.textContent = '398';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4519,6 +4519,17 @@ function holviImport(inp){
             });
           });
 
+          // Wenn GutNr gefunden aber keine Termine → Abrechnung noch nicht eingepflegt
+          if(gnTermine.length === 0 && gutschriftNummern.length > 0){
+            return {
+              zahlung:z, termin:null, termineAlle:[], sessionsOhneTermin:[],
+              gesamtSessions:0, monatsAbrechn:null, betragsAbweichung:0,
+              _konfidenz:'KEINE_ABRECHN',
+              _gutschriftNummern: gutschriftNummern,
+              _hinweis: 'Gutschrift-Nr. '+gutschriftNummern.join(', ')+' noch nicht eingepflegt',
+              terminKandidaten:[]
+            };
+          }
           if(gnTermine.length > 0){
             var studioOk = gnTermine.some(function(t){ return studioPasst(t.studio); });
             var bCheck = betragsCheck(gnTermine, 0.05);
@@ -4597,12 +4608,21 @@ function holviImport(inp){
             });
           }
           var bereitsGezahlt2 = sessionTermine.some(function(t){ return t.status==='bezahlt'; });
+          // Auszahlung: zuerst d.auszahlung, dann Summe der ab-Auszahlungen der Termine
+          var monatsAusz = parseFloat(monatsMatch.auszahlung)||0;
+          if(!monatsAusz && sessionTermine.length){
+            sessionTermine.forEach(function(t){
+              var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+              if(ab) monatsAusz += parseFloat(ab.auszahlung)||0;
+            });
+          }
+          var monatsBetrAbw = monatsAusz > 0 && Math.abs(monatsAusz-z.betrag)>0.02 ? (z.betrag-monatsAusz) : 0;
           return {
             zahlung:z, termin:sessionTermine[0]||null, termineAlle:sessionTermine,
             sessionsOhneTermin:sessionsOhneTermin, gesamtSessions:gesamtSessions,
             monatsAbrechn:monatsMatch,
-            betragsAbweichung: Math.abs((parseFloat(monatsMatch.auszahlung)||0)-z.betrag)>0.02?(z.betrag-(parseFloat(monatsMatch.auszahlung)||0)):0,
-            _konfidenz: bereitsGezahlt2?'DOPPELT':'AUTO',
+            betragsAbweichung: monatsBetrAbw,
+            _konfidenz: bereitsGezahlt2?'DOPPELT':(monatsBetrAbw===0?'AUTO':'WARN'),
             terminKandidaten:[]
           };
         }
@@ -4653,7 +4673,33 @@ function holviImport(inp){
           }
         }
 
-        // ── STUFE 4: Datum-Referenz aus Nachricht (GAGE 20260301) ──
+        // ── STUFE 4: Zeitraum ZUERST prüfen (Gage 20260301 bis 20260304) ──
+        // WICHTIG: Zeitraum vor Datum-Ref — sonst matcht "20260301" fälschlich als Einzeldatum
+        var zeitraumRef = z.nachricht.match(/(\d{8})\s+bis\s+(\d{8})/i);
+        if(zeitraumRef){
+          var vonISO = zeitraumRef[1].slice(0,4)+'-'+zeitraumRef[1].slice(4,6)+'-'+zeitraumRef[1].slice(6,8);
+          var bisISO = zeitraumRef[2].slice(0,4)+'-'+zeitraumRef[2].slice(4,6)+'-'+zeitraumRef[2].slice(6,8);
+          var zeitraumTermine = (db.termine||[]).filter(function(t){
+            return t.datum>=vonISO && t.datum<=bisISO && studioPasst(t.studio) && t.status!=='bezahlt';
+          });
+          if(zeitraumTermine.length > 0){
+            var bCheck2 = betragsCheck(zeitraumTermine, 0.10);
+            return {
+              zahlung:z, termin:zeitraumTermine[0], termineAlle:zeitraumTermine,
+              sessionsOhneTermin:[], gesamtSessions:zeitraumTermine.length,
+              monatsAbrechn:zeitraumTermine.length>1?{
+                id:'zr_'+Date.now(), typ:'abrechn', studio:zeitraumTermine[0].studio,
+                auszahlung:z.betrag, beschr:'Zeitraum '+vonISO+' – '+bisISO,
+                sessions:zeitraumTermine.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};})
+              }:null,
+              betragsAbweichung:0,
+              _konfidenz:'MANUELL',
+              terminKandidaten:[]
+            };
+          }
+        }
+
+        // ── STUFE 5: Datum-Referenz aus Nachricht (GAGE 20260301) ──
         var datRef = z.nachricht.match(/(?:^|\s)(?:GAGE|Gage)\s+(\d{4})(\d{2})(\d{2})(?:\s|$)/i);
         if(datRef){
           var datISO = datRef[1]+'-'+datRef[2]+'-'+datRef[3];
@@ -4672,37 +4718,15 @@ function holviImport(inp){
           }
         }
 
-        // ── STUFE 5: Zeitraum (Gage 20260301 bis 20260304) ──
-        var zeitraumRef = z.nachricht.match(/(\d{4})(\d{2})(\d{2})\s+bis\s+(\d{4})(\d{2})(\d{2})/i);
-        if(zeitraumRef){
-          var vonISO = zeitraumRef[1]+'-'+zeitraumRef[2]+'-'+zeitraumRef[3];
-          var bisISO = zeitraumRef[4]+'-'+zeitraumRef[5]+'-'+zeitraumRef[6];
-          var zeitraumTermine = (db.termine||[]).filter(function(t){
-            return t.datum>=vonISO && t.datum<=bisISO && studioPasst(t.studio) && t.status!=='bezahlt';
-          });
-          if(zeitraumTermine.length > 0){
-            var bCheck2 = betragsCheck(zeitraumTermine, 0.10);
-            return {
-              zahlung:z, termin:zeitraumTermine[0], termineAlle:zeitraumTermine,
-              sessionsOhneTermin:[], gesamtSessions:zeitraumTermine.length,
-              monatsAbrechn:zeitraumTermine.length>1?{
-                id:'zr_'+Date.now(), typ:'abrechn', studio:zeitraumTermine[0].studio,
-                auszahlung:z.betrag, beschr:'Zeitraum '+vonISO+' – '+bisISO,
-                sessions:zeitraumTermine.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};})
-              }:null,
-              betragsAbweichung:0,
-              _konfidenz: bCheck2===true?'MANUELL':'MANUELL',  // Zeitraum immer manuell
-              terminKandidaten:[]
-            };
-          }
-        }
-
         // ── STUFE 6: Lohn/Gehalt — immer manuell ──
         var lohnRef = z.nachricht.match(/Lohn.*Gehalt|Gehalt.*Lohn/i);
         if(lohnRef){
-          // Kandidaten sammeln aber nie auto-confirm
+          // Zeitfenster: Valutadatum - 6 Monate bis Valutadatum
+          var lohnVon = new Date(z.datum); lohnVon.setMonth(lohnVon.getMonth()-6);
+          var lohnVonISO = lohnVon.toISOString().slice(0,10);
           var lohnKandidaten = (db.termine||[]).filter(function(t){
-            return studioPasst(t.studio) && t.status!=='bezahlt';
+            return studioPasst(t.studio) && t.status!=='bezahlt'
+              && t.datum >= lohnVonISO && t.datum <= z.datum;
           }).sort(function(a,b){ return a.datum>b.datum?-1:1; }).slice(0,5);
           return {
             zahlung:z, termin:lohnKandidaten[0]||null, termineAlle:null,
@@ -4713,10 +4737,14 @@ function holviImport(inp){
         }
 
         // ── STUFE 7: Nur Studio-Kandidaten ──
+        // Zeitfilter: Termin max. 6 Monate vor Valutadatum
+        var kVon = new Date(z.datum); kVon.setMonth(kVon.getMonth()-6);
+        var kVonISO = kVon.toISOString().slice(0,10);
         var kandidaten = (db.termine||[]).filter(function(t){
           if(t.status==='bezahlt') return false;
           if(!studioPasst(t.studio)) return false;
           if(t.datum && z.datum && z.datum < t.datum) return false;
+          if(t.datum && t.datum < kVonISO) return false; // nicht älter als 6 Monate
           return true;
         });
         kandidaten.sort(function(a,b){
@@ -4766,7 +4794,8 @@ function holviShowPreview(matches, gesamt){
         +(m._konfidenz==='AUTO'?'<div style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚡ AUTO</div>':
           m._konfidenz==='WARN'?'<div style="background:#fff7ed;color:#c2410c;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚠ Prüfen</div>':
           m._konfidenz==='DOPPELT'?'<div style="background:#fef2f2;color:#991b1b;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">🔴 Bereits bezahlt</div>':
-          m._konfidenz==='LOHN_GEHALT'?'<div style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">📝 Manuell</div>':'')
+          m._konfidenz==='LOHN_GEHALT'?'<div style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">📝 Manuell</div>':
+          m._konfidenz==='KEINE_ABRECHN'?'<div style="background:#fef2f2;color:#991b1b;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚠ Abrechnung fehlt</div>':'')
         +'<div style="font-size:11px;color:#888">'+m.zahlung.datum.split('-').reverse().join('.')+'</div>'
         +'</div>'
         +'<div style="font-size:11px;color:#555;margin-bottom:4px">'+esc(m.zahlung.gegenpartei)+'</div>'
