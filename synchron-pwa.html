@@ -1754,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '400';
+  if(el) el.textContent = '403';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4391,7 +4391,15 @@ function holviImport(inp){
       if(!db.holviImportIds) db.holviImportIds = [];
       var neu = eingaenge.filter(function(z){ return db.holviImportIds.indexOf(z.zahlungsId) < 0; });
 
-      if(!neu.length){ showToast('✓ Alle Eingänge bereits importiert'); return; }
+      if(!neu.length){
+        // Alle bereits importiert — aber Neu-Analyse anbieten
+        var reAnalyse = confirm('Alle Eingänge bereits importiert.\nNochmal analysieren? (verbesserte Zuordnung)');
+        if(!reAnalyse){ showToast('✓ Alle bereits importiert'); return; }
+        // Für Neu-Analyse: IDs dieser Datei temporär aus holviImportIds entfernen
+        var thisIds = eingaenge.map(function(z){ return z.zahlungsId; });
+        db.holviImportIds = db.holviImportIds.filter(function(id){ return thisIds.indexOf(id) < 0; });
+        neu = eingaenge; // alle neu analysieren
+      }
 
       // Gage-Erkennung: relevant / maybe / irrelevant trennen
       var gageEingaenge = [];
@@ -7439,11 +7447,20 @@ function dokGotFilesFolder(inp){
   }
 
   // Duplikate filtern — aus aktiven Dokumenten UND importiertem Archiv
+  // Normalisierung: Dateinamen ohne Extension und lowercase vergleichen
+  // iOS kann Dateinamen mit anderer Schreibweise oder Suffix zurückgeben
+  var normName = function(n){ return (n||'').toLowerCase().replace(/\.[^.]+$/,'').trim(); };
   var existingNames={};
-  (db.dokumente||[]).forEach(function(d){ existingNames[d.dateiname]=true; });
-  // db.importedFiles: dauerhaftes Gedächtnis — überlebt Dok-Bereinigungen
-  (db.importedFiles||[]).forEach(function(name){ existingNames[name]=true; });
-  var neu=files.filter(function(f){ return !existingNames[f.name]; });
+  var existingNamesNorm={};
+  (db.dokumente||[]).forEach(function(d){
+    if(d.dateiname){ existingNames[d.dateiname]=true; existingNamesNorm[normName(d.dateiname)]=true; }
+  });
+  (db.importedFiles||[]).forEach(function(name){
+    if(name){ existingNames[name]=true; existingNamesNorm[normName(name)]=true; }
+  });
+  var neu=files.filter(function(f){
+    return !existingNames[f.name] && !existingNamesNorm[normName(f.name)];
+  });
   var skipped=files.length-neu.length;
 
   if(!neu.length){
@@ -8229,6 +8246,11 @@ function dokAnalyseDoc(d, key, cb){
       d.typ     = j.typ || 'sonstig';
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
+      // Diagnose: KI hat gültige Antwort aber keine Felder erkannt
+      if(d.typ==='dispo' && !j.datum && !j.studio && !j.titel && !j.rolle){
+        showToast('⚠ KI hat Dokument nicht gelesen — bitte nochmal versuchen');
+        console.warn('[KI LEER]', 'typ=dispo aber keine Felder. Raw:', txt&&txt.slice(0,300));
+      }
       d.studio  = (function(s){
         if(!s) return null;
         // Bekannte Kürzel immer uppercase
@@ -8506,7 +8528,7 @@ function dokAnalyseDoc(d, key, cb){
     }
   } else {
     // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
-    resizeImageB64(d.dataURL, 1500, 0.85, function(resized){
+    resizeImageB64(d.dataURL, 2000, 0.90, function(resized){
       showToast('⏳ Sende '+Math.round(resized.length*0.75/1024)+'KB…');
       _sendToAPI(resized);
     });
