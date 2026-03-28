@@ -1754,7 +1754,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '405';
+  if(el) el.textContent = '418';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2129,12 +2129,14 @@ function openDetail(id){
   var monthNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var dayNames=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
   var ur=db.profil&&db.profil.ust!=null?db.profil.ust:0.07;
-  var rawTakes=parseInt(t.takes)||0;
+  // Takes: Kalender-Termin hat Vorrang, Abrechnung als Fallback
+  var _abForTakes = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+  var rawTakes=parseInt(t.takes)||parseInt(_abForTakes&&_abForTakes.takes)||0;
   var billTakes=rawTakes>0&&rawTakes<10?10:rawTakes;
   var net=(t.kommgage||0)+billTakes*(t.rate||0);
   var ust=net*ur;
   var brut=net+ust;
-  var total=parseInt(t.takes)||0;
+  var total=parseInt(t.takes)||parseInt(_abForTakes&&_abForTakes.takes)||0;
   var totalLabel=total>0&&total<10?total+' (→10)':String(total);
 
   // Verknüpfte Dokumente — vorwärts (d.terminId) UND rückwärts (t.dokIds)
@@ -2609,8 +2611,18 @@ function openDetail(id){
       +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
         (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
-      +(ab.mwst?'<div class="info-row"><div class="ir-key" style="color:#888">MwSt ('+Math.round(ur*100)+'%)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.mwst)+'</div></div>':'')
-      +'<div class="info-row" style="font-weight:800;font-size:15px;border-top:1px solid #eee;padding-top:8px;margin-top:4px"><div class="ir-key">Auszahlung</div><div class="ir-val">'+fmtEur(ab.auszahlung)+'</div></div>'
+      +(ab.mwst?'<div class="info-row"><div class="ir-key" style="color:#888">MwSt ('+Math.round(ur*100)+'%)'
+        +(ab.gesamt_mwst?' <span style="font-size:9px;color:#aaa;font-weight:400">anteilig</span>':'')
+        +'</div><div class="ir-val" style="color:#888">'+fmtEur(ab.mwst)
+        +(ab.gesamt_mwst?' <span style="font-size:9px;color:#aaa">(Gesamt: '+fmtEur(ab.gesamt_mwst)+')</span>':'')
+        +'</div></div>':'')
+      +'<div class="info-row" style="font-weight:800;font-size:15px;border-top:1px solid #eee;padding-top:8px;margin-top:4px"><div class="ir-key">Auszahlung'
+        +(ab.gesamt_auszahlung&&ab.auszahlung&&Math.abs(parseFloat(ab.gesamt_auszahlung)-parseFloat(ab.auszahlung))>0.05
+          ?' <span style="font-size:9px;color:#aaa;font-weight:400">anteilig</span>':'')
+        +'</div><div class="ir-val">'+fmtEur(ab.auszahlung)
+        +(ab.gesamt_auszahlung&&ab.auszahlung&&Math.abs(parseFloat(ab.gesamt_auszahlung)-parseFloat(ab.auszahlung))>0.05
+          ?' <span style="font-size:9px;color:#aaa">(Gesamt: '+fmtEur(ab.gesamt_auszahlung)+')</span>':'')
+        +'</div></div>'
       +(!netBruttoOk?'<div style="font-size:12px;color:#c2410c;padding-top:6px;font-weight:700;border-top:1px solid #fecaca;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+'</div>':'')
       +'</div></div>';
   }
@@ -2940,12 +2952,11 @@ function saveMergeChanges(){
       if(_abT && !_abT.abId){
         var _abBrutto = parseFloat(dok.brutto)||0;
         var _abMwst   = parseFloat(dok.mwst)||0;
-        var _abNetto  = parseFloat(dok.netto)||(_abBrutto - Math.abs(parseFloat(dok.kv_abzug)||0)
-                          - Math.abs(parseFloat(dok.rv_abzug)||0)
-                          - Math.abs(parseFloat(dok.pv_abzug)||0));
+        // Buchhaltungsregel: NUR Werte aus Dokument — niemals selbst errechnen
+        var _abNetto  = parseFloat(dok.netto)||null;
         var _abAusz   = parseFloat(dok.auszahlung)||0;
         if(_abBrutto || _abAusz){
-          var _newAbId = 'ab'+Date.now();
+          var _newAbId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
           var _newAb = {
             id:_newAbId, dokId:dok.id,
             dateiname:dok.dateiname||dok.beschr||'',
@@ -3907,6 +3918,13 @@ function deleteCurrentTermin(){
   if(t) logAction('termin_geloescht', 'Termin gelöscht · '+esc(t.titel||t.studio||'')+(t.datum?' · '+fd(t.datum):''),
     {terminSnap: JSON.parse(JSON.stringify(t))});
   db.termine=db.termine.filter(function(x){return x.id!==ctid;});
+  // Cleanup: verwaiste Referenzen auf gelöschten Termin bereinigen
+  (db.abrechnungen||[]).forEach(function(ab){ if(ab.terminId===ctid) ab.terminId=null; });
+  (db.zahlungen||[]).forEach(function(z){
+    if(z.terminId===ctid) z.terminId=null;
+    if(z.terminIds) z.terminIds=z.terminIds.filter(function(id){return id!==ctid;});
+  });
+  (db.dokumente||[]).forEach(function(dok){ if(dok.terminId===ctid) dok.terminId=null; });
   save(db);
   closeDetail();
   rTermine();updateBadge();
@@ -4281,11 +4299,16 @@ function icalSyncFromWorker(){
 }
 
 function exportData(){
-  var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  // API-Key aus Export entfernen — Sicherheitsregel
+  var exportDb = JSON.parse(JSON.stringify(db));
+  if(exportDb.profil) { exportDb.profil.apiKey = ''; }
+  // Auch aus localStorage-Kopie entfernen (wird nicht exportiert, nur zur Sicherheit)
+  var blob=new Blob([JSON.stringify(exportDb,null,2)],{type:'application/json'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='synchron-backup.json';
   a.click();
+  showToast('📦 Export erstellt · API-Key wurde nicht exportiert');
 }
 function importData(inp){
   var file=inp.files[0];
@@ -4450,11 +4473,14 @@ function holviImport(inp){
         var studioPasst = function(terminStudio){
           var ts = studioNorm2(terminStudio);
           if(!ts || !zStudio) return false;
-          // Kürzestes Token (mind. 4 Zeichen) muss im anderen vorkommen
-          var tsTokens = ts.split(' ').filter(function(t){ return t.length >= 4; });
-          var zsTokens = zStudio.split(' ').filter(function(t){ return t.length >= 4; });
-          return tsTokens.some(function(t){ return zStudio.indexOf(t)>=0; }) ||
-                 zsTokens.some(function(t){ return ts.indexOf(t)>=0; });
+          // Direkter Match (für Kürzel wie FFS, VSI, TNT)
+          if(ts === zStudio) return true;
+          if(zStudio.indexOf(ts) >= 0 || ts.indexOf(zStudio) >= 0) return true;
+          // Token-Match: mind. 2 Zeichen (fängt FFS, VSI etc.)
+          var tsTokens = ts.split(' ').filter(function(t){ return t.length >= 2; });
+          var zsTokens = zStudio.split(' ').filter(function(t){ return t.length >= 2; });
+          return tsTokens.some(function(t){ return t.length>=2 && zStudio.indexOf(t)>=0; }) ||
+                 zsTokens.some(function(t){ return t.length>=2 && ts.indexOf(t)>=0; });
         };
 
         // Betrag-Check: Summe der Auszahlungen ±(N × 0,05€)
@@ -4571,6 +4597,15 @@ function holviImport(inp){
             });
             var gnBetrPasst = gnAlleHabenAb && gnSumAusz > 0 ? Math.abs(gnSumAusz - z.betrag) <= Math.max(0.50, gnTermine.length*0.05) : null;
             var gnZeitraumOk = gnTermine.every(function(t){ return !t.datum || z.datum >= t.datum; });
+            // SV-Check: haben die Abrechnungen SV-Abzüge erfasst?
+            var gnSVerfasst = gnTermine.some(function(t){
+              var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+              return ab && ((parseFloat(ab.kv)||0)+(parseFloat(ab.rv)||0)+(parseFloat(ab.pv)||0)) > 0;
+            });
+            var gnHatSVTermine = gnTermine.some(function(t){
+              var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+              return ab && ((parseFloat(ab.kv_abzug)||parseFloat(ab.kv)||0) > 0);
+            });
             return {
               zahlung: z,
               termin: gnTermine[0]||null,
@@ -4584,7 +4619,9 @@ function holviImport(inp){
                 betrag: gnBetrPasst,
                 betragSoll: gnSumAusz,
                 zeitraum: gnZeitraumOk,
-                doppelt: bereitsGezahlt
+                doppelt: bereitsGezahlt,
+                svErfasst: gnSVerfasst,
+                svHinweis: !gnSVerfasst && gnBetrPasst===null
               },
               monatsAbrechn: gnTermine.length>1 ? {
                 id:'gn_'+Date.now(), typ:'abrechn',
@@ -4881,9 +4918,17 @@ function holviShowPreview(matches, gesamt){
         if(cl.betrag===true){
           clRows += ck(true, 'Betrag: '+fmtEur(m.zahlung.betrag)+(cl.betragSoll&&Math.abs(cl.betragSoll-m.zahlung.betrag)>0.01?' (Abrechn. '+fmtEur(cl.betragSoll)+')':''));
         } else if(cl.betrag===false){
-          clRows += ck(false, 'Betrag weicht ab: '+fmtEur(m.zahlung.betrag)+' ≠ '+fmtEur(cl.betragSoll||0));
+          clRows += ck(false, 'Betrag: Überweisung '+fmtEur(m.zahlung.betrag)+' ≠ Abrechn. '+fmtEur(cl.betragSoll||0)
+            +' (Diff: '+fmtEur(Math.abs(m.zahlung.betrag-(cl.betragSoll||0)))+' → SV-Abzug?)');
         } else {
-          clRows += ck(null, 'Betrag: '+fmtEur(m.zahlung.betrag)+' (Abrechnung nicht eingepflegt)');
+          clRows += ck(null, 'Betrag: '+fmtEur(m.zahlung.betrag)
+            +(cl.betragSoll>0?' (Abrechn: '+fmtEur(cl.betragSoll)+')':' (Auszahlung fehlt in Abrechn.)'));
+        }
+        // SV-Abzug
+        if(cl.svHinweis){
+          clRows += ck(null, 'SV-Abzug nicht in Abrechnung erfasst — Betrag nicht prüfbar');
+        } else if(cl.svErfasst){
+          clRows += ck(true, 'SV-Abzug in Abrechnung erfasst');
         }
         // Zeitraum
         clRows += ck(cl.zeitraum, 'Valutadatum nach Aufnahme');
@@ -5095,6 +5140,7 @@ function holviBestaetigen(){
   matches.forEach(function(m){
     var z = m.zahlung;
     if(db.holviImportIds.indexOf(z.zahlungsId) < 0) db.holviImportIds.push(z.zahlungsId);
+    if(db.holviImportIds.length > 5000) db.holviImportIds = db.holviImportIds.slice(-5000);
     undoZahlungsIds.push(z.zahlungsId);
 
     var zid = 'z'+Date.now()+importiert;
@@ -5258,7 +5304,7 @@ function doExportCSV(){
     if(gutNr) csvGesehenGutNr[gutNr] = true;
 
     var brutto     = parseFloat(dok.brutto)||0;
-    var mwst       = parseFloat(dok.mwst)||(brutto ? Math.round(brutto*ur/(1+ur)*100)/100 : 0);
+    var mwst       = parseFloat(dok.mwst)||0; // Buchhaltungsregel: nur aus Dokument
     var auszahlung = parseFloat(dok.auszahlung)||0;
     var kv = Math.abs(parseFloat(dok.kv_abzug)||0);
     var rv = Math.abs(parseFloat(dok.rv_abzug)||0);
@@ -5308,7 +5354,7 @@ function doExportCSV(){
   .forEach(function(a){
     var brutto=parseFloat(a.brutto)||0;
     var mwst=parseFloat(a.mwst)||0;
-    var netto=parseFloat(a.netto)||(brutto-mwst);
+    var netto=parseFloat(a.netto)||0; // Buchhaltungsregel: nur aus Dokument
     var kat=katLabels[a.kategorie||a.ausgabe_kat||'']||a.kategorie||a.ausgabe_kat||'Sonstiges';
     var satz=a.ust_satz!=null?Math.round(a.ust_satz*100)+'%':'';
     rows.push([
@@ -5662,6 +5708,7 @@ function loadGVLSendedaten(){return db.gvlSendedaten||[];}
 function importGVLSendedaten(data){
   db.gvlSendedaten=db.gvlSendedaten||[];
   db.gvlSendedaten.push({id:uid(),data:data,datum:today()});
+  if(db.gvlSendedaten.length > 200) db.gvlSendedaten = db.gvlSendedaten.slice(-200);
   save(db);
 }
 function showGVLSendeAbgleich(){showToast('GVL Sendeabgleich folgt in v3');}
@@ -6208,6 +6255,7 @@ function getImportedCalIds(){return new Set((db._calImported||[]));}
 function markCalImported(calEventId){
   db._calImported=db._calImported||[];
   if(!db._calImported.includes(calEventId))db._calImported.push(calEventId);
+  if(db._calImported.length > 2000) db._calImported = db._calImported.slice(-2000);
   save(db);
 }
 
@@ -7759,10 +7807,13 @@ function dokBestaetigen(){
     return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
   });
   if(!_dokNochGebraucht){ d.dataURL=null; d.thumb=null; }
-  _archiveDateiname(d.dateiname||d.beschr, d.terminId||null);
+  _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, d.typ||null);
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
     if(t2){
+      // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
+      if(d.typ==='dispo'){ t2._dispoDateiname = d.dateiname||d.beschr||''; }
+      else if(d.typ==='abrechn'||d.typ==='monats_abrechn'){ t2.abrechn_dateiname = d.dateiname||d.beschr||''; }
       if(d.rolle&&!t2.rolle) t2.rolle=d.rolle;
       if(d.regie&&!t2.regie) t2.regie=d.regie;
       if(d.titel&&!t2.titel) t2.titel=d.titel;
@@ -8099,6 +8150,9 @@ function dokAnalyseDoc(d, key, cb){
     +'       Wenn NUR EIN Aufnahmetag auf der Seite: termine-Array mit einem Eintrag ODER datum direkt auf der session.\n'
     +'    → Jede session MUSS enthalten: datum (erster Aufnahmetag), page_nr, titel, rolle, takes (Summe), take_gage, grundgage, brutto_termin,\n'
     +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
+    +'    → FFS/SESAM Beispiel: "- Krankenversicherung 24,27" → kv_abzug=24.27 | "- Rentenversicherung 27,04" → rv_abzug=27.04\n'
+    +'      "- Pflegeversicherung 4,51" → pv_abzug=4.51 | "AUSZAHLUNG 255,34" → auszahlung=255.34\n'
+    +'      ⚠ NICHT die Werte aus "Bisherige Jahressummen" (KV/RV/AV/PV unten auf der Seite) — nur Zeilen DIESER Gutschrift!\n'
     +'    → netto NICHT aus "Bisherige Jahressummen" nehmen — nur aus der NETTO GAGE Zeile dieser Seite!\n'
     +'    → Beispiel session (2 Aufnahmetage auf einer Seite): {"datum":"2026-01-20","page_nr":1,"titel":"Project Hail Mary","rolle":"Rocky",\n'
     +'      "takes":234,"take_gage":5.0,"grundgage":200.0,"brutto_termin":1370.0,"gutschrift_nr":"677/20260301",\n'
@@ -8404,14 +8458,13 @@ function dokAnalyseDoc(d, key, cb){
             zielDok.take_gage = s.take_gage||0;
             zielDok.grundgage = s.grundgage||0;
             zielDok.brutto = s.brutto_termin||0;
-            zielDok.mwst = s.mwst||0;
-            zielDok.auszahlung = s.auszahlung||0;
+            zielDok.mwst = parseFloat(s.mwst)||null;
+            zielDok.auszahlung = parseFloat(s.auszahlung)||null;
             zielDok.kv_abzug = s.kv_abzug||0;
             zielDok.rv_abzug = s.rv_abzug||0;
             zielDok.pv_abzug = s.pv_abzug||0;
-            // Netto IMMER selbst berechnen — KI addiert hier oft blattübergreifend falsch
-            var _sv = Math.abs(parseFloat(s.kv_abzug)||0)+Math.abs(parseFloat(s.rv_abzug)||0)+Math.abs(parseFloat(s.pv_abzug)||0);
-            zielDok.netto = Math.round(((parseFloat(s.brutto_termin)||0) - _sv)*100)/100;
+            // Netto: NUR aus Dokument (Buchhaltungsregel — nicht selbst errechnen)
+            zielDok.netto = parseFloat(s.netto)||null;
             zielDok.gutschrift_nr = s.gutschrift_nr||d.gutschrift_nr||'';
             zielDok.beschr = (zielDok.gutschrift_nr||zielDok.titel||'Abrechnung')+' ('+(zielDok.datum||'').split('-').reverse().join('.')+')';
             zielDok._splitFromPdf = d.id;
@@ -8524,7 +8577,7 @@ function dokAnalyseDoc(d, key, cb){
         if(d.netto){ nettoAg = parseFloat(d.netto); }
         else { nettoAg = Math.round((bruttoAg - mwstAg)*100)/100; }
         if(!db.ausgaben) db.ausgaben=[];
-        var agId = 'ag'+Date.now();
+        var agId = 'ag'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
         var katMap = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
           bewirtung:'Bewirtung',buero:'Büro',weiterbildung:'Weiterbildung',marketing:'Marketing',
           steuer_recht:'Steuer/Recht',versicherung:'Versicherung',
@@ -10201,9 +10254,8 @@ function dokBestaetigenMonat(dokId){
       var sessionGutNr = s.gutschrift_nr||gutschriftNr;
       if(sessionGutNr) t.gutschrift_nr = sessionGutNr;
       // MwSt-Anteil aus Brutto berechnen falls noch nicht gesetzt
-      if(!t.mwst_anteil && t.brutto_termin && t.ust_satz){
-        t.mwst_anteil = Math.round(t.brutto_termin * t.ust_satz / (1+t.ust_satz) * 100)/100;
-      }
+      // Buchhaltungsregel: mwst_anteil nicht selbst berechnen — nur aus Dokument
+      // if(!t.mwst_anteil) → bleibt null, wird in USt-Voranmeldung als fehlend behandelt
 
       // ── Takes-Abgleich: abgerechnet vs. Dispo ─────────────────
       var sTakes = parseInt(s.takes)||0;
@@ -10225,17 +10277,21 @@ function dokBestaetigenMonat(dokId){
         var _sesKV = parseFloat(s.kv_abzug)||0;
         var _sesRV = parseFloat(s.rv_abzug)||0;
         var _sesPV = parseFloat(s.pv_abzug)||0;
-        if(!_sesKV && !_sesRV && !_sesPV && gesamtBrutto > 0 && sessionBrutto > 0){
+        // Proportionale Verteilung NUR wenn Gesamt-KV/RV/PV aus Dokument bekannt
+        // Das ist keine Erfindung — wir verteilen einen echten Dokumentwert anteilig
+        if(!_sesKV && !_sesRV && !_sesPV && gesamtBrutto > 0 && sessionBrutto > 0
+           && (parseFloat(d.kv_abzug)||0) > 0){  // nur wenn Dok überhaupt KV hat
           var _anteil = sessionBrutto / gesamtBrutto;
           _sesKV = Math.round(Math.abs(parseFloat(d.kv_abzug)||0) * _anteil * 100)/100;
           _sesRV = Math.round(Math.abs(parseFloat(d.rv_abzug)||0) * _anteil * 100)/100;
           _sesPV = Math.round(Math.abs(parseFloat(d.pv_abzug)||0) * _anteil * 100)/100;
         }
         var sessionNetto = Math.round((sessionBrutto - _sesKV - _sesRV - _sesPV)*100)/100;
-        // Auszahlung: netto + mwst-anteil
+        // Auszahlung: NUR aus Dokument — niemals selbst berechnen (Buchhaltungsregel!)
+        // Wenn KI auszahlung=null → null lassen, Nutzer muss manuell prüfen
         var sessionAuszahlung = s.auszahlung
           ? parseFloat(s.auszahlung)
-          : Math.round((sessionNetto + (s._mwst_anteil||0))*100)/100;
+          : null;
         var newAbId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
         var newAb = {
           id: newAbId,
@@ -10247,7 +10303,12 @@ function dokBestaetigenMonat(dokId){
           gutschrift_nr: sessionGutNr||'',
           brutto: sessionBrutto,
           netto: sessionNetto,
-          mwst: s._mwst_anteil||0,
+          mwst: s._mwst_anteil||null,  // anteiliger Wert pro Termin
+          // Gesamt-Werte des Dokuments — bleiben auch nach Foto-Löschung erhalten
+          gesamt_mwst: parseFloat(d.mwst)||null,
+          gesamt_brutto: parseFloat(d.brutto)||null,
+          gesamt_auszahlung: parseFloat(d.auszahlung)||null,
+          gesamt_gutschrift_nr: d.gutschrift_nr||null,
           auszahlung: sessionAuszahlung,
           takes: sTakes,
           take_gage: parseFloat(s.take_gage)||0,
@@ -10728,7 +10789,7 @@ function dokMergeIntoTermin(d, termin){
     }
 
     if(!existingAb){
-      var abId='ab'+Date.now();
+      var abId='ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
       var newAb={
         id:abId, dokId:d.id,
         dateiname:d.dateiname||d.beschr||'',
@@ -10737,7 +10798,7 @@ function dokMergeIntoTermin(d, termin){
         produktion:d.titel||termin.titel||'',
         gutschrift_nr:d.gutschrift_nr||'',
         brutto:brutto, netto:netto,
-        mwst:parseFloat(d.mwst)||Math.round((brutto-netto)*100)/100,
+        mwst:parseFloat(d.mwst)||null, // Buchhaltungsregel: nur aus Dokument
         auszahlung:auszahlung,
         takes:takes, take_gage:takeGage, grundgage:grundgage,
         kv:parseFloat(d.kv_abzug)||0,
@@ -10935,7 +10996,7 @@ function dokLinkMultiConfirm(){
 
     // Beträge — aus abRec falls vorhanden, sonst direkt aus Dokument
     var brutto   = parseFloat((abRec&&abRec.brutto)   || d.brutto)   || 0;
-    var auszahlung=parseFloat((abRec&&abRec.auszahlung)|| d.auszahlung||d.brutto) || 0;
+    var auszahlung=parseFloat((abRec&&abRec.auszahlung)|| d.auszahlung) || null; // Buchhaltungsregel: nicht zu brutto fallen
     var mwst     = parseFloat((abRec&&abRec.mwst)     || d.mwst)     || 0;
     var netto    = parseFloat((abRec&&abRec.netto)     || d.netto)    || 0;
     var gutschriftNr = (abRec&&abRec.gutschrift_nr)||d.gutschrift_nr||'';
@@ -10987,7 +11048,11 @@ function dokLinkMultiConfirm(){
           erstelltAm:new Date().toISOString(),
           _aufgeteiltVon:brutto,      // Original-Gesamtbetrag
           _aufgeteiltN:n,             // Anzahl Teile
-          _aufgeteiltIdx:i            // Index (0-basiert)
+          _aufgeteiltIdx:i,           // Index (0-basiert)
+          gesamt_mwst: mwst||null,
+          gesamt_brutto: brutto||null,
+          gesamt_auszahlung: auszahlung||null,
+          gesamt_gutschrift_nr: gutschriftNr||null
         };
         db.abrechnungen.push(teilAb);
         t.abId=teilAb.id;
@@ -11211,7 +11276,32 @@ function rUstVoranmeldung(){
       t.dokIds.forEach(function(did){
         if(gezaehlteDokIds[did]) return;
         var dok=(db.dokumente||[]).find(function(d){return d.id===did&&d.bestaetigt;});
-        if(!dok) return;
+        if(!dok){
+          // Dok gelöscht (dokDeleteAll) aber t.dokIds noch vorhanden
+          // Schutz: über ab.dokId sicherstellen dass Gesamt-MwSt nur 1× gezählt wird
+          if(!gezaehlteDokIds[did]){
+            gezaehlteDokIds[did] = true;
+            // ab für diesen Termin holen — hat gesamt_mwst gespeichert
+            var _abForDok = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+            if(_abForDok && _abForDok.gesamt_mwst && _abForDok.dokId===did){
+              var _gestMwst = parseFloat(_abForDok.gesamt_mwst)||0;
+              var _gestBrutto = parseFloat(_abForDok.gesamt_brutto)||0;
+              if(_gestMwst > 0){
+                einnUstEcht += _gestMwst;
+                einnNetto += _gestBrutto;
+                einnZeilen.push({
+                  label: esc(_abForDok.studio||'') + (_abForDok.gesamt_gutschrift_nr?' · '+_abForDok.gesamt_gutschrift_nr:''),
+                  sub: 'Monats-GS (Dok gelöscht)',
+                  zahlDatum: zahlDatum,
+                  netto: _gestBrutto,
+                  ust: _gestMwst
+                });
+              }
+            }
+          }
+          dokGezaehlt = true; // verhindert Einzel-Pfad
+          return;
+        }
 
         // Fall A: klassische monats_abrechn (Arena, Interopa)
         if(dok.typ==='monats_abrechn'){
@@ -11219,9 +11309,9 @@ function rUstVoranmeldung(){
           dokGezaehlt=true;
           var brutto=parseFloat(dok.brutto)||0;
           var mwst=parseFloat(dok.mwst)||0;
-          var ust=mwst>0?mwst:Math.round(brutto*urEinn*100)/100;
+          var ust=mwst; // Buchhaltungsregel: nur aus Dokument
           einnNetto+=brutto;
-          if(mwst>0) einnUstEcht+=mwst; else einnUstBerechnet+=ust;
+          if(mwst>0) einnUstEcht+=mwst; // kein Fallback-Rechnen
           einnZeilen.push({
             label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
             sub:'Monats-GS',
@@ -11236,9 +11326,9 @@ function rUstVoranmeldung(){
           dokGezaehlt=true;
           var bruttoS=parseFloat(dok.brutto)||0;
           var mwstS=parseFloat(dok.mwst)||0;
-          var ustS=mwstS>0?mwstS:Math.round(bruttoS*urEinn*100)/100;
+          var ustS=mwstS; // Buchhaltungsregel: nur aus Dokument
           einnNetto+=bruttoS;
-          if(mwstS>0) einnUstEcht+=mwstS; else einnUstBerechnet+=ustS;
+          if(mwstS>0) einnUstEcht+=mwstS; // kein Fallback-Rechnen
           einnZeilen.push({
             label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
             sub:'Gutschrift '+(dok._splitIdx!=null?(dok._splitIdx+1)+'/'+dok._splitTotal:''),
@@ -11259,9 +11349,9 @@ function rUstVoranmeldung(){
     if(ab && ab.brutto && !ab.aufgeteilt){
       var bruttoAb=parseFloat(ab.brutto)||0;
       var mwstAb=parseFloat(ab.mwst)||0;
-      var ustAb=mwstAb>0?mwstAb:Math.round(bruttoAb*urEinn*100)/100;
+      var ustAb=mwstAb; // Buchhaltungsregel: nur aus Dokument
       einnNetto+=bruttoAb;
-      if(mwstAb>0) einnUstEcht+=mwstAb; else einnUstBerechnet+=ustAb;
+      if(mwstAb>0) einnUstEcht+=mwstAb; // kein Fallback-Rechnen
       einnZeilen.push({
         label:esc(t.titel||t.studio||''),
         sub:(ab.gutschrift_nr||''),
@@ -11269,21 +11359,8 @@ function rUstVoranmeldung(){
         netto:bruttoAb, ust:ustAb
       });
     } else if(!ab || ab.aufgeteilt) {
-      // Schätzung nur wenn keine echte Abrechnung
-      var rawT=parseInt(t.takes)||0;
-      var billT=rawT>0&&rawT<10?10:rawT;
-      var gesch=Math.round(((parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0))*100)/100;
-      if(gesch>0){
-        var ustGesch=Math.round(gesch*urEinn*100)/100;
-        einnNetto+=gesch;
-        einnUstBerechnet+=ustGesch;
-        einnZeilen.push({
-          label:esc(t.titel||t.studio||''),
-          sub:'Schätzung',
-          zahlDatum:zahlDatum,
-          netto:gesch, ust:ustGesch
-        });
-      }
+      // Keine Abrechnung → kein USt-Wert, nicht schätzen (Buchhaltungsregel)
+      // Termin wird in Voranmeldung als "ohne Abrechnung" übersprungen
     }
   });
 
@@ -11458,7 +11535,7 @@ function ausgabeGotFile(inp){
 }
 
 function ausgabeScanStart(){
-  var key = db.profil&&db.profil.apiKey ? db.profil.apiKey : localStorage.getItem('anthropic_key');
+  var key = db.profil&&db.profil.apiKey ? db.profil.apiKey : localStorage.getItem('anthropic_api_key');
   if(!key){ showToast('Kein API-Key'); return; }
   var btn = document.getElementById('ausgabe-scan-btn');
   btn.textContent='⏳ Analysiere…'; btn.style.opacity='0.6';
@@ -11518,7 +11595,8 @@ function ausgabeSpeichern(){
 
   if(!db.ausgaben) db.ausgaben=[];
   db.ausgaben.push({
-    id:'ag'+Date.now(),
+    id:'ag'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+','
+    .slice(0,-1),
     beschr:beschr,
     datum:datum,
     brutto:Math.round(brutto*100)/100,
@@ -13544,7 +13622,8 @@ function abSpeichern(){
   if(!db.abrechnungen) db.abrechnungen=[];
   var matched=_abManualTermin||abFindMatch(_abData);
   var ab={
-    id:'ab'+Date.now(),
+    id:'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+','
+    .slice(0,-1),
     datum:_abData.datum||today(),
     studio:_abData.studio||'',
     produktion:_abData.produktion||'',
