@@ -1712,27 +1712,26 @@ function save(d){
 var db=load();
 
 // ── MIGRATION: bestätigte Dokumente + _archivLog → importedFiles ────────
-// Läuft bei jedem Start — stellt sicher dass gelöschte bestätigte Docs
-// beim nächsten Ordner-Scan nicht wieder auftauchen
 (function(){
   if(!db.importedFiles) db.importedFiles = [];
-  // Schritt 1: alle bestätigten Docs in db.dokumente eintragen
+  // Reset-Flag: überspringt Migration einmalig (nach importedFilesReset())
+  if(db._importedFilesResetDone){
+    db._importedFilesResetDone = false;
+    try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
+    return; // Migration überspringen — importedFiles bleibt leer
+  }
+  // Schritt 1: bestätigte Docs eintragen
   (db.dokumente||[]).forEach(function(d){
     if(d.bestaetigt && d.dateiname && db.importedFiles.indexOf(d.dateiname) < 0){
       db.importedFiles.push(d.dateiname);
     }
   });
-  // Schritt 2: _archivLog-Dateinamen eintragen — ABER nur wenn kein Reset angefordert
-  // (Reset-Flag verhindert dass die Migration den Reset sofort rückgängig macht)
-  if(!db._importedFilesResetDone){
-    (db._archivLog||[]).forEach(function(e){
-      if(e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
-        db.importedFiles.push(e.dateiname);
-      }
-    });
-  } else {
-    db._importedFilesResetDone = false; // Flag einmalig — nächster Start normal
-  }
+  // Schritt 2: _archivLog eintragen
+  (db._archivLog||[]).forEach(function(e){
+    if(e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
+      db.importedFiles.push(e.dateiname);
+    }
+  });
   if(db.importedFiles.length > 3000) db.importedFiles = db.importedFiles.slice(-3000);
   db._importedFilesMigrated = true;
   try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
@@ -1759,7 +1758,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '423';
+  if(el) el.textContent = '424';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
