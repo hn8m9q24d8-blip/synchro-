@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '432';
+  if(el) el.textContent = '433';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2288,11 +2288,14 @@ function openDetail(id){
       || (x.sessions && x.sessions.some(function(s){ return s.terminId===id; }));
     return istAb && istLinked;
   });
-  var abDateinamen = allAbDoks.map(function(d){
-    return d.dateiname||d.beschr||('Abrechnung '+fd(d.datum||t.datum));
-  }).filter(Boolean);
-  // Direkt gespeicherter Dateiname — überlebt dokDeleteAll()
-  if(!abDateinamen.length && t.abrechn_dateiname) abDateinamen=[t.abrechn_dateiname];
+  // t.abrechn_dateiname hat ERSTE Priorität — überlebt dokDeleteAll
+  var abDateinamen = t.abrechn_dateiname ? [t.abrechn_dateiname] : [];
+  // Fallback: aus allAbDoks (nur echter Dateiname, nicht beschr)
+  if(!abDateinamen.length){
+    abDateinamen = allAbDoks.map(function(d){
+      return d.dateiname||null;
+    }).filter(Boolean);
+  }
   // Auch aus db.abrechnungen den Dateinamen holen (dort landet t.abId)
   if(t.abId){
     var abRec=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
@@ -2301,7 +2304,7 @@ function openDetail(id){
       var abName = abRec.dateiname || '';
       if(!abName && abRec.dokId){
         var _srcDok=(db.dokumente||[]).find(function(x){return x.id===abRec.dokId;});
-        if(_srcDok) abName = _srcDok.dateiname||_srcDok.beschr||'';
+        if(_srcDok) abName = _srcDok.dateiname||'';
       }
       if(!abName) abName = abRec.gutschrift_nr||('Abrechnung '+fd(abRec.datum||t.datum));
       if(abName && abDateinamen.indexOf(abName)<0) abDateinamen.push(abName);
@@ -3028,7 +3031,7 @@ function saveMergeChanges(){
       dok._pendingDelete = true; // Foto löschen wenn Termin gespeichert
       _archiveDateiname(dok.dateiname||dok.beschr, ctid, dok.typ||'abrechn');
       _abT.abgerechnet = true;
-      if(dok.dateiname||dok.beschr) _abT.abrechn_dateiname = dok.dateiname||dok.beschr||'';
+      if(dok.dateiname||dok.beschr) _abT.abrechn_dateiname = dok.dateiname||'';
       if(!_abT.dokIds) _abT.dokIds=[];
       if(_abT.dokIds.indexOf(dok.id)<0) _abT.dokIds.push(dok.id);
       save(db);
@@ -3501,7 +3504,7 @@ function showDateinamen(el){
   // Generische Fallback-Texte erkennen — kein echter Dateiname
   // Echter Dateiname = hat Extension ODER UUID-Muster (Bindestriche/Unterstriche)
   var hasExt = /\.(pdf|jpg|jpeg|png|heic|tiff|bmp)$/i.test(firstName);
-  var hasUUIDPattern = firstName.indexOf('-') >= 0 || firstName.indexOf('_') >= 0;
+  var hasUUIDPattern = firstName.indexOf('-') >= 0 || firstName.indexOf('_') >= 0 || /^\d+[\/\-]\d+/.test(firstName);
   var isFallbackText = !firstName || firstName.length < 5
     || /^Dokument$|^Kurzbefehl-Foto$|^Unbekannt$/i.test(firstName)
     || /bestätigt|Foto gelöscht|verknüpft|ausstehend|Abrechnung \d|Dispo \d/i.test(firstName)
@@ -7869,7 +7872,7 @@ function dokBestaetigen(){
     if(t2){
       // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
       if(d.typ==='dispo'){ t2._dispoDateiname = d.dateiname||d.beschr||''; }
-      else if(d.typ==='abrechn'||d.typ==='monats_abrechn'){ t2.abrechn_dateiname = d.dateiname||d.beschr||''; }
+      else if(d.typ==='abrechn'||d.typ==='monats_abrechn'){ t2.abrechn_dateiname = d.dateiname||''; }
       if(d.rolle&&!t2.rolle) t2.rolle=d.rolle;
       if(d.regie&&!t2.regie) t2.regie=d.regie;
       if(d.titel&&!t2.titel) t2.titel=d.titel;
@@ -7887,7 +7890,7 @@ function dokBestaetigen(){
       if(d.takes&&!match.takes) match.takes=d.takes;
       // Dateiname direkt am Termin speichern
       if(d.typ==='dispo' && (d.dateiname||d.beschr)) match._dispoDateiname = d.dateiname||d.beschr||'';
-      else if((d.typ==='abrechn'||d.typ==='monats_abrechn') && (d.dateiname||d.beschr)) match.abrechn_dateiname = d.dateiname||d.beschr||'';
+      else if((d.typ==='abrechn'||d.typ==='monats_abrechn') && (d.dateiname||d.beschr)) match.abrechn_dateiname = d.dateiname||'';
       _archiveDateiname(d.dateiname||d.beschr, match.id, d.typ||null);
     }
   }
@@ -10399,7 +10402,7 @@ function dokBestaetigenMonat(dokId){
       if(t.dokIds.indexOf(dokId)<0) t.dokIds.push(dokId);
       t.abgerechnet=true;
       // Dateiname direkt am Termin — überlebt dokDeleteAll()
-      if(d.dateiname||d.beschr) t.abrechn_dateiname = d.dateiname||d.beschr||'';
+      if(d.dateiname||d.beschr) t.abrechn_dateiname = d.dateiname||'';
       linked++;
     } else {
       notFound.push(s.datum);
@@ -10683,7 +10686,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
       // Nur echten Dateinamen speichern (mit Extension) — nie beschr/lesbaren Titel
       t._dispoDateiname = (d.dateiname && /\.(pdf|jpg|jpeg|png|heic|tiff|bmp)$/i.test(d.dateiname)) ? d.dateiname : (d.dateiname||'');
     } else if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
-      t.abrechn_dateiname = d.dateiname||d.beschr||'';
+      t.abrechn_dateiname = d.dateiname||'';
     }
   }
   // Foto + Archivierung erst wenn Kalendertermin gespeichert wird (_pendingDelete)
