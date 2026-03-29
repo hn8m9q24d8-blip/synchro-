@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '434';
+  if(el) el.textContent = '437';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3032,6 +3032,8 @@ function saveMergeChanges(){
       _archiveDateiname(dok.dateiname||dok.beschr, ctid, dok.typ||'abrechn');
       _abT.abgerechnet = true;
       if(dok.dateiname||dok.beschr) _abT.abrechn_dateiname = dok.dateiname||'';
+      // Falls Dispo: auch _dispoDateiname setzen
+      if(dok.typ==='dispo' && dok.dateiname) _abT._dispoDateiname = dok.dateiname;
       if(!_abT.dokIds) _abT.dokIds=[];
       if(_abT.dokIds.indexOf(dok.id)<0) _abT.dokIds.push(dok.id);
       save(db);
@@ -7353,6 +7355,9 @@ function syncReviewCreate(id){
   if(!db.termine) db.termine=[];
   db.termine.push(t);
   d.terminId=newId;
+  // Dateiname direkt am neuen Termin speichern
+  if(d.dateiname) t._dispoDateiname = d.dateiname;
+  _archiveDateiname(d.dateiname||d.beschr, newId, d.typ||'dispo');
   save(db);updateBadge();
   var row=document.getElementById('sync-row-'+id);
   if(row){
@@ -8009,6 +8014,9 @@ function dokAnalyseDoc(d, key, cb){
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
     +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
+    +'    ⚠ Datumsformat: Interopa/deutsche Studios nutzen DD/MM/YYYY oder DD.MM.YYYY\n'
+    +'    ⚠ "03/02/2026" auf einer deutschen Dispo = 3. Februar 2026 = 2026-02-03 (NICHT 2026-03-02!)\n'
+    +'    ⚠ Immer europäisches Format annehmen: erster Teil = Tag, zweiter = Monat\n'
     +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
     +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
     +'    NICHT der Aufnahmeraum/Atelier (NICHT "BLN Studio E", NICHT "Atelier 4", NICHT "Studio 3", NICHT "Harzer Str.")\n'
@@ -11071,12 +11079,20 @@ function dokLinkMultiConfirm(){
       if(d.regie&&!t.regie) t.regie=d.regie;
       if(d.titel&&!t.titel) t.titel=d.titel;
       if((d.atelier||d.notizen)&&!t.atelier) t.atelier=d.atelier||d.notizen;
+      // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
+      if(d.dateiname) t._dispoDateiname = d.dateiname;
+      _archiveDateiname(d.dateiname||d.beschr, t.id, 'dispo');
     });
   }
 
   // Abrechnung: Betrag aufteilen
   if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
     d.terminId=terminIds[0];
+    // Dateiname an alle verknüpften Termine schreiben
+    termine.forEach(function(t){
+      if(d.dateiname) t.abrechn_dateiname = d.dateiname;
+      _archiveDateiname(d.dateiname||d.beschr, t.id, d.typ||'abrechn');
+    });
     var abRec=(db.abrechnungen||[]).find(function(a){return a.id===d.abId||a.dokId===d.id;});
 
     // Beträge — aus abRec falls vorhanden, sonst direkt aus Dokument
