@@ -1737,6 +1737,35 @@ var db=load();
   try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
 })();
 
+// ── MIGRATION: _dispoDateiname + abrechn_dateiname für alte Termine nachfüllen ──
+(function(){
+  if(db._dispoDateinameMigrated) return;
+  var changed = false;
+  (db.termine||[]).forEach(function(t){
+    // _dispoDateiname fehlt — über db.dokumente suchen
+    if(!t._dispoDateiname){
+      var dispoDok = (db.dokumente||[]).find(function(d){
+        return (d.typ==='dispo') && (d.terminId===t.id || (t.dokIds&&t.dokIds.indexOf(d.id)>=0));
+      });
+      if(!dispoDok && db._archivLog){
+        var entry = db._archivLog.find(function(e){
+          return e.terminId===t.id && (e.typ==='dispo'||(!e.typ&&e.dateiname&&!/abrechn/i.test(e.dateiname)));
+        });
+        if(entry && entry.dateiname) { t._dispoDateiname = entry.dateiname; changed=true; }
+      } else if(dispoDok && dispoDok.dateiname){
+        t._dispoDateiname = dispoDok.dateiname; changed=true;
+      }
+    }
+    // abrechn_dateiname fehlt — über db.abrechnungen suchen
+    if(!t.abrechn_dateiname && t.abId){
+      var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(ab && ab.dateiname){ t.abrechn_dateiname = ab.dateiname; changed=true; }
+    }
+  });
+  db._dispoDateinameMigrated = true;
+  if(changed) try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
+})();
+
 // ── API-KEY SYNC: db.profil.apiKey ↔ localStorage ────────────────
 (function(){
   var fromStorage = localStorage.getItem('anthropic_api_key')||'';
@@ -1758,7 +1787,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '425';
+  if(el) el.textContent = '429';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7114,6 +7143,8 @@ function syncFolderGotFiles(inp){
             beschr:null, datum:null, studio:null,
             terminId:null, ausgabeId:null
           });
+          if(!db.importedFiles) db.importedFiles=[];
+          if(file.name && db.importedFiles.indexOf(file.name)<0) db.importedFiles.push(file.name);
           loaded++;
           if(lbl) lbl.textContent = loaded+'/'+newFiles.length+' geladen...';
           loadNext(idx+1);
@@ -7165,6 +7196,9 @@ function syncDokGotFiles(inp){
             dataURL:fullDataURL, // full für KI — wird nach Analyse genullt
             typ:null, addedAt:new Date().toISOString(),
             beschr:null, datum:null, studio:null, terminId:null, ausgabeId:null});
+          // Dateiname sofort in importedFiles — verhindert Doppel-Import bei erneutem Scan
+          if(!db.importedFiles) db.importedFiles=[];
+          if(file.name && db.importedFiles.indexOf(file.name)<0) db.importedFiles.push(file.name);
           loaded++;
           if(lbl) lbl.textContent=loaded+'/'+files.length+' geladen...';
           if(loaded===files.length){
@@ -7588,20 +7622,7 @@ function dokGotFilesFolder(inp){
     inp.value=''; return;
   }
 
-  // Zu viele Dateien → Rest in Warteschlange, erste Charge sofort anbieten
-  var MAX_BATCH = 10;
-  if(neu.length > MAX_BATCH){
-    // Rest in Queue speichern
-    _dokQueue = neu.slice(MAX_BATCH);
-    _dokQueueKatFn = kategorieAusOrdner;
-    neu = neu.slice(0, MAX_BATCH);
-    showToast('📦 '+_dokQueue.length+' weitere in Warteschlange');
-  } else {
-    _dokQueue = [];
-    _dokQueueKatFn = null;
-  }
-
-  // Dateien nach Typ sortieren: Dispo → Abrechnung → Ausgabe → Rest
+  // ZUERST sortieren: Dispo → Abrechnung → Ausgabe
   var typOrder = function(f){
     var kat = kategorieAusOrdner(f);
     if(kat==='dispo')   return 0;
@@ -7610,7 +7631,19 @@ function dokGotFilesFolder(inp){
     return 3;
   };
   neu.sort(function(a,b){ return typOrder(a)-typOrder(b); });
-  if(_dokQueue.length) _dokQueue.sort(function(a,b){ return typOrder(a)-typOrder(b); });
+
+  // DANACH erst in Batches aufteilen — so sind Dispos immer in der ersten Charge
+  var MAX_BATCH = 10;
+  if(neu.length > MAX_BATCH){
+    _dokQueue = neu.slice(MAX_BATCH);
+    _dokQueueKatFn = kategorieAusOrdner;
+    _dokQueue.sort(function(a,b){ return typOrder(a)-typOrder(b); });
+    neu = neu.slice(0, MAX_BATCH);
+    showToast('📦 '+_dokQueue.length+' weitere in Warteschlange');
+  } else {
+    _dokQueue = [];
+    _dokQueueKatFn = null;
+  }
 
   // Vorschau-Sheet anzeigen BEVOR importiert wird
   _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner);
@@ -7688,6 +7721,8 @@ function _dokImportAndAnalyse(files, katFn){
       var dataURL=e.target.result;
       var id='dok'+Date.now()+Math.random().toString(36).slice(2,6);
       var typHint=katFn(file);
+      if(!db.importedFiles) db.importedFiles=[];
+      if(file.name && db.importedFiles.indexOf(file.name)<0) db.importedFiles.push(file.name);
       db.dokumente.push({
         id:id, dateiname:file.name, mime:mime, dataURL:dataURL,
         typ: typHint||null,
@@ -7843,6 +7878,10 @@ function dokBestaetigen(){
       if(d.regie&&!match.regie) match.regie=d.regie;
       if(d.titel&&!match.titel) match.titel=d.titel;
       if(d.takes&&!match.takes) match.takes=d.takes;
+      // Dateiname direkt am Termin speichern
+      if(d.typ==='dispo' && (d.dateiname||d.beschr)) match._dispoDateiname = d.dateiname||d.beschr||'';
+      else if((d.typ==='abrechn'||d.typ==='monats_abrechn') && (d.dateiname||d.beschr)) match.abrechn_dateiname = d.dateiname||d.beschr||'';
+      _archiveDateiname(d.dateiname||d.beschr, match.id, d.typ||null);
     }
   }
   logAction('dok_bestaetigt','Dok bestätigt · '+(d.beschr||d.dateiname||'')+(d.studio?' · '+d.studio:''),undoSnap);
