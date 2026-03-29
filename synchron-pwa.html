@@ -1758,7 +1758,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '424';
+  if(el) el.textContent = '425';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7570,9 +7570,14 @@ function dokGotFilesFolder(inp){
   (db.dokumente||[]).forEach(function(d){
     if(d.dateiname){ existingNames[d.dateiname]=true; existingNamesNorm[normName(d.dateiname)]=true; }
   });
-  (db.importedFiles||[]).forEach(function(name){
-    if(name){ existingNames[name]=true; existingNamesNorm[normName(name)]=true; }
-  });
+  // importedFiles nur prüfen wenn kein Reset aktiv
+  if(!window._skipImportedFilesCheck){
+    (db.importedFiles||[]).forEach(function(name){
+      if(name){ existingNames[name]=true; existingNamesNorm[normName(name)]=true; }
+    });
+  } else {
+    window._skipImportedFilesCheck = false; // einmalig
+  }
   var neu=files.filter(function(f){
     return !existingNames[f.name] && !existingNamesNorm[normName(f.name)];
   });
@@ -7880,10 +7885,10 @@ function dokAblehnen(){
 function importedFilesReset(){
   if(!confirm('Importierte Dateien-Liste zurücksetzen?\n\nDanach werden alle Dateien beim nächsten Ordner-Scan als "neu" erkannt.\nDaten im Kalender bleiben erhalten.')) return;
   db.importedFiles = [];
-  db._importedFilesResetDone = true; // Migration überspringt _archivLog einmalig
-  // holviImportIds NICHT löschen — Zahlungen bleiben verknüpft
+  db._importedFilesResetDone = true;
+  window._skipImportedFilesCheck = true; // In-Memory Flag — gilt für nächsten Scan
   save(db);
-  showToast('✓ Reset — JETZT Ordner scannen (nicht neu laden!)');
+  showToast('✓ Reset — jetzt Ordner scannen');
 }
 
 function dokDeleteAll(){
