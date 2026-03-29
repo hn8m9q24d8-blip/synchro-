@@ -1787,7 +1787,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '429';
+  if(el) el.textContent = '430';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2197,11 +2197,14 @@ function openDetail(id){
           && x.studio.toLowerCase().slice(0,4)===t.studio.toLowerCase().slice(0,4));
     return istDispo && istLinked;
   });
-  var dispoDateinamen = allDispoDoks.map(function(d){
-    return d.dateiname||d.beschr||('Dispo '+fd(d.datum||t.datum));
-  }).filter(Boolean);
-  // Direkt gespeicherter Dateiname — überlebt dokDeleteAll()
-  if(!dispoDateinamen.length && t._dispoDateiname) dispoDateinamen=[t._dispoDateiname];
+  // t._dispoDateiname hat ERSTE Priorität — wird bei Bestätigung gesetzt, überlebt alles
+  var dispoDateinamen = t._dispoDateiname ? [t._dispoDateiname] : [];
+  // Fallback: aus allDispoDoks (nur echter Dateiname, nicht lesbarer Titel)
+  if(!dispoDateinamen.length){
+    dispoDateinamen = allDispoDoks.map(function(d){
+      return d.dateiname||null;
+    }).filter(Boolean);
+  }
   // Fallback: t.dispoImg existiert aber kein Dokument verknüpft (altes Format)
   if(!dispoDateinamen.length && t.dispoImg) dispoDateinamen=['Dispo (verknüpft)'];
   // Fallback: Dispo zugeordnet aber noch nicht bestätigt (_pendingDelete)
