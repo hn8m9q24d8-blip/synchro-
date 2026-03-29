@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '433';
+  if(el) el.textContent = '434';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3751,6 +3751,18 @@ function dokPeekTermin(terminId){
     _peekDok._skipAbCreate = true;
     dokMergeIntoTermin(_peekDok, t);
     t._hasPendingMerge = true;
+    // Dateiname sofort am Termin speichern — nicht warten auf dokBestaetigen
+    if(d.typ==='dispo' && d.dateiname && /\\.(pdf|jpg|jpeg|png|heic|tiff|bmp)$/i.test(d.dateiname)){
+      t._dispoDateiname = d.dateiname;
+    } else if(d.typ==='dispo' && d.dateiname){
+      t._dispoDateiname = d.dateiname;
+    }
+    if((d.typ==='abrechn'||d.typ==='monats_abrechn') && d.dateiname){
+      t.abrechn_dateiname = d.dateiname;
+    }
+    // d.terminId setzen — dok weiss welchem Termin es zugeordnet ist
+    d.terminId = terminId;
+    _archiveDateiname(d.dateiname||d.beschr, terminId, d.typ||'dispo');
     save(db);
   }
 
