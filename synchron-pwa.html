@@ -1722,13 +1722,17 @@ var db=load();
       db.importedFiles.push(d.dateiname);
     }
   });
-  // Schritt 2: _archivLog-Dateinamen ebenfalls eintragen
-  // (für bereits gelöschte bestätigte Docs — die einzige verbleibende Spur)
-  (db._archivLog||[]).forEach(function(e){
-    if(e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
-      db.importedFiles.push(e.dateiname);
-    }
-  });
+  // Schritt 2: _archivLog-Dateinamen eintragen — ABER nur wenn kein Reset angefordert
+  // (Reset-Flag verhindert dass die Migration den Reset sofort rückgängig macht)
+  if(!db._importedFilesResetDone){
+    (db._archivLog||[]).forEach(function(e){
+      if(e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
+        db.importedFiles.push(e.dateiname);
+      }
+    });
+  } else {
+    db._importedFilesResetDone = false; // Flag einmalig — nächster Start normal
+  }
   if(db.importedFiles.length > 3000) db.importedFiles = db.importedFiles.slice(-3000);
   db._importedFilesMigrated = true;
   try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
@@ -1755,7 +1759,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '419';
+  if(el) el.textContent = '423';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7517,7 +7521,7 @@ function dokGotFilesFolder(inp){
   if(!files.length) return;
 
   // NUR Unterordner "Dispofotos" und "Gagenabrechnungen" — alle anderen ignorieren
-  var ALLOWED_FOLDERS = ['dispofotos', 'gagenabrechnungen', 'ausgaben', 'belege', 'quittungen'];
+  var ALLOWED_FOLDERS = ['dispofotos', 'gagenabrechnungen', 'ausgaben'];
   var allInFolder = files.filter(function(f){
     var path = (f.webkitRelativePath || f.name).toLowerCase();
     var parts = path.split('/');
@@ -7537,19 +7541,24 @@ function dokGotFilesFolder(inp){
     showToast('⚠ '+skippedFormat.length+' Datei'+(skippedFormat.length>1?'en':'')+' übersprungen — Format nicht unterstützt: '+extList);
   }
   if(!files.length){
-    showToast('Keine Dateien in "Dispofotos" oder "Gagenabrechnungen" gefunden');
+    showToast('Keine Dateien gefunden. Ordner muss "Dispofotos", "Dispo", "Gagenabrechnungen" oder "Ausgaben" heissen.');
     inp.value=''; return;
   }
 
   // Kategorie aus Unterordnerpfad erkennen
   function kategorieAusOrdner(file){
     var path=(file.webkitRelativePath||file.name).toLowerCase();
-    if(/abrechn|gutschrift|gage|payment|gagenabrechnungen/.test(path)) return 'abrechn';
+    // Dispo ZUERST prüfen — verhindert Fehlklassifizierung wenn Ordner "gage" enthält
     if(/dispo|dispatch|sheet|aufnahme|dispofotos/.test(path)) return 'dispo';
     if(/ausgaben|belege|quittungen|rechnung|ausgabe|quittung|beleg|invoice|receipt/.test(path)) return 'ausgabe';
+    // Abrechnung: 'gage' allein zu generisch → nur mit Kontext
+    if(/abrechn|gutschrift|gagenabrechnungen/.test(path)) return 'abrechn';
+    if(/payment.*received|received.*payment/.test(path)) return 'abrechn';
     var n=file.name.toLowerCase();
     if(/abrechn|gutschrift/.test(n)) return 'abrechn';
     if(/dispo/.test(n)) return 'dispo';
+    // Fallback: Dateien in Gagenabrechnungen-Ordner = Abrechnung
+    if(/gage/.test(path)) return 'abrechn';
     return null;
   }
 
@@ -7872,10 +7881,10 @@ function dokAblehnen(){
 function importedFilesReset(){
   if(!confirm('Importierte Dateien-Liste zurücksetzen?\n\nDanach werden alle Dateien beim nächsten Ordner-Scan als "neu" erkannt.\nDaten im Kalender bleiben erhalten.')) return;
   db.importedFiles = [];
-  db.holviImportIds = db.holviImportIds || [];
+  db._importedFilesResetDone = true; // Migration überspringt _archivLog einmalig
   // holviImportIds NICHT löschen — Zahlungen bleiben verknüpft
   save(db);
-  showToast('✓ Import-Gedächtnis zurückgesetzt — nächster Scan erkennt alle Dateien');
+  showToast('✓ Reset — JETZT Ordner scannen (nicht neu laden!)');
 }
 
 function dokDeleteAll(){
