@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '437';
+  if(el) el.textContent = '438';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7673,16 +7673,42 @@ function dokGotFilesFolder(inp){
   }
 
   // Vorschau-Sheet anzeigen BEVOR importiert wird
-  _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner);
+  // Statistik pro Kategorie für Kontrollrechnung
+  var statsGesamt={dispo:0,abrechn:0,ausgabe:0};
+  var statsBekannt={dispo:0,abrechn:0,ausgabe:0};
+  files.forEach(function(f){
+    var k=kategorieAusOrdner(f)||'sonstig';
+    if(statsGesamt[k]!==undefined) statsGesamt[k]++;
+  });
+  neu.forEach(function(f){/* neu wird in _dokOrdnerVorschau gezählt */});
+  // bekannt = gesamt - neu pro Kategorie
+  var neuStats={dispo:0,abrechn:0,ausgabe:0};
+  neu.forEach(function(f){ var k=kategorieAusOrdner(f)||'sonstig'; if(neuStats[k]!==undefined) neuStats[k]++; });
+  Object.keys(statsGesamt).forEach(function(k){ statsBekannt[k]=statsGesamt[k]-neuStats[k]; });
+  _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, files.length, statsGesamt, statsBekannt, neuStats);
   inp.value='';
 }
 
-function _dokOrdnerVorschau(files, skipped, katFn){
+function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, statsBekannt, neuStats){
   var stats={dispo:0,abrechn:0,ausgabe:0,sonstig:0};
   files.forEach(function(f){
     var k=katFn(f)||'sonstig';
     stats[k]=(stats[k]||0)+1;
   });
+  // Kontrollrechnung pro Ordner
+  var ordnerRows = [];
+  var labels = {dispo:'Dispofotos', abrechn:'Gagenabrechnungen', ausgabe:'Ausgaben'};
+  if(statsGesamt){
+    ['dispo','abrechn','ausgabe'].forEach(function(k){
+      if(statsGesamt[k]>0 || statsBekannt[k]>0){
+        var bekannt = statsBekannt[k]||0;
+        var neu2 = neuStats[k]||0;
+        var gesamt = statsGesamt[k]||0;
+        var ok = (bekannt + neu2 === gesamt);
+        ordnerRows.push({label:labels[k], bekannt:bekannt, neu:neu2, gesamt:gesamt, ok:ok});
+      }
+    });
+  }
 
   var o=document.createElement('div');
   o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
@@ -7698,6 +7724,39 @@ function _dokOrdnerVorschau(files, skipped, katFn){
   if(stats.ausgabe) html+='<div style="background:#fef9ec;color:#92400e;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">🧾 '+stats.ausgabe+' Ausgabe'+(stats.ausgabe>1?'n':'')+'</div>';
   if(stats.sonstig) html+='<div style="background:#f3f4f6;color:#666;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">📄 '+stats.sonstig+' Sonstige</div>';
   html+='</div>';
+  // Kontrollrechnung-Tabelle
+  if(ordnerRows.length){
+    var allOk = ordnerRows.every(function(r){return r.ok;});
+    html+='<div style="background:'+(allOk?'#f0fdf4':'#fff7ed')+';border:1.5px solid '+(allOk?'#86efac':'#fed7aa')+';border-radius:10px;padding:10px 12px;margin-bottom:12px">';
+    html+='<div style="font-size:10px;font-weight:800;color:'+(allOk?'#15803d':'#92400e')+';margin-bottom:6px;letter-spacing:.5px">'+(allOk?'✓ KONTROLLRECHNUNG OK':'⚠ KONTROLLRECHNUNG – PRÜFEN')+'</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+    html+='<tr style="color:#888;font-weight:700"><td></td><td style="text-align:right;padding:0 4px">Bekannt</td><td style="text-align:right;padding:0 4px">Neu</td><td style="text-align:right;padding:0 4px">=</td><td style="text-align:right;padding:0 4px">Gesamt</td></tr>';
+    ordnerRows.forEach(function(r){
+      var rowOk = r.bekannt + r.neu === r.gesamt;
+      var rowColor = rowOk ? '#374151' : '#dc2626';
+      var sumColor = rowOk ? '#15803d' : '#dc2626';
+      html+='<tr style="color:'+rowColor+'">'
+        +'<td style="padding:2px 0;font-weight:600">'+r.label+'</td>'
+        +'<td style="text-align:right;padding:2px 4px">'+r.bekannt+'</td>'
+        +'<td style="text-align:right;padding:2px 4px">'+r.neu+'</td>'
+        +'<td style="text-align:right;padding:2px 4px;color:#888">+</td>'
+        +'<td style="text-align:right;padding:2px 4px;font-weight:800;color:'+sumColor+'">'+r.gesamt+'</td>'
+        +'</tr>';
+    });
+    // Gesamtzeile
+    var totBek=ordnerRows.reduce(function(s,r){return s+r.bekannt;},0);
+    var totNeu=ordnerRows.reduce(function(s,r){return s+r.neu;},0);
+    var totGes=ordnerRows.reduce(function(s,r){return s+r.gesamt;},0);
+    var totOk=totBek+totNeu===totGes;
+    html+='<tr style="border-top:1px solid #e5e7eb;font-weight:800;color:'+(totOk?'#15803d':'#dc2626')+'">'
+      +'<td style="padding:4px 0">Gesamt</td>'
+      +'<td style="text-align:right;padding:4px">'+totBek+'</td>'
+      +'<td style="text-align:right;padding:4px">'+totNeu+'</td>'
+      +'<td style="text-align:right;padding:4px;color:#888">+</td>'
+      +'<td style="text-align:right;padding:4px">'+totGes+'</td>'
+      +'</tr>';
+    html+='</table></div>';
+  }
   html+='<div style="font-size:12px;color:#888;margin-bottom:16px">Nur Unterordner <b>Dispofotos</b> &amp; <b>Gagenabrechnungen</b> werden importiert. KI-Analyse danach einzeln per Knopfdruck.</div>';
 
   box.innerHTML=html;
