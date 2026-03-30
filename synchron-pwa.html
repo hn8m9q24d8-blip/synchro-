@@ -1321,7 +1321,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
         <input type="hidden" id="f-takes" value="0">
         <div class="takes-drum-wrap">
           <div class="takes-drum-btn" data-dir="-1" onclick="takesChange(-1)">−</div>
-          <div class="takes-drum-display" id="takes-drum-display">
+          <div class="takes-drum-display" id="takes-drum-display" onclick="takesManualInput()" title="Tippen zum manuellen Eingeben">
             <div class="takes-drum-fade-top"></div>
             <div class="takes-drum-line"></div>
             <div id="takes-drum-track" class="takes-drum-track"></div>
@@ -1503,7 +1503,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
         <input type="hidden" id="f-takes" value="0">
         <div class="takes-drum-wrap">
           <div class="takes-drum-btn" data-dir="-1" onclick="takesChange(-1)">−</div>
-          <div class="takes-drum-display" id="takes-drum-display">
+          <div class="takes-drum-display" id="takes-drum-display" onclick="takesManualInput()" title="Tippen zum manuellen Eingeben">
             <div class="takes-drum-fade-top"></div>
             <div class="takes-drum-line"></div>
             <div id="takes-drum-track" class="takes-drum-track"></div>
@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '440';
+  if(el) el.textContent = '441';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7763,7 +7763,8 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
       +'</tr>';
     html+='</table></div>';
   }
-  html+='<div style="font-size:12px;color:#888;margin-bottom:16px">Nur Unterordner <b>Dispofotos</b> &amp; <b>Gagenabrechnungen</b> werden importiert. KI-Analyse danach einzeln per Knopfdruck.</div>';
+  html+='<div style="font-size:12px;color:#888;margin-bottom:8px">Nur Unterordner <b>Dispofotos</b> &amp; <b>Gagenabrechnungen</b> werden importiert. KI-Analyse danach einzeln per Knopfdruck.</div>';
+  html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-size:11px;color:#1e40af">&#x26A0;&#xFE0F; <b>PDFs (Gagenabrechnungen)</b> bitte über <b>+ Dateien</b> importieren — iOS-Safari liefert PDFs nicht über den Ordner-Scan.</div>';
 
   box.innerHTML=html;
 
@@ -13180,6 +13181,15 @@ function takesSetVal(v) {
   drumRender();
   var h = document.getElementById('f-takes');
   if (h) h.value = _takesVal;
+}
+
+function takesManualInput() {
+  var input = prompt('Anzahl Takes eingeben:', _takesVal || 0);
+  if(input === null) return; // Abbrechen
+  var val = parseInt(input);
+  if(!isNaN(val) && val >= 0) {
+    takesSetVal(val);
+  }
 }
 
 function takesChange(dir) {
