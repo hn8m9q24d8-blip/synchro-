@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '441';
+  if(el) el.textContent = '442';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7605,6 +7605,11 @@ function dokGotFilesFolder(inp){
       .filter(function(v,i,a){ return a.indexOf(v)===i; }).join(', ');
     showToast('⚠ '+skippedFormat.length+' Datei'+(skippedFormat.length>1?'en':'')+' übersprungen — Format nicht unterstützt: '+extList);
   }
+  // Debug: zeige was iOS geliefert hat
+  var _pdfCount = Array.from(inp.files||[]).filter(function(f){ return /\.pdf$/i.test(f.name); }).length;
+  var _allCount = (inp.files||[]).length;
+  if(_pdfCount > 0) showToast('📄 '+_pdfCount+' PDFs von '+_allCount+' Dateien erkannt');
+  
   if(!files.length){
     showToast('Keine Dateien gefunden. Ordner muss "Dispofotos", "Dispo", "Gagenabrechnungen" oder "Ausgaben" heissen.');
     inp.value=''; return;
