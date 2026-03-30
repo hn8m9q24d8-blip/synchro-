@@ -719,11 +719,11 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <!-- Action buttons row -->
   <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream)">
         <div onclick="dokDeleteAll()" style="background:#fff0f0;border:1.5px solid #fca5a5;color:#dc2626;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">&#x1F5D1; Alle</div>
-        <div onclick="importedFilesReset()" style="background:#fefce8;border:1.5px solid #fde68a;color:#92400e;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Importierte Dateien zurücksetzen">&#x1F504; Reset</div>
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
     <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:#1a6ea8;color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;touch-action:manipulation">&#x2601;&#xFE0F; Ordner</button>
     <div onclick="document.getElementById('dok-upload-input').click()" style="background:var(--card);border:1.5px solid var(--border);color:var(--ink);font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">+ Dateien</div>
+    <div onclick="importedFilesReset()" style="margin-left:auto;background:#fefce8;border:1.5px solid #fde68a;color:#92400e;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">&#x1F504; Reset</div>
   </div>
   <!-- Search bar -->
   <div style="padding:8px 12px;background:#fff;flex-shrink:0;border-bottom:1px solid #fce7f3">
@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '439';
+  if(el) el.textContent = '440';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8011,6 +8011,25 @@ function dokAblehnen(){
     save(db); rDokumente(); dokOpenDetail(d.id);
     showToast('✓ Neu analysiert: '+d.typ);
   });
+}
+
+function dokDeleteAllMenu(){
+  var o=document.createElement('div');
+  o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  var box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 40px;width:100%;max-width:480px';
+  var bStyle='width:100%;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:10px;display:block;border:none';
+  box.innerHTML='<div style="width:40px;height:4px;background:#e0e0e0;border-radius:2px;margin:0 auto 16px"></div>'
+    +'<div style="font-size:15px;font-weight:800;margin-bottom:16px;color:#dc2626">&#x1F5D1; Dokumente</div>'
+    +'<button type="button" id="ddm-del" style="'+bStyle+';background:#fff0f0;color:#dc2626;border:1.5px solid #fca5a5">&#x1F5D1; Alle Dokumente löschen</button>'
+    +'<button type="button" id="ddm-rst" style="'+bStyle+';background:#fefce8;color:#92400e;border:1.5px solid #fde68a">&#x1F504; Import-Gedächtnis zurücksetzen</button>'
+    +'<button type="button" id="ddm-cls" style="'+bStyle+';background:#f3f4f6;color:#666">Abbrechen</button>';
+  o.appendChild(box);
+  o.onclick=function(e){if(e.target===o)o.remove();};
+  document.body.appendChild(o);
+  document.getElementById('ddm-del').onclick=function(){dokDeleteAll();o.remove();};
+  document.getElementById('ddm-rst').onclick=function(){importedFilesReset();o.remove();};
+  document.getElementById('ddm-cls').onclick=function(){o.remove();};
 }
 
 function importedFilesReset(){
