@@ -722,7 +722,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
     <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:#1a6ea8;color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;touch-action:manipulation">&#x2601;&#xFE0F; Ordner</button>
-    <div onclick="document.getElementById('dok-upload-input').click()" style="background:var(--card);border:1.5px solid var(--border);color:var(--ink);font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">+ Dateien</div>
+    <div onclick="document.getElementById('dok-upload-input').click()" style="background:var(--card);border:1.5px solid var(--border);color:var(--ink);font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="PDFs und Einzeldateien">+ Dateien / PDF</div>
     <div onclick="importedFilesReset()" style="margin-left:auto;background:#fefce8;border:1.5px solid #fde68a;color:#92400e;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">&#x1F504; Reset</div>
   </div>
   <!-- Search bar -->
@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '442';
+  if(el) el.textContent = '446';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7605,11 +7605,6 @@ function dokGotFilesFolder(inp){
       .filter(function(v,i,a){ return a.indexOf(v)===i; }).join(', ');
     showToast('⚠ '+skippedFormat.length+' Datei'+(skippedFormat.length>1?'en':'')+' übersprungen — Format nicht unterstützt: '+extList);
   }
-  // Debug: zeige was iOS geliefert hat
-  var _pdfCount = Array.from(inp.files||[]).filter(function(f){ return /\.pdf$/i.test(f.name); }).length;
-  var _allCount = (inp.files||[]).length;
-  if(_pdfCount > 0) showToast('📄 '+_pdfCount+' PDFs von '+_allCount+' Dateien erkannt');
-  
   if(!files.length){
     showToast('Keine Dateien gefunden. Ordner muss "Dispofotos", "Dispo", "Gagenabrechnungen" oder "Ausgaben" heissen.');
     inp.value=''; return;
@@ -7618,17 +7613,12 @@ function dokGotFilesFolder(inp){
   // Kategorie aus Unterordnerpfad erkennen
   function kategorieAusOrdner(file){
     var path=(file.webkitRelativePath||file.name).toLowerCase();
-    // Dispo ZUERST prüfen — verhindert Fehlklassifizierung wenn Ordner "gage" enthält
-    if(/dispo|dispatch|sheet|aufnahme|dispofotos/.test(path)) return 'dispo';
-    if(/ausgaben|belege|quittungen|rechnung|ausgabe|quittung|beleg|invoice|receipt/.test(path)) return 'ausgabe';
-    // Abrechnung: 'gage' allein zu generisch → nur mit Kontext
-    if(/abrechn|gutschrift|gagenabrechnungen/.test(path)) return 'abrechn';
-    if(/payment.*received|received.*payment/.test(path)) return 'abrechn';
-    var n=file.name.toLowerCase();
-    if(/abrechn|gutschrift/.test(n)) return 'abrechn';
-    if(/dispo/.test(n)) return 'dispo';
-    // Fallback: Dateien in Gagenabrechnungen-Ordner = Abrechnung
-    if(/gage/.test(path)) return 'abrechn';
+    var parts=path.split('/');
+    var subfolder=parts.length>=3?parts[1]:(parts.length===2?parts[0]:'');
+    // Ordner-basierte Klassifizierung — eindeutig und einfach
+    if(subfolder.indexOf('dispofotos')>=0)       return 'dispo';
+    if(subfolder.indexOf('gagenabrechnungen')>=0) return 'abrechn';
+    if(subfolder.indexOf('ausgaben')>=0)          return 'ausgabe';
     return null;
   }
 
@@ -7696,11 +7686,11 @@ function dokGotFilesFolder(inp){
     if(neuStats[k]!==undefined) neuStats[k]++;
   });
   Object.keys(statsGesamt).forEach(function(k){ statsBekannt[k]=statsGesamt[k]-neuStats[k]; });
-  _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, files.length, statsGesamt, statsBekannt, neuStats);
+  _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, files.length, statsGesamt, statsBekannt, neuStats, files);
   inp.value='';
 }
 
-function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, statsBekannt, neuStats){
+function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, statsBekannt, neuStats, allFiles){
   var stats={dispo:0,abrechn:0,ausgabe:0,sonstig:0};
   files.forEach(function(f){
     var k=katFn(f)||'sonstig';
@@ -7768,8 +7758,30 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
       +'</tr>';
     html+='</table></div>';
   }
-  html+='<div style="font-size:12px;color:#888;margin-bottom:8px">Nur Unterordner <b>Dispofotos</b> &amp; <b>Gagenabrechnungen</b> werden importiert. KI-Analyse danach einzeln per Knopfdruck.</div>';
-  html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-size:11px;color:#1e40af">&#x26A0;&#xFE0F; <b>PDFs (Gagenabrechnungen)</b> bitte über <b>+ Dateien</b> importieren — iOS-Safari liefert PDFs nicht über den Ordner-Scan.</div>';
+  // Fehlende Dateien: im Ordner vorhanden aber NICHT in importedFiles UND NICHT in neu
+  if(allFiles && allFiles.length){
+    var normName=function(n){return(n||'').toLowerCase().replace(/\.[^.]+$/,'').trim();};
+    var importedSet={};
+    (db.importedFiles||[]).forEach(function(n){if(n){importedSet[n]=true;importedSet[normName(n)]=true;}});
+    var neuSet={};
+    (files||[]).forEach(function(f){neuSet[f.name]=true;neuSet[normName(f.name)]=true;});
+    // auch Queue
+    (_dokQueue||[]).forEach(function(f){neuSet[f.name]=true;neuSet[normName(f.name)]=true;});
+    var fehlende=allFiles.filter(function(f){
+      return !importedSet[f.name] && !importedSet[normName(f.name)]
+          && !neuSet[f.name] && !neuSet[normName(f.name)];
+    });
+    if(fehlende.length){
+      html+='<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
+      html+='<div style="font-size:10px;font-weight:800;color:#dc2626;margin-bottom:6px;letter-spacing:.5px">⚠ '+fehlende.length+' DATEI'+(fehlende.length>1?'EN':'')+' NICHT IN IMPORTLISTE</div>';
+      fehlende.slice(0,10).forEach(function(f){
+        html+='<div style="font-size:11px;color:#991b1b;padding:2px 0;word-break:break-all">• '+esc(f.name)+'</div>';
+      });
+      if(fehlende.length>10) html+='<div style="font-size:11px;color:#991b1b;padding:2px 0">... und '+(fehlende.length-10)+' weitere</div>';
+      html+='</div>';
+    }
+  }
+  html+='<div style="font-size:12px;color:#888;margin-bottom:8px">Nur Unterordner <b>Dispofotos</b>, <b>Gagenabrechnungen</b> &amp; <b>Ausgaben</b> werden importiert.</div>';
 
   box.innerHTML=html;
 
