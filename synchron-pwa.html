@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '463';
+  if(el) el.textContent = '464';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11428,12 +11428,6 @@ function dokAnalyseOne(){
     // Overlay entfernen
     var ol = document.getElementById('_analyse-overlay');
     if(ol && ol.parentNode) ol.parentNode.removeChild(ol);
-    // dataURL sofort freigeben nach Analyse — Speicher für nächstes Dok
-    // Split-Original behalten solange Kinder noch unbestätigt
-    var nochGebraucht = (db.dokumente||[]).some(function(x){
-      return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
-    });
-    if(!nochGebraucht && d.typ && d.typ !== 'offen') d.dataURL = null;
     save(db);
     rDokumente();
     // Panel kurz schließen + neu öffnen → zwingt iOS zu frischem Render
