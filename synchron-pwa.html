@@ -739,7 +739,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div id="dok-tab-dispo" onclick="dokSetTab('dispo')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Dispos</div>
     <div id="dok-tab-abrechn" onclick="dokSetTab('abrechn')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Abrechnungen</div>
     <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Ausgaben</div>
-    <div id="dok-tab-offen" onclick="dokSetTab('offen')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Offen</div>
+
   </div>
   <div id="dokumente-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom) + 90px)"></div>
 </div>
@@ -1720,15 +1720,15 @@ var db=load();
     try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
     return; // Migration überspringen — importedFiles bleibt leer
   }
-  // Schritt 1: bestätigte Docs eintragen
+  // Schritt 1: bestätigte Docs MIT Kalendertermin eintragen — Regel: terminId erforderlich
   (db.dokumente||[]).forEach(function(d){
-    if(d.bestaetigt && d.dateiname && db.importedFiles.indexOf(d.dateiname) < 0){
+    if(d.bestaetigt && d.terminId && d.dateiname && db.importedFiles.indexOf(d.dateiname) < 0){
       db.importedFiles.push(d.dateiname);
     }
   });
-  // Schritt 2: _archivLog eintragen
+  // Schritt 2: _archivLog eintragen — nur Einträge mit terminId (seit Build 455 garantiert)
   (db._archivLog||[]).forEach(function(e){
-    if(e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
+    if(e.terminId && e.dateiname && e.dateiname.length > 5 && db.importedFiles.indexOf(e.dateiname) < 0){
       db.importedFiles.push(e.dateiname);
     }
   });
@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '455';
+  if(el) el.textContent = '460';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7686,9 +7686,9 @@ function dokGotFilesFolder(inp){
   (db.importedFiles||[]).forEach(function(n){
     if(n){ _impSet[n]=true; _impSet[normName(n)]=true; }
   });
-  // aktive Docs (noch nicht bestätigt) auch als bekannt zählen
+  // nur bestätigte Docs als bekannt — offene/unbestätigte zählen nicht
   (db.dokumente||[]).forEach(function(d){
-    if(d.dateiname){ _impSet[d.dateiname]=true; _impSet[normName(d.dateiname)]=true; }
+    if(d.dateiname && d.bestaetigt){ _impSet[d.dateiname]=true; _impSet[normName(d.dateiname)]=true; }
   });
   allInFolder.forEach(function(f){
     if(_impSet[f.name]||_impSet[normName(f.name)]){
@@ -7902,10 +7902,19 @@ function _dokQueueBannerShow(){
     // Bereits vorhandene Docs rausfiltern (koennte seit erstem Scan bestaetigt worden sein)
     var normN=function(n){return(n||'').toLowerCase().replace(/\.[^.]+$/,'').trim();};
     var exNames={},exNorm={};
-    (db.dokumente||[]).forEach(function(d){if(d.dateiname){exNames[d.dateiname]=true;exNorm[normN(d.dateiname)]=true;}});
+    // Nur bestätigte Docs als "bekannt" — unbestätigte aus Vorbatch nicht blockieren
+    (db.dokumente||[]).forEach(function(d){if(d.dateiname && d.bestaetigt){exNames[d.dateiname]=true;exNorm[normN(d.dateiname)]=true;}});
     (db.importedFiles||[]).forEach(function(n){if(n){exNames[n]=true;exNorm[normN(n)]=true;}});
     var filtered=batch.filter(function(f){return !exNames[f.name]&&!exNorm[normN(f.name)];});
     if(!filtered.length){showToast('Alle Dokumente bereits importiert');_dokQueueBannerShow();return;}
+    // Nicht-bestätigte aus Vorbatch bleiben als "offen" in db.dokumente — sichtbar im Offen-Tab
+    // Duplikate (gleicher Dateiname, nicht bestätigt) entfernen damit neuer Batch sauber lädt
+    var filteredNames={};
+    filtered.forEach(function(f){filteredNames[f.name]=true;filteredNames[normN(f.name)]=true;});
+    db.dokumente=(db.dokumente||[]).filter(function(d){
+      if(!d.bestaetigt && d.dateiname && (filteredNames[d.dateiname]||filteredNames[normN(d.dateiname)])) return false;
+      return true;
+    });
     _dokOrdnerVorschau(filtered, batch.length-filtered.length, katFn);
   };
 }
