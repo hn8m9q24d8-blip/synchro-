@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '446';
+  if(el) el.textContent = '447';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7673,20 +7673,25 @@ function dokGotFilesFolder(inp){
   }
 
   // Vorschau-Sheet anzeigen BEVOR importiert wird
-  // Statistik pro Kategorie für Kontrollrechnung — VOR Batch-Aufteilung (vollständige Zahlen)
+  // Statistik pro Kategorie für Kontrollrechnung
+  // WICHTIG: allInFolder (vor MIME-Filter) für echte Gesamtzahl verwenden
   var statsGesamt={dispo:0,abrechn:0,ausgabe:0};
   var neuStats={dispo:0,abrechn:0,ausgabe:0};
   var statsBekannt={dispo:0,abrechn:0,ausgabe:0};
-  files.forEach(function(f){
+  allInFolder.forEach(function(f){  // ← rohe Gesamtzahl inkl. unsupported Formate
     var k=kategorieAusOrdner(f)||'sonstig';
     if(statsGesamt[k]!==undefined) statsGesamt[k]++;
   });
-  neu.forEach(function(f){ // hier noch vollständiges neu-Array (vor Batch-Slice)
+  // neu enthält nur MIME-gefilterte neue Dateien — für Neu-Spalte ok
+  var _neuAll = files.filter(function(f){
+    return !existingNames[f.name] && !existingNamesNorm[normName(f.name)];
+  });
+  _neuAll.forEach(function(f){
     var k=kategorieAusOrdner(f)||'sonstig';
     if(neuStats[k]!==undefined) neuStats[k]++;
   });
   Object.keys(statsGesamt).forEach(function(k){ statsBekannt[k]=statsGesamt[k]-neuStats[k]; });
-  _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, files.length, statsGesamt, statsBekannt, neuStats, files);
+  _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, allInFolder.length, statsGesamt, statsBekannt, neuStats, allInFolder);
   inp.value='';
 }
 
