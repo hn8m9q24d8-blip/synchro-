@@ -1703,7 +1703,7 @@ function save(d){
         if(dok.dataURL && dok.dataURL.length > 50000) dok.dataURL = null;
       });
       localStorage.setItem(DBK, JSON.stringify(slim));
-      showToast('\u26a0 Speicher fast voll \u2013 Fotos werden nach Best\u00e4tigung gel\u00f6scht');
+      showToast('⚠ Speicher fast voll — Dokumente jetzt bestätigen damit Fotos freigegeben werden');
     } catch(e2) {
       showToast('\u274c Speicher voll! Bitte Dokumente best\u00e4tigen oder l\u00f6schen.');
     }
@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '460';
+  if(el) el.textContent = '463';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3030,7 +3030,8 @@ function saveMergeChanges(){
       }
       dok.bestaetigt = true;
       dok.awaitConfirm = false;
-      dok._pendingDelete = true; // Foto löschen wenn Termin gespeichert
+      dok.dataURL = null; // Vollbild sofort freigeben — Speicher
+      dok._pendingDelete = true; // thumb auch löschen beim nächsten saveMerge
       _archiveDateiname(dok.dateiname||dok.beschr, ctid, dok.typ||'abrechn');
       _abT.abgerechnet = true;
       if(dok.dateiname||dok.beschr) _abT.abrechn_dateiname = dok.dateiname||'';
@@ -8004,7 +8005,7 @@ function dokBestaetigen(){
   var _dokNochGebraucht = (db.dokumente||[]).some(function(x){
     return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
   });
-  if(!_dokNochGebraucht){ d.dataURL=null; d.thumb=null; }
+  if(!_dokNochGebraucht){ d.dataURL=null; } // thumb behalten für Miniaturansicht
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, d.typ||null);
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
@@ -8131,6 +8132,11 @@ function resizeImageB64(dataURL, maxPx, quality, cb){
 }
 
 function dokAnalyseDoc(d, key, cb){
+  // Bild nicht mehr im Speicher — iOS hat es verworfen
+  if(!d.dataURL && d.mime!=='application/pdf'){
+    showToast('⚠ Bild nicht mehr im Speicher — bitte Dokument löschen und neu einlesen');
+    if(cb) cb(); return;
+  }
   var lernEx='';
   // Lernbeispiele aus bestaetigten Dokumenten
   var confirmed=(db.dokumente||[]).filter(function(x){return x.bestaetigt&&x.typ==='dispo'&&x.studio;}).slice(-3);
@@ -8592,9 +8598,9 @@ function dokAnalyseDoc(d, key, cb){
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
       // Diagnose: KI hat gültige Antwort aber keine Felder erkannt
-      if(d.typ==='dispo' && !j.datum && !j.studio && !j.titel && !j.rolle){
-        showToast('⚠ KI hat Dokument nicht gelesen — bitte nochmal versuchen');
-        console.warn('[KI LEER]', 'typ=dispo aber keine Felder. Raw:', txt&&txt.slice(0,300));
+      if((d.typ==='dispo'||d.typ==='abrechn') && !j.datum && !j.studio && !j.titel && !j.rolle){
+        showToast('⚠ Bild nicht lesbar — nochmal analysieren');
+        console.warn('[KI LEER]', 'Raw:', txt&&txt.slice(0,300));
       }
       d.studio  = (function(s){
         if(!s) return null;
@@ -11422,10 +11428,15 @@ function dokAnalyseOne(){
     // Overlay entfernen
     var ol = document.getElementById('_analyse-overlay');
     if(ol && ol.parentNode) ol.parentNode.removeChild(ol);
+    // dataURL sofort freigeben nach Analyse — Speicher für nächstes Dok
+    // Split-Original behalten solange Kinder noch unbestätigt
+    var nochGebraucht = (db.dokumente||[]).some(function(x){
+      return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
+    });
+    if(!nochGebraucht && d.typ && d.typ !== 'offen') d.dataURL = null;
     save(db);
     rDokumente();
     // Panel kurz schließen + neu öffnen → zwingt iOS zu frischem Render
-    // (behebt: leerer Body nach Analyse + Button nicht tippbar)
     dokDetailClose();
     setTimeout(function(){
       dokOpenDetail(_analyseDocId);
