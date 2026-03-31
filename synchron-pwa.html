@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '451';
+  if(el) el.textContent = '455';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2453,9 +2453,11 @@ function openDetail(id){
       gvlHtml+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';
       t.gvl_takes_detail.forEach(function(td, ei){
         var fs=String(td.folge);
+        var isFilmEntry = td.folge===0;
         var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
         var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
-        gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'          +'<div style="font-size:9px;font-weight:700;color:#7c3aed">S'+sNr+' F'+fNr+'</div>'          +'<div style="font-size:14px;font-weight:900;color:#6d28d9">'+td.takes+'</div>'          +'</div>';
+        var chipLabel = isFilmEntry ? '🎬' : ('S'+sNr+' F'+fNr);
+        gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:700;color:#7c3aed">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:900;color:#6d28d9">'+td.takes+'</div>'+'</div>';
       });
       gvlHtml+='</div>';
       gvlHtml+='<div style="font-size:10px;color:#888">Gesamt: <b>'+(t.gvl_takes||'')+'</b> Takes</div>';
@@ -7167,8 +7169,6 @@ function syncFolderGotFiles(inp){
             beschr:null, datum:null, studio:null,
             terminId:null, ausgabeId:null
           });
-          if(!db.importedFiles) db.importedFiles=[];
-          if(file.name && db.importedFiles.indexOf(file.name)<0) db.importedFiles.push(file.name);
           loaded++;
           if(lbl) lbl.textContent = loaded+'/'+newFiles.length+' geladen...';
           loadNext(idx+1);
@@ -7221,8 +7221,6 @@ function syncDokGotFiles(inp){
             typ:null, addedAt:new Date().toISOString(),
             beschr:null, datum:null, studio:null, terminId:null, ausgabeId:null});
           // Dateiname sofort in importedFiles — verhindert Doppel-Import bei erneutem Scan
-          if(!db.importedFiles) db.importedFiles=[];
-          if(file.name && db.importedFiles.indexOf(file.name)<0) db.importedFiles.push(file.name);
           loaded++;
           if(lbl) lbl.textContent=loaded+'/'+files.length+' geladen...';
           if(loaded===files.length){
@@ -7858,8 +7856,6 @@ function _dokImportAndAnalyse(files, katFn){
       var dataURL=e.target.result;
       var id='dok'+Date.now()+Math.random().toString(36).slice(2,6);
       var typHint=katFn(file);
-      if(!db.importedFiles) db.importedFiles=[];
-      if(file.name && db.importedFiles.indexOf(file.name)<0) db.importedFiles.push(file.name);
       db.dokumente.push({
         id:id, dateiname:file.name, mime:mime, dataURL:dataURL,
         typ: typHint||null,
@@ -7903,7 +7899,14 @@ function _dokQueueBannerShow(){
     var batch = _dokQueue.splice(0, MAX_BATCH);
     var katFn = _dokQueueKatFn || function(){ return null; };
     banner.remove();
-    _dokOrdnerVorschau(batch, 0, katFn);
+    // Bereits vorhandene Docs rausfiltern (koennte seit erstem Scan bestaetigt worden sein)
+    var normN=function(n){return(n||'').toLowerCase().replace(/\.[^.]+$/,'').trim();};
+    var exNames={},exNorm={};
+    (db.dokumente||[]).forEach(function(d){if(d.dateiname){exNames[d.dateiname]=true;exNorm[normN(d.dateiname)]=true;}});
+    (db.importedFiles||[]).forEach(function(n){if(n){exNames[n]=true;exNorm[normN(n)]=true;}});
+    var filtered=batch.filter(function(f){return !exNames[f.name]&&!exNorm[normN(f.name)];});
+    if(!filtered.length){showToast('Alle Dokumente bereits importiert');_dokQueueBannerShow();return;}
+    _dokOrdnerVorschau(filtered, batch.length-filtered.length, katFn);
   };
 }
 
@@ -9195,7 +9198,7 @@ function dokOpenDetail(id){
   }
   var img = document.getElementById('dok-detail-img');
   var isNotAnalysed = !d.typ || d.typ==='offen' || d.typ==='sonstig';
-  if(d.dataURL && d.mime!=='application/pdf' && isNotAnalysed){
+  if(d.dataURL && d.mime!=='application/pdf' && isNotAnalysed && !d.awaitConfirm){
     img.src=d.dataURL; img.style.display='block';
   } else { img.style.display='none'; }
 
@@ -10636,11 +10639,13 @@ function dokBestaetigenMonat(dokId){
 // Dateiname dauerhaft als "bereits importiert" markieren
 function _archiveDateiname(dateiname, terminId, typ){
   if(!dateiname) return;
-  // importedFiles: einfache String-Liste gegen Duplikat-Import
-  if(!db.importedFiles) db.importedFiles = [];
-  if(db.importedFiles.indexOf(dateiname) < 0){
-    db.importedFiles.push(dateiname);
-    if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
+  // importedFiles: nur wenn Termin zugeordnet — Regel: erst nach Kalenderverknüpfung als "eingepflegt" gelten
+  if(terminId){
+    if(!db.importedFiles) db.importedFiles = [];
+    if(db.importedFiles.indexOf(dateiname) < 0){
+      db.importedFiles.push(dateiname);
+      if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
+    }
   }
   // _archivLog: mit terminId UND typ — damit Ampel sicher zwischen Dispo/Abrechn unterscheidet
   if(terminId){
