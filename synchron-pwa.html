@@ -1792,7 +1792,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '467';
+  if(el) el.textContent = '473';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2481,7 +2481,7 @@ function openDetail(id){
     +'<div class="info-card-header"><span>Takes</span></div>'
     +'<div style="display:flex;align-items:center;justify-content:center;gap:20px;padding:16px 0">'
     +'<div onclick="decrementTake()" style="width:44px;height:44px;border-radius:50%;background:var(--ink6);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent">−</div>'
-    +'<div id="takes-count" style="font-size:48px;font-weight:900;color:var(--blue);min-width:60px;text-align:center">'+total+'</div>'
+    +'<div id="takes-count" onclick="takesDirectEdit()" style="font-size:48px;font-weight:900;color:var(--blue);min-width:60px;text-align:center;cursor:pointer;border-radius:10px;padding:0 8px" title="Antippen zum Eingeben">'+total+'</div>'
     +'<div onclick="incrementTake()" style="width:44px;height:44px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent">+</div>'
     +'</div>'
     +'</div>'
@@ -3951,6 +3951,37 @@ function decrementTake(){
   openDetail(ctid);
   rTermine();updateBadge();
 }
+
+function takesDirectEdit(){
+  if(!ctid) return;
+  var t = db.termine.find(function(x){return x.id===ctid;});
+  if(!t) return;
+  var el = document.getElementById('takes-count');
+  if(!el) return;
+  var cur = parseInt(t.takes)||0;
+  var inp = document.createElement('input');
+  inp.type = 'number';
+  inp.min = '0';
+  inp.value = cur;
+  inp.style.cssText = 'font-size:42px;font-weight:900;color:var(--blue);width:100px;text-align:center;border:none;border-bottom:3px solid var(--blue);background:transparent;outline:none;font-family:inherit;padding:0';
+  el.innerHTML = '';
+  el.appendChild(inp);
+  inp.focus();
+  inp.select();
+  function commit(){
+    var val = Math.max(0, parseInt(inp.value)||0);
+    var diff = val - cur;
+    t.takes = val;
+    if(diff !== 0) _adjustGvlLastFolge(t, diff);
+    save(db); openDetail(ctid); rTermine(); updateBadge();
+  }
+  inp.onblur = commit;
+  inp.onkeydown = function(e){
+    if(e.key==='Enter'){ inp.blur(); }
+    if(e.key==='Escape'){ el.textContent=cur; }
+  };
+}
+
 
 function toggleTake(id,i){
   var t=db.termine.find(function(x){return x.id===id;});
@@ -8884,7 +8915,7 @@ function dokAnalyseDoc(d, key, cb){
     }
   } else {
     // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
-    resizeImageB64(d.dataURL, 2000, 0.90, function(resized){
+    resizeImageB64(d.dataURL, 1200, 0.82, function(resized){
       showToast('⏳ Sende '+Math.round(resized.length*0.75/1024)+'KB…');
       _sendToAPI(resized);
     });
@@ -9350,6 +9381,7 @@ function dokOpenDetail(id){
             : '')
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
         d.gvl_takes_detail.forEach(function(e, ei){
+          var isFilm = e.folge===0;
           var folgeStr=String(e.folge);
           var staffelNr, folgeNr;
           if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
@@ -9357,7 +9389,7 @@ function dokOpenDetail(id){
           else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
           else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
           body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
-            +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed #e5e7eb;margin-bottom:2px;padding-bottom:2px">S'+staffelNr+' F'+folgeNr+' ✎</div>'
+            +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed #e5e7eb;margin-bottom:2px;padding-bottom:2px">'+(isFilm?'🎬 Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
             +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
             +'</div>';
         });
@@ -10597,6 +10629,7 @@ function dokBestaetigenMonat(dokId){
   // Abrechnung als Ganzes bestätigen
   d.bestaetigt=true;
   d.awaitConfirm=false;
+  d.dataURL=null; // RAM freigeben
   var allSessionsDone = d.sessions.every(function(s){return s._done;});
   if(allSessionsDone){
     // dataURL NUR löschen wenn kein anderes Split-Dok mehr drauf verweist
@@ -10858,6 +10891,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
   }
   d.bestaetigt = true;
   d.awaitConfirm = false;
+  d.dataURL = null; // RAM freigeben
   // _archivLog jetzt schon — Foto-Löschung kommt später via _pendingDelete
   _archiveDateiname(d.dateiname||d.beschr, terminId, d.typ||'dispo');
   // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
