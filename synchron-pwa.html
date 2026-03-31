@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '448';
+  if(el) el.textContent = '449';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7683,31 +7683,28 @@ function dokGotFilesFolder(inp){
     var k=kategorieAusOrdner(f)||'sonstig';
     if(statsGesamt[k]!==undefined) statsGesamt[k]++;
   });
-  // Bestätigt+zugeordnet aus _archivLog
-  var _archivSetK={};
-  (db._archivLog||[]).forEach(function(e){
-    if(e.dateiname && e.terminId) _archivSetK[e.dateiname]=true;
+  // Bekannt = in importedFiles (zuverlässig: befüllt bei Import, geleert bei Löschung)
+  var _impSet={};
+  (db.importedFiles||[]).forEach(function(n){
+    if(n){ _impSet[n]=true; _impSet[normName(n)]=true; }
   });
+  // aktive Docs (noch nicht bestätigt) auch als bekannt zählen
   (db.dokumente||[]).forEach(function(d){
-    if(d.dateiname) _archivSetK[d.dateiname]=true; // aktiv in Bearbeitung = auch zählen
+    if(d.dateiname){ _impSet[d.dateiname]=true; _impSet[normName(d.dateiname)]=true; }
   });
   allInFolder.forEach(function(f){
-    if(_archivSetK[f.name]){
+    if(_impSet[f.name]||_impSet[normName(f.name)]){
       var k=kategorieAusOrdner(f)||'sonstig';
       if(statsBekannt[k]!==undefined) statsBekannt[k]++;
     }
   });
-  // Neu = im Ordner aber weder bestätigt noch aktiv noch in Warteschlange
+  // Neu = im Ordner aber nicht in importedFiles
   var _neuAll = files.filter(function(f){
     return !existingNames[f.name] && !existingNamesNorm[normName(f.name)];
   });
   _neuAll.forEach(function(f){
     var k=kategorieAusOrdner(f)||'sonstig';
     if(neuStats[k]!==undefined) neuStats[k]++;
-  });
-  // statsBekannt aus Differenz für Ordner ohne _archivLog Daten als Fallback
-  Object.keys(statsGesamt).forEach(function(k){
-    if(statsBekannt[k]===undefined) statsBekannt[k]=0;
   });
   _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, allInFolder.length, statsGesamt, statsBekannt, neuStats, allInFolder);
   inp.value='';
@@ -7781,32 +7778,22 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
       +'</tr>';
     html+='</table></div>';
   }
-  // Fehlende Dateien: im Ordner vorhanden aber NICHT in _archivLog bestätigt+zugeordnet
+  // Fehlende Dateien: im Ordner vorhanden aber NICHT in importedFiles
   if(allFiles && allFiles.length){
     var normN=function(n){return(n||'').toLowerCase().replace(/\.[^.]+$/,'').trim();};
-    // _archivLog: Dateinamen die wirklich bestätigt UND einem Termin zugeordnet wurden
-    var archivSet={};
-    (db._archivLog||[]).forEach(function(e){
-      if(e.dateiname && e.terminId){
-        archivSet[e.dateiname]=true;
-        archivSet[normN(e.dateiname)]=true;
-      }
+    var impSet2={};
+    (db.importedFiles||[]).forEach(function(n){
+      if(n){impSet2[n]=true;impSet2[normN(n)]=true;}
     });
-    // auch aktive unbestätigte Dokumente zählen (noch in Bearbeitung)
-    var aktivSet={};
     (db.dokumente||[]).forEach(function(d){
-      if(d.dateiname){aktivSet[d.dateiname]=true;aktivSet[normN(d.dateiname)]=true;}
+      if(d.dateiname){impSet2[d.dateiname]=true;impSet2[normN(d.dateiname)]=true;}
     });
-    // neu (gerade im Scan gefunden) — werden jetzt importiert
+    // neu (gerade im Scan gefunden)
     var neuSet={};
     (files||[]).forEach(function(f){neuSet[f.name]=true;});
     (_dokQueue||[]).forEach(function(f){neuSet[f.name]=true;});
     var fehlende=allFiles.filter(function(f){
-      var name=f.name, nn=normN(f.name);
-      // Datei fehlt wenn: nicht bestätigt+zugeordnet, nicht aktiv in Bearbeitung, nicht gerade neu
-      return !archivSet[name] && !archivSet[nn]
-          && !aktivSet[name] && !aktivSet[nn]
-          && !neuSet[name];
+      return !impSet2[f.name] && !impSet2[normN(f.name)] && !neuSet[f.name];
     });
     if(fehlende.length){
       html+='<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
