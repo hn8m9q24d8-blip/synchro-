@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '449';
+  if(el) el.textContent = '450';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4377,6 +4377,15 @@ function importData(inp){
       if(!parsed.termine&&!parsed.profil){showToast('⚠ Ungültige Backup-Datei');return;}
       if(!confirm('Backup importieren? Aktuelle Daten werden überschrieben.'))return;
       db=parsed;
+      // importedFiles neu aufbauen — alle echten Dokumente (inkl. Dispos per Kamera)
+      var saubereFiles=[];
+      (db.dokumente||[]).forEach(function(d){
+        if(d.dateiname && saubereFiles.indexOf(d.dateiname)<0) saubereFiles.push(d.dateiname);
+      });
+      (db.abrechnungen||[]).forEach(function(a){
+        if(a.dateiname && saubereFiles.indexOf(a.dateiname)<0) saubereFiles.push(a.dateiname);
+      });
+      db.importedFiles = saubereFiles;
       save(db);
       rTermine();updateBadge();rProfil();rDispos();rGVL();rDokumente();
       showToast('✓ Backup importiert: '+((parsed.termine||[]).length)+' Termine');
