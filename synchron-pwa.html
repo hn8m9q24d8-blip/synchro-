@@ -1693,19 +1693,25 @@ function ddb(){
 }
 function load(){try{return JSON.parse(localStorage.getItem(DBK))||ddb();}catch(e){return ddb();}}
 function save(d){
+  // dataURLs unbestaetigter Docs NIE in localStorage schreiben — nur im Memory halten
+  // Verhindert localStorage-Ueberlauf der Bilder killt bevor sie analysiert wurden
+  var slim = JSON.parse(JSON.stringify(d));
+  if(slim.dokumente) slim.dokumente.forEach(function(dok){
+    if(!dok.bestaetigt && dok.dataURL) dok.dataURL = null;
+  });
   try {
-    localStorage.setItem(DBK, JSON.stringify(d));
+    localStorage.setItem(DBK, JSON.stringify(slim));
   } catch(e) {
-    // localStorage voll — Fallback ohne dataURLs
+    // Immer noch voll (viele thumbs etc.) — thumbs auch strippen
     try {
-      var slim = JSON.parse(JSON.stringify(d));
       if(slim.dokumente) slim.dokumente.forEach(function(dok){
-        if(dok.dataURL && dok.dataURL.length > 50000) dok.dataURL = null;
+        if(dok.dataURL) dok.dataURL = null;
+        if(dok.thumb && dok.thumb.length > 5000) dok.thumb = null;
       });
       localStorage.setItem(DBK, JSON.stringify(slim));
-      showToast('⚠ Speicher fast voll — Dokumente jetzt bestätigen damit Fotos freigegeben werden');
+      showToast('\u26a0 Speicher fast voll — bitte alte Dokumente löschen');
     } catch(e2) {
-      showToast('\u274c Speicher voll! Bitte Dokumente best\u00e4tigen oder l\u00f6schen.');
+      showToast('\u274c Speicher voll! Bitte Dokumente löschen.');
     }
   }
 }
@@ -1786,7 +1792,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '464';
+  if(el) el.textContent = '467';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7843,10 +7849,10 @@ function _dokImportAndAnalyse(files, katFn){
 
   function loadNext(idx){
     if(idx>=files.length){
-      save(db); rDokumente();
+      save(db);
+      rDokumente();
       switchView('dokumente');
       showToast('✓ '+newIds.length+' Dokument'+(newIds.length>1?'e':'')+' importiert – jetzt einzeln analysieren');
-      // Warteschlange-Banner zeigen falls noch Dokumente warten
       setTimeout(_dokQueueBannerShow, 500);
       return;
     }
@@ -9241,7 +9247,12 @@ function dokOpenDetail(id){
       body+=thumbHtml;
       body+='</div>';
     }
-    body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔍 KI-Analyse starten</button>';
+    if(d.dataURL){
+      body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔍 KI-Analyse starten</button>';
+    } else {
+      body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#92400e">⚠ Bild nicht im Speicher — App neu gestartet. Bitte neu einlesen.</div>';
+      body+='<label style="width:100%;display:block"><input type="file" accept="image/*,application/pdf" style="display:none" onchange="dokReuploadFile(this,\''+d.id+'\')"><div style="width:100%;background:#f5f5f5;color:#374151;border:1.5px solid #d1d5db;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation;box-sizing:border-box">📁 Datei neu einlesen</div></label>';
+    }
 
 
   // ── STATE 2: ANALYSIERT, WARTET AUF BESTÄTIGUNG ──
@@ -11438,6 +11449,22 @@ function dokAnalyseOne(){
     }, 80);
   });
 }
+
+function dokReuploadFile(inp, dokId){
+  var file = inp.files[0];
+  if(!file) return;
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    d.dataURL = e.target.result;
+    d.mime = file.type || 'image/jpeg';
+    showToast('✓ Bild geladen — jetzt analysieren');
+    dokOpenDetail(dokId);
+  };
+  reader.readAsDataURL(file);
+}
+
 
 function dokDeleteOne(){
   var d = (db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
