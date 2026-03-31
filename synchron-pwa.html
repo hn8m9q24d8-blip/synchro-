@@ -1786,7 +1786,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '447';
+  if(el) el.textContent = '448';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7678,11 +7678,26 @@ function dokGotFilesFolder(inp){
   var statsGesamt={dispo:0,abrechn:0,ausgabe:0};
   var neuStats={dispo:0,abrechn:0,ausgabe:0};
   var statsBekannt={dispo:0,abrechn:0,ausgabe:0};
-  allInFolder.forEach(function(f){  // ← rohe Gesamtzahl inkl. unsupported Formate
+  // Gesamtzahl aus allInFolder (roher Scan inkl. unsupported)
+  allInFolder.forEach(function(f){
     var k=kategorieAusOrdner(f)||'sonstig';
     if(statsGesamt[k]!==undefined) statsGesamt[k]++;
   });
-  // neu enthält nur MIME-gefilterte neue Dateien — für Neu-Spalte ok
+  // Bestätigt+zugeordnet aus _archivLog
+  var _archivSetK={};
+  (db._archivLog||[]).forEach(function(e){
+    if(e.dateiname && e.terminId) _archivSetK[e.dateiname]=true;
+  });
+  (db.dokumente||[]).forEach(function(d){
+    if(d.dateiname) _archivSetK[d.dateiname]=true; // aktiv in Bearbeitung = auch zählen
+  });
+  allInFolder.forEach(function(f){
+    if(_archivSetK[f.name]){
+      var k=kategorieAusOrdner(f)||'sonstig';
+      if(statsBekannt[k]!==undefined) statsBekannt[k]++;
+    }
+  });
+  // Neu = im Ordner aber weder bestätigt noch aktiv noch in Warteschlange
   var _neuAll = files.filter(function(f){
     return !existingNames[f.name] && !existingNamesNorm[normName(f.name)];
   });
@@ -7690,7 +7705,10 @@ function dokGotFilesFolder(inp){
     var k=kategorieAusOrdner(f)||'sonstig';
     if(neuStats[k]!==undefined) neuStats[k]++;
   });
-  Object.keys(statsGesamt).forEach(function(k){ statsBekannt[k]=statsGesamt[k]-neuStats[k]; });
+  // statsBekannt aus Differenz für Ordner ohne _archivLog Daten als Fallback
+  Object.keys(statsGesamt).forEach(function(k){
+    if(statsBekannt[k]===undefined) statsBekannt[k]=0;
+  });
   _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, allInFolder.length, statsGesamt, statsBekannt, neuStats, allInFolder);
   inp.value='';
 }
@@ -7763,27 +7781,44 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
       +'</tr>';
     html+='</table></div>';
   }
-  // Fehlende Dateien: im Ordner vorhanden aber NICHT in importedFiles UND NICHT in neu
+  // Fehlende Dateien: im Ordner vorhanden aber NICHT in _archivLog bestätigt+zugeordnet
   if(allFiles && allFiles.length){
-    var normName=function(n){return(n||'').toLowerCase().replace(/\.[^.]+$/,'').trim();};
-    var importedSet={};
-    (db.importedFiles||[]).forEach(function(n){if(n){importedSet[n]=true;importedSet[normName(n)]=true;}});
+    var normN=function(n){return(n||'').toLowerCase().replace(/\.[^.]+$/,'').trim();};
+    // _archivLog: Dateinamen die wirklich bestätigt UND einem Termin zugeordnet wurden
+    var archivSet={};
+    (db._archivLog||[]).forEach(function(e){
+      if(e.dateiname && e.terminId){
+        archivSet[e.dateiname]=true;
+        archivSet[normN(e.dateiname)]=true;
+      }
+    });
+    // auch aktive unbestätigte Dokumente zählen (noch in Bearbeitung)
+    var aktivSet={};
+    (db.dokumente||[]).forEach(function(d){
+      if(d.dateiname){aktivSet[d.dateiname]=true;aktivSet[normN(d.dateiname)]=true;}
+    });
+    // neu (gerade im Scan gefunden) — werden jetzt importiert
     var neuSet={};
-    (files||[]).forEach(function(f){neuSet[f.name]=true;neuSet[normName(f.name)]=true;});
-    // auch Queue
-    (_dokQueue||[]).forEach(function(f){neuSet[f.name]=true;neuSet[normName(f.name)]=true;});
+    (files||[]).forEach(function(f){neuSet[f.name]=true;});
+    (_dokQueue||[]).forEach(function(f){neuSet[f.name]=true;});
     var fehlende=allFiles.filter(function(f){
-      return !importedSet[f.name] && !importedSet[normName(f.name)]
-          && !neuSet[f.name] && !neuSet[normName(f.name)];
+      var name=f.name, nn=normN(f.name);
+      // Datei fehlt wenn: nicht bestätigt+zugeordnet, nicht aktiv in Bearbeitung, nicht gerade neu
+      return !archivSet[name] && !archivSet[nn]
+          && !aktivSet[name] && !aktivSet[nn]
+          && !neuSet[name];
     });
     if(fehlende.length){
       html+='<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
-      html+='<div style="font-size:10px;font-weight:800;color:#dc2626;margin-bottom:6px;letter-spacing:.5px">⚠ '+fehlende.length+' DATEI'+(fehlende.length>1?'EN':'')+' NICHT IN IMPORTLISTE</div>';
+      html+='<div style="font-size:10px;font-weight:800;color:#dc2626;margin-bottom:6px;letter-spacing:.5px">⚠ '+fehlende.length+' NOCH NICHT EINGEPFLEGT</div>';
       fehlende.slice(0,10).forEach(function(f){
         html+='<div style="font-size:11px;color:#991b1b;padding:2px 0;word-break:break-all">• '+esc(f.name)+'</div>';
       });
       if(fehlende.length>10) html+='<div style="font-size:11px;color:#991b1b;padding:2px 0">... und '+(fehlende.length-10)+' weitere</div>';
+      html+='<div style="font-size:10px;color:#92400e;margin-top:6px">Diese Dateien werden beim nächsten Import automatisch erkannt.</div>';
       html+='</div>';
+    } else {
+      html+='<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#15803d;font-weight:700">✓ Alle Dateien bestätigt &amp; eingepflegt</div>';
     }
   }
   html+='<div style="font-size:12px;color:#888;margin-bottom:8px">Nur Unterordner <b>Dispofotos</b>, <b>Gagenabrechnungen</b> &amp; <b>Ausgaben</b> werden importiert.</div>';
