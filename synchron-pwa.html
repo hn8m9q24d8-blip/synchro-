@@ -1792,7 +1792,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '473';
+  if(el) el.textContent = '474';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5873,7 +5873,7 @@ function gvlBuildData(year){
     }
   });
   Object.values(disposByTermin).forEach(function(d){
-    var key=(d.titel||d.studio||'Unbekannt').trim();
+    var key=(d.titel||d.studio||'Unbekannt').trim().toLowerCase();
     if(!prods[key]) prods[key]={
       titel:key, studio:d.studio||'', rolle:d.rolle||'',
       staffeln:{}, takes_gesamt:0, termine_count:0, dokCount:0,
@@ -5947,7 +5947,7 @@ function gvlBuildData(year){
     if(hatDispoDok) return;
     var takes=parseInt(t.gvl_takes||t.takes)||0;
     if(!takes) return;
-    var key=(t.titel||t.studio||'Unbekannt').trim();
+    var key=(t.titel||t.studio||'Unbekannt').trim().toLowerCase();
     if(!prods[key]) prods[key]={
       titel:key, studio:t.studio||'', rolle:t.rolle||'',
       staffeln:{}, takes_gesamt:0, termine_count:0, dokCount:0,
@@ -13125,7 +13125,9 @@ function rZahlungen(){
     var prods={};
     all.forEach(function(t){
       var key=(t.titel||t.studio||'Unbekannt').trim();
-      if(!prods[key]) prods[key]={termine:[],net:0,offen:0,bezahlt:0,studio:t.studio||''};
+      var keyLow=key.toLowerCase();
+      if(!prods[keyLow]){ prods[keyLow]={termine:[],net:0,offen:0,bezahlt:0,studio:t.studio||'',displayKey:key}; }
+      key=keyLow;
       var net=calcNet(t);
       prods[key].termine.push(t); prods[key].net+=net;
       if(t.status==='bezahlt') prods[key].bezahlt+=net; else prods[key].offen+=net;
@@ -13137,7 +13139,7 @@ function rZahlungen(){
       var gid='zp-'+key.replace(/[^a-z0-9]/gi,'_');
       html+='<div style="border-bottom:1.5px solid #f1f5f9">'
         +'<div onclick="zgToggle(\''+gid+'\')" style="display:flex;align-items:center;padding:12px 16px;gap:10px;cursor:pointer;background:#fff;touch-action:manipulation">'
-        +'<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(key)+'</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.displayKey||key)+'</div>'
         +'<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(g.studio)+' · '+g.termine.length+' Termine'
         +(g.offen>0?' · <span style="color:#ef4444">'+fmtEur(g.offen)+' offen</span>':'')
         +'</div></div>'
