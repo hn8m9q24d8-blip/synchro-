@@ -446,6 +446,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <input type="file" id="backup-import-input" accept=".json" style="display:none" onchange="importData(this)">
       <div class="settings-row" onclick="document.getElementById('holvi-import-input').click()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Holvi-Kontoauszug importieren</div></div><div class="sr-right" id="holvi-import-status">›</div></div>
       <input type="file" id="holvi-import-input" accept=".xlsx,.xls" style="display:none" onchange="holviImport(this)">
+      <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">🛡</div><div class="sr-label">Sozialabgaben (KV/RV/PV)</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🗑</div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
@@ -1792,7 +1793,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '483';
+  if(el) el.textContent = '489';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2813,6 +2814,16 @@ function openDetail(id){
         abHtml+='<div class="info-row"><div class="ir-key">Brutto Anteil</div><div class="ir-val">'+fmtEur(bruttoAnteil)+'</div></div>';
       if(t.mwst_anteil!=null)
         abHtml+='<div class="info-row"><div class="ir-key">MwSt '+ustProzent+' Anteil</div><div class="ir-val">'+fmtEur(mwstAnteil)+'</div></div>';
+      // SV-Abzüge anteilig
+      var _kvA=Math.abs(parseFloat(t.kv_abzug)||0);
+      var _rvA=Math.abs(parseFloat(t.rv_abzug)||0);
+      var _pvA=Math.abs(parseFloat(t.pv_abzug)||0);
+      if(_kvA||_rvA||_pvA)
+        abHtml+='<div class="info-row"><div class="ir-key" style="color:#888">SV-Abzüge <span style="font-size:9px">(anteilig)</span></div><div class="ir-val" style="color:#888;font-size:11px">'
+          +(_kvA?'KV '+fmtEur(_kvA)+' ':'')
+          +(_rvA?'RV '+fmtEur(_rvA)+' ':'')
+          +(_pvA?'PV '+fmtEur(_pvA):'')
+          +'</div></div>';
       if(bruttoAnteil)
         abHtml+='<div class="info-row" style="font-weight:800"><div class="ir-key">Auszahlung</div><div class="ir-val" style="color:#15803d">'+fmtEur(auszAnteil)+'</div></div>';
 
@@ -6651,17 +6662,41 @@ function rSozialStat(){
   var el=document.getElementById('sozial-content');
   if(!el)return;
   var y=new Date().getFullYear();
-  
-  var net=db.termine.filter(function(t){return t.datum&&t.datum.startsWith(String(y));}).reduce(function(a,t){return a+(t.kommgage||0)+(t.takes||0)*(t.rate||0);},0);
-  // KSK: ~5% of net income (rough estimate)
-  var ksk=net*0.05;
-  el.innerHTML='<div class="info-card" style="margin-bottom:16px">'
-    +'<div class="info-card-header"><span>Sozialabgaben '+y+'</span></div>'
-    +'<div class="gage-row"><span>Netto Einkommen</span><span>'+fmtEur(net)+'</span></div>'
-    +'<div class="gage-row"><span>KSK-Beitrag (~5%)</span><span>'+fmtEur(ksk)+'</span></div>'
-    +'</div>'
-    +'<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px;font-size:12px;color:#856404">'
-    +'Hinweis: Dies ist eine Schätzung. Den genauen KSK-Beitrag erfährst du direkt bei der Künstlersozialkasse.'
+  // Jahresauswahl
+  var y2025=y-1, y2026=y;
+  function buildYear(yr){
+    var abs=(db.abrechnungen||[]).filter(function(a){return (a.datum||'').startsWith(String(yr));});
+    var kv=0,rv=0,pv=0,brutto=0,ausz=0;
+    abs.forEach(function(a){
+      kv+=Math.abs(parseFloat(a.kv)||0);
+      rv+=Math.abs(parseFloat(a.rv)||0);
+      pv+=Math.abs(parseFloat(a.pv)||0);
+      brutto+=parseFloat(a.brutto)||0;
+      ausz+=parseFloat(a.auszahlung)||0;
+    });
+    // Auch aus Termin-Feldern (monats_abrechn sessions)
+    (db.termine||[]).filter(function(t){return (t.datum||'').startsWith(String(yr))&&t.abId;}).forEach(function(t){
+      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(!ab){
+        kv+=Math.abs(parseFloat(t.kv_abzug)||0);
+        rv+=Math.abs(parseFloat(t.rv_abzug)||0);
+        pv+=Math.abs(parseFloat(t.pv_abzug)||0);
+      }
+    });
+    var sv=kv+rv+pv;
+    if(brutto===0&&sv===0) return '<div style="font-size:12px;color:#999;padding:8px 0">Keine Abrechnungen für '+yr+'</div>';
+    return '<div class="info-card" style="margin-bottom:12px">'
+      +'<div class="info-card-header"><span>Sozialabgaben '+yr+'</span></div>'
+      +'<div style="padding:0 16px 12px">'
+      +(kv?'<div class="gage-row"><span style="color:#555">Krankenversicherung (KV)</span><span style="font-weight:700">'+fmtEur(kv)+'</span></div>':'')
+      +(rv?'<div class="gage-row"><span style="color:#555">Rentenversicherung (RV)</span><span style="font-weight:700">'+fmtEur(rv)+'</span></div>':'')
+      +(pv?'<div class="gage-row"><span style="color:#555">Pflegeversicherung (PV)</span><span style="font-weight:700">'+fmtEur(pv)+'</span></div>':'')
+      +(sv?'<div class="gage-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:6px"><span style="font-weight:800">SV gesamt</span><span style="font-weight:900;color:#1d6fa8">'+fmtEur(sv)+'</span></div>':'')
+      +'</div></div>';
+  }
+  el.innerHTML=buildYear(y)+buildYear(y-1)
+    +'<div style="background:#f0f4ff;border:1px solid #c7d7f5;border-radius:8px;padding:12px;font-size:12px;color:#374151;margin-top:4px">'
+    +'<b>Für die Steuererklärung:</b> KV ist als Sonderausgabe voll absetzbar. RV und PV bis zum Höchstbetrag. Diese Jahressummen an deinen Steuerberater weitergeben.'
     +'</div>';
 }
 
@@ -8377,6 +8412,12 @@ function dokAnalyseDoc(d, key, cb){
     +'    Zeile "Streaming 1-10 Ta | Film XY | 127,00€" bedeutet: grundgage=127.0 (Pauschale für ≤10 Takes)\n'
     +'    Der Betrag ist KORREKT — keine Differenz zur Dispo (die zeigt oft nur die Komm.-Gage ohne 1-10-Regel)\n'
     +'    Bei Einzelabrechnung (abrechn): grundgage = dieser Pauschalbetrag, takes=0, take_gage=0\n'
+    +'  ⚠ VSI-FORMAT — Zwei separate Zeilen für Grundgage und Takegage:\n'
+    +'    Zeile 1: "Grundgage Streaming" mit Betrag z.B. 127,00€ → grundgage=127\n'
+    +'    Zeile 2: "Takegage Streaming" mit Anzahl Takes z.B. "4" und Betrag 0,00€\n'
+    +'    Der 0,00€-Betrag bei Takegage bedeutet: er ist bereits in Grundgage enthalten!\n'
+    +'    → take_gage=0, takes = Anzahl aus Takegage-Zeile (hier 4)\n'
+    +'    → grundgage = Pauschale (127€) — KEINE 1-10-Regel hier, einfach Pauschalgage für ≤10 Takes\n'
     +'  ⚠ TV vs STREAMING erkennen aus Zeilenbeschriftung:\n'
     +'    "Streaming" oder "AMAZ", "NFLX", "DISN", "APPLE" in Zeile → produktionstyp=streaming\n'
     +'    "TV", "WARN", "PRO7", "ARD", "ZDF" oder kein Typ → produktionstyp=tv\n'
@@ -12035,13 +12076,14 @@ function rAbrechnungen(){
   var groups={};
   all.forEach(function(t){
     var key=t.studio||'Unbekannt';
-    if(!groups[key]) groups[key]={termine:[],net:0,offen:0,bezahlt:0,abgerechnet:0};
+    var keyLow=key.toLowerCase();
+    if(!groups[keyLow]){groups[keyLow]={termine:[],net:0,offen:0,bezahlt:0,abgerechnet:0,displayKey:key};}
     var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-    groups[key].termine.push(t);
-    groups[key].net+=net;
-    if(t.status==='bezahlt') groups[key].bezahlt+=net;
-    else if(t.status==='abrechnung') groups[key].abgerechnet+=net;
-    else groups[key].offen+=net;
+    groups[keyLow].termine.push(t);
+    groups[keyLow].net+=net;
+    if(t.status==='bezahlt') groups[keyLow].bezahlt+=net;
+    else if(t.status==='abrechnung') groups[keyLow].abgerechnet+=net;
+    else groups[keyLow].offen+=net;
   });
 
   var html='';
@@ -12113,7 +12155,7 @@ function rAbrechnungen(){
       +'<div onclick="abToggleGroup(\''+gid+'\')" style="display:flex;align-items:center;padding:12px 16px;gap:10px;cursor:pointer;background:#fff">'
       +'<div style="width:5px;height:40px;border-radius:3px;background:'+barColor+';flex-shrink:0"></div>'
       +'<div style="flex:1">'
-      +'<div style="font-weight:800;font-size:15px">'+esc(key)+'</div>'
+      +'<div style="font-weight:800;font-size:15px">'+esc(g.displayKey||key)+'</div>'
       +'<div style="font-size:11px;color:#999;margin-top:1px">'+g.termine.length+' Termin'+(g.termine.length!==1?'e':'')
       +(g.offen>0?' · <span style="color:#c0392b">'+fmtEur(g.offen)+' offen</span>':'')
       +(g.abgerechnet>0?' · <span style="color:#e65100">'+fmtEur(g.abgerechnet)+' abgr.</span>':'')
@@ -13034,13 +13076,14 @@ function rZahlungen(){
     var groups={};
     all.forEach(function(t){
       var key=t.studio||'Unbekannt';
-      if(!groups[key]) groups[key]={termine:[],net:0,offen:0,bezahlt:0,abgerechnet:0};
+      var keyLow=key.toLowerCase();
+      if(!groups[keyLow]){groups[keyLow]={termine:[],net:0,offen:0,bezahlt:0,abgerechnet:0,displayKey:key};}
       var net=calcNet(t);
-      groups[key].termine.push(t);
-      groups[key].net+=net;
-      if(t.status==='bezahlt') groups[key].bezahlt+=net;
-      else if(t.status==='abrechnung') groups[key].abgerechnet+=net;
-      else groups[key].offen+=net;
+      groups[keyLow].termine.push(t);
+      groups[keyLow].net+=net;
+      if(t.status==='bezahlt') groups[keyLow].bezahlt+=net;
+      else if(t.status==='abrechnung') groups[keyLow].abgerechnet+=net;
+      else groups[keyLow].offen+=net;
     });
     var html='';
     if(diffTermine.length){
@@ -13193,7 +13236,7 @@ function rZahlungen(){
   if(_zahlTab==='analyse'){
     var COLORS=['#1d6fa8','#0ea5e9','#22c55e','#f97316','#8b5cf6','#ec4899','#14b8a6','#f59e0b'];
     var studios={};
-    all.forEach(function(t){var k=t.studio||'Unbekannt';if(!studios[k])studios[k]=0;studios[k]+=calcNet(t);});
+    all.forEach(function(t){var k=(t.studio||'Unbekannt').toLowerCase();if(!studios[k])studios[k]=0;studios[k]+=calcNet(t);});
     var studioKeys=Object.keys(studios).sort(function(a,b){return studios[b]-studios[a];}).slice(0,8);
     var studioMax=studios[studioKeys[0]]||1;
     var prodMap={};
