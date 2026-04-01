@@ -1238,7 +1238,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 </nav>
 </div>
 
-<div class="fab" id="fab" onclick="openTerminSheet()">＋</div>
+
 
 <!-- TERMIN DETAIL -->
 <div class="detail-panel" id="detail-panel">
@@ -1792,7 +1792,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '474';
+  if(el) el.textContent = '483';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2190,7 +2190,7 @@ function openDetail(id){
       // Auch: noch nicht analysiert aber aus Dispofotos-Ordner (Dateiname-Hint)
       || (!x.typ && x.terminId===id && /dispo/i.test(x.dateiname||''));
   });
-  var abDoks=allDoks.filter(function(x){return x.typ==='abrechn'||x.typ==='monats_abrechn';});
+  var abDoks=allDoks.filter(function(x){return (x.typ==='abrechn'||x.typ==='monats_abrechn') && x.bestaetigt;});
   // Dateinamen für Ampel — auch bestätigte Dokumente (dataURL=null) einschließen
   // Erweiterte Dispo-Dok-Suche: auch bestaetigt+dataURL=null Dokumente einschliessen
   // und Dokumente die via t.dokIds verknüpft sind (auch ohne terminId direkt)
@@ -2554,16 +2554,15 @@ function openDetail(id){
       var bruttoOhne1to10 = Math.abs(_effBrutto - (kommgage2 + rawTakes2 * rate2)) < 0.5;
       var diff1to10 = !netBruttoOk && rawTakes2 > 0 && rawTakes2 < 10 && bruttoOhne1to10;
 
-      // Farben: grün wenn passt, orange wenn nur 1-10-Regel-Diff, rot wenn echter Fehler
-      var cKomm = hasVergleich ? (kommMismatch ? '#c2410c' : netBruttoOk ? '#15803d' : '#374151') : 'inherit';
-      var cTakes= hasVergleich ? (takesMismatch ? '#c2410c' : netBruttoOk||diff1to10 ? '#92400e' : '#374151') : 'inherit';
-      var cNet  = hasVergleich ? (netBruttoOk ? '#15803d' : diff1to10 ? '#92400e' : '#c2410c') : 'inherit';
-      var bgNet = hasVergleich ? (netBruttoOk ? 'background:#f0fdf4;border-radius:8px;padding:4px 6px' : diff1to10 ? 'background:#fff7ed;border-radius:8px;padding:4px 6px' : 'background:#fff5f5;border-radius:8px;padding:4px 6px') : '';
+      // Farben: grün wenn passt, rot wenn echter Fehler — kein Orange mehr
+      var cKomm = hasVergleich ? (kommMismatch ? '#c2410c' : '#15803d') : 'inherit';
+      var cTakes= hasVergleich ? (takesMismatch || rateMismatch ? '#c2410c' : '#15803d') : 'inherit';
+      var cNet  = hasVergleich ? (netBruttoOk || diff1to10 ? '#15803d' : '#c2410c') : 'inherit';
+      var bgNet = hasVergleich ? (netBruttoOk || diff1to10 ? 'background:#f0fdf4;border-radius:8px;padding:4px 6px' : 'background:#fff5f5;border-radius:8px;padding:4px 6px') : '';
 
       var headerStatus = '';
       if(hasVergleich){
-        if(netBruttoOk) headerStatus = '<span style="font-size:11px;font-weight:700;color:#15803d">✓ passt</span>';
-        else if(diff1to10) headerStatus = '<span style="font-size:11px;font-weight:700;color:#92400e">⚠ 1-10 Regel ignoriert</span>';
+        if(netBruttoOk || diff1to10) headerStatus = '<span style="font-size:11px;font-weight:700;color:#15803d">✓ passt</span>';
         else headerStatus = '<span style="font-size:11px;font-weight:700;color:#c2410c">⚠ Differenz</span>';
       } else {
         headerStatus = '<span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span>';
@@ -2588,7 +2587,7 @@ function openDetail(id){
           +(takesMismatch?' ⚠ <span style="font-size:10px">(Abrechn: '+abTakes+' Takes)</span>':'')
           +'</span>'
           +'<span style="color:'+cTakes+';font-weight:'+(takesMismatch?'800':'400')+'">'
-          +((t.rate||0)*total).toFixed(2).replace('.',',')+' €'+(rateMismatch?' <span style="font-size:10px">('+fmtEur(abRate)+'/T)</span>':'')
+          +((t.rate||0)*billTakes).toFixed(2).replace('.',',')+' €'+(rateMismatch?' <span style="font-size:10px">('+fmtEur(abRate)+'/T)</span>':'')
           +'</span></div>';
       }
 
@@ -6708,6 +6707,7 @@ function switchView(v){
   // deactivate all views and nav
   document.querySelectorAll('.view').forEach(function(el){el.classList.remove('active');el.style.removeProperty('display');});
   document.querySelectorAll('.nav-btn').forEach(function(el){el.classList.remove('active');});
+
   var view = document.getElementById('view-'+v);
   if(view) view.classList.add('active');
   // Warteschlange-Banner nur in Dokumente-View sichtbar
@@ -6809,6 +6809,10 @@ function undoAction(actionId){
           var t2 = (db.termine||[]).find(function(x){return x.id===action.undoData.terminId;});
           if(t2){ t2.abId=null; t2.abgerechnet=false; }
         }
+        // importedFiles bereinigen — sonst wird Datei beim nächsten Scan übersprungen
+        if(d && d.dateiname && db.importedFiles){
+          db.importedFiles = db.importedFiles.filter(function(n){ return n !== d.dateiname; });
+        }
         showToast('↩ Dokument zurück in Warteliste (Foto unwiederbringlich gelöscht)');
         break;
 
@@ -6840,10 +6844,15 @@ function undoAction(actionId){
             dSess.sessions[action.undoData.fromSessionIdx]._done=false;
           }
         }
-        // Gelöschte Dok-Fotos → Dok zurück in Warteliste
+        // Gelöschte Dok-Fotos → Dok zurück in Warteliste + importedFiles bereinigen
         (action.undoData.deletedDoks||[]).forEach(function(snap){
           var dok2=(db.dokumente||[]).find(function(x){return x.id===snap.dokId;});
-          if(dok2){ dok2.bestaetigt=false; dok2.awaitConfirm=true; }
+          if(dok2){
+            dok2.bestaetigt=false; dok2.awaitConfirm=true;
+            if(dok2.dateiname && db.importedFiles){
+              db.importedFiles = db.importedFiles.filter(function(n){ return n !== dok2.dateiname; });
+            }
+          }
         });
         showToast('↩ Rückgängig'+(action.undoData.deletedDoks&&action.undoData.deletedDoks.length?' (Fotos unwiederbringlich gelöscht)':''));
         break;
@@ -8373,6 +8382,12 @@ function dokAnalyseDoc(d, key, cb){
     +'    "TV", "WARN", "PRO7", "ARD", "ZDF" oder kein Typ → produktionstyp=tv\n'
     +'    Bei "Streaming 1-10 Ta" Zeile: grundgage aus Streaming-Satz (85€ Komm + 10×4,20€ = 127€)\n'
     +'    Bei "TV 1-10 Ta" oder "Grundgage 1-10 T" Zeile: grundgage aus TV-Satz (80€ Komm + 10×4€ = 120€)\n'
+    +'  ⚠ KOMM.-GAGE RÜCKRECHNUNG wenn nicht explizit angegeben:\n'
+    +'    Wenn in Tabelle nur Takes-Zeile steht (z.B. "95 Takes TV × 4€ = 380€") und Grundgage-Zeile (z.B. "Grundgage 1-10 TV × 120€"):\n'
+    +'    → take_gage = Betrag ÷ Takes (380 ÷ 95 = 4€)\n'
+    +'    → kommgage = grundgage - 10×take_gage (120 - 10×4 = 80€)\n'
+    +'    → takes = Takes aus Tabelle (95) — App erkennt 1-10-Regel automatisch und addiert 10\n'
+    +'    Wenn grundgage nicht lesbar: grundgage = brutto_termin - (takes × take_gage) + 10×take_gage\n'
     +'\n'
     +'Bei "monats_abrechn" — NUR wenn EINES dieser Kriterien zutrifft:\n'
     +'  1. Titel enthält "Monats-Gutschrift"\n'
@@ -9167,11 +9182,11 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     var ss=studio?bestStudioScore(t):0;
     if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
     else sc+=Math.round(ss*15);
-    // Titel/Produktion-Überlapp — nur Bonus, nie Strafe (Arbeitstitel!)
+    // Titel/Produktion-Überlapp — Bonus wenn ähnlich, Abzug wenn klar verschieden
     if(titel && t.titel){
       var ov=_studioScore(titel,t.titel);
-      if(ov > 0.3) sc+=Math.round(ov*10); // Bonus wenn ähnlich
-      // Kein Abzug bei verschiedenem Titel — könnte Arbeitstitel sein
+      if(ov > 0.3) sc+=Math.round(ov*12); // Bonus wenn ähnlich
+      else if(ov < 0.1) sc-=6; // Abzug wenn Titel klar nicht passt
     }
     // Uhrzeit im Von-Bis-Fenster
     if(uhrzeit && _uhrzeitTrifft(t.uhrzeit,uhrzeit,bis_uhrzeit)) sc+=6;
@@ -10542,11 +10557,18 @@ function dokBestaetigenMonat(dokId){
       // ── Takes-Abgleich: abgerechnet vs. Dispo ─────────────────
       var sTakes = parseInt(s.takes)||0;
       var dispTakes = parseInt(t.takes)||0;
-      if(sTakes) t.takes_abgerechnet = sTakes;
+      var sGG = parseFloat(s.grundgage)||0;
+      var sRate = parseFloat(s.take_gage)||0;
+      var tKomm = parseFloat(t.kommgage)||0;
+      // 1-10-Regel erkennen: grundgage = kommgage + 10×rate
+      var s1to10 = sGG > 0 && sRate > 0 && Math.abs(sGG - (tKomm + 10*sRate)) < 1.5;
+      // Wenn 1-10-Regel: echte Takes = sTakes + 10
+      var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
+      if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
       if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
       if(s.grundgage) t.kommgage_abgerechnet = parseFloat(s.grundgage)||0;
-      if(sTakes && dispTakes && sTakes !== dispTakes){
-        t.takes_differenz = dispTakes - sTakes;
+      if(sTakesEffektiv && dispTakes && sTakesEffektiv !== dispTakes){
+        t.takes_differenz = dispTakes - sTakesEffektiv;
       } else {
         t.takes_differenz = 0;
       }
@@ -11039,7 +11061,11 @@ function dokMergeIntoTermin(d, termin){
       if(d.gutschrift_nr) termin.gutschrift_nr = d.gutschrift_nr;
       if(brutto) termin.brutto_termin = brutto;
       if(d.mwst) termin.mwst_anteil = parseFloat(d.mwst)||0;
-      if(takes) termin.takes_abgerechnet = takes;
+      // 1-10-Regel: grundgage = kommgage + 10×rate → echte Takes = takes + 10
+      var _t10Komm = parseFloat(termin.kommgage)||0;
+      var _t10Rate = parseFloat(takeGage||termin.rate)||0;
+      var _t10Is1to10 = grundgage > 0 && _t10Rate > 0 && Math.abs(grundgage - (_t10Komm + 10*_t10Rate)) < 1.5;
+      if(takes) termin.takes_abgerechnet = _t10Is1to10 ? takes + 10 : takes;
       if(takeGage) termin.rate_abgerechnet = takeGage;
       if(grundgage) termin.kommgage_abgerechnet = grundgage;
       if(d.kuerzel && !termin.sender){
@@ -11102,7 +11128,11 @@ function dokMergeIntoTermin(d, termin){
       var dispRate  = parseFloat(termin.rate)||0;
       var dispKomm  = parseFloat(termin.kommgage)||0;
 
-      if(takes) termin.takes_abgerechnet = takes;
+      // 1-10-Regel: grundgage = kommgage + 10×rate → echte Takes = takes + 10
+      var _t10Komm = parseFloat(termin.kommgage)||0;
+      var _t10Rate = parseFloat(takeGage||termin.rate)||0;
+      var _t10Is1to10 = grundgage > 0 && _t10Rate > 0 && Math.abs(grundgage - (_t10Komm + 10*_t10Rate)) < 1.5;
+      if(takes) termin.takes_abgerechnet = _t10Is1to10 ? takes + 10 : takes;
       if(takeGage) termin.rate_abgerechnet = takeGage;
       if(grundgage) termin.kommgage_abgerechnet = grundgage;
 
