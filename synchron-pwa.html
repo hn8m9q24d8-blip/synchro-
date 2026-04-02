@@ -447,6 +447,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="document.getElementById('holvi-import-input').click()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Holvi-Kontoauszug importieren</div></div><div class="sr-right" id="holvi-import-status">›</div></div>
       <input type="file" id="holvi-import-input" accept=".xlsx,.xls" style="display:none" onchange="holviImport(this)">
       <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">🛡</div><div class="sr-label">Sozialabgaben (KV/RV/PV)</div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div class="sr-icon" style="background:#fef9c3">📋</div><div class="sr-label">Jahresabschluss</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🗑</div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
@@ -698,6 +699,22 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div><div style="color:#fff;font-size:18px;font-weight:900">Sozialabgaben</div><div style="color:rgba(255,255,255,.75);font-size:12px">KV / RV / PV Jahresübersicht</div></div>
   </div>
   <div class="scroll" id="sozial-content" style="padding:16px;padding-bottom:100px"></div>
+</div>
+
+<!-- ══════ JAHRESABSCHLUSS ════════════════════════════════════ -->
+<div id="view-jahresabschluss" class="view" style="overflow:hidden;display:flex;flex-direction:column">
+  <div class="app-header" style="background:#78350f;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('profil')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div style="flex:1">
+      <div style="color:#fff;font-size:18px;font-weight:900">Jahresabschluss</div>
+      <div style="color:rgba(255,255,255,.75);font-size:12px" id="jahres-sub">Steuerübersicht</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" id="jahres-prev" onclick="jahresJahrWechsel(-1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:4px 10px;font-size:16px;cursor:pointer">‹</button>
+      <button type="button" id="jahres-next" onclick="jahresJahrWechsel(1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:4px 10px;font-size:16px;cursor:pointer">›</button>
+    </div>
+  </div>
+  <div class="scroll" id="jahres-content" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ ZAHLUNGSEINGÄNGE ════════════════════════════════════ -->
@@ -1802,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '501';
+  if(el) el.textContent = '503';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3014,7 +3031,8 @@ function saveMergeChanges(){
       if(!dok.terminId) dok.terminId = ctid;
       // Abrechnung formal anlegen (abId, status, etc.)
       var _abT = (db.termine||[]).find(function(x){ return x.id===ctid; });
-      if(_abT && !_abT.abId){
+      var _abTExisting = _abT && _abT.abId ? (db.abrechnungen||[]).find(function(a){return a.id===_abT.abId;}) : null;
+      if(_abT && (!_abT.abId || !_abTExisting)){
         var _abBrutto = parseFloat(dok.brutto)||0;
         var _abMwst   = parseFloat(dok.mwst)||0;
         // Buchhaltungsregel: NUR Werte aus Dokument — niemals selbst errechnen
@@ -6670,6 +6688,121 @@ function rUstStat(){
     }).join('');
 }
 
+var _jahresJahr = new Date().getFullYear();
+
+function jahresJahrWechsel(d){
+  _jahresJahr += d;
+  rJahresabschluss();
+}
+
+function rJahresabschluss(){
+  var el = document.getElementById('jahres-content');
+  var sub = document.getElementById('jahres-sub');
+  if(!el) return;
+  var yr = _jahresJahr;
+  if(sub) sub.textContent = 'Steuerjahr ' + yr;
+
+  var termine = (db.termine||[]).filter(function(t){
+    return (t.datum||'').startsWith(String(yr));
+  }).sort(function(a,b){ return a.datum<b.datum?-1:1; });
+
+  // Gesamtverdienst aus Abrechnungen
+  var abs = (db.abrechnungen||[]).filter(function(a){
+    return (a.datum||'').startsWith(String(yr));
+  });
+  var bruttoGes=0, kvGes=0, rvGes=0, pvGes=0, svGes=0;
+  abs.forEach(function(a){
+    bruttoGes += parseFloat(a.brutto)||0;
+    kvGes += Math.abs(parseFloat(a.kv)||0);
+    rvGes += Math.abs(parseFloat(a.rv)||0);
+    pvGes += Math.abs(parseFloat(a.pv)||0);
+  });
+  // Fallback: aus Termin-Feldern wenn ab leer
+  if(kvGes===0){
+    termine.forEach(function(t){
+      var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+      if(!ab || !(parseFloat(ab.kv)||0)){
+        kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
+        rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
+        pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
+      }
+    });
+  }
+  svGes = kvGes + rvGes + pvGes;
+
+  // Statistik
+  var total = termine.length;
+  var abgerechnet = termine.filter(function(t){ return t.abgerechnet||t.abId; }).length;
+  var bezahlt = termine.filter(function(t){ return t.status==='bezahlt'; }).length;
+  var offen = total - abgerechnet;
+
+  var html = '';
+
+  // ── ZUSAMMENFASSUNG ─────────────────────────────────────────
+  html += '<div class="info-card" style="margin-bottom:12px;background:#78350f;color:#fff">'
+    +'<div style="padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;opacity:.8;margin-bottom:4px">Gesamtverdienst '+yr+'</div>'
+    +'<div style="font-size:28px;font-weight:900">'+fmtEur(bruttoGes)+'</div>'
+    +'<div style="display:flex;gap:16px;margin-top:10px;font-size:12px">'
+    +'<div><div style="opacity:.7">Termine</div><div style="font-weight:800">'+total+'</div></div>'
+    +'<div><div style="opacity:.7">Abgerechnet</div><div style="font-weight:800">'+abgerechnet+'</div></div>'
+    +'<div><div style="opacity:.7">Bezahlt</div><div style="font-weight:800">'+bezahlt+'</div></div>'
+    +(offen>0?'<div><div style="opacity:.7;color:#fca5a5">Offen</div><div style="font-weight:800;color:#fca5a5">'+offen+'</div></div>':'')
+    +'</div>'
+    +'</div></div>';
+
+  // ── SOZIALABGABEN ────────────────────────────────────────────
+  if(svGes > 0){
+    html += '<div class="info-card" style="margin-bottom:12px">'
+      +'<div class="info-card-header"><span>🛡 Sozialabgaben '+yr+'</span></div>'
+      +'<div style="padding:0 16px 14px">'
+      +(kvGes?'<div class="info-row"><div class="ir-key">Krankenversicherung (KV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(kvGes)+'</div></div>':'')
+      +(rvGes?'<div class="info-row"><div class="ir-key">Rentenversicherung (RV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(rvGes)+'</div></div>':'')
+      +(pvGes?'<div class="info-row"><div class="ir-key">Pflegeversicherung (PV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(pvGes)+'</div></div>':'')
+      +'<div class="info-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:6px"><div class="ir-key" style="font-weight:800">SV gesamt</div><div class="ir-val" style="font-weight:900;color:#1d6fa8">'+fmtEur(svGes)+'</div></div>'
+      +'</div></div>';
+  } else {
+    html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:#92400e">'
+      +'⚠ Keine Sozialabgaben gefunden — bitte Abrechnungen nochmal analysieren und bestätigen.'
+      +'</div>';
+  }
+
+  // ── TERMINLISTE ──────────────────────────────────────────────
+  if(!termine.length){
+    html += '<div style="text-align:center;padding:30px;color:#999">Keine Termine für '+yr+'</div>';
+  } else {
+    html += '<div class="info-card" style="margin-bottom:12px">'
+      +'<div class="info-card-header"><span>📅 Alle Termine '+yr+'</span><span style="font-size:11px;color:#888">'+abgerechnet+' / '+total+' abgerechnet</span></div>'
+      +'<div style="padding:0 16px 14px">';
+
+    termine.forEach(function(t){
+      var hatAb = !!(t.abgerechnet||t.abId);
+      var bezahltT = t.status==='bezahlt';
+      var ampel = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
+      var net = (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+      var abrechn = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+      var abDateiname = abrechn ? abrechn.dateiname : (t.abrechn_dateiname||'');
+
+      html += '<div onclick="openDetail(''+t.id+'')" style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5;cursor:pointer;gap:8px">'
+        +'<div style="font-size:16px">'+ampel+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||t.studio||'?')+'</div>'
+        +'<div style="font-size:11px;color:#888">'+fd(t.datum)+(t.studio?' · '+esc(t.studio):'')+'</div>'
+        +(abDateiname?'<div style="font-size:10px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(abDateiname)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+        +'<div style="font-size:13px;font-weight:800">'+fmtEur(net)+'</div>'
+        +(bezahltT?'<div style="font-size:10px;color:#15803d">bezahlt</div>':hatAb?'<div style="font-size:10px;color:#92400e">abgr.</div>':'<div style="font-size:10px;color:#c2410c">offen</div>')
+        +'</div>'
+        +'</div>';
+    });
+
+    html += '</div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
 function rSozialStat(){
   var el=document.getElementById('sozial-content');
   if(!el)return;
@@ -6686,13 +6819,15 @@ function rSozialStat(){
       brutto+=parseFloat(a.brutto)||0;
       ausz+=parseFloat(a.auszahlung)||0;
     });
-    // Auch aus Termin-Feldern wenn kein ab gefunden
+    // Auch aus Termin-Feldern — immer, als Ergänzung wenn ab.kv fehlt
     (db.termine||[]).filter(function(t){return (t.datum||'').startsWith(String(yr));}).forEach(function(t){
       var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
-      if(!ab && (parseFloat(t.kv_abzug)||0)>0){
+      var abHatKV = ab && (parseFloat(ab.kv)||0) > 0;
+      if(!abHatKV && (parseFloat(t.kv_abzug)||0)>0){
         kv+=Math.abs(parseFloat(t.kv_abzug)||0);
         rv+=Math.abs(parseFloat(t.rv_abzug)||0);
         pv+=Math.abs(parseFloat(t.pv_abzug)||0);
+        brutto+=parseFloat(t.brutto_termin)||0;
       }
     });
     var sv=kv+rv+pv;
@@ -6770,7 +6905,7 @@ function switchView(v){
     'rechnungen':'buch','zahlungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
-    'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil'
+    'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil','jahresabschluss':'profil'
   };
   var navBtn = document.getElementById('nav-'+(navMap[v]||v));
   if(navBtn) navBtn.classList.add('active');
@@ -6798,6 +6933,7 @@ function switchView(v){
   else if(v==='bankverbindung'){rBankverbindung();}
   else if(v==='umsatzsteuer'){rUstStat();}
   else if(v==='sozialabgaben'){rSozialStat();}
+  else if(v==='jahresabschluss'){rJahresabschluss();}
 };
 
 // ── BUCHHALTUNG QUICK OVERVIEW ────────────────────────────────
@@ -10631,7 +10767,8 @@ function dokBestaetigenMonat(dokId){
 
       // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
       // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
-      if(!t.abId){
+      var _existingAb = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+      if(!t.abId || !_existingAb){
         var sessionBrutto = parseFloat(s.brutto_termin)||0;
         // KV/RV/PV: session-eigene haben Vorrang; sonst proportional vom Dok verteilen
         var _sesKV = parseFloat(s.kv_abzug)||0;
