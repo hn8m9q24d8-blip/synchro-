@@ -1802,7 +1802,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '495';
+  if(el) el.textContent = '501';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3045,6 +3045,10 @@ function saveMergeChanges(){
           db.abrechnungen.push(_newAb);
           _abT.abId = _newAbId;
           _abT.status = 'abrechnung';
+          // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
+          if(Math.abs(parseFloat(dok.kv_abzug)||0)>0) _abT.kv_abzug = Math.abs(parseFloat(dok.kv_abzug));
+          if(Math.abs(parseFloat(dok.rv_abzug)||0)>0) _abT.rv_abzug = Math.abs(parseFloat(dok.rv_abzug));
+          if(Math.abs(parseFloat(dok.pv_abzug)||0)>0) _abT.pv_abzug = Math.abs(parseFloat(dok.pv_abzug));
           if(dok.gutschrift_nr) _abT.gutschrift_nr = dok.gutschrift_nr;
           if(_abBrutto) _abT.brutto_termin = _abBrutto;
           if(_abMwst) _abT.mwst_anteil = _abMwst;
@@ -6682,17 +6686,18 @@ function rSozialStat(){
       brutto+=parseFloat(a.brutto)||0;
       ausz+=parseFloat(a.auszahlung)||0;
     });
-    // Auch aus Termin-Feldern (monats_abrechn sessions)
-    (db.termine||[]).filter(function(t){return (t.datum||'').startsWith(String(yr))&&t.abId;}).forEach(function(t){
-      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-      if(!ab){
+    // Auch aus Termin-Feldern wenn kein ab gefunden
+    (db.termine||[]).filter(function(t){return (t.datum||'').startsWith(String(yr));}).forEach(function(t){
+      var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+      if(!ab && (parseFloat(t.kv_abzug)||0)>0){
         kv+=Math.abs(parseFloat(t.kv_abzug)||0);
         rv+=Math.abs(parseFloat(t.rv_abzug)||0);
         pv+=Math.abs(parseFloat(t.pv_abzug)||0);
       }
     });
     var sv=kv+rv+pv;
-    if(brutto===0&&sv===0) return '<div style="font-size:12px;color:#999;padding:8px 0">Keine Abrechnungen für '+yr+'</div>';
+    var debug='<div style="font-size:10px;color:#aaa;margin-bottom:4px">'+abs.length+' Abrechnungen gefunden · '+(sv>0?fmtEur(sv)+' SV':'kein SV-Wert')+'</div>';
+    if(brutto===0&&sv===0) return debug+'<div style="font-size:12px;color:#999;padding:8px 0">Keine Abrechnungen für '+yr+'</div>';
     return '<div class="info-card" style="margin-bottom:12px">'
       +'<div class="info-card-header"><span>Sozialabgaben '+yr+'</span></div>'
       +'<div style="padding:0 16px 12px">'
@@ -8490,9 +8495,11 @@ function dokAnalyseDoc(d, key, cb){
     +'       Wenn NUR EIN Aufnahmetag auf der Seite: termine-Array mit einem Eintrag ODER datum direkt auf der session.\n'
     +'    → Jede session MUSS enthalten: datum (erster Aufnahmetag), page_nr, titel, rolle, takes (Summe), take_gage, grundgage, brutto_termin,\n'
     +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
-    +'    → FFS/SESAM Beispiel: "- Krankenversicherung 24,27" → kv_abzug=24.27 | "- Rentenversicherung 27,04" → rv_abzug=27.04\n'
+    +'    → FFS/SESAM/RC Beispiel: "- Krankenversicherung 24,27" → kv_abzug=24.27 | "- Rentenversicherung 27,04" → rv_abzug=27.04\n'
     +'      "- Pflegeversicherung 4,51" → pv_abzug=4.51 | "AUSZAHLUNG 255,34" → auszahlung=255.34\n'
     +'      ⚠ NICHT die Werte aus "Bisherige Jahressummen" (KV/RV/AV/PV unten auf der Seite) — nur Zeilen DIESER Gutschrift!\n'
+    +'      ⚠ RC-Format: KV/RV/PV stehen zwischen BRUTTO GAGE und NETTO GAGE — IMMER in kv_abzug/rv_abzug/pv_abzug der Session eintragen!\n'
+    +'      ⚠ KRITISCH: kv_abzug/rv_abzug/pv_abzug MÜSSEN in jeder Session gesetzt sein wenn die Werte auf der Seite stehen — nie null lassen!\n'
     +'    → netto NICHT aus "Bisherige Jahressummen" nehmen — nur aus der NETTO GAGE Zeile dieser Seite!\n'
     +'    → Beispiel session (2 Aufnahmetage auf einer Seite): {"datum":"2026-01-20","page_nr":1,"titel":"Project Hail Mary","rolle":"Rocky",\n'
     +'      "takes":234,"take_gage":5.0,"grundgage":200.0,"brutto_termin":1370.0,"gutschrift_nr":"677/20260301",\n'
@@ -10632,12 +10639,25 @@ function dokBestaetigenMonat(dokId){
         var _sesPV = parseFloat(s.pv_abzug)||0;
         // Proportionale Verteilung NUR wenn Gesamt-KV/RV/PV aus Dokument bekannt
         // Das ist keine Erfindung — wir verteilen einen echten Dokumentwert anteilig
-        if(!_sesKV && !_sesRV && !_sesPV && gesamtBrutto > 0 && sessionBrutto > 0
-           && (parseFloat(d.kv_abzug)||0) > 0){  // nur wenn Dok überhaupt KV hat
-          var _anteil = sessionBrutto / gesamtBrutto;
-          _sesKV = Math.round(Math.abs(parseFloat(d.kv_abzug)||0) * _anteil * 100)/100;
-          _sesRV = Math.round(Math.abs(parseFloat(d.rv_abzug)||0) * _anteil * 100)/100;
-          _sesPV = Math.round(Math.abs(parseFloat(d.pv_abzug)||0) * _anteil * 100)/100;
+        var _dKV = Math.abs(parseFloat(d.kv_abzug)||0);
+        var _dRV = Math.abs(parseFloat(d.rv_abzug)||0);
+        var _dPV = Math.abs(parseFloat(d.pv_abzug)||0);
+        if(!_sesKV && !_sesRV && !_sesPV && _dKV > 0){
+          // RC-Format: jede Session hat eigene Seite mit eigenem brutto_termin = eigene KV/RV/PV
+          // Arena/FFS: eine Gesamtabrechnung, KV/RV/PV anteilig verteilen
+          // Erkennung: wenn Session ein eigenes auszahlung-Feld hat → eigene Abrechnung → volle Werte
+          // Wenn keine eigene Auszahlung → Teil einer Gesamtabrechnung → anteilig
+          var hatEigeneAuszahlung = s.auszahlung && parseFloat(s.auszahlung) > 0;
+          if(hatEigeneAuszahlung){
+            // RC-Format: volle KV/RV/PV dieser Session-Seite direkt übernehmen
+            _sesKV = _dKV; _sesRV = _dRV; _sesPV = _dPV;
+          } else if(gesamtBrutto > 0 && sessionBrutto > 0){
+            // Monats-GS ohne eigene Auszahlung → anteilig verteilen
+            var _anteil = sessionBrutto / gesamtBrutto;
+            _sesKV = Math.round(_dKV * _anteil * 100)/100;
+            _sesRV = Math.round(_dRV * _anteil * 100)/100;
+            _sesPV = Math.round(_dPV * _anteil * 100)/100;
+          }
         }
         var sessionNetto = Math.round((sessionBrutto - _sesKV - _sesRV - _sesPV)*100)/100;
         // Auszahlung: NUR aus Dokument — niemals selbst berechnen (Buchhaltungsregel!)
@@ -10677,6 +10697,10 @@ function dokBestaetigenMonat(dokId){
         db.abrechnungen.push(newAb);
         t.abId = newAbId;
         t.status = 'abrechnung';
+        // KV/RV/PV auch direkt am Termin speichern für Kalenderblatt-Anzeige
+        if(_sesKV) t.kv_abzug = _sesKV;
+        if(_sesRV) t.rv_abzug = _sesRV;
+        if(_sesPV) t.pv_abzug = _sesPV;
       }
 
       if(!t.dokIds) t.dokIds=[];
@@ -11156,6 +11180,10 @@ function dokMergeIntoTermin(d, termin){
       db.abrechnungen.push(newAb);
       termin.abId=abId;
       termin.status='abrechnung';
+      // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
+      if(parseFloat(d.kv_abzug)||0) termin.kv_abzug = Math.abs(parseFloat(d.kv_abzug));
+      if(parseFloat(d.rv_abzug)||0) termin.rv_abzug = Math.abs(parseFloat(d.rv_abzug));
+      if(parseFloat(d.pv_abzug)||0) termin.pv_abzug = Math.abs(parseFloat(d.pv_abzug));
       // ── DIFFERENZ-TRACKING: Dispo-Werte vs. Abrechnung ──────────
       var dispTakes = parseInt(termin.takes)||0;
       var dispRate  = parseFloat(termin.rate)||0;
@@ -12349,10 +12377,7 @@ function runIntegrityCheck(silent){
         return a._aufgeteiltVon === ab.brutto && a.dokId === ab.dokId && !a.aufgeteilt;
       });
       if(!teile.length){
-        // Keine Teile gefunden — aufgeteilt-Flag zurücksetzen
-        ab.aufgeteilt = false;
-        fixes++;
-        warnings.push('⚠ Abrechnung '+ab.gutschrift_nr+': aufgeteilt-Flag ohne Teile — zurückgesetzt');
+        warnings.push('⚠ Abrechnung '+ab.gutschrift_nr+': aufgeteilt-Flag ohne Teile — bitte prüfen');
       }
     }
   });
@@ -12389,15 +12414,10 @@ function runIntegrityCheck(silent){
     if(t.abId){
       var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(!ab){
-        // Verwaiste abId entfernen
-        delete t.abId;
-        fixes++;
-        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+': verwaiste abId entfernt');
+        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): abId zeigt auf nicht-existente Abrechnung — bitte prüfen');
       }
     }
   });
-
-  if(fixes > 0) save(db);
 
   // 5. ab.bezahlt=true aber t.status nicht bezahlt → auto-fix
   (db.termine||[]).forEach(function(t){
@@ -12405,10 +12425,7 @@ function runIntegrityCheck(silent){
     if(t.abId){
       var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(ab&&ab.bezahlt&&ab.zahlungDatum){
-        t.status='bezahlt';
-        if(!t.zahlungDatum) t.zahlungDatum=ab.zahlungDatum;
-        fixes++;
-        warnings.push('✓ Auto-Fix: '+esc(t.titel||t.datum||'?')+' → bezahlt (Abrechnung war schon bezahlt)');
+        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): Abrechnung bezahlt aber Termin-Status nicht — bitte manuell prüfen');
       }
     }
     if(t.dokIds){
@@ -12420,9 +12437,8 @@ function runIntegrityCheck(silent){
           var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
           if(mz) zahlDat=mz.datum;
         }
-        if(zahlDat){
-          if(t.status!=='bezahlt'){ t.status='bezahlt'; fixes++; }
-          if(!t.zahlungDatum){ t.zahlungDatum=zahlDat; fixes++; }
+        if(zahlDat && t.status!=='bezahlt'){
+          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): Zahlung vorhanden aber Status nicht bezahlt — bitte manuell prüfen');
         }
       });
     }
@@ -12583,7 +12599,7 @@ function runIntegrityCheckAndShow(){
     html+=renderKat('🔗 Datenstruktur', strukturFehler);
     html+=renderKat('💶 Finanzzahlen', finanzFehler);
     html+=renderKat('⚠ Sonstiges', sonstige);
-    html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Auto-Fixes wurden angewendet. Manuelle Korrekturen über Buch → Rückgängig.</div>';
+    html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Bitte oben genannte Punkte manuell prüfen und korrigieren.</div>';
   }
 
   html+='<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
