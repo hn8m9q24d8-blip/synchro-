@@ -691,6 +691,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div class="scroll" id="undo-log-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
+<!-- ══════ SOZIALABGABEN ════════════════════════════════════ -->
+<div id="view-sozialabgaben" class="view" style="overflow:hidden;display:flex;flex-direction:column">
+  <div class="app-header" style="background:#1d6fa8;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('profil')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="color:#fff;font-size:18px;font-weight:900">Sozialabgaben</div><div style="color:rgba(255,255,255,.75);font-size:12px">KV / RV / PV Jahresübersicht</div></div>
+  </div>
+  <div class="scroll" id="sozial-content" style="padding:16px;padding-bottom:100px"></div>
+</div>
+
 <!-- ══════ ZAHLUNGSEINGÄNGE ════════════════════════════════════ -->
 <div id="view-zahlungen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="background:#c62828;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
@@ -1793,7 +1802,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '489';
+  if(el) el.textContent = '495';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4086,7 +4095,6 @@ function saveTermin(){
     var oldTakes=parseInt(t.takes)||0;
     var newTakes=parseInt(el.value)||0;
     t.takes=newTakes;
-    // GVL synchronisieren wenn Takes geändert
     if(newTakes!==oldTakes && t.gvl_takes_detail && t.gvl_takes_detail.length){
       var delta=newTakes-oldTakes;
       var last=t.gvl_takes_detail[t.gvl_takes_detail.length-1];
@@ -10912,13 +10920,12 @@ function _applyEditedFields(d){
   var newTakes = parseInt(d.takes)||0;
   if(newTakes !== oldTakes && newTakes > 0){
     var delta = newTakes - oldTakes;
-    d.gvl_takes = newTakes; // Gesamtsumme aktualisieren
+    d.gvl_takes = newTakes;
     if(d.gvl_takes_detail && d.gvl_takes_detail.length){
       var last = d.gvl_takes_detail[d.gvl_takes_detail.length-1];
       var lastNeu = (parseInt(last.takes)||0) + delta;
       if(lastNeu < 0) lastNeu = 0;
       last.takes = lastNeu;
-      // Neu summieren
       d.gvl_takes = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
     }
   }
@@ -11044,24 +11051,9 @@ function dokMergeIntoTermin(d, termin){
   overwrite('gvl_folge',   d.gvl_folge||d.gvl_episode_header,   'GVL Folge');
   overwrite('gvl_takes',   d.gvl_takes, 'GVL Takes');
   if(d.gvl_takes_detail && d.gvl_takes_detail.length){
-    if(!termin.gvl_takes_detail || !termin.gvl_takes_detail.length){
-      // Erster Eintrag — direkt übernehmen
-      termin.gvl_takes_detail = JSON.parse(JSON.stringify(d.gvl_takes_detail));
-      changed.push('Takes-Detail');
-    } else {
-      // Bereits Takes vorhanden — pro Folge ADDIEREN (mehrere Termine selbe Folge)
-      var merged = JSON.parse(JSON.stringify(termin.gvl_takes_detail));
-      d.gvl_takes_detail.forEach(function(neu){
-        var existing = merged.find(function(e){ return e.folge === neu.folge; });
-        if(existing){
-          existing.takes = (parseInt(existing.takes)||0) + (parseInt(neu.takes)||0);
-        } else {
-          merged.push({folge: neu.folge, takes: neu.takes});
-        }
-      });
-      termin.gvl_takes_detail = merged;
-      changed.push('Takes-Detail (addiert)');
-    }
+    // Ein Termin hat immer nur eine Dispo — niemals addieren, immer überschreiben
+    termin.gvl_takes_detail = JSON.parse(JSON.stringify(d.gvl_takes_detail));
+    changed.push('Takes-Detail');
   }
 
   // ── Dispo-spezifisch ──────────────────────────────────────────────
@@ -12495,6 +12487,42 @@ function runIntegrityCheck(silent){
     }).length;
     if(bezahltOhneDatum>0){
       warnings.push('⚠ '+jahr+': '+bezahltOhneDatum+' Termin'+(bezahltOhneDatum>1?'e':'')+' als bezahlt markiert ohne Zahlungsdatum → USt-Voranmeldung unvollständig');
+    }
+  });
+
+  // ── NEUE INTELLIGENTE PRÜFUNGEN ──────────────────────────────
+
+  // GVL-Takes vs. Kalender-Takes Abgleich
+  (db.termine||[]).forEach(function(t){
+    if(!t.gvl_takes_detail || !t.gvl_takes_detail.length) return;
+    var gvlGesamt = t.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+    var kalTakes = parseInt(t.takes)||0;
+    if(gvlGesamt !== kalTakes && kalTakes > 0 && gvlGesamt > 0){
+      warnings.push('⚠ GVL/Takes Differenz: '+esc(t.titel||t.studio||t.datum||'?')+' ('+fd(t.datum)+'): GVL-Summe '+gvlGesamt+' ≠ Kalender-Takes '+kalTakes);
+    }
+  });
+
+  // GVL-Takes vs. Abrechnungs-Takes Abgleich
+  (db.termine||[]).forEach(function(t){
+    if(!t.gvl_takes_detail || !t.gvl_takes_detail.length) return;
+    var gvlGesamt = t.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+    var abTakes = parseInt(t.takes_abgerechnet)||0;
+    if(abTakes > 0 && gvlGesamt !== abTakes){
+      // 1-10-Regel erlaubt Differenz von 10
+      var diff = Math.abs(gvlGesamt - abTakes);
+      if(diff !== 10 && diff > 0){
+        warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes);
+      }
+    }
+  });
+
+  // Doppelte Dispos am selben Termin
+  (db.termine||[]).forEach(function(t){
+    var dispos = (db.dokumente||[]).filter(function(d){
+      return d.terminId===t.id && d.typ==='dispo' && d.bestaetigt;
+    });
+    if(dispos.length > 1){
+      warnings.push('⚠ Doppelte Dispo: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+dispos.length+' Dispos zugeordnet');
     }
   });
 
