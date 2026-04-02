@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '509';
+  if(el) el.textContent = '512';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6725,20 +6725,56 @@ function rJahresabschluss(){
   var bruttoGes=0, kvGes=0, rvGes=0, pvGes=0;
   var abListe = []; // für Anzeige mit Quelle
 
+  // Strategie: Monats-GS nach gutschrift_nr gruppieren, Session-Bruttos summieren
+  // SV: gesamt_kv aus erstem Eintrag der Gruppe (echte PDF-Werte)
+  var terminByAbId = {};
+  (db.termine||[]).forEach(function(t){ if(t.abId) terminByAbId[t.abId]=t; });
+
+  // Alle Einträge nach gutschrift_nr gruppieren
+  var gnrGruppen = {}; // key → {abs:[], gnr, datum, studio, produktion}
   (db.abrechnungen||[]).forEach(function(a){
     if(!(a.datum||'').startsWith(String(yr))) return;
-    // Deduplizierung: gleiche Gutschrift-Nr. (Monats-GS) nur einmal zählen
     var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
-    if(gezaehlt[key]) return;
-    gezaehlt[key] = true;
-    // Brutto: bei Monats-GS gesamt_brutto bevorzugen, sonst brutto
-    var _b = parseFloat(a.gesamt_brutto)||parseFloat(a.brutto)||0;
-    bruttoGes += _b;
-    // SV: bei Monats-GS gesamt_kv bevorzugen (echte Werte), sonst anteilige ab.kv
-    kvGes += Math.abs(parseFloat(a.gesamt_kv)||parseFloat(a.kv)||0);
-    rvGes += Math.abs(parseFloat(a.gesamt_rv)||parseFloat(a.rv)||0);
-    pvGes += Math.abs(parseFloat(a.gesamt_pv)||parseFloat(a.pv)||0);
-    abListe.push(a);
+    if(!gnrGruppen[key]) gnrGruppen[key]={abs:[], key:key, gnr:a.gutschrift_nr, datum:a.datum, studio:a.studio, produktion:a.produktion, dateiname:a.dateiname};
+    gnrGruppen[key].abs.push(a);
+  });
+
+  Object.keys(gnrGruppen).forEach(function(key){
+    var gruppe = gnrGruppen[key];
+    var abs = gruppe.abs;
+    var erstesAb = abs[0];
+
+    // Brutto: gesamt_brutto (einmal) ODER Summe aller Session-Bruttos
+    var gesamtBrutto = parseFloat(erstesAb.gesamt_brutto)||0;
+    if(!gesamtBrutto){
+      // Summe aller Sessions (inkl. Fallback auf t.brutto_termin)
+      gesamtBrutto = abs.reduce(function(s, a){
+        var _t = terminByAbId[a.id];
+        return s + (parseFloat(a.brutto)||((_t&&_t.brutto_termin)?parseFloat(_t.brutto_termin):0)||0);
+      }, 0);
+    }
+    bruttoGes += gesamtBrutto;
+
+    // SV: gesamt_kv (einmal aus Dokument) — nicht anteilig summieren
+    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||0;
+    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||0;
+    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||0;
+    // Fallback: einzige Session oder Einzel-Abrechnung → kv direkt
+    if(!gesamtKV && abs.length===1){
+      gesamtKV = Math.abs(parseFloat(erstesAb.kv)||0);
+      gesamtRV = Math.abs(parseFloat(erstesAb.rv)||0);
+      gesamtPV = Math.abs(parseFloat(erstesAb.pv)||0);
+    }
+    kvGes += gesamtKV;
+    rvGes += gesamtRV;
+    pvGes += gesamtPV;
+
+    // Für Abrechnungsliste: einen repräsentativen Eintrag zeigen
+    var repAb = Object.assign({}, erstesAb, {
+      brutto: gesamtBrutto,
+      kv: gesamtKV, rv: gesamtRV, pv: gesamtPV
+    });
+    abListe.push(repAb);
   });
   var svGes = kvGes + rvGes + pvGes;
 
@@ -6814,7 +6850,7 @@ function rJahresabschluss(){
     html += '<div style="color:#999;font-size:12px;padding:8px 0">Keine Termine</div>';
   } else {
     termine.forEach(function(t){
-      var hatAb = !!(t.abgerechnet||t.abId);
+      var hatAb = !!(t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin);
       var bezahltT = t.status==='bezahlt';
       var ampel = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
       // Betrag NUR aus db.abrechnungen — nie Dispo-Werte
@@ -10808,7 +10844,7 @@ function dokBestaetigenMonat(dokId){
       // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
       // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
       if(true){ // UPSERT: immer ausführen — _upsertAbrechnung handled create/update
-        var sessionBrutto = parseFloat(s.brutto_termin)||0;
+        var sessionBrutto = parseFloat(s.brutto_termin)||parseFloat(t.brutto_termin)||0;
         // KV/RV/PV: session-eigene haben Vorrang; sonst proportional vom Dok verteilen
         var _sesKV = parseFloat(s.kv_abzug)||0;
         var _sesRV = parseFloat(s.rv_abzug)||0;
