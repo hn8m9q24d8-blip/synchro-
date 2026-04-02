@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '503';
+  if(el) el.textContent = '505';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6706,31 +6706,27 @@ function rJahresabschluss(){
     return (t.datum||'').startsWith(String(yr));
   }).sort(function(a,b){ return a.datum<b.datum?-1:1; });
 
-  // Gesamtverdienst aus Abrechnungen
-  var abs = (db.abrechnungen||[]).filter(function(a){
-    return (a.datum||'').startsWith(String(yr));
-  });
-  var bruttoGes=0, kvGes=0, rvGes=0, pvGes=0, svGes=0;
-  abs.forEach(function(a){
+  // ── EINZIGE QUELLE: db.abrechnungen — nie Dispo-Werte mischen ──
+  // Deduplizierung über gutschrift_nr (gleiche GS nie doppelt zählen)
+  var gezaehlt = {};
+  var bruttoGes=0, kvGes=0, rvGes=0, pvGes=0;
+  var abListe = []; // für Anzeige mit Quelle
+
+  (db.abrechnungen||[]).forEach(function(a){
+    if(!(a.datum||'').startsWith(String(yr))) return;
+    // Deduplizierung: gleiche Gutschrift-Nr. nur einmal
+    var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
+    if(gezaehlt[key]) return;
+    gezaehlt[key] = true;
     bruttoGes += parseFloat(a.brutto)||0;
     kvGes += Math.abs(parseFloat(a.kv)||0);
     rvGes += Math.abs(parseFloat(a.rv)||0);
     pvGes += Math.abs(parseFloat(a.pv)||0);
+    abListe.push(a);
   });
-  // Fallback: aus Termin-Feldern wenn ab leer
-  if(kvGes===0){
-    termine.forEach(function(t){
-      var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
-      if(!ab || !(parseFloat(ab.kv)||0)){
-        kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
-        rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
-        pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
-      }
-    });
-  }
-  svGes = kvGes + rvGes + pvGes;
+  var svGes = kvGes + rvGes + pvGes;
 
-  // Statistik
+  // Statistik aus Terminen
   var total = termine.length;
   var abgerechnet = termine.filter(function(t){ return t.abgerechnet||t.abId; }).length;
   var bezahlt = termine.filter(function(t){ return t.status==='bezahlt'; }).length;
@@ -6743,6 +6739,7 @@ function rJahresabschluss(){
     +'<div style="padding:16px">'
     +'<div style="font-size:13px;font-weight:700;opacity:.8;margin-bottom:4px">Gesamtverdienst '+yr+'</div>'
     +'<div style="font-size:28px;font-weight:900">'+fmtEur(bruttoGes)+'</div>'
+    +'<div style="font-size:11px;opacity:.6;margin-top:2px">Quelle: '+abListe.length+' Abrechnungen aus db.abrechnungen</div>'
     +'<div style="display:flex;gap:16px;margin-top:10px;font-size:12px">'
     +'<div><div style="opacity:.7">Termine</div><div style="font-weight:800">'+total+'</div></div>'
     +'<div><div style="opacity:.7">Abgerechnet</div><div style="font-weight:800">'+abgerechnet+'</div></div>'
@@ -6751,7 +6748,7 @@ function rJahresabschluss(){
     +'</div>'
     +'</div></div>';
 
-  // ── SOZIALABGABEN ────────────────────────────────────────────
+  // ── SOZIALABGABEN — nur aus db.abrechnungen ──────────────────
   if(svGes > 0){
     html += '<div class="info-card" style="margin-bottom:12px">'
       +'<div class="info-card-header"><span>🛡 Sozialabgaben '+yr+'</span></div>'
@@ -6760,45 +6757,72 @@ function rJahresabschluss(){
       +(rvGes?'<div class="info-row"><div class="ir-key">Rentenversicherung (RV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(rvGes)+'</div></div>':'')
       +(pvGes?'<div class="info-row"><div class="ir-key">Pflegeversicherung (PV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(pvGes)+'</div></div>':'')
       +'<div class="info-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:6px"><div class="ir-key" style="font-weight:800">SV gesamt</div><div class="ir-val" style="font-weight:900;color:#1d6fa8">'+fmtEur(svGes)+'</div></div>'
+      +'<div style="font-size:10px;color:#aaa;margin-top:6px">Nur aus bestätigten Abrechnungen — keine Schätzung</div>'
       +'</div></div>';
   } else {
     html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:#92400e">'
-      +'⚠ Keine Sozialabgaben gefunden — bitte Abrechnungen nochmal analysieren und bestätigen.'
+      +'⚠ Keine Sozialabgaben in db.abrechnungen für '+yr+' — bitte Abrechnungen erneut einpflegen.'
       +'</div>';
   }
 
-  // ── TERMINLISTE ──────────────────────────────────────────────
-  if(!termine.length){
-    html += '<div style="text-align:center;padding:30px;color:#999">Keine Termine für '+yr+'</div>';
-  } else {
+  // ── ABRECHNUNGEN EINZELN mit Quelle ─────────────────────────
+  if(abListe.length){
     html += '<div class="info-card" style="margin-bottom:12px">'
-      +'<div class="info-card-header"><span>📅 Alle Termine '+yr+'</span><span style="font-size:11px;color:#888">'+abgerechnet+' / '+total+' abgerechnet</span></div>'
+      +'<div class="info-card-header"><span>📄 Abrechnungen '+yr+'</span><span style="font-size:11px;color:#888">'+abListe.length+' Einträge</span></div>'
       +'<div style="padding:0 16px 14px">';
+    abListe.sort(function(a,b){return a.datum<b.datum?-1:1;}).forEach(function(a){
+      var hasSV = (parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0)>0;
+      html += '<div style="padding:8px 0;border-bottom:1px solid #f5f5f5">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center">'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:12px;font-weight:700">'+esc(a.produktion||a.studio||'?')+'</div>'
+        +'<div style="font-size:10px;color:#888">'+fd(a.datum)+(a.gutschrift_nr?' · '+esc(a.gutschrift_nr):'')+'</div>'
+        +(a.dateiname?'<div style="font-size:10px;color:#aaa">📄 '+esc(a.dateiname)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
+        +'<div style="font-size:13px;font-weight:800">'+fmtEur(a.brutto)+'</div>'
+        +(hasSV?'<div style="font-size:10px;color:#888">SV '+fmtEur((parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0))+'</div>':'<div style="font-size:10px;color:#fca5a5">kein SV</div>')
+        +'</div>'
+        +'</div>'
+        +'</div>';
+    });
+    html += '</div></div>';
+  }
 
+  // ── TERMINLISTE ──────────────────────────────────────────────
+  html += '<div class="info-card" style="margin-bottom:12px">'
+    +'<div class="info-card-header"><span>📅 Termine '+yr+'</span><span style="font-size:11px;color:#888">'+abgerechnet+'/'+total+' abger.</span></div>'
+    +'<div style="padding:0 16px 14px">';
+
+  if(!termine.length){
+    html += '<div style="color:#999;font-size:12px;padding:8px 0">Keine Termine</div>';
+  } else {
     termine.forEach(function(t){
       var hatAb = !!(t.abgerechnet||t.abId);
       var bezahltT = t.status==='bezahlt';
       var ampel = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
-      var net = (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+      // Betrag NUR aus db.abrechnungen — nie Dispo-Werte
       var abrechn = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+      var betrag = abrechn ? parseFloat(abrechn.brutto)||0 : 0;
       var abDateiname = abrechn ? abrechn.dateiname : (t.abrechn_dateiname||'');
+      var gutNr = abrechn ? abrechn.gutschrift_nr : (t.gutschrift_nr||'');
 
-      html += '<div onclick="openDetail(''+t.id+'')" style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5;cursor:pointer;gap:8px">'
+      html += '<div onclick="openDetail(\''+t.id+'\')" style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5;cursor:pointer;gap:8px">'
         +'<div style="font-size:16px">'+ampel+'</div>'
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||t.studio||'?')+'</div>'
         +'<div style="font-size:11px;color:#888">'+fd(t.datum)+(t.studio?' · '+esc(t.studio):'')+'</div>'
-        +(abDateiname?'<div style="font-size:10px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(abDateiname)+'</div>':'')
+        +(gutNr?'<div style="font-size:10px;color:#aaa">GS: '+esc(gutNr)+'</div>':'')
+        +(abDateiname?'<div style="font-size:10px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(abDateiname)+'</div>':'')
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0">'
-        +'<div style="font-size:13px;font-weight:800">'+fmtEur(net)+'</div>'
+        +(betrag?'<div style="font-size:13px;font-weight:800">'+fmtEur(betrag)+'</div>':'<div style="font-size:11px;color:#ccc">kein Betrag</div>')
         +(bezahltT?'<div style="font-size:10px;color:#15803d">bezahlt</div>':hatAb?'<div style="font-size:10px;color:#92400e">abgr.</div>':'<div style="font-size:10px;color:#c2410c">offen</div>')
         +'</div>'
         +'</div>';
     });
-
-    html += '</div></div>';
   }
+  html += '</div></div>';
 
   el.innerHTML = html;
 }
