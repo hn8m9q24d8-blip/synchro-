@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '512';
+  if(el) el.textContent = '514';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8707,7 +8707,7 @@ function dokAnalyseDoc(d, key, cb){
     +'       Wenn NUR EIN Aufnahmetag auf der Seite: termine-Array mit einem Eintrag ODER datum direkt auf der session.\n'
     +'    → Jede session MUSS enthalten: datum (erster Aufnahmetag), page_nr, titel, rolle, takes (Summe), take_gage, grundgage, brutto_termin,\n'
     +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
-    +'    → FFS/SESAM/RC Beispiel: "- Krankenversicherung 24,27" → kv_abzug=24.27 | "- Rentenversicherung 27,04" → rv_abzug=27.04\n'
+    +'    → FFS/SESAM/RC/G&G Beispiel: "- Krankenversicherung 9,87" → kv_abzug=9.87 | "- Rentenversicherung 11,16" → rv_abzug=11.16\n'
     +'      "- Pflegeversicherung 4,51" → pv_abzug=4.51 | "AUSZAHLUNG 255,34" → auszahlung=255.34\n'
     +'      ⚠ NICHT die Werte aus "Bisherige Jahressummen" (KV/RV/AV/PV unten auf der Seite) — nur Zeilen DIESER Gutschrift!\n'
     +'      ⚠ RC-Format: KV/RV/PV stehen zwischen BRUTTO GAGE und NETTO GAGE — IMMER in kv_abzug/rv_abzug/pv_abzug der Session eintragen!\n'
@@ -10844,7 +10844,7 @@ function dokBestaetigenMonat(dokId){
       // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
       // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
       if(true){ // UPSERT: immer ausführen — _upsertAbrechnung handled create/update
-        var sessionBrutto = parseFloat(s.brutto_termin)||parseFloat(t.brutto_termin)||0;
+        var sessionBrutto = parseFloat(s.brutto_termin)||parseFloat(t.brutto_termin)||((d.sessions&&d.sessions.length===1)?parseFloat(d.brutto)||0:0)||0;
         // KV/RV/PV: session-eigene haben Vorrang; sonst proportional vom Dok verteilen
         var _sesKV = parseFloat(s.kv_abzug)||0;
         var _sesRV = parseFloat(s.rv_abzug)||0;
@@ -10911,10 +10911,14 @@ function dokBestaetigenMonat(dokId){
         var _upsertId = _upsertAbrechnung(t.abId, newAb);
         t.abId = _upsertId;
         t.status = 'abrechnung';
-        // KV/RV/PV auch direkt am Termin speichern für Kalenderblatt-Anzeige (anteilig)
+        // KV/RV/PV direkt am Termin speichern
         if(_sesKV) t.kv_abzug = _sesKV;
         if(_sesRV) t.rv_abzug = _sesRV;
         if(_sesPV) t.pv_abzug = _sesPV;
+        // Letzter Fallback: direkt von Dokument-Ebene wenn Session nichts hat
+        if(!t.kv_abzug && _dKV) t.kv_abzug = _dKV;
+        if(!t.rv_abzug && _dRV) t.rv_abzug = _dRV;
+        if(!t.pv_abzug && _dPV) t.pv_abzug = _dPV;
       }
 
       if(!t.dokIds) t.dokIds=[];
