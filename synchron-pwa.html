@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '505';
+  if(el) el.textContent = '509';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2945,6 +2945,27 @@ function closeDetail(){
   }
 }
 
+
+// ── ABRECHNUNG UPSERT — create oder update, nie blockieren ────
+function _upsertAbrechnung(abId, felder){
+  if(!db.abrechnungen) db.abrechnungen = [];
+  var idx = abId ? db.abrechnungen.findIndex(function(a){return a.id===abId;}) : -1;
+  if(idx >= 0){
+    // Update bestehenden Eintrag — nur Felder überschreiben die im Dokument stehen
+    var ab = db.abrechnungen[idx];
+    Object.keys(felder).forEach(function(k){
+      if(felder[k] !== null && felder[k] !== undefined) ab[k] = felder[k];
+    });
+    return abId;
+  } else {
+    // Neu anlegen
+    var newId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    felder.id = newId;
+    db.abrechnungen.push(felder);
+    return newId;
+  }
+}
+
 function saveMergeChanges(){
   if(!ctid) return;
   var t=(db.termine||[]).find(function(x){return x.id===ctid;});
@@ -3031,39 +3052,31 @@ function saveMergeChanges(){
       if(!dok.terminId) dok.terminId = ctid;
       // Abrechnung formal anlegen (abId, status, etc.)
       var _abT = (db.termine||[]).find(function(x){ return x.id===ctid; });
-      var _abTExisting = _abT && _abT.abId ? (db.abrechnungen||[]).find(function(a){return a.id===_abT.abId;}) : null;
-      if(_abT && (!_abT.abId || !_abTExisting)){
+      if(_abT){
         var _abBrutto = parseFloat(dok.brutto)||0;
         var _abMwst   = parseFloat(dok.mwst)||0;
-        // Buchhaltungsregel: NUR Werte aus Dokument — niemals selbst errechnen
         var _abNetto  = parseFloat(dok.netto)||null;
         var _abAusz   = parseFloat(dok.auszahlung)||0;
         if(_abBrutto || _abAusz){
-          var _newAbId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-          var _newAb = {
-            id:_newAbId, dokId:dok.id,
+          // UPSERT: update wenn vorhanden, create wenn nicht
+          var _abFelder = {
+            dokId:dok.id,
             dateiname:dok.dateiname||dok.beschr||'',
             datum:dok.datum||_abT.datum||'',
             studio:dok.studio||_abT.studio||'',
             produktion:dok.titel||_abT.titel||'',
             gutschrift_nr:dok.gutschrift_nr||'',
-            brutto:_abBrutto, netto:_abNetto,
-            mwst:_abMwst,
-            auszahlung:_abAusz,
+            brutto:_abBrutto, netto:_abNetto, mwst:_abMwst, auszahlung:_abAusz,
             takes:parseInt(dok.takes)||0,
             take_gage:parseFloat(dok.take_gage)||0,
             grundgage:parseFloat(dok.grundgage)||0,
             kv:Math.abs(parseFloat(dok.kv_abzug)||0),
             rv:Math.abs(parseFloat(dok.rv_abzug)||0),
             pv:Math.abs(parseFloat(dok.pv_abzug)||0),
-            terminId:ctid, bezahlt:false,
-            erstelltAm:new Date().toISOString()
+            terminId:ctid, bezahlt:false
           };
-          if(!db.abrechnungen) db.abrechnungen=[];
-          db.abrechnungen.push(_newAb);
-          _abT.abId = _newAbId;
+          _abT.abId = _upsertAbrechnung(_abT.abId, _abFelder);
           _abT.status = 'abrechnung';
-          // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
           if(Math.abs(parseFloat(dok.kv_abzug)||0)>0) _abT.kv_abzug = Math.abs(parseFloat(dok.kv_abzug));
           if(Math.abs(parseFloat(dok.rv_abzug)||0)>0) _abT.rv_abzug = Math.abs(parseFloat(dok.rv_abzug));
           if(Math.abs(parseFloat(dok.pv_abzug)||0)>0) _abT.pv_abzug = Math.abs(parseFloat(dok.pv_abzug));
@@ -6714,14 +6727,17 @@ function rJahresabschluss(){
 
   (db.abrechnungen||[]).forEach(function(a){
     if(!(a.datum||'').startsWith(String(yr))) return;
-    // Deduplizierung: gleiche Gutschrift-Nr. nur einmal
+    // Deduplizierung: gleiche Gutschrift-Nr. (Monats-GS) nur einmal zählen
     var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
     if(gezaehlt[key]) return;
     gezaehlt[key] = true;
-    bruttoGes += parseFloat(a.brutto)||0;
-    kvGes += Math.abs(parseFloat(a.kv)||0);
-    rvGes += Math.abs(parseFloat(a.rv)||0);
-    pvGes += Math.abs(parseFloat(a.pv)||0);
+    // Brutto: bei Monats-GS gesamt_brutto bevorzugen, sonst brutto
+    var _b = parseFloat(a.gesamt_brutto)||parseFloat(a.brutto)||0;
+    bruttoGes += _b;
+    // SV: bei Monats-GS gesamt_kv bevorzugen (echte Werte), sonst anteilige ab.kv
+    kvGes += Math.abs(parseFloat(a.gesamt_kv)||parseFloat(a.kv)||0);
+    rvGes += Math.abs(parseFloat(a.gesamt_rv)||parseFloat(a.rv)||0);
+    pvGes += Math.abs(parseFloat(a.gesamt_pv)||parseFloat(a.pv)||0);
     abListe.push(a);
   });
   var svGes = kvGes + rvGes + pvGes;
@@ -10791,8 +10807,7 @@ function dokBestaetigenMonat(dokId){
 
       // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
       // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
-      var _existingAb = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-      if(!t.abId || !_existingAb){
+      if(true){ // UPSERT: immer ausführen — _upsertAbrechnung handled create/update
         var sessionBrutto = parseFloat(s.brutto_termin)||0;
         // KV/RV/PV: session-eigene haben Vorrang; sonst proportional vom Dok verteilen
         var _sesKV = parseFloat(s.kv_abzug)||0;
@@ -10826,9 +10841,8 @@ function dokBestaetigenMonat(dokId){
         var sessionAuszahlung = s.auszahlung
           ? parseFloat(s.auszahlung)
           : null;
-        var newAbId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
         var newAb = {
-          id: newAbId,
+          id: t.abId||null,  // upsert: bestehende ID beibehalten wenn vorhanden
           dokId: dokId,
           dateiname: d.dateiname||d.beschr||'',  // PDF-Dateiname für Ampel-Klick
           datum: s.datum||d.datum||'',
@@ -10843,6 +10857,9 @@ function dokBestaetigenMonat(dokId){
           gesamt_brutto: parseFloat(d.brutto)||null,
           gesamt_auszahlung: parseFloat(d.auszahlung)||null,
           gesamt_gutschrift_nr: d.gutschrift_nr||null,
+          gesamt_kv: Math.abs(parseFloat(d.kv_abzug)||0)||null,
+          gesamt_rv: Math.abs(parseFloat(d.rv_abzug)||0)||null,
+          gesamt_pv: Math.abs(parseFloat(d.pv_abzug)||0)||null,
           auszahlung: sessionAuszahlung,
           takes: sTakes,
           take_gage: parseFloat(s.take_gage)||0,
@@ -10854,11 +10871,11 @@ function dokBestaetigenMonat(dokId){
           bezahlt: false,
           erstelltAm: new Date().toISOString()
         };
-        if(!db.abrechnungen) db.abrechnungen=[];
-        db.abrechnungen.push(newAb);
-        t.abId = newAbId;
+        // UPSERT: update wenn vorhanden, create wenn nicht
+        var _upsertId = _upsertAbrechnung(t.abId, newAb);
+        t.abId = _upsertId;
         t.status = 'abrechnung';
-        // KV/RV/PV auch direkt am Termin speichern für Kalenderblatt-Anzeige
+        // KV/RV/PV auch direkt am Termin speichern für Kalenderblatt-Anzeige (anteilig)
         if(_sesKV) t.kv_abzug = _sesKV;
         if(_sesRV) t.rv_abzug = _sesRV;
         if(_sesPV) t.pv_abzug = _sesPV;
@@ -11319,26 +11336,25 @@ function dokMergeIntoTermin(d, termin){
       changed.push('Pauschalgage ('+fmtEur(auszahlung)+')');
     }
 
-    if(!existingAb){
-      var abId='ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-      var newAb={
-        id:abId, dokId:d.id,
+    {
+      // UPSERT: immer ausführen — update wenn vorhanden, create wenn nicht
+      var abFelder={
+        dokId:d.id,
         dateiname:d.dateiname||d.beschr||'',
         datum:d.datum||today(),
         studio:d.studio||termin.studio||'',
         produktion:d.titel||termin.titel||'',
         gutschrift_nr:d.gutschrift_nr||'',
         brutto:brutto, netto:netto,
-        mwst:parseFloat(d.mwst)||null, // Buchhaltungsregel: nur aus Dokument
+        mwst:parseFloat(d.mwst)||null,
         auszahlung:auszahlung,
         takes:takes, take_gage:takeGage, grundgage:grundgage,
-        kv:parseFloat(d.kv_abzug)||0,
-        rv:parseFloat(d.rv_abzug)||0,
-        pv:parseFloat(d.pv_abzug)||0,
-        terminId:termin.id, bezahlt:false,
-        erstelltAm:new Date().toISOString()
+        kv:Math.abs(parseFloat(d.kv_abzug)||0),
+        rv:Math.abs(parseFloat(d.rv_abzug)||0),
+        pv:Math.abs(parseFloat(d.pv_abzug)||0),
+        terminId:termin.id, bezahlt: existingAb ? existingAb.bezahlt : false
       };
-      db.abrechnungen.push(newAb);
+      var abId = _upsertAbrechnung(termin.abId, abFelder);
       termin.abId=abId;
       termin.status='abrechnung';
       // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
@@ -11423,12 +11439,6 @@ function dokMergeIntoTermin(d, termin){
       var erwartet = isPausch ? auszahlung : (billTakesAb*takeGage + grundgage);
       termin.abStatus=Math.abs(auszahlung-erwartet)<1.5?'ok':'differenz';
       changed.push('Abrechnung angelegt ('+fmtEur(auszahlung)+')');
-    } else {
-      // Update bestehende Abrechnung — Takes nie in Termin schreiben
-      if(takes&&!existingAb.takes)        { existingAb.takes=takes; } // nur in Ab, nicht in Termin
-      if(takeGage&&!existingAb.take_gage) { existingAb.take_gage=takeGage; overwrite('rate',takeGage,'Take-Gage'); }
-      if(grundgage&&!existingAb.grundgage){ existingAb.grundgage=grundgage; overwrite('kommgage',grundgage,'Komm.-Gage'); }
-      if(d.gutschrift_nr&&!existingAb.gutschrift_nr){ existingAb.gutschrift_nr=d.gutschrift_nr; changed.push('Gutschrift-Nr.'); }
     }
   }
 
@@ -12700,6 +12710,62 @@ function runIntegrityCheck(silent){
     });
     if(dispos.length > 1){
       warnings.push('⚠ Doppelte Dispo: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+dispos.length+' Dispos zugeordnet');
+    }
+  });
+
+  // ── ABRECHNUNG vs. KALENDERTERMIN ABGLEICH ──────────────────
+
+  // 1. t.brutto_termin vs. ab.brutto: sollten identisch sein
+  (db.termine||[]).forEach(function(t){
+    if(!t.abId || !t.brutto_termin) return;
+    var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+    if(!ab) return;
+    var diff = Math.abs((parseFloat(t.brutto_termin)||0) - (parseFloat(ab.brutto)||0));
+    if(diff > 0.05){
+      warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Abrechnung '+fmtEur(ab.brutto));
+    }
+  });
+
+  // 2. Monats-GS: Summe aller brutto_termin der Sessions = gesamt_brutto
+  var gnrMap = {};
+  (db.termine||[]).forEach(function(t){
+    if(!t.gutschrift_nr || !t.brutto_termin) return;
+    var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+    var gestBrutto = ab ? parseFloat(ab.gesamt_brutto)||0 : 0;
+    if(!gestBrutto) return;
+    if(!gnrMap[t.gutschrift_nr]) gnrMap[t.gutschrift_nr]={sum:0, gesamt:gestBrutto, titel:t.titel||t.studio||'?'};
+    gnrMap[t.gutschrift_nr].sum += parseFloat(t.brutto_termin)||0;
+  });
+  Object.keys(gnrMap).forEach(function(gnr){
+    var e = gnrMap[gnr];
+    if(Math.abs(e.sum - e.gesamt) > 0.10){
+      warnings.push('⚠ Monats-GS Summe: '+esc(gnr)+' ('+esc(e.titel)+'): Session-Summe '+fmtEur(e.sum)+' ≠ Gesamt-Brutto '+fmtEur(e.gesamt));
+    }
+  });
+
+  // 3. Monats-GS: Summe aller KV-Anteile = gesamt_kv
+  var gnrKvMap = {};
+  (db.termine||[]).forEach(function(t){
+    if(!t.gutschrift_nr || !t.kv_abzug) return;
+    var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+    var gestKV = ab ? parseFloat(ab.gesamt_kv)||0 : 0;
+    if(!gestKV) return;
+    if(!gnrKvMap[t.gutschrift_nr]) gnrKvMap[t.gutschrift_nr]={sum:0, gesamt:gestKV};
+    gnrKvMap[t.gutschrift_nr].sum += parseFloat(t.kv_abzug)||0;
+  });
+  Object.keys(gnrKvMap).forEach(function(gnr){
+    var e = gnrKvMap[gnr];
+    if(Math.abs(e.sum - e.gesamt) > 0.10){
+      warnings.push('⚠ Monats-GS KV-Summe: '+esc(gnr)+': KV-Anteile '+fmtEur(e.sum)+' ≠ Gesamt-KV '+fmtEur(e.gesamt));
+    }
+  });
+
+  // 4. Termine mit abId aber kein brutto_termin gesetzt
+  (db.termine||[]).forEach(function(t){
+    if(!t.abId || t.brutto_termin) return;
+    var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+    if(ab && parseFloat(ab.brutto)>0){
+      warnings.push('⚠ Fehlender Brutto-Anteil: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): hat Abrechnung aber kein brutto_termin — bitte nochmal einpflegen');
     }
   });
 
