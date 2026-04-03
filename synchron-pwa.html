@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '528';
+  if(el) el.textContent = '529';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6867,6 +6867,22 @@ function rJahresabschluss(){
       });
     });
   }
+  // Auch SV aus Termin-Fallback-Einträgen summieren (nicht in gnrGruppen)
+  var gnrInGruppenSV = {};
+  Object.keys(gnrGruppen).forEach(function(key){ if(gnrGruppen[key].gnr) gnrInGruppenSV[gnrGruppen[key].gnr]=true; });
+  termine.filter(function(t){
+    if(!t.brutto_termin && !t.gutschrift_nr) return false;
+    if(t.gutschrift_nr && gnrInGruppenSV[t.gutschrift_nr]) return false; // schon in gnrGruppen
+    return !!(parseFloat(t.kv_abzug)||parseFloat(t.rv_abzug)||parseFloat(t.pv_abzug));
+  }).forEach(function(t){
+    // Deduplizierung
+    var _key = t.gutschrift_nr ? 'gnr_'+t.gutschrift_nr : 'id_'+t.id;
+    if(gnrInGruppenSV[_key]) return;
+    gnrInGruppenSV[_key] = true;
+    kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
+    rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
+    pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
+  });
   var svGes = kvGes + rvGes + pvGes;
 
   // Statistik aus Terminen
