@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '520';
+  if(el) el.textContent = '522';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6858,7 +6858,7 @@ function rJahresabschluss(){
 
   // Statistik aus Terminen
   var total = termine.length;
-  var abgerechnet = termine.filter(function(t){ return t.abgerechnet||t.abId; }).length;
+  var abgerechnet = termine.filter(function(t){ return t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin; }).length;
   var bezahlt = termine.filter(function(t){ return t.status==='bezahlt'; }).length;
   var offen = total - abgerechnet;
 
@@ -8787,6 +8787,9 @@ function dokAnalyseDoc(d, key, cb){
     +'       Wenn NUR EIN Aufnahmetag auf der Seite: termine-Array mit einem Eintrag ODER datum direkt auf der session.\n'
     +'    → Jede session MUSS enthalten: datum (erster Aufnahmetag), page_nr, titel, rolle, takes (Summe), take_gage, grundgage, brutto_termin,\n'
     +'      gutschrift_nr (eigene Gutschrift-Nr. dieser Seite!), mwst, auszahlung, kv_abzug, rv_abzug, pv_abzug\n'
+    +'    ⚠⚠⚠ brutto_termin NIEMALS null oder 0 lassen — das ist der BRUTTO GAGE Betrag dieser Seite (z.B. 325.0 oder 1370.0)!\n'
+    +'      Für RC/SESAM: brutto_termin = die "BRUTTO GAGE" Summe dieser Seite.\n'
+    +'      Für Arena/FFS: brutto_termin = der Betrag in der Positionstabelle für diesen Termin.\n'
     +'    → FFS/SESAM/RC/G&G Beispiel: "- Krankenversicherung 9,87" → kv_abzug=9.87 | "- Rentenversicherung 11,16" → rv_abzug=11.16\n'
     +'      "- Pflegeversicherung 4,51" → pv_abzug=4.51 | "AUSZAHLUNG 255,34" → auszahlung=255.34\n'
     +'      ⚠ NICHT die Werte aus "Bisherige Jahressummen" (KV/RV/AV/PV unten auf der Seite) — nur Zeilen DIESER Gutschrift!\n'
