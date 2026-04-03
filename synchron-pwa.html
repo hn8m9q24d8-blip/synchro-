@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '525';
+  if(el) el.textContent = '528';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2608,13 +2608,16 @@ function openDetail(id){
 
       // Takes × Rate Zeile
       if(t.rate){
+        var _dispFehlend = !hasDispo && total===0;
         html += '<div class="gage-row">'
-          +'<span style="color:'+cTakes+'">'
-          +totalLabel+' Takes × '+parseFloat(t.rate||0).toFixed(2).replace('.',',')+' €'
-          +(takesMismatch?' ⚠ <span style="font-size:10px">(Abrechn: '+abTakes+' Takes)</span>':'')
+          +'<span style="color:'+(_dispFehlend?'#999':cTakes)+'">'
+          +(_dispFehlend
+            ? '📋 Dispo fehlt'
+            : totalLabel+' Takes × '+parseFloat(t.rate||0).toFixed(2).replace('.',',')+' €'
+              +(takesMismatch?' ⚠ <span style="font-size:10px">(Abrechn: '+abTakes+' Takes)</span>':''))
           +'</span>'
-          +'<span style="color:'+cTakes+';font-weight:'+(takesMismatch?'800':'400')+'">'
-          +((t.rate||0)*billTakes).toFixed(2).replace('.',',')+' €'+(rateMismatch?' <span style="font-size:10px">('+fmtEur(abRate)+'/T)</span>':'')
+          +'<span style="color:'+(_dispFehlend?'#999':cTakes)+';font-weight:'+(takesMismatch?'800':'400')+'">'
+          +(_dispFehlend ? '—' : ((t.rate||0)*billTakes).toFixed(2).replace('.',',')+' €'+(rateMismatch?' <span style="font-size:10px">('+fmtEur(abRate)+'/T)</span>':''))
           +'</span></div>';
       }
 
@@ -3111,8 +3114,8 @@ function saveMergeChanges(){
       save(db);
       if(naechstesDok2){
         showToast('✓ Gutschrift '+(dok._splitIdx+1)+' von '+dok._splitTotal+' · Weiter: '+(naechstesIdx2+1));
-        switchView('dokumente');
-        setTimeout(function(){ dokOpenDetail(naechstesDok2.id); }, 200);
+        // Direkt zur nächsten Gutschrift — kein Umweg über Dokumentenliste
+        dokOpenDetail(naechstesDok2.id);
         return;
       } else {
         showToast('✓ Alle '+dok._splitTotal+' Abrechnungen bestätigt');
@@ -6935,20 +6938,25 @@ function rJahresabschluss(){
       return (gnrGruppen[a].datum||'') < (gnrGruppen[b].datum||'') ? -1 : 1;
     });
 
-    // Fallback wenn gnrGruppen leer (Termin-Fallback-Modus)
+    // Hilfsfunktion: eine Zeile rendern
+    function renderAbRow(a){
+      var sv=(parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0);
+      return '<tr style="border-bottom:1px solid #f0f0f0">'
+        +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
+        +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
+        +'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>'
+        +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
+        +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(a.pv?fmtEur(a.pv):'—')+'</td>'
+        +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv?fmtEur(sv):'—')+'</td>'
+        +'</tr>';
+    }
+
     if(!gruppenSorted.length){
+      // Nur Termin-Fallback — alle aus abListe
       abListe.sort(function(a,b){return a.datum<b.datum?-1:1;}).forEach(function(a){
-        var sv=(parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0);
-        html += '<tr style="border-bottom:1px solid #f0f0f0">'
-          +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
-          +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
-          +'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>'
-          +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
-          +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
-          +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
-          +'<td style="'+colNum+'">'+(a.pv?fmtEur(a.pv):'—')+'</td>'
-          +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv?fmtEur(sv):'—')+'</td>'
-          +'</tr>';
+        html += renderAbRow(a);
       });
     } else {
       gruppenSorted.forEach(function(key){
@@ -7013,6 +7021,12 @@ function rJahresabschluss(){
             +'</tr>';
         }
       });
+      // Auch Termin-Fallback-Einträge zeigen die nicht in gnrGruppen sind
+      var gnrInGruppen = {};
+      gruppenSorted.forEach(function(key){ if(gnrGruppen[key].gnr) gnrInGruppen[gnrGruppen[key].gnr]=true; });
+      abListe.filter(function(a){ return !a.gutschrift_nr || !gnrInGruppen[a.gutschrift_nr]; })
+        .sort(function(a,b){return a.datum<b.datum?-1:1;})
+        .forEach(function(a){ html += renderAbRow(a); });
     }
 
     // ── GESAMTZEILE ──────────────────────────────────────────
@@ -8811,6 +8825,15 @@ function dokAnalyseDoc(d, key, cb){
     +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12) — "- Krankenversicherung" Zeile\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
+    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format):\n'
+    +'    KV/RV/PV stehen als Prozentzeillen: "abzgl. anteiliger AN-Beitrag zur Krankenversicherung 8,345% → 91,80€"\n'
+    +'    → kv_abzug = der BETRAG (91.80), NICHT der Prozentsatz!\n'
+    +'    RV: "abzgl. anteiliger AN-Beitrag zur Rentenversicherung 9,300%" → rv_abzug = Betrag\n'
+    +'    PV: "abzgl. Aufschlag AN-Beitrag zur Pflegeversicherung" → pv_abzug = Betrag (auch wenn negativ: Absolutwert nehmen)\n'
+    +'    brutto = "Vereinbartes Sozialversicherungspflichtiges Nettohonorar" + "Vergütung für Übertragung der Nutzungsrechte" = Summe VOR MwSt\n'
+    +'    netto = brutto (da Tim selbst versteuert)\n'
+    +'    mwst = "zzgl. Gesetzliche Mehrwertsteuer" Betrag\n'
+    +'    auszahlung = "Brutto Total Zahlbetrag" Betrag\n'
     +'  netto = NETTO GAGE dieser Abrechnung (nach SV-Abzügen, VOR MwSt) — steht in der Zeile "NETTO GAGE"\n'
     +'    ⚠ NICHT die "Bisherige Jahressummen" am Fuß des Dokuments — diese ignorieren!\n'
     +'  mwst = Mehrwertsteuer-Betrag in Euro (z.B. 22.75)\n'
