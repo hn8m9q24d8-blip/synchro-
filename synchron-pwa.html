@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '522';
+  if(el) el.textContent = '525';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4470,6 +4470,16 @@ function importData(inp){
       if(!parsed.termine&&!parsed.profil){showToast('⚠ Ungültige Backup-Datei');return;}
       if(!confirm('Backup importieren? Aktuelle Daten werden überschrieben.'))return;
       db=parsed;
+      // Migration: importedFiles aus Termin-Feldern rekonstruieren wenn leer
+      if(!db.importedFiles || db.importedFiles.length === 0){
+        db.importedFiles = [];
+        (db.termine||[]).forEach(function(t){
+          if(t._dispoDateiname && db.importedFiles.indexOf(t._dispoDateiname) < 0)
+            db.importedFiles.push(t._dispoDateiname);
+          if(t.abrechn_dateiname && db.importedFiles.indexOf(t.abrechn_dateiname) < 0)
+            db.importedFiles.push(t.abrechn_dateiname);
+        });
+      }
       // Migration: fehlende db.abrechnungen aus Termin-Feldern nachfüllen
       if(!db.abrechnungen) db.abrechnungen=[];
       var _migCount=0;
@@ -6897,28 +6907,125 @@ function rJahresabschluss(){
       +'</div>';
   }
 
-  // ── ABRECHNUNGEN EINZELN mit Quelle ─────────────────────────
-  if(abListe.length){
-    html += '<div class="info-card" style="margin-bottom:12px">'
-      +'<div class="info-card-header"><span>📄 Abrechnungen '+yr+'</span><span style="font-size:11px;color:#888">'+abListe.length+' Einträge</span></div>'
-      +'<div style="padding:0 16px 14px">';
-    abListe.sort(function(a,b){return a.datum<b.datum?-1:1;}).forEach(function(a){
-      var hasSV = (parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0)>0;
-      html += '<div style="padding:8px 0;border-bottom:1px solid #f5f5f5">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center">'
-        +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:12px;font-weight:700">'+esc(a.produktion||a.studio||'?')+'</div>'
-        +'<div style="font-size:10px;color:#888">'+fd(a.datum)+(a.gutschrift_nr?' · '+esc(a.gutschrift_nr):'')+'</div>'
-        +(a.dateiname?'<div style="font-size:10px;color:#aaa">📄 '+esc(a.dateiname)+'</div>':'')
-        +'</div>'
-        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
-        +'<div style="font-size:13px;font-weight:800">'+fmtEur(a.brutto)+'</div>'
-        +(hasSV?'<div style="font-size:10px;color:#888">SV '+fmtEur((parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0))+'</div>':'<div style="font-size:10px;color:#fca5a5">kein SV</div>')
-        +'</div>'
-        +'</div>'
-        +'</div>';
+  // ── ABRECHNUNGEN TABELLE nach Gutschrift-Nr. ────────────────
+  if(abListe.length || gnrGruppen && Object.keys(gnrGruppen).length){
+    // Spaltenbreiten als CSS
+    var colStyle = 'font-size:11px;padding:4px 6px;vertical-align:top;';
+    var colHead  = colStyle+'font-weight:700;color:#666;border-bottom:2px solid #e5e7eb;padding-bottom:6px;';
+    var colNum   = colStyle+'text-align:right;font-variant-numeric:tabular-nums;';
+    var colNumH  = colHead+'text-align:right;';
+
+    html += '<div class="info-card" style="margin-bottom:12px;overflow-x:auto">'
+      +'<div class="info-card-header"><span>📄 Abrechnungen '+yr+'</span></div>'
+      +'<div style="padding:0 12px 14px;overflow-x:auto">'
+      +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+      +'<thead><tr>'
+      +'<th style="'+colHead+'text-align:left">Gutschrift-Nr.</th>'
+      +'<th style="'+colHead+'text-align:left">Studio</th>'
+      +'<th style="'+colHead+'text-align:left">Produktion</th>'
+      +'<th style="'+colNumH+'">Brutto</th>'
+      +'<th style="'+colNumH+'">KV</th>'
+      +'<th style="'+colNumH+'">RV</th>'
+      +'<th style="'+colNumH+'">PV</th>'
+      +'<th style="'+colNumH+'">SV</th>'
+      +'</tr></thead><tbody>';
+
+    // Gruppen nach Datum sortieren
+    var gruppenSorted = Object.keys(gnrGruppen||{}).sort(function(a,b){
+      return (gnrGruppen[a].datum||'') < (gnrGruppen[b].datum||'') ? -1 : 1;
     });
-    html += '</div></div>';
+
+    // Fallback wenn gnrGruppen leer (Termin-Fallback-Modus)
+    if(!gruppenSorted.length){
+      abListe.sort(function(a,b){return a.datum<b.datum?-1:1;}).forEach(function(a){
+        var sv=(parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0);
+        html += '<tr style="border-bottom:1px solid #f0f0f0">'
+          +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
+          +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
+          +'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>'
+          +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
+          +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
+          +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
+          +'<td style="'+colNum+'">'+(a.pv?fmtEur(a.pv):'—')+'</td>'
+          +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv?fmtEur(sv):'—')+'</td>'
+          +'</tr>';
+      });
+    } else {
+      gruppenSorted.forEach(function(key){
+        var gruppe = gnrGruppen[key];
+        var abs = gruppe.abs;
+        var erstesAb = abs[0];
+        // Sessions dieser Gruppe aus db.termine
+        var sessions = (db.termine||[]).filter(function(t){
+          return t.gutschrift_nr === gruppe.gnr && (t.datum||'').startsWith(String(yr));
+        }).sort(function(a,b){return a.datum<b.datum?-1:1;});
+        // Gesamt-Werte
+        var gBrutto = parseFloat(erstesAb.gesamt_brutto)||abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+        var gKV = parseFloat(erstesAb.gesamt_kv)||Math.abs(parseFloat(erstesAb.kv)||0);
+        var gRV = parseFloat(erstesAb.gesamt_rv)||Math.abs(parseFloat(erstesAb.rv)||0);
+        var gPV = parseFloat(erstesAb.gesamt_pv)||Math.abs(parseFloat(erstesAb.pv)||0);
+        var gSV = gKV+gRV+gPV;
+        var gnr = gruppe.gnr||erstesAb.gutschrift_nr||'—';
+        var studio = erstesAb.studio||'';
+        var dateiname = erstesAb.dateiname||'';
+
+        if(sessions.length > 1){
+          // Monats-GS: Kopfzeile mit GS-Nr.
+          html += '<tr style="background:#f8f8f8">'
+            +'<td style="'+colStyle+'font-weight:700;color:#374151" rowspan="'+(sessions.length+1)+'">'+esc(gnr)
+            +(dateiname?'<div style="font-size:9px;color:#aaa;font-weight:400">📄 '+esc(dateiname)+'</div>':'')
+            +'</td>'
+            +'<td style="'+colStyle+'font-weight:600">'+esc(studio)+'</td>'
+            +'<td style="'+colStyle+'color:#888;font-style:italic">'+fd(erstesAb.datum)+'</td>'
+            +'<td colspan="5"></td></tr>';
+          // Einzelne Sessions
+          sessions.forEach(function(t){
+            var tBrutto = parseFloat(t.brutto_termin)||0;
+            html += '<tr style="border-bottom:1px solid #f5f5f5">'
+              +'<td style="'+colStyle+'color:#666">'+esc(t.studio||studio)+'</td>'
+              +'<td style="'+colStyle+'">'+esc(t.titel||'?')+'</td>'
+              +'<td style="'+colNum+'">'+(tBrutto?fmtEur(tBrutto):'—')+'</td>'
+              +'<td colspan="4"></td></tr>';
+          });
+          // Gesamt-Zeile
+          html += '<tr style="border-top:2px solid #e5e7eb;background:#f0f4ff">'
+            +'<td colspan="2" style="'+colStyle+'font-weight:800;color:#374151">Gesamt</td>'
+            +'<td style="'+colNum+'font-weight:800">'+fmtEur(gBrutto)+'</td>'
+            +'<td style="'+colNum+'">'+(gKV?fmtEur(gKV):'—')+'</td>'
+            +'<td style="'+colNum+'">'+(gRV?fmtEur(gRV):'—')+'</td>'
+            +'<td style="'+colNum+'">'+(gPV?fmtEur(gPV):'—')+'</td>'
+            +'<td style="'+colNum+'font-weight:800;color:#1d6fa8">'+(gSV?fmtEur(gSV):'—')+'</td>'
+            +'</tr>';
+        } else {
+          // Einzel-Abrechnung: eine Zeile
+          var t = sessions[0]||null;
+          html += '<tr style="border-bottom:1px solid #f0f0f0">'
+            +'<td style="'+colStyle+'color:#555">'+esc(gnr)
+            +(dateiname?'<div style="font-size:9px;color:#aaa">📄 '+esc(dateiname)+'</div>':'')
+            +'</td>'
+            +'<td style="'+colStyle+'">'+esc(studio)+'</td>'
+            +'<td style="'+colStyle+'font-weight:600">'+esc((t&&t.titel)||erstesAb.produktion||'?')+'</td>'
+            +'<td style="'+colNum+'font-weight:700">'+fmtEur(gBrutto)+'</td>'
+            +'<td style="'+colNum+'">'+(gKV?fmtEur(gKV):'—')+'</td>'
+            +'<td style="'+colNum+'">'+(gRV?fmtEur(gRV):'—')+'</td>'
+            +'<td style="'+colNum+'">'+(gPV?fmtEur(gPV):'—')+'</td>'
+            +'<td style="'+colNum+'font-weight:700;color:#1d6fa8">'+(gSV?fmtEur(gSV):'—')+'</td>'
+            +'</tr>';
+        }
+      });
+    }
+
+    // ── GESAMTZEILE ──────────────────────────────────────────
+    html += '<tr style="border-top:3px solid #374151;background:#1d6fa8">'
+      +'<td colspan="3" style="'+colStyle+'font-weight:900;color:#fff;font-size:12px">GESAMT '+yr+'</td>'
+      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+fmtEur(bruttoGes)+'</td>'
+      +'<td style="'+colNum+'color:#fff">'+(kvGes?fmtEur(kvGes):'—')+'</td>'
+      +'<td style="'+colNum+'color:#fff">'+(rvGes?fmtEur(rvGes):'—')+'</td>'
+      +'<td style="'+colNum+'color:#fff">'+(pvGes?fmtEur(pvGes):'—')+'</td>'
+      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+(svGes?fmtEur(svGes):'—')+'</td>'
+      +'</tr>';
+
+    html += '</tbody></table></div></div>';
   }
 
   // ── TERMINLISTE ──────────────────────────────────────────────
@@ -12548,6 +12655,8 @@ function rMahnwesen(){
       });
       if(dok && dok.datum) abDatum = dok.datum;
     }
+    // Fallback: wenn kein abDatum aber abgerechnet → t.datum nehmen
+    if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum;
     if(!abDatum) return false; // Keine Abrechnung → nicht fällig
 
     // Fälligkeit prüfen
@@ -12588,7 +12697,7 @@ function rMahnwesen(){
     var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
     var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
     var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
-    var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || 0;
+    var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
 
     var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
     var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
