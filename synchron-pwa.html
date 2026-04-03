@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '514';
+  if(el) el.textContent = '518';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4470,9 +4470,32 @@ function importData(inp){
       if(!parsed.termine&&!parsed.profil){showToast('⚠ Ungültige Backup-Datei');return;}
       if(!confirm('Backup importieren? Aktuelle Daten werden überschrieben.'))return;
       db=parsed;
+      // Migration: fehlende db.abrechnungen aus Termin-Feldern nachfüllen
+      if(!db.abrechnungen) db.abrechnungen=[];
+      var _migCount=0;
+      (db.termine||[]).forEach(function(t){
+        if(!t.brutto_termin && !t.gutschrift_nr) return;
+        var _ex = t.abId ? db.abrechnungen.find(function(a){return a.id===t.abId;}) : null;
+        if(_ex) return;
+        var _b = parseFloat(t.brutto_termin)||0;
+        if(!_b) return;
+        var _nid='ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+        db.abrechnungen.push({
+          id:_nid, datum:t.datum||'', studio:t.studio||'',
+          produktion:t.titel||'', gutschrift_nr:t.gutschrift_nr||'',
+          dateiname:t.abrechn_dateiname||'', brutto:_b,
+          mwst:parseFloat(t.mwst_anteil)||null, auszahlung:_b,
+          kv:Math.abs(parseFloat(t.kv_abzug)||0),
+          rv:Math.abs(parseFloat(t.rv_abzug)||0),
+          pv:Math.abs(parseFloat(t.pv_abzug)||0),
+          terminId:t.id, bezahlt:t.status==='bezahlt',
+          zahlungDatum:t.zahlungDatum||null, _migriert:true
+        });
+        t.abId=_nid; _migCount++;
+      });
       save(db);
       rTermine();updateBadge();rProfil();rDispos();rGVL();rDokumente();
-      showToast('✓ Backup importiert: '+((parsed.termine||[]).length)+' Termine');
+      showToast('✓ Backup importiert: '+((parsed.termine||[]).length)+' Termine'+(_migCount?' · '+_migCount+' Abrechnungen nachgetragen':''));
     }catch(ex){showToast('⚠ Fehler beim Lesen: '+ex.message);}
     inp.value='';
   };
@@ -6708,6 +6731,46 @@ function jahresJahrWechsel(d){
   rJahresabschluss();
 }
 
+
+function migrateAbrechungen(){
+  // Füllt fehlende db.abrechnungen-Einträge aus Termin-Feldern nach
+  if(!db.abrechnungen) db.abrechnungen=[];
+  var count=0;
+  (db.termine||[]).forEach(function(t){
+    if(!t.brutto_termin && !t.abgerechnet && !t.gutschrift_nr) return;
+    // Prüfe ob db.abrechnungen Eintrag existiert
+    var existing = t.abId ? db.abrechnungen.find(function(a){return a.id===t.abId;}) : null;
+    if(existing) return; // schon vorhanden
+    // Eintrag fehlt — aus Termin-Feldern rekonstruieren
+    var brutto = parseFloat(t.brutto_termin)||0;
+    if(!brutto) return; // kein Betrag bekannt → nicht anlegen
+    var newId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    var newAb = {
+      id: newId,
+      datum: t.datum||'',
+      studio: t.studio||'',
+      produktion: t.titel||'',
+      gutschrift_nr: t.gutschrift_nr||'',
+      dateiname: t.abrechn_dateiname||'',
+      brutto: brutto,
+      mwst: parseFloat(t.mwst_anteil)||null,
+      auszahlung: brutto,
+      kv: Math.abs(parseFloat(t.kv_abzug)||0),
+      rv: Math.abs(parseFloat(t.rv_abzug)||0),
+      pv: Math.abs(parseFloat(t.pv_abzug)||0),
+      terminId: t.id,
+      bezahlt: t.status==='bezahlt',
+      zahlungDatum: t.zahlungDatum||null,
+      _migriert: true
+    };
+    db.abrechnungen.push(newAb);
+    t.abId = newId;
+    count++;
+  });
+  if(count>0){ save(db); showToast('✓ '+count+' Abrechnungen nachgetragen'); }
+  else showToast('Nichts zu migrieren');
+  rJahresabschluss();
+}
 function rJahresabschluss(){
   var el = document.getElementById('jahres-content');
   var sub = document.getElementById('jahres-sub');
@@ -6813,7 +6876,9 @@ function rJahresabschluss(){
       +'</div></div>';
   } else {
     html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:#92400e">'
-      +'⚠ Keine Sozialabgaben in db.abrechnungen für '+yr+' — bitte Abrechnungen erneut einpflegen.'
+      +'<div style="font-weight:700;margin-bottom:6px">⚠ Keine Abrechnungsbeträge gefunden</div>'
+      +'<div style="margin-bottom:8px">Bereits eingepflegte Termine können automatisch nachgetragen werden.</div>'
+      +'<button type="button" onclick="migrateAbrechungen()" style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📥 Abrechnungen nachtragen</button>'
       +'</div>';
   }
 
@@ -10808,6 +10873,7 @@ function dokBestaetigenMonat(dokId){
       if(s.take_gage && !t.rate) t.rate=s.take_gage;
       if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage;
       if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
+      else if(!t.brutto_termin && d.sessions && d.sessions.length===1 && parseFloat(d.brutto)) t.brutto_termin=parseFloat(d.brutto);
       // Sender aus Kürzel
       if(s.kuerzel && !t.sender){
         var senderName = erkenneSender(s.kuerzel);
@@ -11336,6 +11402,10 @@ function dokMergeIntoTermin(d, termin){
       if(d.gutschrift_nr) termin.gutschrift_nr = d.gutschrift_nr;
       if(brutto) termin.brutto_termin = brutto;
       if(d.mwst) termin.mwst_anteil = parseFloat(d.mwst)||0;
+      // KV/RV/PV auch im _skipAbCreate-Pfad setzen
+      if(parseFloat(d.kv_abzug)||0) termin.kv_abzug = Math.abs(parseFloat(d.kv_abzug));
+      if(parseFloat(d.rv_abzug)||0) termin.rv_abzug = Math.abs(parseFloat(d.rv_abzug));
+      if(parseFloat(d.pv_abzug)||0) termin.pv_abzug = Math.abs(parseFloat(d.pv_abzug));
       // 1-10-Regel: grundgage = kommgage + 10×rate → echte Takes = takes + 10
       var _t10Komm = parseFloat(termin.kommgage)||0;
       var _t10Rate = parseFloat(takeGage||termin.rate)||0;
