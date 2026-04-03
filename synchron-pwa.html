@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '529';
+  if(el) el.textContent = '536';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2981,11 +2981,17 @@ function saveMergeChanges(){
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){
       deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||''});
-      // dataURL nur löschen wenn kein unbestätigtes Split-Dok noch drauf verweist
+      // dataURL nur löschen wenn kein unbestätigtes Geschwister-Dok das Parent noch braucht
+      var parentId = dok._splitFromPdf || dok.id;
       var nochGebraucht = (db.dokumente||[]).some(function(x){
-        return x.id !== dok.id && x._splitFromPdf === dok.id && !x.bestaetigt;
+        return x.id !== dok.id && x._splitFromPdf === parentId && !x.bestaetigt;
       });
-      if(!nochGebraucht){ dok.dataURL=null; dok.thumb=null; }
+      if(!nochGebraucht){
+        // Parent-dataURL löschen
+        var parentDok = parentId !== dok.id ? (db.dokumente||[]).find(function(x){return x.id===parentId;}) : dok;
+        if(parentDok){ parentDok.dataURL=null; parentDok.thumb=null; }
+        dok.dataURL=null; dok.thumb=null;
+      }
       dok._pendingDelete=false;
       _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null, dok.typ||null);
     }
@@ -4473,16 +4479,14 @@ function importData(inp){
       if(!parsed.termine&&!parsed.profil){showToast('⚠ Ungültige Backup-Datei');return;}
       if(!confirm('Backup importieren? Aktuelle Daten werden überschrieben.'))return;
       db=parsed;
-      // Migration: importedFiles aus Termin-Feldern rekonstruieren wenn leer
-      if(!db.importedFiles || db.importedFiles.length === 0){
-        db.importedFiles = [];
-        (db.termine||[]).forEach(function(t){
-          if(t._dispoDateiname && db.importedFiles.indexOf(t._dispoDateiname) < 0)
-            db.importedFiles.push(t._dispoDateiname);
-          if(t.abrechn_dateiname && db.importedFiles.indexOf(t.abrechn_dateiname) < 0)
-            db.importedFiles.push(t.abrechn_dateiname);
-        });
-      }
+      // Migration: importedFiles aus Termin-Feldern immer ergänzen (merge)
+      if(!db.importedFiles) db.importedFiles = [];
+      (db.termine||[]).forEach(function(t){
+        if(t._dispoDateiname && db.importedFiles.indexOf(t._dispoDateiname) < 0)
+          db.importedFiles.push(t._dispoDateiname);
+        if(t.abrechn_dateiname && db.importedFiles.indexOf(t.abrechn_dateiname) < 0)
+          db.importedFiles.push(t.abrechn_dateiname);
+      });
       // Migration: fehlende db.abrechnungen aus Termin-Feldern nachfüllen
       if(!db.abrechnungen) db.abrechnungen=[];
       var _migCount=0;
@@ -6845,28 +6849,30 @@ function rJahresabschluss(){
     abListe.push(repAb);
   });
 
-  // Fallback: wenn db.abrechnungen leer, aus t.brutto_termin summieren
-  if(!abListe.length){
-    var gnrGesehen = {};
-    termine.forEach(function(t){
-      if(!t.brutto_termin && !t.gutschrift_nr) return;
-      var _b = parseFloat(t.brutto_termin)||0;
-      if(!_b) return;
-      var key = t.gutschrift_nr ? 'gnr_'+t.gutschrift_nr : 'id_'+t.id;
-      if(gnrGesehen[key]) return;
-      gnrGesehen[key] = true;
-      bruttoGes += _b;
-      kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
-      rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
-      pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
-      abListe.push({
-        datum: t.datum, studio: t.studio, produktion: t.titel||'',
-        gutschrift_nr: t.gutschrift_nr||'', dateiname: t.abrechn_dateiname||'',
-        brutto: _b, kv: Math.abs(parseFloat(t.kv_abzug)||0),
-        rv: Math.abs(parseFloat(t.rv_abzug)||0), pv: Math.abs(parseFloat(t.pv_abzug)||0)
-      });
+  // Termin-Fallback: immer ergänzen für Termine die nicht in gnrGruppen erfasst sind
+  var gnrGesehen = {};
+  // Bereits erfasste GS-Nummern aus gnrGruppen merken
+  Object.keys(gnrGruppen).forEach(function(key){
+    if(gnrGruppen[key].gnr) gnrGesehen['gnr_'+gnrGruppen[key].gnr] = true;
+  });
+  termine.forEach(function(t){
+    if(!t.brutto_termin && !t.gutschrift_nr) return;
+    var _b = parseFloat(t.brutto_termin)||0;
+    if(!_b) return;
+    var key = t.gutschrift_nr ? 'gnr_'+t.gutschrift_nr : 'id_'+t.id;
+    if(gnrGesehen[key]) return; // schon in gnrGruppen oder bereits gezählt
+    gnrGesehen[key] = true;
+    bruttoGes += _b;
+    kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
+    rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
+    pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
+    abListe.push({
+      datum: t.datum, studio: t.studio, produktion: t.titel||'',
+      gutschrift_nr: t.gutschrift_nr||'', dateiname: t.abrechn_dateiname||'',
+      brutto: _b, kv: Math.abs(parseFloat(t.kv_abzug)||0),
+      rv: Math.abs(parseFloat(t.rv_abzug)||0), pv: Math.abs(parseFloat(t.pv_abzug)||0)
     });
-  }
+  });
   // Auch SV aus Termin-Fallback-Einträgen summieren (nicht in gnrGruppen)
   var gnrInGruppenSV = {};
   Object.keys(gnrGruppen).forEach(function(key){ if(gnrGruppen[key].gnr) gnrInGruppenSV[gnrGruppen[key].gnr]=true; });
@@ -7013,7 +7019,7 @@ function rJahresabschluss(){
           });
           // Gesamt-Zeile
           html += '<tr style="border-top:2px solid #e5e7eb;background:#f0f4ff">'
-            +'<td colspan="2" style="'+colStyle+'font-weight:800;color:#374151">Gesamt</td>'
+            +'<td colspan="3" style="'+colStyle+'font-weight:800;color:#374151;text-align:right">Gesamt</td>'
             +'<td style="'+colNum+'font-weight:800">'+fmtEur(gBrutto)+'</td>'
             +'<td style="'+colNum+'">'+(gKV?fmtEur(gKV):'—')+'</td>'
             +'<td style="'+colNum+'">'+(gRV?fmtEur(gRV):'—')+'</td>'
@@ -8845,8 +8851,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    KV/RV/PV stehen als Prozentzeillen: "abzgl. anteiliger AN-Beitrag zur Krankenversicherung 8,345% → 91,80€"\n'
     +'    → kv_abzug = der BETRAG (91.80), NICHT der Prozentsatz!\n'
     +'    RV: "abzgl. anteiliger AN-Beitrag zur Rentenversicherung 9,300%" → rv_abzug = Betrag\n'
-    +'    PV: "abzgl. Aufschlag AN-Beitrag zur Pflegeversicherung" → pv_abzug = Betrag (auch wenn negativ: Absolutwert nehmen)\n'
-    +'    brutto = "Vereinbartes Sozialversicherungspflichtiges Nettohonorar" + "Vergütung für Übertragung der Nutzungsrechte" = Summe VOR MwSt\n'
+    +'    PV: BEIDE Zeilen addieren: "abzgl. anteiliger AN-Beitrag zur Pflegeversicherung 1,800%" (z.B. 19,80€) PLUS "abzgl. Aufschlag AN-Beitrag zur Pflegeversicherung" (z.B. -2,75€)\n'
+    +'      → pv_abzug = 19.80 + (-2.75) = 17.05 — SUMME beider PV-Zeilen als Absolutwert\n'
+    +'    brutto = SUMME aller Positionen VOR MwSt: "Vereinbartes Sozialversicherungspflichtiges Nettohonorar" (z.B. 1100€) + "Vergütung für Übertragung der Nutzungsrechte § 73ff UrhG" (z.B. 2200€) = 3300€\n'
+    +'      DANN + MwSt (7%) dazuaddieren → brutto = 3300 + 231 = 3531€ (= "Zwischensumme inkl. Mehrwertsteuer")\n'
+    +'      Also: brutto = die "Zwischensumme inkl. Mehrwertsteuer" — NICHT nur das Nettohonorar allein!\n'
     +'    netto = brutto (da Tim selbst versteuert)\n'
     +'    mwst = "zzgl. Gesetzliche Mehrwertsteuer" Betrag\n'
     +'    auszahlung = "Brutto Total Zahlbetrag" Betrag\n'
