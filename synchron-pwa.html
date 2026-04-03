@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '518';
+  if(el) el.textContent = '519';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6920,7 +6920,7 @@ function rJahresabschluss(){
       var ampel = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
       // Betrag NUR aus db.abrechnungen — nie Dispo-Werte
       var abrechn = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
-      var betrag = abrechn ? parseFloat(abrechn.brutto)||0 : 0;
+      var betrag = (abrechn ? parseFloat(abrechn.brutto)||0 : 0) || parseFloat(t.brutto_termin)||0;
       var abDateiname = abrechn ? abrechn.dateiname : (t.abrechn_dateiname||'');
       var gutNr = abrechn ? abrechn.gutschrift_nr : (t.gutschrift_nr||'');
 
