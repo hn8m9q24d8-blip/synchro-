@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '519';
+  if(el) el.textContent = '520';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6807,10 +6807,9 @@ function rJahresabschluss(){
     var abs = gruppe.abs;
     var erstesAb = abs[0];
 
-    // Brutto: gesamt_brutto (einmal) ODER Summe aller Session-Bruttos
+    // Brutto: gesamt_brutto (einmal) ODER Summe aller Session-Bruttos ODER t.brutto_termin
     var gesamtBrutto = parseFloat(erstesAb.gesamt_brutto)||0;
     if(!gesamtBrutto){
-      // Summe aller Sessions (inkl. Fallback auf t.brutto_termin)
       gesamtBrutto = abs.reduce(function(s, a){
         var _t = terminByAbId[a.id];
         return s + (parseFloat(a.brutto)||((_t&&_t.brutto_termin)?parseFloat(_t.brutto_termin):0)||0);
@@ -6818,27 +6817,43 @@ function rJahresabschluss(){
     }
     bruttoGes += gesamtBrutto;
 
-    // SV: gesamt_kv (einmal aus Dokument) — nicht anteilig summieren
-    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||0;
-    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||0;
-    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||0;
-    // Fallback: einzige Session oder Einzel-Abrechnung → kv direkt
-    if(!gesamtKV && abs.length===1){
-      gesamtKV = Math.abs(parseFloat(erstesAb.kv)||0);
-      gesamtRV = Math.abs(parseFloat(erstesAb.rv)||0);
-      gesamtPV = Math.abs(parseFloat(erstesAb.pv)||0);
-    }
+    // SV: gesamt_kv (einmal) → kv direkt als Fallback
+    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||Math.abs(parseFloat(erstesAb.kv)||0);
+    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||Math.abs(parseFloat(erstesAb.rv)||0);
+    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||Math.abs(parseFloat(erstesAb.pv)||0);
     kvGes += gesamtKV;
     rvGes += gesamtRV;
     pvGes += gesamtPV;
 
-    // Für Abrechnungsliste: einen repräsentativen Eintrag zeigen
     var repAb = Object.assign({}, erstesAb, {
       brutto: gesamtBrutto,
       kv: gesamtKV, rv: gesamtRV, pv: gesamtPV
     });
     abListe.push(repAb);
   });
+
+  // Fallback: wenn db.abrechnungen leer, aus t.brutto_termin summieren
+  if(!abListe.length){
+    var gnrGesehen = {};
+    termine.forEach(function(t){
+      if(!t.brutto_termin && !t.gutschrift_nr) return;
+      var _b = parseFloat(t.brutto_termin)||0;
+      if(!_b) return;
+      var key = t.gutschrift_nr ? 'gnr_'+t.gutschrift_nr : 'id_'+t.id;
+      if(gnrGesehen[key]) return;
+      gnrGesehen[key] = true;
+      bruttoGes += _b;
+      kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
+      rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
+      pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
+      abListe.push({
+        datum: t.datum, studio: t.studio, produktion: t.titel||'',
+        gutschrift_nr: t.gutschrift_nr||'', dateiname: t.abrechn_dateiname||'',
+        brutto: _b, kv: Math.abs(parseFloat(t.kv_abzug)||0),
+        rv: Math.abs(parseFloat(t.rv_abzug)||0), pv: Math.abs(parseFloat(t.pv_abzug)||0)
+      });
+    });
+  }
   var svGes = kvGes + rvGes + pvGes;
 
   // Statistik aus Terminen
