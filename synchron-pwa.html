@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '550';
+  if(el) el.textContent = '553';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5063,6 +5063,9 @@ function holviShowPreview(matches, gesamt){
   var box = document.createElement('div');
   box.style.cssText = 'background:#fff;border-radius:20px;margin:0 12px;padding:20px 16px;max-width:480px;margin-left:auto;margin-right:auto';
 
+  // ← Echter Index im matches-Array stampen — mitTermin/ohneTermin haben andere Indizes!
+  matches.forEach(function(m, i){ m._matchIdx = i; });
+
   var mitTermin = matches.filter(function(m){ return m.termin; });
   var ohneTermin = matches.filter(function(m){ return !m.termin; });
 
@@ -5071,12 +5074,12 @@ function holviShowPreview(matches, gesamt){
 
   if(mitTermin.length){
     html += '<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px;letter-spacing:.5px">✓ TERMIN GEFUNDEN ('+mitTermin.length+') — Tippen zum Ändern</div>';
-    mitTermin.forEach(function(m,i){
+    mitTermin.forEach(function(m){
       var mehrTermine = m.terminKandidaten && m.terminKandidaten.length > 1;
       var istMonats = !!m.monatsAbrechn;
       var anzTermine = m.termineAlle ? m.termineAlle.length : 1;
 
-      html += '<div onclick="'+(istMonats||m._gutschriftMatch?'':' holviTerminWechseln('+i+')')+'" '
+      html += '<div onclick="'+(istMonats||m._gutschriftMatch?'':' holviTerminWechseln('+m._matchIdx+')')+'" '
         +'style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(istMonats||m._gutschriftMatch?'':'cursor:pointer;touch-action:manipulation')+'">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
         +'<div style="font-size:13px;font-weight:800">'+fmtEur(m.zahlung.betrag)+'</div>'
@@ -5396,6 +5399,11 @@ function holviBestaetigen(){
       m.termin.status = 'bezahlt';
       m.termin.zahlungDatum = z.datum;
       m.termin.zahlungBetrag = z.betrag;
+      // Auch db.abrechnungen als bezahlt markieren
+      if(m.termin.abId){
+        var ab=(db.abrechnungen||[]).find(function(a){return a.id===m.termin.abId;});
+        if(ab){ ab.bezahlt=true; ab.zahlungDatum=z.datum; }
+      }
     }
     importiert++;
   });
@@ -8701,10 +8709,23 @@ function dokAnalyseDoc(d, key, cb){
     +'Bestimme typ:\n'
     +'  "dispo" = Synchron-Dispoblatt\n'
     +'  "abrechn" = EINZEL-Gagenabrechnung/Gutschrift für GENAU EINEN Aufnahmetag\n'
+    +'  "abrechn" AUCH = Selbst ausgestellte Rechnung von Tim Knauer an ein Studio/eine Firma\n'
+    +'    → Erkennbar an: "Tim Knauer" oben als Absender, "Bitte überweisen Sie", IBAN im Text, Rollenname\n'
+    +'    → NIEMALS "ausgabe" — Tim ist Rechnungssteller = Einnahme!\n'
     +'  "monats_abrechn" = Monats-Sammelabrechnung mit TABELLE die MEHRERE VERSCHIEDENE Aufnahmedaten auflistet\n'
     +'  WICHTIG: Eine Abrechnung mit NUR EINEM Aufnahmedatum ("von:/bis:" gleich) ist IMMER "abrechn", NIEMALS "monats_abrechn"!\n'
     +'  "Bisherige Jahressummen" unten auf der Seite = KUMULATIVWERTE, IGNORIEREN für Typerkennung und Beträge!\n'
-    +'  "ausgabe" = Quittung/Rechnung, "sonstig" = sonstiges\n'
+    +'  "ausgabe" = Quittung/Rechnung NUR wenn Tim der KÄUFER/EMPFÄNGER ist (er bezahlt jemand anderen)\n'
+    +'\n'
+    +'Bei selbst ausgestellten Rechnungen (Tim als Rechnungssteller):\n'
+    +'  datum = Leistungsdatum (steht als "Leistungsdatum:" oder "Aufnahmedatum:" — NICHT das Rechnungsdatum oben!)\n'
+    +'  studio = der Empfänger der Rechnung (Firmenname oben, z.B. "mobyDOK GmbH" → "mobyDOK")\n'
+    +'  titel = Projektname (steht in der Leistungsbeschreibung, z.B. "Arte42", "KI & Gefühle")\n'
+    +'  rolle = Rollenname aus der Leistungsbeschreibung\n'
+    +'  brutto = Gesamtbetrag inkl. MwSt ("zus.:" oder "Gesamt" Zeile)\n'
+    +'  netto = Betrag ohne MwSt\n'
+    +'  mwst = MwSt-Betrag\n'
+    +'  auszahlung = brutto\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
@@ -8866,7 +8887,17 @@ function dokAnalyseDoc(d, key, cb){
     +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12) — "- Krankenversicherung" Zeile\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
-    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format):\n'
+    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format oder einfache Rechnung):\n'
+    +'    Erkennbar an: Tim Knauer steht OBEN als Absender, "Bitte überweisen Sie", IBAN im Text\n'
+    +'    datum = Leistungsdatum ("Leistungsdatum:" Zeile) — NICHT das Rechnungsdatum oben rechts!\n'
+    +'    studio = Empfänger der Rechnung (Firma oben, z.B. "mobyDOK GmbH" → studio="mobyDOK")\n'
+    +'    EINFACHES FORMAT (nur Netto + MwSt + Gesamt, keine SV-Abzüge):\n'
+    +'      brutto = "zus.:" oder "Gesamt" Zeile (= Netto + MwSt)\n'
+    +'      netto = Nettobetrag vor MwSt\n'
+    +'      mwst = "zzgl. X% MWST." Betrag\n'
+    +'      auszahlung = brutto\n'
+    +'      kv_abzug=0, rv_abzug=0, pv_abzug=0\n'
+    +'    TONEWORX FORMAT (mit SV-Abzügen):\n'
     +'    KV/RV/PV stehen als Prozentzeillen: "abzgl. anteiliger AN-Beitrag zur Krankenversicherung 8,345% → 91,80€"\n'
     +'    → kv_abzug = der BETRAG (91.80), NICHT der Prozentsatz!\n'
     +'    RV: "abzgl. anteiliger AN-Beitrag zur Rentenversicherung 9,300%" → rv_abzug = Betrag\n'
@@ -12806,6 +12837,7 @@ function rMahnwesen(){
       return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
     });
     var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
+    if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum||'';
     var abDate = new Date(abDatum);
     var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
     var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
@@ -12828,7 +12860,7 @@ function rMahnwesen(){
       +'</div>'
       +'</div>'
       +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
-      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
+      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+(!isNaN(faelligAm.getTime())?fd(faelligAm.toISOString().split('T')[0]):'?')
       +'</div>'
       +'<div style="display:flex;gap:8px">'
       +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
