@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '546';
+  if(el) el.textContent = '547';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11466,8 +11466,7 @@ function dokStornoAlsAusgabe(dokId){
   var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
   if(termin){
     var stornoNotiz = 'Storno '+(d.gutschrift_nr||d.dateiname||'')+(d.brutto?' · '+fmtEur(Math.abs(parseFloat(d.brutto))):'');
-    termin.notiz = (termin.notiz ? termin.notiz+'
-' : '') + stornoNotiz;
+    termin.notiz = (termin.notiz ? termin.notiz+'\n' : '') + stornoNotiz;
   }
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, 'sonstig');
   save(db);
