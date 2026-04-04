@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '536';
+  if(el) el.textContent = '539';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2952,16 +2952,18 @@ function closeDetail(){
 // ── ABRECHNUNG UPSERT — create oder update, nie blockieren ────
 function _upsertAbrechnung(abId, felder){
   if(!db.abrechnungen) db.abrechnungen = [];
+  // Suche erst nach abId, dann nach terminId als Fallback
   var idx = abId ? db.abrechnungen.findIndex(function(a){return a.id===abId;}) : -1;
+  if(idx < 0 && felder.terminId){
+    idx = db.abrechnungen.findIndex(function(a){return a.terminId===felder.terminId;});
+  }
   if(idx >= 0){
-    // Update bestehenden Eintrag — nur Felder überschreiben die im Dokument stehen
     var ab = db.abrechnungen[idx];
     Object.keys(felder).forEach(function(k){
       if(felder[k] !== null && felder[k] !== undefined) ab[k] = felder[k];
     });
-    return abId;
+    return ab.id;
   } else {
-    // Neu anlegen
     var newId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
     felder.id = newId;
     db.abrechnungen.push(felder);
@@ -4496,9 +4498,8 @@ function importData(inp){
         if(_ex) return;
         var _b = parseFloat(t.brutto_termin)||0;
         if(!_b) return;
-        var _nid='ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-        db.abrechnungen.push({
-          id:_nid, datum:t.datum||'', studio:t.studio||'',
+        var _nid = _upsertAbrechnung(t.abId||null, {
+          datum:t.datum||'', studio:t.studio||'',
           produktion:t.titel||'', gutschrift_nr:t.gutschrift_nr||'',
           dateiname:t.abrechn_dateiname||'', brutto:_b,
           mwst:parseFloat(t.mwst_anteil)||null, auszahlung:_b,
@@ -6761,26 +6762,17 @@ function migrateAbrechungen(){
     // Eintrag fehlt — aus Termin-Feldern rekonstruieren
     var brutto = parseFloat(t.brutto_termin)||0;
     if(!brutto) return; // kein Betrag bekannt → nicht anlegen
-    var newId = 'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-    var newAb = {
-      id: newId,
-      datum: t.datum||'',
-      studio: t.studio||'',
-      produktion: t.titel||'',
-      gutschrift_nr: t.gutschrift_nr||'',
-      dateiname: t.abrechn_dateiname||'',
-      brutto: brutto,
-      mwst: parseFloat(t.mwst_anteil)||null,
-      auszahlung: brutto,
+    var newId = _upsertAbrechnung(t.abId||null, {
+      datum: t.datum||'', studio: t.studio||'',
+      produktion: t.titel||'', gutschrift_nr: t.gutschrift_nr||'',
+      dateiname: t.abrechn_dateiname||'', brutto: brutto,
+      mwst: parseFloat(t.mwst_anteil)||null, auszahlung: brutto,
       kv: Math.abs(parseFloat(t.kv_abzug)||0),
       rv: Math.abs(parseFloat(t.rv_abzug)||0),
       pv: Math.abs(parseFloat(t.pv_abzug)||0),
-      terminId: t.id,
-      bezahlt: t.status==='bezahlt',
-      zahlungDatum: t.zahlungDatum||null,
-      _migriert: true
-    };
-    db.abrechnungen.push(newAb);
+      terminId: t.id, bezahlt: t.status==='bezahlt',
+      zahlungDatum: t.zahlungDatum||null, _migriert: true
+    });
     t.abId = newId;
     count++;
   });
@@ -6873,23 +6865,28 @@ function rJahresabschluss(){
       rv: Math.abs(parseFloat(t.rv_abzug)||0), pv: Math.abs(parseFloat(t.pv_abzug)||0)
     });
   });
-  // Auch SV aus Termin-Fallback-Einträgen summieren (nicht in gnrGruppen)
-  var gnrInGruppenSV = {};
-  Object.keys(gnrGruppen).forEach(function(key){ if(gnrGruppen[key].gnr) gnrInGruppenSV[gnrGruppen[key].gnr]=true; });
-  termine.filter(function(t){
-    if(!t.brutto_termin && !t.gutschrift_nr) return false;
-    if(t.gutschrift_nr && gnrInGruppenSV[t.gutschrift_nr]) return false; // schon in gnrGruppen
-    return !!(parseFloat(t.kv_abzug)||parseFloat(t.rv_abzug)||parseFloat(t.pv_abzug));
-  }).forEach(function(t){
-    // Deduplizierung
-    var _key = t.gutschrift_nr ? 'gnr_'+t.gutschrift_nr : 'id_'+t.id;
-    if(gnrInGruppenSV[_key]) return;
-    gnrInGruppenSV[_key] = true;
-    kvGes += Math.abs(parseFloat(t.kv_abzug)||0);
-    rvGes += Math.abs(parseFloat(t.rv_abzug)||0);
-    pvGes += Math.abs(parseFloat(t.pv_abzug)||0);
+  // svGes aus abListe — gleiche Quelle wie Tabelle, verhindert Doppelzählung
+  var svGes = 0, kvGesTab = 0, rvGesTab = 0, pvGesTab = 0, bruttoGesTab = 0;
+  // gnrGruppen: gesamt-Werte
+  Object.keys(gnrGruppen).forEach(function(key){
+    var g=gnrGruppen[key]; var e=g.abs[0];
+    bruttoGesTab += parseFloat(e.gesamt_brutto)||g.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+    kvGesTab += parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0);
+    rvGesTab += parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0);
+    pvGesTab += parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0);
   });
-  var svGes = kvGes + rvGes + pvGes;
+  // abListe (Termin-Fallback, nicht in gnrGruppen)
+  var _gnrInTab = {};
+  Object.keys(gnrGruppen).forEach(function(k){ if(gnrGruppen[k].gnr) _gnrInTab[gnrGruppen[k].gnr]=true; });
+  abListe.filter(function(a){ return !a.gutschrift_nr||!_gnrInTab[a.gutschrift_nr]; }).forEach(function(a){
+    bruttoGesTab += parseFloat(a.brutto)||0;
+    kvGesTab += parseFloat(a.kv)||0;
+    rvGesTab += parseFloat(a.rv)||0;
+    pvGesTab += parseFloat(a.pv)||0;
+  });
+  svGes = kvGesTab + rvGesTab + pvGesTab;
+  // Überschreibe bruttoGes/kvGes mit Tabellen-Werten für konsistente Anzeige
+  bruttoGes = bruttoGesTab; kvGes = kvGesTab; rvGes = rvGesTab; pvGes = pvGesTab;
 
   // Statistik aus Terminen
   var total = termine.length;
@@ -7051,14 +7048,32 @@ function rJahresabschluss(){
         .forEach(function(a){ html += renderAbRow(a); });
     }
 
-    // ── GESAMTZEILE ──────────────────────────────────────────
+    // ── GESAMTZEILE — nur aus Tabellenwerten summieren ──────
+    // Brutto: aus gnrGruppen + abListe (was die Tabelle zeigt)
+    var _tabBrutto=0, _tabKV=0, _tabRV=0, _tabPV=0;
+    gruppenSorted.forEach(function(key){
+      var g=gnrGruppen[key];
+      var e=g.abs[0];
+      var _b=parseFloat(e.gesamt_brutto)||g.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+      var _kv=parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0);
+      var _rv=parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0);
+      var _pv=parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0);
+      _tabBrutto+=_b; _tabKV+=_kv; _tabRV+=_rv; _tabPV+=_pv;
+    });
+    abListe.filter(function(a){return !a.gutschrift_nr||!gnrGruppen['gnr_'+a.gutschrift_nr];}).forEach(function(a){
+      _tabBrutto+=parseFloat(a.brutto)||0;
+      _tabKV+=parseFloat(a.kv)||0;
+      _tabRV+=parseFloat(a.rv)||0;
+      _tabPV+=parseFloat(a.pv)||0;
+    });
+    var _tabSV=_tabKV+_tabRV+_tabPV;
     html += '<tr style="border-top:3px solid #374151;background:#1d6fa8">'
       +'<td colspan="3" style="'+colStyle+'font-weight:900;color:#fff;font-size:12px">GESAMT '+yr+'</td>'
-      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+fmtEur(bruttoGes)+'</td>'
-      +'<td style="'+colNum+'color:#fff">'+(kvGes?fmtEur(kvGes):'—')+'</td>'
-      +'<td style="'+colNum+'color:#fff">'+(rvGes?fmtEur(rvGes):'—')+'</td>'
-      +'<td style="'+colNum+'color:#fff">'+(pvGes?fmtEur(pvGes):'—')+'</td>'
-      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+(svGes?fmtEur(svGes):'—')+'</td>'
+      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+fmtEur(_tabBrutto)+'</td>'
+      +'<td style="'+colNum+'color:#fff">'+(_tabKV?fmtEur(_tabKV):'—')+'</td>'
+      +'<td style="'+colNum+'color:#fff">'+(_tabRV?fmtEur(_tabRV):'—')+'</td>'
+      +'<td style="'+colNum+'color:#fff">'+(_tabPV?fmtEur(_tabPV):'—')+'</td>'
+      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+(_tabSV?fmtEur(_tabSV):'—')+'</td>'
       +'</tr>';
 
     html += '</tbody></table></div></div>';
@@ -11894,8 +11909,8 @@ function dokLinkMultiConfirm(){
           gesamt_auszahlung: auszahlung||null,
           gesamt_gutschrift_nr: gutschriftNr||null
         };
-        db.abrechnungen.push(teilAb);
-        t.abId=teilAb.id;
+        var _teilId = _upsertAbrechnung(t.abId||null, teilAb);
+        t.abId=_teilId;
         if(d.rolle&&!t.rolle) t.rolle=d.rolle;
         if(d.regie&&!t.regie) t.regie=d.regie;
         if(d.titel&&!t.titel) t.titel=d.titel;
@@ -14594,10 +14609,11 @@ function abSpeichern(){
     erstelltAm:new Date().toISOString(),
     abImg:(_abFileType==='img'&&_abFileDataURL)?_abFileDataURL:null
   };
-  db.abrechnungen.push(ab);
+  var _abNewId = _upsertAbrechnung(matched&&matched.abId||null, ab);
+  ab.id = _abNewId;
   if(matched){
     matched.status='abrechnung';
-    matched.abId=ab.id;
+    matched.abId=_abNewId;
     // Übertrage Gagen-Daten aus Abrechnung immer in Termin
     if(ab.takes) matched.takes=ab.takes;
     if(ab.take_gage) matched.rate=ab.take_gage;
