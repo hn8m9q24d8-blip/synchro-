@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '547';
+  if(el) el.textContent = '550';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6865,7 +6865,8 @@ function rJahresabschluss(){
       datum: t.datum, studio: t.studio, produktion: t.titel||'',
       gutschrift_nr: t.gutschrift_nr||'', dateiname: t.abrechn_dateiname||'',
       brutto: _b, kv: Math.abs(parseFloat(t.kv_abzug)||0),
-      rv: Math.abs(parseFloat(t.rv_abzug)||0), pv: Math.abs(parseFloat(t.pv_abzug)||0)
+      rv: Math.abs(parseFloat(t.rv_abzug)||0), pv: Math.abs(parseFloat(t.pv_abzug)||0),
+      terminId: t.id
     });
   });
   // svGes aus abListe — gleiche Quelle wie Tabelle, verhindert Doppelzählung
@@ -7238,7 +7239,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
-  else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');rMahnwesen();}
+  else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');setTimeout(rMahnwesen,50);}
   else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
   else if(v==='gagenabrechnungen'){rZahlungen();}
@@ -11216,12 +11217,17 @@ function dokBestaetigenMonat(dokId){
   d.dataURL=null; // RAM freigeben
   var allSessionsDone = d.sessions.every(function(s){return s._done;});
   if(allSessionsDone){
-    // dataURL NUR löschen wenn kein anderes Split-Dok mehr drauf verweist
-    // (andere Gutschriften brauchen dataURL für ihre PDF-Vorschau via _splitFromPdf)
+    // dataURL NUR löschen wenn alle Sessions dieser Gruppe bestätigt sind
+    var _parentId2 = d._splitFromPdf || d.id;
     var istNochReferenziert = (db.dokumente||[]).some(function(x){
-      return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
+      return x.id !== d.id && x._splitFromPdf === _parentId2 && !x.bestaetigt;
     });
     if(!istNochReferenziert){
+      // Auch Parent-Dok dataURL löschen
+      if(d._splitFromPdf){
+        var _par = (db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+        if(_par){ _par.dataURL=null; _par.thumb=null; }
+      }
       d.dataURL=null;
       d.thumb=null;
     }
@@ -11258,8 +11264,7 @@ function dokBestaetigenMonat(dokId){
     if(naechstesDok){
       showToast('\u2713 Gutschrift '+(d._splitIdx+1)+' von '+d._splitTotal+' \u00b7 Weiter: '+(naechstesIdx+1));
       dokDetailClose();
-      switchView('dokumente'); // sicherstellen dass wir auf der richtigen View sind
-      setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 200);
+      setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 150);
     } else {
       showToast('\u2713 Alle '+d._splitTotal+' Abrechnungen bestätigt \u00b7 '+msg2);
       dokDetailClose();
@@ -13197,6 +13202,7 @@ function updateMahnBadgeOnLoad(){
       });
       if(dok&&dok.datum) abDatum=dok.datum;
     }
+    if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum;
     if(!abDatum) return false;
     var faellig=new Date(new Date(abDatum).getTime()+30*24*60*60*1000);
     return faellig < new Date(heute);
