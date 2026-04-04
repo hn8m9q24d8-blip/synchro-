@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '541';
+  if(el) el.textContent = '546';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2980,6 +2980,7 @@ function saveMergeChanges(){
   }
   // Alle Dokumente mit _pendingDelete archivieren
   var deletedDoks=[];
+  var _lastSplitDok = null; // merken für Navigation nach der Schleife
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){
       deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||''});
@@ -2996,6 +2997,7 @@ function saveMergeChanges(){
       }
       dok._pendingDelete=false;
       _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null, dok.typ||null);
+      if(dok._splitGroup && dok._splitTotal > 1) _lastSplitDok = dok;
     }
   });
 
@@ -3113,8 +3115,9 @@ function saveMergeChanges(){
       save(db);
     }
     // ── Split-Navigation: nächste Gutschrift automatisch öffnen ──────────
-    // (gilt für alle Split-Docs — mit und ohne Sub-Sessions)
-    if(dok && dok._splitGroup && dok._splitTotal > 1 && dok.bestaetigt){
+    var _navDok = _lastSplitDok || dok;
+    if(_navDok && _navDok._splitGroup && _navDok._splitTotal > 1 && _navDok.bestaetigt){
+      var dok = _navDok; // für den Rest des Blocks
       var naechstesIdx2 = (dok._splitIdx||0) + 1;
       var naechstesDok2 = (db.dokumente||[]).find(function(x){
         return x._splitGroup===dok._splitGroup && x._splitIdx===naechstesIdx2 && !x.bestaetigt;
@@ -7235,7 +7238,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
-  else if(v==='mahnwesen'){rMahnwesen();}
+  else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');rMahnwesen();}
   else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
   else if(v==='gagenabrechnungen'){rZahlungen();}
@@ -8887,6 +8890,12 @@ function dokAnalyseDoc(d, key, cb){
     +'    Zeile "Streaming 1-10 Ta | Film XY | 127,00€" bedeutet: grundgage=127.0 (Pauschale für ≤10 Takes)\n'
     +'    Der Betrag ist KORREKT — keine Differenz zur Dispo (die zeigt oft nur die Komm.-Gage ohne 1-10-Regel)\n'
     +'    Bei Einzelabrechnung (abrechn): grundgage = dieser Pauschalbetrag, takes=0, take_gage=0\n'
+    +'    ⚠⚠⚠ WENN grundgage gesetzt aber take_gage=0 und takes=0: IMMER prüfen ob 1-10-Regel!\n'
+    +'    Bekannte Sätze: TV=80€+10×4€=120€, Streaming=85€+10×4,20€=127€, Kino=100€+10×5€=150€\n'
+    +'    Wenn grundgage einem dieser Werte entspricht: take_gage und grundgage AUFTEILEN!\n'
+    +'    Beispiel: grundgage=127 → grundgage=85, take_gage=4.20, takes=0 (App addiert 10 automatisch)\n'
+    +'    Beispiel: grundgage=120 → grundgage=80, take_gage=4.0, takes=0\n'
+    +'    Beispiel: grundgage=150 → grundgage=100, take_gage=5.0, takes=0\n'
     +'  ⚠ VSI-FORMAT — Zwei separate Zeilen für Grundgage und Takegage:\n'
     +'    Zeile 1: "Grundgage Streaming" mit Betrag z.B. 127,00€ → grundgage=127\n'
     +'    Zeile 2: "Takegage Streaming" mit Anzahl Takes z.B. "4" und Betrag 0,00€\n'
@@ -10130,6 +10139,14 @@ function dokOpenDetail(id){
         + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:'+terminLabelColor+';color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
         + '</div>';
       body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:#f8fafc;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
+      // Storno-Hinweis bei negativem Brutto
+      if(parseFloat(d.brutto||0) < 0){
+        body += '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 14px;margin-bottom:10px">'
+          +'<div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:4px">⚠ Storno-Gutschrift erkannt</div>'
+          +'<div style="font-size:11px;color:#7f1d1d;margin-bottom:8px">Negativer Betrag ('+fmtEur(parseFloat(d.brutto||0))+'). Diese Gutschrift sollte nicht als Einnahme gebucht werden — stattdessen als Ausgabe, um die Buchhaltung auszugleichen.</div>'
+          +'<button type="button" onclick="dokStornoAlsAusgabe(\''+d.id+'\')" style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📁 Storno archivieren</button>'
+          +'</div>';
+      }
       body += _buildMergePreview(d, termin);
       // Button ist im fixen Footer (dok-footer-confirm)
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
@@ -11434,6 +11451,30 @@ function _applyEditedFields(d){
   }
 }
 
+
+function dokStornoAlsAusgabe(dokId){
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  // Storno archivieren — kein Einfluss auf Buchhaltung/USt/EÜR
+  d.typ = 'sonstig';
+  d.storno = true;
+  d.bestaetigt = true;
+  d.awaitConfirm = false;
+  d.dataURL = null;
+  d._pendingDelete = true;
+  // Notiz am Kalendertermin hinterlassen wenn vorhanden
+  var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
+  if(termin){
+    var stornoNotiz = 'Storno '+(d.gutschrift_nr||d.dateiname||'')+(d.brutto?' · '+fmtEur(Math.abs(parseFloat(d.brutto))):'');
+    termin.notiz = (termin.notiz ? termin.notiz+'
+' : '') + stornoNotiz;
+  }
+  _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, 'sonstig');
+  save(db);
+  rDokumente();
+  showToast('✓ Storno archiviert'+(termin?' · Notiz am Termin':''));
+  dokDetailClose();
+}
 function dokBestaetigenMitTermin(dokId, terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
@@ -11457,7 +11498,12 @@ function dokBestaetigenMitTermin(dokId, terminId){
   }
   d.bestaetigt = true;
   d.awaitConfirm = false;
-  d.dataURL = null; // RAM freigeben
+  // dataURL nur löschen wenn keine unbestätigten Geschwister mehr das Parent brauchen
+  var _parentId = d._splitFromPdf || d.id;
+  var _nochGebraucht = (db.dokumente||[]).some(function(x){
+    return x.id !== d.id && x._splitFromPdf === _parentId && !x.bestaetigt;
+  });
+  if(!_nochGebraucht){ d.dataURL = null; }
   // _archivLog jetzt schon — Foto-Löschung kommt später via _pendingDelete
   _archiveDateiname(d.dateiname||d.beschr, terminId, d.typ||'dispo');
   // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
