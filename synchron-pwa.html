@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '539';
+  if(el) el.textContent = '541';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6963,7 +6963,7 @@ function rJahresabschluss(){
       return '<tr style="border-bottom:1px solid #f0f0f0">'
         +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
         +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
-        +'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>'
+        +(a.terminId?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+a.terminId+'\')},150)">'+esc(a.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>')
         +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
         +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
         +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
@@ -7010,7 +7010,7 @@ function rJahresabschluss(){
             var tBrutto = parseFloat(t.brutto_termin)||0;
             html += '<tr style="border-bottom:1px solid #f5f5f5">'
               +'<td style="'+colStyle+'color:#666">'+esc(t.studio||studio)+'</td>'
-              +'<td style="'+colStyle+'">'+esc(t.titel||'?')+'</td>'
+              +'<td style="'+colStyle+';cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\')},150)">'+esc(t.titel||'?')+'</td>'
               +'<td style="'+colNum+'">'+(tBrutto?fmtEur(tBrutto):'—')+'</td>'
               +'<td colspan="4"></td></tr>';
           });
@@ -7031,7 +7031,7 @@ function rJahresabschluss(){
             +(dateiname?'<div style="font-size:9px;color:#aaa">📄 '+esc(dateiname)+'</div>':'')
             +'</td>'
             +'<td style="'+colStyle+'">'+esc(studio)+'</td>'
-            +'<td style="'+colStyle+'font-weight:600">'+esc((t&&t.titel)||erstesAb.produktion||'?')+'</td>'
+            +((t&&t.id)?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\')},150)">'+esc(t.titel||erstesAb.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(erstesAb.produktion||'?')+'</td>')
             +'<td style="'+colNum+'font-weight:700">'+fmtEur(gBrutto)+'</td>'
             +'<td style="'+colNum+'">'+(gKV?fmtEur(gKV):'—')+'</td>'
             +'<td style="'+colNum+'">'+(gRV?fmtEur(gRV):'—')+'</td>'
