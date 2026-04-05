@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '575';
+  if(el) el.textContent = '577';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8802,6 +8802,8 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ Immer europäisches Format: erster Teil = Tag, zweiter = Monat — keine Ausnahmen!\n'
     +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
     +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
+    +'    ⚠ IYUNO-Dispos: Erkennbar an "NAVISION #" oder "DEBER..." im Kopf — studio="Iyuno"\n'
+    +'    ⚠ Iyuno-Format hat kein prominentes Studio-Logo — stattdessen steht "NAVISION # DEBER1704-DE" o.ä. oben\n'
     +'    NICHT der Aufnahmeraum/Atelier (NICHT "BLN Studio E", NICHT "Atelier 4", NICHT "Studio 3", NICHT "Harzer Str.")\n'
     +'    Der Atelierraum steht separat als Kommentar/Notiz — dieser gehört NICHT ins studio-Feld!\n'
     +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
@@ -8826,6 +8828,11 @@ function dokAnalyseDoc(d, key, cb){
     +'      Zeile 2: Tetsuo Tanba | Tim Knauer   | 19:00 | 20:30 | 50 | ...\n'
     +'      → FALSCH: rolle="Plum Squad_F" (das ist Lin Gothonas Rolle!)\n'
     +'      → RICHTIG: rolle="Tetsuo Tanba" (steht links von "Tim Knauer" in DERSELBEN Zeile!)\n'
+    +'    ⚠ WEITERES BEISPIEL (Iyuno-Format, Spalten: Character/Role | Actor | Start | End | Takes | Episodes):\n'
+    +'      Zeile 1: DIGBY | Stefan Krause | 09:00 | 09:30 | 12 | ...\n'
+    +'      Zeile 2: BOXER | Tim Knauer    | 09:30 | 12:15 | 101| ...\n'
+    +'      → FALSCH: rolle="DIGBY" (Stefan Krauses Rolle!)\n'
+    +'      → RICHTIG: rolle="BOXER" (steht in Tims Zeile in der Character/Role-Spalte)\n'
     +'    ⚠ Die Rolle der Zeile ÜBER Tim gehört einem anderen Sprecher — NICHT Tims Rolle!\n'
     +'    KREUZPRÜFUNG: Tims Zeile muss "Tim Knauer" in der Sprecher-Spalte haben — sonst falsche Zeile!\n'
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
@@ -11741,7 +11748,12 @@ function dokMergeIntoTermin(d, termin){
   if(d.typ==='dispo'){
     if(!termin.dispoDocId) termin.dispoDocId=d.id;
     // Takes aus Dispo setzen — overwrite wenn noch keine Abrechnung
-    if(d.takes&&!termin.abId) overwrite('takes', d.takes, 'Takes (aus Dispo)');
+    var _dispTakes = parseInt(d.takes)||0;
+    if(!_dispTakes && d.gvl_takes_detail && d.gvl_takes_detail.length){
+      // Fallback: Summe aus gvl_takes_detail (Film-Dispos haben takes nur dort)
+      _dispTakes = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+    }
+    if(_dispTakes && !termin.abId) overwrite('takes', _dispTakes, 'Takes (aus Dispo)');
   }
 
   // ── Abrechnung — alles antizipieren ───────────────────────────────
