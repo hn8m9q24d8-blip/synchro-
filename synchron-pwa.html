@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '569';
+  if(el) el.textContent = '575';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2485,11 +2485,17 @@ function openDetail(id){
       // Chips aus Termin-eigenen gvl_takes_detail
       gvlHtml+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';
       t.gvl_takes_detail.forEach(function(td, ei){
-        var fs=String(td.folge);
-        var isFilmEntry = td.folge===0;
-        var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
-        var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
-        var chipLabel = isFilmEntry ? '🎬' : ('S'+sNr+' F'+fNr);
+        var folgeVal = parseInt(td.folge);
+        var isFilmEntry = td.folge===0 || td.folge==='Film' || isNaN(folgeVal) || td.folge===null || td.folge===undefined;
+        var chipLabel;
+        if(isFilmEntry){
+          chipLabel = '🎬 Film';
+        } else {
+          var fs=String(folgeVal);
+          var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
+          var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(folgeVal||0);
+          chipLabel = 'S'+sNr+' F'+fNr;
+        }
         gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:700;color:#7c3aed">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:900;color:#6d28d9">'+td.takes+'</div>'+'</div>';
       });
       gvlHtml+='</div>';
@@ -8602,39 +8608,46 @@ function dokFooterBestaetigen(){
 function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
+  var datumVorher = d.datum; // Datum vor Edit merken
   _applyEditedFields(d);
   var undoSnap={dokId:d.id,typVorher:d.typ,terminId:d.terminId||null};
+
+  // Datum geändert → alten terminId verwerfen, neu suchen
+  if(d.terminId && datumVorher && d.datum && d.datum !== datumVorher){
+    var oldT=(db.termine||[]).find(function(x){return x.id===d.terminId;});
+    if(oldT && oldT.datum !== d.datum){
+      // Alten Termin aufräumen wenn Dispo dort gesetzt war
+      if(oldT.dispoDocId===d.id){
+        oldT.gvl_takes_detail=null; oldT.gvl_takes=null;
+        oldT.gvl_staffel=null; oldT.gvl_folge=null;
+        oldT.takes=null; oldT.dispoDocId=null;
+      }
+      d.terminId=null; // Neu suchen erzwingen
+    }
+  }
+
   d.bestaetigt=true; d.awaitConfirm=false;
-  // dataURL nur löschen wenn kein Split-Dok mehr drauf verweist
   var _dokNochGebraucht = (db.dokumente||[]).some(function(x){
     return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
   });
-  if(!_dokNochGebraucht){ d.dataURL=null; } // thumb behalten für Miniaturansicht
+  if(!_dokNochGebraucht){ d.dataURL=null; }
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, d.typ||null);
+
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
     if(t2){
-      // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
-      if(d.typ==='dispo'){ t2._dispoDateiname = d.dateiname||d.beschr||''; }
+      if(d.typ==='dispo'){ t2._dispoDateiname = d.dateiname||d.beschr||''; t2.dispoDocId=d.id; }
       else if(d.typ==='abrechn'||d.typ==='monats_abrechn'){ t2.abrechn_dateiname = d.dateiname||''; }
-      if(d.rolle&&!t2.rolle) t2.rolle=d.rolle;
-      if(d.regie&&!t2.regie) t2.regie=d.regie;
-      if(d.titel&&!t2.titel) t2.titel=d.titel;
-      if(d.uhrzeit&&!t2.uhrzeit) t2.uhrzeit=d.uhrzeit;
-      if(d.takes&&!t2.takes) t2.takes=d.takes;
-      if(d.typ==='abrechn'&&d.auszahlung){t2.abgerechnet=true;t2.abrechnungBrutto=parseFloat(d.auszahlung);}
+      // Alle Felder via dokMergeIntoTermin — überall overwrite-Logik konsistent
+      dokMergeIntoTermin(d, t2);
     }
-  } else if(d.datum&&d.studio){
-    var match=dokFindTermin(d.datum,d.studio);
+  } else if(d.datum){
+    var match=dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'', null, d.typ==='abrechn');
     if(match){
       d.terminId=match.id;
-      if(d.rolle&&!match.rolle) match.rolle=d.rolle;
-      if(d.regie&&!match.regie) match.regie=d.regie;
-      if(d.titel&&!match.titel) match.titel=d.titel;
-      if(d.takes&&!match.takes) match.takes=d.takes;
-      // Dateiname direkt am Termin speichern
-      if(d.typ==='dispo' && (d.dateiname||d.beschr)) match._dispoDateiname = d.dateiname||d.beschr||'';
+      if(d.typ==='dispo'){ match._dispoDateiname = d.dateiname||d.beschr||''; match.dispoDocId=d.id; }
       else if((d.typ==='abrechn'||d.typ==='monats_abrechn') && (d.dateiname||d.beschr)) match.abrechn_dateiname = d.dateiname||'';
+      dokMergeIntoTermin(d, match);
       _archiveDateiname(d.dateiname||d.beschr, match.id, d.typ||null);
     }
   }
@@ -8783,10 +8796,10 @@ function dokAnalyseDoc(d, key, cb){
     +'    Beispiel FFS: Titel="10Dance Film" aber kein separates Gattungsfeld → titel="10Dance" (Film ist reine Gattung)\n'
     +'    NIEMALS strippen wenn Gattungswort integraler Titelbestandteil ist: "Squid Game" bleibt "Squid Game"!\n'
     +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
-    +'    ⚠ Datumsformat: Interopa/deutsche Studios nutzen DD/MM/YYYY oder DD.MM.YYYY\n'
-    +'    ⚠ "03/02/2026" auf einer deutschen Dispo = 3. Februar 2026 = 2026-02-03 (NICHT 2026-03-02!)\n'
-    +'    ⚠ Immer europäisches Format annehmen: erster Teil = Tag, zweiter = Monat\n'
-    +'    ⚠ AUSNAHME FFS: FFS nutzt MM/DD/YYYY → "09/10/2025" bei FFS = Oktober 9 = 2025-10-09\n'
+    +'    ⚠ Datumsformat: ALLE Studios (inkl. FFS) nutzen DD/MM/YYYY oder DD.MM.YYYY\n'
+    +'    ⚠ "03/02/2026" = 3. Februar 2026 = 2026-02-03 (NICHT 2026-03-02!)\n'
+    +'    ⚠ "11/12/2025" = 11. Dezember 2025 = 2025-12-11\n'
+    +'    ⚠ Immer europäisches Format: erster Teil = Tag, zweiter = Monat — keine Ausnahmen!\n'
     +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
     +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
     +'    NICHT der Aufnahmeraum/Atelier (NICHT "BLN Studio E", NICHT "Atelier 4", NICHT "Studio 3", NICHT "Harzer Str.")\n'
@@ -8808,6 +8821,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    3) Lies ALLE Werte NUR aus DIESER Zeile: Rolle (Spalte LINKS von Sprecher!), von, bis, EPS, Takes\n'
     +'    4) Alle anderen Zeilen komplett ignorieren — auch wenn sie ähnliche EPS-Nummern haben!\n'
     +'    ⚠ TYPISCHES LAYOUT: Rolle | Sprecher | von | bis | Takes — Rolle steht LINKS vom Sprecher!\n'
+    +'    ⚠ KONKRETES BEISPIEL — so NICHT:\n'
+    +'      Zeile 1: Plum Squad_F | Lin Gothoni  | 18:40 | 19:00 | 10 | ...\n'
+    +'      Zeile 2: Tetsuo Tanba | Tim Knauer   | 19:00 | 20:30 | 50 | ...\n'
+    +'      → FALSCH: rolle="Plum Squad_F" (das ist Lin Gothonas Rolle!)\n'
+    +'      → RICHTIG: rolle="Tetsuo Tanba" (steht links von "Tim Knauer" in DERSELBEN Zeile!)\n'
     +'    ⚠ Die Rolle der Zeile ÜBER Tim gehört einem anderen Sprecher — NICHT Tims Rolle!\n'
     +'    KREUZPRÜFUNG: Tims Zeile muss "Tim Knauer" in der Sprecher-Spalte haben — sonst falsche Zeile!\n'
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
@@ -8888,6 +8906,11 @@ function dokAnalyseDoc(d, key, cb){
     +'  → Bei LAYOUT B/C (nur Gesamtzahl): Extra-Takes in Gesamtzahl einrechnen, dann gleichmäßig verteilen.\n'
     +'  MEHRERE TERMINE PRO FOLGE: Takes werden später pro Folge addiert (nicht ersetzen).\n'
     +'  Falls nicht vorhanden: null\n'
+    +'  ★ FILM-EINTRAG (EPS = "HF", "Film", leer oder keine Folgennummer):\n'
+    +'    Wenn EPS-Spalte "HF" (Halbfilm/Film) oder keinen Folgencode enthält:\n'
+    +'    → gvl_takes_detail=[{"folge":0,"takes":N}] — folge=0 ist das Kennzeichen für Film!\n'
+    +'    NIEMALS null für folge setzen — immer 0 für Filme!\n'
+    +'    Beispiel: Tim Zeile: Rolle=Shinya Suzuki, EPS=HF, Takes=118 → gvl_takes_detail=[{"folge":0,"takes":118}]\n'
     +'\n'
     +'  LAYOUT F: FFS-Format — EPS-Spalte enthält nur Folgennummer, Staffel steht im Kopf\n'
     +'    Kopf der Dispo: "Chicago Medical S11 Staffel 11" → gvl_staffel_header="11"\n'
@@ -9903,10 +9926,11 @@ function dokOpenDetail(id){
     titleEl.textContent = d.beschr||d.dateiname||'Dokument';
   }
   var img = document.getElementById('dok-detail-img');
-  var isNotAnalysed = !d.typ || d.typ==='offen' || d.typ==='sonstig';
-  if(d.dataURL && d.mime!=='application/pdf' && isNotAnalysed && !d.awaitConfirm){
+  // dok-detail-img NUR in STATE 1 (noch nicht analysiert, kein awaitConfirm)
+  var inState1 = (!d.typ || d.typ==='offen') && !d.awaitConfirm;
+  if(d.dataURL && d.mime!=='application/pdf' && inState1){
     img.src=d.dataURL; img.style.display='block';
-  } else { img.style.display='none'; }
+  } else { img.src=''; img.style.display='none'; }
 
   // Termin holen — falls noch nicht verknüpft, jetzt noch versuchen
   if(!d.terminId && (d.typ==='dispo'||d.typ==='abrechn') && d.datum){
@@ -10035,13 +10059,16 @@ function dokOpenDetail(id){
             : '')
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
         d.gvl_takes_detail.forEach(function(e, ei){
-          var isFilm = e.folge===0;
-          var folgeStr=String(e.folge);
+          var folgeVal = parseInt(e.folge);
+          var isFilm = e.folge===0 || e.folge==='Film' || isNaN(folgeVal) || e.folge===null || e.folge===undefined;
           var staffelNr, folgeNr;
-          if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
-          else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
-          else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
-          else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
+          if(!isFilm){
+            var folgeStr=String(folgeVal);
+            if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
+            else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
+            else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
+            else { staffelNr='1'; folgeNr=String(folgeVal||0); }
+          }
           body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
             +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed #e5e7eb;margin-bottom:2px;padding-bottom:2px">'+(isFilm?'🎬 Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
             +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
