@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '566';
+  if(el) el.textContent = '568';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8795,7 +8795,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
     +'    ⚠ NICHT "Produktionsleitung" — das ist eine andere Person!\n'
     +'    ⚠ NICHT "Aufnahmeleitung" — das ist ebenfalls eine andere Person!\n'
-    +'    Wenn mehrere Zeilen vorhanden: Regie ≠ Produktionsleitung ≠ Aufnahmeleitung — nur die "Regie:"-Zeile nehmen!\n'
+    +'    VSI-Dispo-Beispiel (typische Reihenfolge):\n'
+    +'      Produktionsleitung: Amelie Dirks  ← IGNORIEREN für regie!\n'
+    +'      Regie:              Patrick Keller ← DAS ist regie!\n'
+    +'      Aufnahmeleitung:    Tommy Müller  ← IGNORIEREN für regie!\n'
+    +'    → regie = "Patrick Keller" (die Zeile die explizit "Regie:" heißt)\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
     +'  rolle + takes + EPS: NUR aus der Zeile mit "Tim Knauer" als Sprecher!\n'
     +'    ABLAUF — ZWINGEND in dieser Reihenfolge:\n'
@@ -9258,11 +9262,11 @@ function dokAnalyseDoc(d, key, cb){
     xhr.setRequestHeader('anthropic-dangerous-direct-browser-access','true');
     xhr.onload = function(){
       var data;
-      try { data = JSON.parse(xhr.responseText); } catch(e){ showToast('Parse Fehler: '+e.message); if(cb) cb(); return; }
+      try { data = JSON.parse(xhr.responseText); } catch(e){ showToast('Parse Fehler: '+e.message); d.awaitConfirm=true; if(cb) cb(); return; }
       if(!data.content||!data.content[0]){
         var rawErr = (data.error&&data.error.message) || JSON.stringify(data).slice(0,200);
         showToast('API Fehler: '+rawErr);
-        if(cb) cb(); return;
+        d.awaitConfirm=true; if(cb) cb(); return;
       }
       if(data.stop_reason === 'max_tokens'){
         showToast('⚠ Antwort abgeschnitten — bitte nochmal analysieren');
@@ -9277,7 +9281,7 @@ function dokAnalyseDoc(d, key, cb){
       var end = txt.lastIndexOf('}');
       if(start<0||end<0){
         showToast('KI: kein JSON (' + (txt||'').slice(0,60) + ')');
-        d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return;
+        d.typ='sonstig'; d.beschr=d.dateiname; d.awaitConfirm=true; if(cb) cb(); return;
       }
       txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
@@ -9527,10 +9531,10 @@ function dokAnalyseDoc(d, key, cb){
     // Recherche nur auf Knopfdruck im Termin — nicht automatisch
     if(cb) cb();
     };
-    xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; if(cb) cb(); };
+    xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; d.awaitConfirm=true; if(cb) cb(); };
     xhr.timeout = 60000;
-    xhr.ontimeout = function(){ showToast('Timeout'); d.typ='sonstig'; if(cb) cb(); };
-    try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
+    xhr.ontimeout = function(){ showToast('Timeout'); d.typ='sonstig'; d.awaitConfirm=true; if(cb) cb(); };
+    try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); d.awaitConfirm=true; if(cb) cb(); }
   } // end _sendToAPI
 
   // PDF: zuerst bekanntes Passwort versuchen — Studio aus Dateinamen als Fallback
