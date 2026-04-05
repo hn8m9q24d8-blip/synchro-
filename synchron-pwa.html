@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '553';
+  if(el) el.textContent = '558';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6837,10 +6837,18 @@ function rJahresabschluss(){
     }
     bruttoGes += gesamtBrutto;
 
-    // SV: gesamt_kv (einmal) → kv direkt als Fallback
-    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||Math.abs(parseFloat(erstesAb.kv)||0);
-    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||Math.abs(parseFloat(erstesAb.rv)||0);
-    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||Math.abs(parseFloat(erstesAb.pv)||0);
+    // SV: gesamt_kv (einmal) → Summe über alle abs → kv_abzug als letzter Fallback
+    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||0;
+    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||0;
+    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||0;
+    if(!gesamtKV && !gesamtRV && !gesamtPV){
+      // Summe über alle abs der Gruppe (Split-Docs haben Werte verteilt)
+      abs.forEach(function(a){
+        gesamtKV += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
+        gesamtRV += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
+        gesamtPV += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
+      });
+    }
     kvGes += gesamtKV;
     rvGes += gesamtRV;
     pvGes += gesamtPV;
@@ -6883,9 +6891,17 @@ function rJahresabschluss(){
   Object.keys(gnrGruppen).forEach(function(key){
     var g=gnrGruppen[key]; var e=g.abs[0];
     bruttoGesTab += parseFloat(e.gesamt_brutto)||g.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-    kvGesTab += parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0);
-    rvGesTab += parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0);
-    pvGesTab += parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0);
+    var _gkv = parseFloat(e.gesamt_kv)||0;
+    var _grv = parseFloat(e.gesamt_rv)||0;
+    var _gpv = parseFloat(e.gesamt_pv)||0;
+    if(!_gkv && !_grv && !_gpv){
+      g.abs.forEach(function(a){
+        _gkv += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
+        _grv += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
+        _gpv += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
+      });
+    }
+    kvGesTab += _gkv; rvGesTab += _grv; pvGesTab += _gpv;
   });
   // abListe (Termin-Fallback, nicht in gnrGruppen)
   var _gnrInTab = {};
@@ -6972,10 +6988,24 @@ function rJahresabschluss(){
     // Hilfsfunktion: eine Zeile rendern
     function renderAbRow(a){
       var sv=(parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0);
+      // Fallback: terminId via gutschrift_nr oder dokId suchen
+      var _tid = a.terminId;
+      if(!_tid && a.gutschrift_nr){
+        var _t = (db.termine||[]).find(function(t){ return t.gutschrift_nr===a.gutschrift_nr; });
+        if(_t) _tid = _t.id;
+      }
+      if(!_tid && a.dokId){
+        var _t2 = (db.termine||[]).find(function(t){ return t.dokIds && t.dokIds.indexOf(a.dokId)>=0; });
+        if(_t2) _tid = _t2.id;
+      }
+      if(!_tid && a.id){
+        var _t3 = (db.termine||[]).find(function(t){ return t.abId===a.id; });
+        if(_t3) _tid = _t3.id;
+      }
       return '<tr style="border-bottom:1px solid #f0f0f0">'
         +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
         +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
-        +(a.terminId?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+a.terminId+'\')},150)">'+esc(a.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>')
+        +(_tid?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid+'\')},150)">'+esc(a.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>')
         +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
         +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
         +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
@@ -7000,9 +7030,16 @@ function rJahresabschluss(){
         }).sort(function(a,b){return a.datum<b.datum?-1:1;});
         // Gesamt-Werte
         var gBrutto = parseFloat(erstesAb.gesamt_brutto)||abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-        var gKV = parseFloat(erstesAb.gesamt_kv)||Math.abs(parseFloat(erstesAb.kv)||0);
-        var gRV = parseFloat(erstesAb.gesamt_rv)||Math.abs(parseFloat(erstesAb.rv)||0);
-        var gPV = parseFloat(erstesAb.gesamt_pv)||Math.abs(parseFloat(erstesAb.pv)||0);
+        var gKV = parseFloat(erstesAb.gesamt_kv)||0;
+        var gRV = parseFloat(erstesAb.gesamt_rv)||0;
+        var gPV = parseFloat(erstesAb.gesamt_pv)||0;
+        if(!gKV && !gRV && !gPV){
+          abs.forEach(function(a){
+            gKV += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
+            gRV += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
+            gPV += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
+          });
+        }
         var gSV = gKV+gRV+gPV;
         var gnr = gruppe.gnr||erstesAb.gutschrift_nr||'—';
         var studio = erstesAb.studio||'';
@@ -7038,6 +7075,17 @@ function rJahresabschluss(){
         } else {
           // Einzel-Abrechnung: eine Zeile
           var t = sessions[0]||null;
+          // Fallback: Termin via ab.terminId oder ab.dokId suchen
+          if(!t && erstesAb.terminId){
+            t = (db.termine||[]).find(function(x){ return x.id===erstesAb.terminId; })||null;
+          }
+          if(!t && erstesAb.dokId){
+            t = (db.termine||[]).find(function(x){ return x.dokIds && x.dokIds.indexOf(erstesAb.dokId)>=0; })||null;
+          }
+          // Stärkster Fallback: t.abId zeigt auf dieses ab
+          if(!t && erstesAb.id){
+            t = (db.termine||[]).find(function(x){ return x.abId===erstesAb.id; })||null;
+          }
           html += '<tr style="border-bottom:1px solid #f0f0f0">'
             +'<td style="'+colStyle+'color:#555">'+esc(gnr)
             +(dateiname?'<div style="font-size:9px;color:#aaa">📄 '+esc(dateiname)+'</div>':'')
@@ -13109,14 +13157,20 @@ function runIntegrityCheck(silent){
   });
 
   // 2. Monats-GS: Summe aller brutto_termin der Sessions = gesamt_brutto
+  // GNR-Normalisierung: "2559/20260301" → "2559/202603" (Tagesdatum → Monatspräfix)
+  var normalizeGnr = function(gnr){
+    var m = (gnr||'').match(/^(.+\/\d{6})\d{2}$/);
+    return m ? m[1] : (gnr||'');
+  };
   var gnrMap = {};
   (db.termine||[]).forEach(function(t){
     if(!t.gutschrift_nr || !t.brutto_termin) return;
     var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
     var gestBrutto = ab ? parseFloat(ab.gesamt_brutto)||0 : 0;
     if(!gestBrutto) return;
-    if(!gnrMap[t.gutschrift_nr]) gnrMap[t.gutschrift_nr]={sum:0, gesamt:gestBrutto, titel:t.titel||t.studio||'?'};
-    gnrMap[t.gutschrift_nr].sum += parseFloat(t.brutto_termin)||0;
+    var key = normalizeGnr(t.gutschrift_nr);
+    if(!gnrMap[key]) gnrMap[key]={sum:0, gesamt:gestBrutto, titel:t.titel||t.studio||'?'};
+    gnrMap[key].sum += parseFloat(t.brutto_termin)||0;
   });
   Object.keys(gnrMap).forEach(function(gnr){
     var e = gnrMap[gnr];
@@ -13132,8 +13186,9 @@ function runIntegrityCheck(silent){
     var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
     var gestKV = ab ? parseFloat(ab.gesamt_kv)||0 : 0;
     if(!gestKV) return;
-    if(!gnrKvMap[t.gutschrift_nr]) gnrKvMap[t.gutschrift_nr]={sum:0, gesamt:gestKV};
-    gnrKvMap[t.gutschrift_nr].sum += parseFloat(t.kv_abzug)||0;
+    var key = normalizeGnr(t.gutschrift_nr);
+    if(!gnrKvMap[key]) gnrKvMap[key]={sum:0, gesamt:gestKV};
+    gnrKvMap[key].sum += parseFloat(t.kv_abzug)||0;
   });
   Object.keys(gnrKvMap).forEach(function(gnr){
     var e = gnrKvMap[gnr];
@@ -15201,6 +15256,20 @@ function suchHL(text,q){
       if(badge){ badge.textContent=warnings.length; badge.style.display='inline'; }
     }
   }, 1500);
+
+  // iOS Safari: Tabellen nach Orientierungswechsel neu rendern
+  // (overflow-x:auto shrinkst nicht automatisch beim Zurückdrehen)
+  window.addEventListener('orientationchange', function(){
+    setTimeout(function(){
+      var activeView = document.querySelector('.view.active');
+      if(!activeView) return;
+      var id = activeView.id;
+      if(id === 'view-jahresabschluss') rJahresabschluss();
+      else if(id === 'view-sozialabgaben') rSozialStat();
+      else if(id === 'view-gagenabrechnungen') rZahlungen();
+      else if(id === 'view-gvl') rGVL();
+    }, 350); // 350ms: Rotation-Animation abwarten
+  });
 })();
 
 </script>
