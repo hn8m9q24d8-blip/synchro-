@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '568';
+  if(el) el.textContent = '569';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11713,8 +11713,8 @@ function dokMergeIntoTermin(d, termin){
   // ── Dispo-spezifisch ──────────────────────────────────────────────
   if(d.typ==='dispo'){
     if(!termin.dispoDocId) termin.dispoDocId=d.id;
-    // Takes aus Dispo setzen (wenn Abrechnung noch nicht da)
-    if(d.takes&&!termin.abId) fill('takes', d.takes, 'Takes (aus Dispo)');
+    // Takes aus Dispo setzen — overwrite wenn noch keine Abrechnung
+    if(d.takes&&!termin.abId) overwrite('takes', d.takes, 'Takes (aus Dispo)');
   }
 
   // ── Abrechnung — alles antizipieren ───────────────────────────────
@@ -11928,12 +11928,28 @@ function dokAssignTermin(dokId, terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d||!t) return;
+
+  // Alten Termin aufräumen: GVL-Daten entfernen wenn Dispo umgezogen wird
+  var oldTerminId = d.terminId;
+  if(oldTerminId && oldTerminId !== terminId){
+    var oldTermin = (db.termine||[]).find(function(x){return x.id===oldTerminId;});
+    if(oldTermin && oldTermin.dispoDocId === dokId){
+      // Dieser Termin hatte die Dispo — GVL-Felder zurücksetzen
+      oldTermin.gvl_takes_detail = null;
+      oldTermin.gvl_takes = null;
+      oldTermin.gvl_staffel = null;
+      oldTermin.gvl_folge = null;
+      oldTermin.takes = null;
+      oldTermin.dispoDocId = null;
+    }
+  }
+
   d.terminId=terminId;
   var changed=dokMergeIntoTermin(d,t);
   save(db); rDokumente(); rTermine();
   showToast('✓ Mit "'+esc(t.titel||t.studio||t.datum)+'" verknüpft');
   if(changed.length) _showMergeSummary(t, changed, d);
-  dokOpenDetail(dokId); // Panel aktualisieren
+  dokOpenDetail(dokId);
 }
 
 function _checkPendingDokLink(terminId){
