@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '577';
+  if(el) el.textContent = '583';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4172,11 +4172,35 @@ function saveTermin(){
   }
   if(!t.titel){showToast('⚠️ Bitte Titel eingeben');return;}
   if(!t.datum){showToast('⚠️ Bitte Datum eingeben');return;}
+
+  // Duplikat-Schutz: Gleicher Titel + Datum + Studio → Warnung
+  if(isNew){
+    var duplikat = db.termine.find(function(x){
+      if(x.id === t.id) return false;
+      if(x.datum !== t.datum) return false;
+      var titelMatch = x.titel && t.titel && x.titel.trim().toLowerCase() === t.titel.trim().toLowerCase();
+      var studioMatch = x.studio && t.studio && x.studio.trim().toLowerCase() === t.studio.trim().toLowerCase();
+      var uhrzeitMatch = !x.uhrzeit || !t.uhrzeit || x.uhrzeit === t.uhrzeit;
+      return titelMatch && (studioMatch || uhrzeitMatch);
+    });
+    if(duplikat){
+      if(!confirm('⚠️ Mögliches Duplikat!\n"'+duplikat.titel+'" am '+fd(duplikat.datum)+' existiert bereits.\nTrotzdem neu erstellen?')){
+        return;
+      }
+    }
+  }
   save(db);
   closeTerminSheet();
   rTermine();updateBadge();
   showToast('✓ Termin '+(isNew?'angelegt':'gespeichert'));
   if(!isNew&&ctid===id)openDetail(id);
+  // Wenn Dispo auf neuen Termin wartet → sofort direkt verknüpfen (kein Multi-Select)
+  if(isNew && _pendingDokLink){
+    var _pdl = _pendingDokLink;
+    _pendingDokLink = null;
+    dokLinkCancel();
+    setTimeout(function(){ dokAssignTermin(_pdl, t.id); }, 150);
+  }
 }
 
 function applyGagenprofil(gp){
@@ -7506,15 +7530,38 @@ function rUndoLog(){
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Keine Aktionen</div><div class="empty-sub">Letzte 20 Aktionen erscheinen hier</div></div>';
     return;
   }
-  var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎'};
+  var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎',
+    merge_saved:'💾', session_link:'📎', dok_typ:'🏷', termin_geloescht:'🗑', holvi_undo:'↩'};
   el.innerHTML = log.map(function(a){
-    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">'
-      +'<div style="font-size:22px;flex-shrink:0">'+(icons[a.typ]||'📝')+'</div>'
+    // Detail-Zeile aus undoData extrahieren
+    var detail = '';
+    if(a.undoData){
+      var u = a.undoData;
+      if(u.terminId){
+        var t=(db.termine||[]).find(function(x){return x.id===u.terminId;});
+        if(t) detail = (t.titel||t.studio||'')+(t.datum?' · '+fd(t.datum):'');
+      }
+      if(!detail && u.dokId){
+        var d=(db.dokumente||[]).find(function(x){return x.id===u.dokId;});
+        if(d) detail = d.beschr||d.dateiname||'';
+      }
+      if(!detail && u.zahlungIds && u.zahlungIds.length){
+        detail = u.zahlungIds.length+' Zahlung'+(u.zahlungIds.length>1?'en':'');
+      }
+    }
+    // beschr aufteilen: oft "Aktion · Detail · Datum"
+    var parts = (a.beschr||'').split(' · ');
+    var hauptText = parts[0]||'';
+    var nebenText = parts.slice(1).join(' · ');
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px">'
+      +'<div style="font-size:22px;flex-shrink:0;margin-top:2px">'+(icons[a.typ]||'📝')+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.beschr)+'</div>'
-      +'<div style="font-size:10px;color:#888;margin-top:2px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:#1a1a1a;line-height:1.3;word-break:break-word">'+esc(hauptText)+'</div>'
+      +(nebenText?'<div style="font-size:11px;color:#555;margin-top:3px;line-height:1.4;word-break:break-word">'+esc(nebenText)+'</div>':'')
+      +(detail && detail!==nebenText?'<div style="font-size:11px;color:#888;margin-top:2px;line-height:1.3">📅 '+esc(detail)+'</div>':'')
+      +'<div style="font-size:10px;color:#bbb;margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
       +'</div>'
-      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rückgängig</button>'
+      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:2px">↩</button>'
       +'</div>';
   }).join('');
 }
@@ -8802,6 +8849,8 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ Immer europäisches Format: erster Teil = Tag, zweiter = Monat — keine Ausnahmen!\n'
     +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
     +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
+    +'    ⚠ INTEROPA-Logo: Zwei Kreise oben links — ein ausgefüllter (●) und ein leerer (○) Kreis nebeneinander\n'
+    +'      Kein Text, nur dieses Symbol → studio="Interopa"\n'
     +'    ⚠ IYUNO-Dispos: Erkennbar an "NAVISION #" oder "DEBER..." im Kopf — studio="Iyuno"\n'
     +'    ⚠ Iyuno-Format hat kein prominentes Studio-Logo — stattdessen steht "NAVISION # DEBER1704-DE" o.ä. oben\n'
     +'    NICHT der Aufnahmeraum/Atelier (NICHT "BLN Studio E", NICHT "Atelier 4", NICHT "Studio 3", NICHT "Harzer Str.")\n'
@@ -8836,6 +8885,10 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ Die Rolle der Zeile ÜBER Tim gehört einem anderen Sprecher — NICHT Tims Rolle!\n'
     +'    KREUZPRÜFUNG: Tims Zeile muss "Tim Knauer" in der Sprecher-Spalte haben — sonst falsche Zeile!\n'
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
+    +'    ⚠ ROLLENNAMEN BEREINIGEN: Technik-Suffixe aus Rollennamen entfernen!\n'
+    +'    Technik-Kürzel: VO, V.O., OV, ADR, ERYTMO, ERYTHMO, SB, SP, HF — gehören NICHT zum Rollennamen\n'
+    +'    Beispiele: "Kibi Vo" → rolle="Kibi" | "Bill VO" → rolle="Bill" | "Lee SPA SB?" → rolle="Lee"\n'
+    +'    Nur den eigentlichen Charakternamen behalten!\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
     +'    ⚠ FFS-Format: Spalte heißt "Stunden" und zeigt "09:30 - 11:30" als Zeitspanne → VON=09:30\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
@@ -13054,7 +13107,67 @@ function runIntegrityCheck(silent){
   var warnings = [];
   var fixes = 0;
 
-  // 1. Aufgeteilte Original-Abrechnungen dürfen nicht in Summen eingehen
+  // 0. Doppelte Termine (gleicher Titel + Datum + Studio)
+  var terminKeys = {};
+  (db.termine||[]).forEach(function(t){
+    if(!t.datum || !t.titel) return;
+    var key = (t.datum||'')+'|'+(t.titel||'').toLowerCase().trim()+'|'+(t.studio||'').toLowerCase().trim();
+    if(!terminKeys[key]) terminKeys[key] = [];
+    terminKeys[key].push(t);
+  });
+  Object.keys(terminKeys).forEach(function(key){
+    if(terminKeys[key].length > 1){
+      var ts = terminKeys[key];
+      warnings.push('⚠ Doppelter Termin: "'+esc(ts[0].titel)+'" am '+fd(ts[0].datum)+(ts[0].studio?' ('+esc(ts[0].studio)+')':'')+' — '+ts.length+'× vorhanden!');
+    }
+  });
+
+  // 0b. Doppelte Gutschrift-Nummern in db.abrechnungen (gleiche gnr, verschiedene Einträge)
+  var gnrAbMap = {};
+  (db.abrechnungen||[]).forEach(function(a){
+    if(!a.gutschrift_nr) return;
+    if(!gnrAbMap[a.gutschrift_nr]) gnrAbMap[a.gutschrift_nr] = [];
+    gnrAbMap[a.gutschrift_nr].push(a);
+  });
+  Object.keys(gnrAbMap).forEach(function(gnr){
+    var group = gnrAbMap[gnr];
+    // Erlaubt: mehrere Einträge wenn verschiedene terminIds (Split-Sessions)
+    var uniqueTermins = [...new Set(group.map(function(a){return a.terminId||'null';}))];
+    if(uniqueTermins.length === 1 && group.length > 1){
+      warnings.push('⚠ Doppelte Abrechnung: Gutschrift-Nr. '+esc(gnr)+' kommt '+group.length+'× in db.abrechnungen vor (gleicher Termin)');
+    }
+  });
+
+  // 0c. Verwaiste Abrechnungen (kein Termin zeigt auf sie)
+  var terminAbIds = new Set((db.termine||[]).map(function(t){return t.abId;}).filter(Boolean));
+  (db.abrechnungen||[]).forEach(function(a){
+    if(!a.terminId && !terminAbIds.has(a.id)){
+      warnings.push('⚠ Verwaiste Abrechnung: '+esc(a.gutschrift_nr||a.id)+' ('+fmtEur(a.brutto||0)+') — kein Termin verknüpft, wird nicht gezählt');
+    }
+  });
+
+  // 0d. Doppelte Holvi-Zahlungen (gleiche zahlungsId)
+  var zIdMap = {};
+  (db.zahlungen||[]).forEach(function(z){
+    if(!z.zahlungsId) return;
+    if(!zIdMap[z.zahlungsId]) zIdMap[z.zahlungsId] = 0;
+    zIdMap[z.zahlungsId]++;
+  });
+  Object.keys(zIdMap).forEach(function(zid){
+    if(zIdMap[zid] > 1){
+      warnings.push('⚠ Doppelte Holvi-Zahlung: zahlungsId '+zid+' ist '+zIdMap[zid]+'× importiert');
+    }
+  });
+
+  // 0e. Termin bezahlt aber gleicher Termin auch in offenen Abrechnungen
+  (db.termine||[]).forEach(function(t){
+    if(t.status !== 'bezahlt') return;
+    if(!t.abId) return;
+    var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+    if(ab && ab.bezahlt === false){
+      warnings.push('⚠ Status-Konflikt: '+esc(t.titel||'?')+' ('+fd(t.datum)+'): Termin=bezahlt aber Abrechnung.bezahlt=false');
+    }
+  });
   (db.abrechnungen||[]).forEach(function(ab){
     if(ab.aufgeteilt && ab.aufgeteiltIn && ab.aufgeteiltIn.length){
       // Prüfen ob Teilabrechnungen existieren
