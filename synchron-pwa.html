@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '583';
+  if(el) el.textContent = '587';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8837,6 +8837,9 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
+    +'    ⚠ EVA-Format (Logo: "eva · a visual data company"): Kein Serientitel — stattdessen steht eine ZAHL prominent oben (z.B. "1086")\n'
+    +'      Diese Zahl ist die Produktionsnummer → als titel übernehmen: titel="1086"\n'
+    +'      So können mehrere Aufnahmetage derselben Produktion zugeordnet werden!\n'
     +'    ⚠ Gattungsbezeichnungen am Ende NUR weglassen wenn sie AUCH als separates Feld auf dem Dokument stehen\n'
     +'    (z.B. "Produktionsart: Game", "Gattung: Film", "Art: Serie")\n'
     +'    Beispiel toneworx: Titel="Orbitals", Produktionsart="Game" → titel="Orbitals" (Game weglassen)\n'
@@ -8927,13 +8930,20 @@ function dokAnalyseDoc(d, key, cb){
     +'    Beispiel: Tim Zeile hat Takes=100, Episode:Takes="604:100" → gvl_takes_detail=[{"folge":604,"takes":100}]\n'
     +'    Mehrere kommagetrennt: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
     +'    ⚠ WICHTIG: Diese Spalte hat VORRANG vor der normalen Takes-Spalte für gvl_takes_detail!\n'
-    +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Notiz", "Notes", "Remarks")\n'
+    +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Anmerkungen", "Notiz", "Notes", "Remarks")\n'
     +'    Manchmal steht der Folgen:Takes-Code nicht in einer EPS-Spalte sondern in der Bemerkung!\n'
     +'    Format: "104:46 Abgedreht" oder "104:46" oder "Ep104:46" in der Bemerkungsspalte\n'
     +'    → Zahl VOR Doppelpunkt = Folge, Zahl NACH Doppelpunkt = Takes\n'
     +'    Beispiel: Bemerkung="104:46 Abgedreht", Takes=46 → gvl_takes_detail=[{"folge":104,"takes":46}]\n'
     +'    Beispiel: Bemerkung="103:21 104:58" → [{"folge":103,"takes":21},{"folge":104,"takes":58}]\n'
     +'    ⚠ Wörter wie "Abgedreht", "Sprachberatung", "Akzentberatung" in Bemerkung IGNORIEREN — nur Zahlen:Zahlen auslesen!\n'
+    +'    ⚠ SONDERFALL VO/Dokumentation (z.B. EVA-Format): Takes-Spalte zeigt 0 weil Stundenvergütung statt Takevergütung\n'
+    +'      NUR dann: Folgen:Takes-Codes aus "Anmerkungen"-Spalte lesen (z.B. "8:76")\n'
+    +'      Erkennbar an: Takes=0 in Hauptspalte UND "Anmerkungen"-Spalte enthält Zahlen:Zahlen-Codes\n'
+    +'      → takes = Wert nach Doppelpunkt (76), folge = Wert vor Doppelpunkt (8)\n'
+    +'      → gvl_takes_detail=[{"folge":8,"takes":76}], takes=76\n'
+    +'      Mehrere Codes: "7:111, 8:7" → [{"folge":7,"takes":111},{"folge":8,"takes":7}]\n'
+    +'      ⚠ NICHT anwenden wenn Takes-Spalte eine echte Zahl >0 zeigt — dann die echten Takes nehmen!\n'
     +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
@@ -11778,12 +11788,12 @@ function dokMergeIntoTermin(d, termin){
   mergeField('uhrzeit',     d.uhrzeit,     'Uhrzeit');
   mergeField('bis_uhrzeit', d.bis_uhrzeit, 'Bis-Uhrzeit');
   // Studio: nur überschreiben wenn Dispo-Studio spezifischer ist
-  // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat)
+  // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat — oder umgekehrt)
   if(d.studio){
     var curStudio = (termin.studio||'').toLowerCase().trim();
     var newStudio = d.studio.toLowerCase().trim();
-    // Überschreiben wenn: leer, oder neues Studio enthält mehr Info als altes
-    if(!curStudio || newStudio.length > curStudio.length || newStudio.indexOf(curStudio) >= 0) {
+    // Überschreiben wenn: leer, oder einer enthält den anderen (Kürzel vs. Vollname)
+    if(!curStudio || newStudio.indexOf(curStudio) >= 0 || curStudio.indexOf(newStudio) >= 0) {
       overwrite('studio', d.studio, 'Studio');
     }
   }
@@ -13132,16 +13142,19 @@ function runIntegrityCheck(silent){
   Object.keys(gnrAbMap).forEach(function(gnr){
     var group = gnrAbMap[gnr];
     // Erlaubt: mehrere Einträge wenn verschiedene terminIds (Split-Sessions)
-    var uniqueTermins = [...new Set(group.map(function(a){return a.terminId||'null';}))];
-    if(uniqueTermins.length === 1 && group.length > 1){
+    var seenTermins = {};
+    group.forEach(function(a){ seenTermins[a.terminId||'null']=true; });
+    var uniqueCount = Object.keys(seenTermins).length;
+    if(uniqueCount === 1 && group.length > 1){
       warnings.push('⚠ Doppelte Abrechnung: Gutschrift-Nr. '+esc(gnr)+' kommt '+group.length+'× in db.abrechnungen vor (gleicher Termin)');
     }
   });
 
   // 0c. Verwaiste Abrechnungen (kein Termin zeigt auf sie)
-  var terminAbIds = new Set((db.termine||[]).map(function(t){return t.abId;}).filter(Boolean));
+  var terminAbIds = {};
+  (db.termine||[]).forEach(function(t){ if(t.abId) terminAbIds[t.abId]=true; });
   (db.abrechnungen||[]).forEach(function(a){
-    if(!a.terminId && !terminAbIds.has(a.id)){
+    if(!a.terminId && !terminAbIds[a.id]){
       warnings.push('⚠ Verwaiste Abrechnung: '+esc(a.gutschrift_nr||a.id)+' ('+fmtEur(a.brutto||0)+') — kein Termin verknüpft, wird nicht gezählt');
     }
   });
