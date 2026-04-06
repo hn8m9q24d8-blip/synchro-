@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '598';
+  if(el) el.textContent = '599';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7081,15 +7081,28 @@ function rJahresabschluss(){
         var _t3 = (db.termine||[]).find(function(t){ return t.abId===a.id; });
         if(_t3) _tid = _t3.id;
       }
+      var _kv = parseFloat(a.kv)||parseFloat(a.kv_abzug)||0;
+      var _rv = parseFloat(a.rv)||parseFloat(a.rv_abzug)||0;
+      var _pv = parseFloat(a.pv)||parseFloat(a.pv_abzug)||0;
+      // Fallback: Termin direkt fragen wenn ab-Felder leer
+      if(!_kv || !_rv){
+        var _abT2 = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
+        if(_abT2){
+          if(!_kv) _kv = Math.abs(parseFloat(_abT2.kv_abzug)||0);
+          if(!_rv) _rv = Math.abs(parseFloat(_abT2.rv_abzug)||0);
+          if(!_pv) _pv = Math.abs(parseFloat(_abT2.pv_abzug)||0);
+        }
+      }
+      var sv2 = _kv+_rv+_pv;
       return '<tr style="border-bottom:1px solid #f0f0f0">'
         +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
         +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
         +(_tid?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid+'\')},150)">'+esc(a.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>')
         +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
-        +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
-        +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
-        +'<td style="'+colNum+'">'+(a.pv?fmtEur(a.pv):'—')+'</td>'
-        +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv?fmtEur(sv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(_kv?fmtEur(_kv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(_rv?fmtEur(_rv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(_pv?fmtEur(_pv):'—')+'</td>'
+        +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv2?fmtEur(sv2):'—')+'</td>'
         +'</tr>';
     }
 
