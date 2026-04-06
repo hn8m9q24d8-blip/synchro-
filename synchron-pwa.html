@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '599';
+  if(el) el.textContent = '603';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3629,8 +3629,8 @@ function showDateinamen(el){
   var hasUUIDPattern = firstName.indexOf('-') >= 0 || firstName.indexOf('_') >= 0 || /^\d+[\/\-]\d+/.test(firstName);
   var isFallbackText = !firstName || firstName.length < 5
     || /^Dokument$|^Kurzbefehl-Foto$|^Unbekannt$/i.test(firstName)
-    || /bestätigt|Foto gelöscht|verknüpft|ausstehend|Abrechnung \d|Dispo \d/i.test(firstName)
-    || (!hasExt && !hasUUIDPattern);
+    || /bestätigt|Foto gelöscht|verknüpft|ausstehend/i.test(firstName)
+    || (!hasExt && !hasUUIDPattern && /Abrechnung \d|Dispo \d/i.test(firstName));
 
   // Sofort in Clipboard kopieren — nur wenn echter Dateiname
   if(!isFallbackText && navigator.clipboard){
@@ -7597,6 +7597,7 @@ function rUndoLog(){
   el.innerHTML = log.map(function(a){
     // Detail-Zeile aus undoData extrahieren
     var detail = '';
+    var dateiname = '';
     if(a.undoData){
       var u = a.undoData;
       if(u.terminId){
@@ -7606,6 +7607,18 @@ function rUndoLog(){
       if(!detail && u.dokId){
         var d=(db.dokumente||[]).find(function(x){return x.id===u.dokId;});
         if(d) detail = d.beschr||d.dateiname||'';
+      }
+      // Dateiname aus Dok holen
+      if(u.dokId){
+        var _d2=(db.dokumente||[]).find(function(x){return x.id===u.dokId;});
+        if(_d2 && _d2.dateiname && /\.(pdf|jpg|jpeg|png|heic)$/i.test(_d2.dateiname)) dateiname = _d2.dateiname;
+      }
+      if(!dateiname && u.terminIds){
+        u.terminIds.forEach(function(tid){
+          var _t2=(db.termine||[]).find(function(x){return x.id===tid;});
+          if(_t2 && _t2.abrechn_dateiname && !dateiname) dateiname = _t2.abrechn_dateiname;
+          if(_t2 && _t2._dispoDateiname && !dateiname) dateiname = _t2._dispoDateiname;
+        });
       }
       if(!detail && u.zahlungIds && u.zahlungIds.length){
         detail = u.zahlungIds.length+' Zahlung'+(u.zahlungIds.length>1?'en':'');
@@ -7621,6 +7634,7 @@ function rUndoLog(){
       +'<div style="font-size:13px;font-weight:700;color:#1a1a1a;line-height:1.3;word-break:break-word">'+esc(hauptText)+'</div>'
       +(nebenText?'<div style="font-size:11px;color:#555;margin-top:3px;line-height:1.4;word-break:break-word">'+esc(nebenText)+'</div>':'')
       +(detail && detail!==nebenText?'<div style="font-size:11px;color:#888;margin-top:2px;line-height:1.3">📅 '+esc(detail)+'</div>':'')
+      +(dateiname?'<div style="font-size:10px;color:#6d28d9;margin-top:3px;word-break:break-all;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+dateiname.replace(/'/g,"\\'")+'\')" title="Tippen = kopieren">📎 '+esc(dateiname)+'</div>':'')
       +'<div style="font-size:10px;color:#bbb;margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
       +'</div>'
       +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:2px">↩</button>'
@@ -10191,7 +10205,12 @@ function dokOpenDetail(id){
         body+='</div>';
         body+='</div>';
       } else {
-        body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
+        body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;text-align:center">'
+          +'<div style="font-size:28px;margin-bottom:6px">📄</div>'
+          +'<div style="font-size:13px;font-weight:700;color:#555">'+esc(d.dateiname||'PDF-Dokument')+'</div>'
+          +(d._splitPageNr?'<div style="font-size:11px;color:#999;margin-top:4px">Seite '+d._splitPageNr+' von '+(d._splitTotal||'?')+'</div>':'')
+          +'<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="margin-top:8px;background:#1d6fa8;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">📄 PDF öffnen</button>'
+          +'</div>';
       }
     }
     // Nochmal analysieren (immer sichtbar in State 2)
@@ -11399,7 +11418,13 @@ function dokBestaetigenMonat(dokId){
       if(s.rolle && !t.rolle) t.rolle=s.rolle;
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
       if(s.take_gage && !t.rate) t.rate=s.take_gage;
-      if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage;
+      // 1-10-Regel: grundgage vor Zuweisung aufsplitten
+      var _gg10 = parseFloat(s.grundgage)||0;
+      var _tg10 = parseFloat(s.take_gage)||0;
+      var _known10 = [{total:120,komm:80,rate:4},{total:127,komm:85,rate:4.2},{total:150,komm:100,rate:5}];
+      var _m10 = (!_tg10 && _gg10) ? _known10.find(function(r){return Math.abs(_gg10-r.total)<0.05;}) : null;
+      var _effKomm = _m10 ? _m10.komm : _gg10;
+      if(s.grundgage && !t.kommgage) t.kommgage=_effKomm;
       if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
       else if(!t.brutto_termin && d.sessions && d.sessions.length===1 && parseFloat(d.brutto)) t.brutto_termin=parseFloat(d.brutto);
       // Sender aus Kürzel
@@ -11441,7 +11466,7 @@ function dokBestaetigenMonat(dokId){
       var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
       if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
-      if(s.grundgage) t.kommgage_abgerechnet = parseFloat(s.grundgage)||0;
+      if(s.grundgage) t.kommgage_abgerechnet = _effKomm;
       if(sTakesEffektiv && dispTakes && sTakesEffektiv !== dispTakes){
         t.takes_differenz = dispTakes - sTakesEffektiv;
       } else {
@@ -11882,6 +11907,14 @@ function dokBestaetigenMitTermin(dokId, terminId){
       _openDetailLock = false;
       openDetail(terminId);
     }, 350);
+  } else if(window._pendingSplitNav){
+    // Kein Termin gefunden → direkt zur nächsten Gutschrift
+    var _nidDirect = window._pendingSplitNav;
+    window._pendingSplitNav = null;
+    window._pendingSplitLabel = null;
+    dokDetailClose();
+    showToast('✓ Bestätigt · Weiter zur nächsten Gutschrift');
+    setTimeout(function(){ dokOpenDetail(_nidDirect); }, 200);
   }
 }
 
