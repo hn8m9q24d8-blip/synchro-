@@ -730,7 +730,11 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div id="view-mahnwesen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="background:#c2410c;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
     <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Mahnwesen</div><div style="color:rgba(255,255,255,.75);font-size:12px">Überfällige Zahlungen</div></div>
+    <div><div style="color:#fff;font-size:18px;font-weight:900">Mahnwesen</div><div style="color:rgba(255,255,255,.75);font-size:12px" id="mahn-sub">Offene Zahlungen & Differenzen</div></div>
+  </div>
+  <div style="display:flex;background:#a83216;flex-shrink:0">
+    <div id="mahn-tab-ueberfaellig" onclick="mahnSetTab('ueberfaellig')" style="flex:1;text-align:center;padding:10px 8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;border-bottom:3px solid #fff;touch-action:manipulation">📭 Überfällig<span id="mahn-tab-badge-ue" style="margin-left:5px;background:#fff;color:#c2410c;border-radius:10px;padding:1px 6px;font-size:10px"></span></div>
+    <div id="mahn-tab-differenzen" onclick="mahnSetTab('differenzen')" style="flex:1;text-align:center;padding:10px 8px;font-size:12px;font-weight:700;color:rgba(255,255,255,.65);cursor:pointer;border-bottom:3px solid transparent;touch-action:manipulation">⚠ Differenzen<span id="mahn-tab-badge-diff" style="margin-left:5px;background:rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px"></span></div>
   </div>
   <div class="scroll" id="mahn-scroll" style="padding:16px;padding-bottom:100px"></div>
 </div>
@@ -1819,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '593';
+  if(el) el.textContent = '595';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11210,15 +11214,21 @@ function _buildMergePreview(d, t){
   // Nur wenn Abrechnung (nicht Dispo) und Termin hat bereits Werte
   var gageWarnungen = [];
   if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
-    // Komm.-Gage (Grundgage aus Dok vs. kommgage am Termin)
-    var dokGrundgage = parseFloat(d.grundgage||0);
-    var tKommgage    = parseFloat(t.kommgage||0);
+    // 1-10-Regel: bekannte Pauschalen vor Vergleich aufsplitten
+    var _known1to10Preview = [{total:120.0,komm:80.0,rate:4.00},{total:127.0,komm:85.0,rate:4.20},{total:150.0,komm:100.0,rate:5.00}];
+    var dokGrundgageRaw = parseFloat(d.grundgage||0);
+    var dokTakeGageRaw  = parseFloat(d.take_gage||0);
+    var _m1 = !dokTakeGageRaw ? _known1to10Preview.find(function(r){return Math.abs(dokGrundgageRaw-r.total)<0.05;}) : null;
+    var dokGrundgage = _m1 ? _m1.komm : dokGrundgageRaw;
+    var dokTakeGage  = _m1 ? _m1.rate : dokTakeGageRaw;
+
+    // Komm.-Gage
+    var tKommgage = parseFloat(t.kommgage||0);
     if(dokGrundgage && tKommgage && Math.abs(dokGrundgage - tKommgage) > 0.5){
       gageWarnungen.push({label:'Komm.-Gage', termin: tKommgage+'€', dok: dokGrundgage+'€'});
     }
     // Take-Gage
-    var dokTakeGage = parseFloat(d.take_gage||0);
-    var tTakeGage   = parseFloat(t.rate||0);
+    var tTakeGage = parseFloat(t.rate||0);
     if(dokTakeGage && tTakeGage && Math.abs(dokTakeGage - tTakeGage) > 0.01){
       gageWarnungen.push({label:'Take-Gage', termin: tTakeGage+'€', dok: dokTakeGage+'€'});
     }
@@ -13044,6 +13054,27 @@ function tlabel2(s){
   return 'offen';
 }
 
+var _mahnTab = 'ueberfaellig';
+function mahnSetTab(tab){
+  _mahnTab = tab;
+  var tabs = ['ueberfaellig','differenzen'];
+  tabs.forEach(function(t){
+    var el = document.getElementById('mahn-tab-'+t);
+    if(!el) return;
+    if(t===tab){
+      el.style.color='#fff';
+      el.style.borderBottomColor='#fff';
+    } else {
+      el.style.color='rgba(255,255,255,.65)';
+      el.style.borderBottomColor='transparent';
+    }
+    var badge = document.getElementById('mahn-tab-badge-'+(t==='ueberfaellig'?'ue':'diff'));
+    if(badge) badge.style.background = t===tab ? '#fff' : 'rgba(255,255,255,.3)';
+    if(badge) badge.style.color = t===tab ? '#c2410c' : '#fff';
+  });
+  rMahnwesen();
+}
+
 function rMahnwesen(){
   var el = document.getElementById('mahn-scroll');
   if(!el) return;
@@ -13051,15 +13082,10 @@ function rMahnwesen(){
   var heute = today();
   var FAELLIG_TAGE = 30;
 
-  // Termine die überfällig sind:
-  // - haben eine Abrechnung (abId oder abrechn-Dok)
-  // - sind NICHT bezahlt
-  // - Abrechnungsdatum + 30 Tage < heute
+  // ── ÜBERFÄLLIGE TERMINE ──────────────────────────────────────
   var ueberfaellig = (db.termine||[]).filter(function(t){
     if(t.status === 'bezahlt') return false;
     if(t.status === 'storno') return false;
-
-    // Abrechnungsdatum ermitteln
     var abDatum = null;
     if(t.abId){
       var ab = (db.abrechnungen||[]).find(function(a){ return a.id===t.abId; });
@@ -13071,75 +13097,142 @@ function rMahnwesen(){
       });
       if(dok && dok.datum) abDatum = dok.datum;
     }
-    // Fallback: wenn kein abDatum aber abgerechnet → t.datum nehmen
     if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum;
-    if(!abDatum) return false; // Keine Abrechnung → nicht fällig
-
-    // Fälligkeit prüfen
+    if(!abDatum) return false;
     var abDate = new Date(abDatum);
     var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
     return faelligAm < new Date(heute);
   });
 
-  // Badge aktualisieren
-  _updateMahnBadge(ueberfaellig.length);
-
-  if(!ueberfaellig.length){
-    el.innerHTML = '<div class="empty-state">'
-      +'<div class="empty-icon">✅</div>'
-      +'<div class="empty-title">Alles bezahlt</div>'
-      +'<div class="empty-sub">Keine überfälligen Zahlungen</div>'
-      +'</div>';
-    return;
+  // ── DIFFERENZEN sammeln ──────────────────────────────────────
+  var differenzen = [];
+  var known1to10 = [{total:120,komm:80,rate:4},{total:127,komm:85,rate:4.2},{total:150,komm:100,rate:5}];
+  function decompose(gg, tg){
+    if(gg && !tg){
+      var m = known1to10.find(function(r){return Math.abs(gg-r.total)<0.05;});
+      if(m) return {komm:m.komm, rate:m.rate};
+    }
+    return {komm:gg, rate:tg};
   }
 
-  // Nach Überfälligkeit sortieren (älteste zuerst)
-  ueberfaellig.sort(function(a,b){
-    return (a.datum||'') < (b.datum||'') ? -1 : 1;
-  });
-
-  var html = '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
-    +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+ueberfaellig.length+' überfällige Zahlung'+(ueberfaellig.length>1?'en':'')+'</div>'
-    +'<div style="font-size:11px;color:#92400e">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
-    +'</div>';
-
-  ueberfaellig.forEach(function(t){
+  (db.termine||[]).forEach(function(t){
+    // Gage-Differenz: falsche Komm.-Gage oder Take-Gage
+    if(t.takes_differenz && Math.abs(t.takes_differenz) > 0 && Math.abs(t.takes_differenz) !== 10){
+      differenzen.push({typ:'takes', termin:t,
+        text: 'Takes: '+Math.abs(t.takes_differenz)+' '+(t.takes_differenz>0?'zu wenig':'zu viel')+' abgerechnet',
+        details: 'Dispo: '+(parseInt(t.takes)||0)+' · Abrechn: '+(parseInt(t.takes_abgerechnet)||0)
+      });
+    }
+    // Komm.-Gage Differenz
     var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-    var dok = (db.dokumente||[]).find(function(d){
-      return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
-    });
-    var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
-    if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum||'';
-    var abDate = new Date(abDatum);
-    var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
-    var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
-    var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
-    var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
-
-    var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
-    var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
-
-    html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
-      +'<div>'
-      +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
-      +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
-      +(gutschriftNr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(gutschriftNr)+'</div>':'')
-      +'</div>'
-      +'<div style="text-align:right">'
-      +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
-      +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
-      +'</div>'
-      +'</div>'
-      +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
-      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+(!isNaN(faelligAm.getTime())?fd(faelligAm.toISOString().split('T')[0]):'?')
-      +'</div>'
-      +'<div style="display:flex;gap:8px">'
-      +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
-      +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
-      +'</div>'
-      +'</div>';
+    if(ab && t.kommgage){
+      var d2 = decompose(parseFloat(ab.grundgage||0), parseFloat(ab.take_gage||0));
+      var abKomm = d2.komm;
+      var tKomm = parseFloat(t.kommgage)||0;
+      if(abKomm && tKomm && Math.abs(abKomm-tKomm) > 0.5 && t.status !== 'bezahlt'){
+        differenzen.push({typ:'gage', termin:t,
+          text: 'Komm.-Gage: '+fmtEur(abKomm)+' abgerechnet statt '+fmtEur(tKomm),
+          details: ab.gutschrift_nr||''
+        });
+      }
+    }
+    // Brutto-Differenz (aus rate_differenz)
+    if(t.rate_differenz && Math.abs(t.rate_differenz) > 0.01 && t.status !== 'bezahlt'){
+      differenzen.push({typ:'rate', termin:t,
+        text: 'Take-Gage: '+(t.rate_differenz>0?'-':'+')+''+fmtEur(Math.abs(t.rate_differenz))+' je Take',
+        details: ''
+      });
+    }
   });
+
+  // Badge aktualisieren
+  var gesamtCount = ueberfaellig.length + differenzen.length;
+  _updateMahnBadge(gesamtCount);
+  var badgeUe = document.getElementById('mahn-tab-badge-ue');
+  var badgeDiff = document.getElementById('mahn-tab-badge-diff');
+  if(badgeUe) badgeUe.textContent = ueberfaellig.length || '';
+  if(badgeDiff) badgeDiff.textContent = differenzen.length || '';
+
+  var html = '';
+
+  if(_mahnTab === 'ueberfaellig'){
+    if(!ueberfaellig.length){
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Alles bezahlt</div><div class="empty-sub">Keine überfälligen Zahlungen</div></div>';
+      return;
+    }
+    ueberfaellig.sort(function(a,b){ return (a.datum||'') < (b.datum||'') ? -1 : 1; });
+    html += '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
+      +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+ueberfaellig.length+' überfällige Zahlung'+(ueberfaellig.length>1?'en':'')+'</div>'
+      +'<div style="font-size:11px;color:#92400e">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
+      +'</div>';
+    ueberfaellig.forEach(function(t){
+      var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+      var dok = (db.dokumente||[]).find(function(d){
+        return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
+      });
+      var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
+      if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum||'';
+      var abDate = new Date(abDatum);
+      var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
+      var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
+      var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
+      var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
+      var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
+      var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
+      html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+        +'<div>'
+        +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
+        +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
+        +(gutschriftNr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(gutschriftNr)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right">'
+        +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
+        +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
+        +'</div>'
+        +'</div>'
+        +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
+        +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+(!isNaN(faelligAm.getTime())?fd(faelligAm.toISOString().split('T')[0]):'?')
+        +'</div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
+        +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
+        +'</div>'
+        +'</div>';
+    });
+
+  } else {
+    // ── DIFFERENZEN TAB ──────────────────────────────────────
+    if(!differenzen.length){
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Keine Differenzen</div><div class="empty-sub">Alle Gagen stimmen überein</div></div>';
+      return;
+    }
+    html += '<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
+      +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+differenzen.length+' Differenz'+(differenzen.length>1?'en':'')+'</div>'
+      +'<div style="font-size:11px;color:#92400e">Falsche Gagensätze oder Abrechnungsdifferenzen — prüfen und ggf. reklamieren.</div>'
+      +'</div>';
+    differenzen.forEach(function(item){
+      var t = item.termin;
+      var iconMap = {takes:'🔢', gage:'💶', rate:'📊'};
+      html += '<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;margin-bottom:10px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+        +'<div>'
+        +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
+        +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
+        +'</div>'
+        +'<div style="font-size:22px">'+( iconMap[item.typ]||'⚠')+'</div>'
+        +'</div>'
+        +'<div style="background:#fff7ed;border-radius:8px;padding:8px 10px;margin-bottom:8px">'
+        +'<div style="font-size:12px;font-weight:700;color:#c2410c">'+esc(item.text)+'</div>'
+        +(item.details?'<div style="font-size:10px;color:#92400e;margin-top:2px">'+esc(item.details)+'</div>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Reklamation</button>'
+        +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
+        +'</div>'
+        +'</div>';
+    });
+  }
 
   el.innerHTML = html;
 }
@@ -14842,7 +14935,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel (bei FFS/Taunus: "TITEL FILMCODE" → nur Titel nehmen, Zahl weglassen; z.B. "FUZE 25112589" → "FUZE"). grundgage=Pauschale bei "Pauschale 1-10"/""Mindestgage 1-10" (z.B. 120.00), takes/take_gage nur wenn explizit. brutto/netto/auszahlung/mwst=Geldbetraege, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
