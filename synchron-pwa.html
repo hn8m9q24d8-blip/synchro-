@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '595';
+  if(el) el.textContent = '598';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3147,6 +3147,18 @@ function saveMergeChanges(){
       save(db);
     }
     // ── Split-Navigation: nächste Gutschrift automatisch öffnen ──────────
+    // Erst _pendingSplitNav prüfen (aus dokBestaetigenMitTermin)
+    if(window._pendingSplitNav){
+      var _nid = window._pendingSplitNav;
+      var _nlabel = window._pendingSplitLabel||'';
+      window._pendingSplitNav = null;
+      window._pendingSplitLabel = null;
+      save(db);
+      showToast('✓ '+(_nlabel?'Gutschrift '+_nlabel+' gespeichert · ':'' )+'Weiter zur nächsten');
+      switchView('dokumente');
+      setTimeout(function(){ dokOpenDetail(_nid); }, 200);
+      return;
+    }
     var _navDok = _lastSplitDok || dok;
     if(_navDok && _navDok._splitGroup && _navDok._splitTotal > 1 && _navDok.bestaetigt){
       var dok = _navDok; // für den Rest des Blocks
@@ -3157,7 +3169,6 @@ function saveMergeChanges(){
       save(db);
       if(naechstesDok2){
         showToast('✓ Gutschrift '+(dok._splitIdx+1)+' von '+dok._splitTotal+' · Weiter: '+(naechstesIdx2+1));
-        // Direkt zur nächsten Gutschrift — kein Umweg über Dokumentenliste
         dokOpenDetail(naechstesDok2.id);
         return;
       } else {
@@ -4006,6 +4017,18 @@ function discardMergeChanges(){
   _mergeSnapshot=null;
   _mergeTerminId=null;
   _returnToDokId=null;
+
+  // Split-Navigation auch beim Verwerfen: nächste Gutschrift öffnen
+  if(window._pendingSplitNav){
+    var _nid2 = window._pendingSplitNav;
+    window._pendingSplitNav = null;
+    window._pendingSplitLabel = null;
+    closeDetail();
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(_nid2); }, 200);
+    showToast('Verworfen · Weiter zur nächsten Gutschrift');
+    return;
+  }
 
   if(returnId){
     closeDetail();
@@ -11385,15 +11408,22 @@ function dokBestaetigenMonat(dokId){
       var dispTakes = parseInt(t.takes)||0;
       var sGG = parseFloat(s.grundgage)||0;
       var sRate = parseFloat(s.take_gage)||0;
-      // tKomm: Original-Kommgage VOR Überschreibung — oder aus grundgage - 10*rate ableiten
       var tKomm = parseFloat(t.kommgage)||0;
-      // 1-10-Regel: grundgage enthält kommgage + 10×rate
-      // Wenn tKomm noch nicht gesetzt oder durch GG überschrieben wurde, aus GG ableiten
-      var _kommAusGG = sGG > 0 && sRate > 0 ? sGG - 10*sRate : 0;
-      var s1to10 = sGG > 0 && sRate > 0 && (
-        Math.abs(sGG - (tKomm + 10*sRate)) < 1.5 ||    // tKomm stimmt
-        (_kommAusGG > 0 && _kommAusGG < sGG)            // GG > 10×Rate → Basis enthalten
-      );
+      // 1-10-Regel erkennen: ZWEI Formen
+      // Form A: sGG ist der Pauschalbetrag (120/127/150) — noch nicht aufgespaltet
+      // Form B: sGG ist die Basis-Komm.-Gage (80/85/100) + rate passt → sGG + 10*rate = bekannter Total
+      var _known1to10 = [
+        {total:120,komm:80,rate:4},
+        {total:127,komm:85,rate:4.2},
+        {total:150,komm:100,rate:5}
+      ];
+      var _isKnownTotal = sGG > 0 && _known1to10.some(function(r){
+        return Math.abs(sGG-r.total)<0.05 && Math.abs(sRate-r.rate)<0.05;
+      });
+      var _isKnownBase = sGG > 0 && sRate > 0 && _known1to10.some(function(r){
+        return Math.abs(sGG-r.komm)<0.05 && Math.abs(sRate-r.rate)<0.05;
+      });
+      var s1to10 = _isKnownTotal || _isKnownBase;
       // Wenn 1-10-Regel: echte Takes = sTakes + 10
       var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
@@ -11816,12 +11846,23 @@ function dokBestaetigenMitTermin(dokId, terminId){
   save(db);
   rDokumente();
   rTermine();
+
+  // Split-Navigation: merken für nach dem Termin-Speichern
+  if(d._splitGroup && d._splitTotal > 1){
+    var _nextSplitIdx = (d._splitIdx||0) + 1;
+    var _nextSplitDok = (db.dokumente||[]).find(function(x){
+      return x._splitGroup===d._splitGroup && x._splitIdx===_nextSplitIdx && !x.bestaetigt;
+    });
+    window._pendingSplitNav = _nextSplitDok ? _nextSplitDok.id : null;
+    window._pendingSplitLabel = _nextSplitDok ? ((d._splitIdx+1)+' von '+d._splitTotal) : null;
+  } else {
+    window._pendingSplitNav = null;
+  }
+
   showToast('✓ Bitte Termin-Änderungen prüfen und speichern');
   if(t){
-    // Dok-ID merken für Rücknavigation
     _returnToDokId = _dokCurrentId;
     dokDetailClose();
-    // Lock + View-Wechsel
     _openDetailLock = true;
     switchView('termine');
     setTimeout(function(){
