@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '590';
+  if(el) el.textContent = '592';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2958,6 +2958,28 @@ function closeDetail(){
 // ── ABRECHNUNG UPSERT — create oder update, nie blockieren ────
 function _upsertAbrechnung(abId, felder){
   if(!db.abrechnungen) db.abrechnungen = [];
+
+  // ── 1-10-Regel Auto-Aufspaltung ──────────────────────────────
+  // Bekannte Grundgage-1-10-Pauschalen → Komm.-Gage + Take-Gage aufteilen
+  var _gg = parseFloat(felder.grundgage)||0;
+  var _tg = parseFloat(felder.take_gage)||0;
+  var _known1to10 = [
+    {total:120.0, komm:80.0,  rate:4.00},  // TV
+    {total:127.0, komm:85.0,  rate:4.20},  // Streaming
+    {total:150.0, komm:100.0, rate:5.00},  // Kino
+  ];
+  if(_gg > 0 && !_tg){
+    var _match = _known1to10.find(function(r){ return Math.abs(_gg - r.total) < 0.05; });
+    if(_match){
+      // Grundgage aufsplitten: der übergebene Wert ist die Pauschale (z.B. 120)
+      // → echte Grundgage = Komm.-Gage (z.B. 80), take_gage = Rate (z.B. 4.00)
+      felder.grundgage = _match.komm;
+      felder.take_gage = _match.rate;
+      // Takes: wenn nicht gesetzt → 0 (bedeutet: ≤10 Takes, nur Mindestgage)
+      if(!felder.takes) felder.takes = 0;
+    }
+  }
+
   // Suche erst nach abId, dann nach terminId als Fallback
   var idx = abId ? db.abrechnungen.findIndex(function(a){return a.id===abId;}) : -1;
   if(idx < 0 && felder.terminId){
@@ -8187,6 +8209,7 @@ function rDokumente(){
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
       +'<span style="font-size:10px;font-weight:700;color:'+t.color+';background:'+t.bg+';border:1px solid '+t.border+';padding:2px 6px;border-radius:6px">'+t.label+'</span>'
+      +(d._splitGroup && d._splitTotal > 1 ? '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;border:1px solid #c4b5fd;padding:2px 6px;border-radius:6px">'+(d._splitIdx+1)+'/'+d._splitTotal+'</span>' : '')
       +(linked?'<span style="font-size:10px;font-weight:700;color:'+linkedColor+'">'+linked+'</span>':'<span style="font-size:10px;color:#f97316;font-weight:600">nicht zugeordnet</span>')
       +'</div>'
       +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(d.beschr||d.dateiname||'Dokument')+'</div>'
@@ -8708,6 +8731,19 @@ function dokBestaetigen(){
     var naechstesDok = (db.dokumente||[]).find(function(x){
       return x._splitGroup===d._splitGroup && x._splitIdx===naechstesIdx;
     });
+    // Prüfen ob alle Seiten bestätigt
+    var alleSeitenBestaetigt = (db.dokumente||[]).filter(function(x){
+      return x._splitGroup===d._splitGroup;
+    }).every(function(x){ return x.bestaetigt; });
+    if(alleSeitenBestaetigt){
+      // Original-PDF-Dateiname (Parent) in importedFiles eintragen
+      var origDok = (db.dokumente||[]).find(function(x){ return x.id===d._splitFromPdf; });
+      if(origDok && origDok.dateiname){
+        _archiveDateiname(origDok.dateiname, d.terminId||null, d.typ||null);
+      }
+      showToast('✓ Alle '+d._splitTotal+' Abrechnungen bestätigt');
+      return;
+    }
     if(naechstesDok && !naechstesDok.bestaetigt){
       showToast('✓ Bestätigt · Weiter: '+(naechstesIdx+1)+' von '+d._splitTotal);
       setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 300);
@@ -13213,7 +13249,19 @@ function runIntegrityCheck(silent){
     }
   });
 
-  // 0e. Termin bezahlt aber gleicher Termin auch in offenen Abrechnungen
+  // 0f. Unvollständige Split-PDF-Gruppen (z.B. 1/3 bestätigt aber 2/3 und 3/3 fehlen noch)
+  var splitGruppen = {};
+  (db.dokumente||[]).forEach(function(d){
+    if(!d._splitGroup || !d._splitTotal || d._splitTotal <= 1) return;
+    if(!splitGruppen[d._splitGroup]) splitGruppen[d._splitGroup]={total:d._splitTotal, bestaetigt:0, name:d.dateiname||d.beschr||''};
+    if(d.bestaetigt) splitGruppen[d._splitGroup].bestaetigt++;
+  });
+  Object.keys(splitGruppen).forEach(function(key){
+    var g = splitGruppen[key];
+    if(g.bestaetigt > 0 && g.bestaetigt < g.total){
+      warnings.push('⚠ Unvollständige Split-PDF: "'+esc(g.name)+'" — '+g.bestaetigt+' von '+g.total+' Seiten bestätigt, '+( g.total-g.bestaetigt)+' noch offen');
+    }
+  });
   (db.termine||[]).forEach(function(t){
     if(t.status !== 'bezahlt') return;
     if(!t.abId) return;
