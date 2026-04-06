@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '592';
+  if(el) el.textContent = '593';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2461,7 +2461,7 @@ function openDetail(id){
   // ── GVL ÜBERSICHT ──────────────────────────────────────────
   var gvlHtml='';
   var gvlDispo=dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
-  if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
+  if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail||(parseInt(t.takes)>0)){
     gvlHtml='<div class="info-card" style="border-left:4px solid #6d28d9">'
       +'<div class="info-card-header"><span>🎬 GVL-Übersicht</span>'
       +'<span class="ic-edit" onclick="gvlTerminBearbeiten(\''+id+'\')" style="color:#6d28d9">✎ Bearbeiten</span></div>'
