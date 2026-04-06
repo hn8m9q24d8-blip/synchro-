@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '588';
+  if(el) el.textContent = '590';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9937,10 +9937,41 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
 // ── DETAIL VIEW ──────────────────────────────────────────────
 function _editRow(field, label, val){
   var inputType = (field==='datum')?'date':(field==='uhrzeit')?'time':'text';
+  var extra = (field==='datum') ? ' onchange="dokDatumGeaendert(this.value)"' : '';
   return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
-    +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:#1a1a1a;outline:none;padding:0 2px">'
+    +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'"'+extra+' style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:#1a1a1a;outline:none;padding:0 2px">'
     +'</div>';
+}
+
+// Datum manuell geändert → Termin-Vorschlag neu suchen
+function dokDatumGeaendert(newDatum){
+  if(!newDatum || !_dokCurrentId) return;
+  var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
+  if(!d) return;
+  // Studio + Titel aus aktuellen Editfeldern lesen
+  var studioEl=document.getElementById('dedit-studio');
+  var titelEl=document.getElementById('dedit-titel');
+  var studio = (studioEl&&studioEl.value)||d.studio||'';
+  var titel = (titelEl&&titelEl.value)||d.titel||'';
+  // Neuen Match suchen
+  var match = dokFindTermin(newDatum, studio, titel, '', '', null, d.typ==='abrechn');
+  if(!match) match = dokFindTermin(newDatum, studio, '', '', '', null, d.typ==='abrechn');
+  // Termin-Vorschlagsbereich aktualisieren
+  var vorschlagEl = document.getElementById('dok-termin-vorschlag');
+  if(!vorschlagEl) return;
+  if(match){
+    d.terminId = match.id;
+    vorschlagEl.innerHTML = '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:4px">📅 TERMIN GEFUNDEN</div>'
+      +'<div style="font-size:13px;font-weight:800">'+esc(match.titel||match.studio||'')+'</div>'
+      +'<div style="font-size:11px;color:#555;margin-top:2px">'+fd(match.datum)+(match.studio?' · '+esc(match.studio):'')+(match.uhrzeit?' · '+match.uhrzeit+' Uhr':'')+'</div>'
+      +'<button type="button" onclick="dokOpenDetail(\''+d.id+'\')" style="margin-top:6px;background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Öffnen</button>'
+      +'</div>';
+  } else {
+    d.terminId = null;
+    vorschlagEl.innerHTML = '<div style="font-size:11px;color:#888;padding:8px 0">Kein passender Termin für '+newDatum+' gefunden — manuell suchen</div>';
+  }
 }
 
 // Read-only Anzeigezeile (wie im Screenshot)
@@ -10337,7 +10368,8 @@ function dokOpenDetail(id){
       var terminBannerBorder = terminHatDispo ? '#fed7aa' : '#86efac';
       var terminLabelColor = terminHatDispo ? '#c2410c' : '#15803d';
       var terminLabel = terminHatDispo ? '⚠ TERMIN HAT BEREITS EINE DISPO' : '📅 TERMIN GEFUNDEN';
-      body += '<div style="background:'+terminBannerBg+';border:1.5px solid '+terminBannerBorder+';border-radius:10px;padding:10px 14px;margin-bottom:10px">'
+      body += '<div id="dok-termin-vorschlag">'
+        +'<div style="background:'+terminBannerBg+';border:1.5px solid '+terminBannerBorder+';border-radius:10px;padding:10px 14px;margin-bottom:10px">'
         + '<div>'
         + '<div style="font-size:10px;font-weight:700;color:'+terminLabelColor+';margin-bottom:2px">'+terminLabel+'</div>'
         + '<div style="font-size:14px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
@@ -10345,7 +10377,8 @@ function dokOpenDetail(id){
         + (terminHatDispo ? '<div style="font-size:11px;color:#c2410c;margin-top:4px;font-weight:600">Trotzdem möglich — bitte prüfen ob es dieselbe Dispo ist.</div>' : '')
         + '</div>'
         + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:'+terminLabelColor+';color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
-        + '</div>';
+        + '</div>'
+        +'</div>';
       body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:#f8fafc;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
       // Storno-Hinweis bei negativem Brutto
       if(parseFloat(d.brutto||0) < 0){
@@ -10410,11 +10443,11 @@ function dokOpenDetail(id){
       if(vorschlaege.length){
         // Besten Vorschlag direkt zuordnen (wie dokFindTermin-Fallback)
         if(!d.terminId){ d.terminId=vorschlaege[0].id; save(db); }
+        body+='<div id="dok-termin-vorschlag">';
         body+='<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:8px">📅 PASSENDER TERMIN GEFUNDEN</div>';
         vorschlaege.forEach(function(tv){
           var diff3=d.datum?Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24):99;
           var ml=diff3===0?'✓ Gleicher Tag':(diff3<=1?'~1 Tag':'~'+Math.round(diff3)+' Tage');
-          // Zeige Merge-Vorschau für diesen Termin
           var preview=_buildMergePreview(d, tv);
           body+='<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:10px;margin-bottom:10px;overflow:hidden">'
             +'<div style="background:#fff7ed;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
@@ -10423,15 +10456,15 @@ function dokOpenDetail(id){
             +'<div style="font-size:10px;font-weight:700;color:#c2410c">'+ml+'</div>'
             +'</div>'
             +preview
-            +'<div style="padding:10px 12px">'
-            +''/* Button im fixen Footer */
-            +'</div></div>';
+            +'<div style="padding:10px 12px"></div></div>';
         });
+        body+='</div>';
       } else {
-        body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+        body+='<div id="dok-termin-vorschlag">'
+          +'<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
           +'<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:6px">📅 Kein passender Termin gefunden</div>'
           +'<div style="font-size:12px;color:#666">Datum '+(d.datum?fd(d.datum):'?')+(d.studio?' · '+esc(d.studio):'')+'</div>'
-          +'</div>';
+          +'</div></div>';
       }
 
       // Fallback: manuell oder neuer Termin
@@ -11306,9 +11339,15 @@ function dokBestaetigenMonat(dokId){
       var dispTakes = parseInt(t.takes)||0;
       var sGG = parseFloat(s.grundgage)||0;
       var sRate = parseFloat(s.take_gage)||0;
+      // tKomm: Original-Kommgage VOR Überschreibung — oder aus grundgage - 10*rate ableiten
       var tKomm = parseFloat(t.kommgage)||0;
-      // 1-10-Regel erkennen: grundgage = kommgage + 10×rate
-      var s1to10 = sGG > 0 && sRate > 0 && Math.abs(sGG - (tKomm + 10*sRate)) < 1.5;
+      // 1-10-Regel: grundgage enthält kommgage + 10×rate
+      // Wenn tKomm noch nicht gesetzt oder durch GG überschrieben wurde, aus GG ableiten
+      var _kommAusGG = sGG > 0 && sRate > 0 ? sGG - 10*sRate : 0;
+      var s1to10 = sGG > 0 && sRate > 0 && (
+        Math.abs(sGG - (tKomm + 10*sRate)) < 1.5 ||    // tKomm stimmt
+        (_kommAusGG > 0 && _kommAusGG < sGG)            // GG > 10×Rate → Basis enthalten
+      );
       // Wenn 1-10-Regel: echte Takes = sTakes + 10
       var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
