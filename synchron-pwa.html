@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '587';
+  if(el) el.textContent = '588';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8846,10 +8846,12 @@ function dokAnalyseDoc(d, key, cb){
     +'    Beispiel FFS: Titel="10Dance Film" aber kein separates Gattungsfeld → titel="10Dance" (Film ist reine Gattung)\n'
     +'    NIEMALS strippen wenn Gattungswort integraler Titelbestandteil ist: "Squid Game" bleibt "Squid Game"!\n'
     +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
-    +'    ⚠ Datumsformat: ALLE Studios (inkl. FFS) nutzen DD/MM/YYYY oder DD.MM.YYYY\n'
-    +'    ⚠ "03/02/2026" = 3. Februar 2026 = 2026-02-03 (NICHT 2026-03-02!)\n'
-    +'    ⚠ "11/12/2025" = 11. Dezember 2025 = 2025-12-11\n'
-    +'    ⚠ Immer europäisches Format: erster Teil = Tag, zweiter = Monat — keine Ausnahmen!\n'
+    +'    ⚠ Datumsformat: ALLE Studios nutzen DD/MM/YYYY oder DD.MM.YYYY — IMMER europäisch!\n'
+    +'    ⚠ ERSTE ZAHL = TAG, ZWEITE ZAHL = MONAT — keine Ausnahmen!\n'
+    +'    ⚠ "06/11/2025" = 6. November 2025 = 2025-11-06 (NICHT Juni!)\n'
+    +'    ⚠ "03/02/2026" = 3. Februar 2026 = 2026-02-03 (NICHT März!)\n'
+    +'    ⚠ "11/12/2025" = 11. Dezember 2025 = 2025-12-11 (NICHT November!)\n'
+    +'    Merkhilfe: Kein deutsches Studio schreibt Monat zuerst — immer Tag.Monat.Jahr!\n'
     +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
     +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
     +'    ⚠ INTEROPA-Logo: Zwei Kreise oben links — ein ausgefüllter (●) und ein leerer (○) Kreis nebeneinander\n'
