@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '619';
+  if(el) el.textContent = '621';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6952,6 +6952,99 @@ function rJahresabschluss(){
   if(!el) return;
   var yr = _jahresJahr;
   if(sub) sub.textContent = 'Steuerjahr ' + yr;
+
+  // ── AUTO-MIGRATION: gesamt_kv in db.abrechnungen nachfüllen ──
+  // Läuft jedes Mal beim Öffnen des Jahresabschlusses — idempotent
+  var _migChanged = false;
+  var _gnrAbMap = {};
+  (db.abrechnungen||[]).forEach(function(a){
+    var gKey = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
+    if(!_gnrAbMap[gKey]) _gnrAbMap[gKey]=[];
+    _gnrAbMap[gKey].push(a);
+  });
+
+  Object.keys(_gnrAbMap).forEach(function(gKey){
+    var group = _gnrAbMap[gKey];
+    var N = group.length;
+
+    // Schritt 1: Quelle für gesamt_kv ermitteln (Priorität: gesamt_kv → dok → termin)
+    var _gKV=0, _gRV=0, _gPV=0, _quelleName='';
+
+    // Bereits gesamt_kv gesetzt?
+    var withGesamt = group.filter(function(a){return parseFloat(a.gesamt_kv)>0;});
+    if(withGesamt.length > 0){
+      // Nehme den Maximum-Wert (falls mehrere unterschiedlich)
+      withGesamt.forEach(function(a){
+        var v=parseFloat(a.gesamt_kv);
+        if(v>_gKV){_gKV=v;_gRV=parseFloat(a.gesamt_rv)||0;_gPV=parseFloat(a.gesamt_pv)||0;}
+      });
+      _quelleName='gesamt_kv';
+    }
+
+    // Dok-Quelle (zuverlässigste externe Quelle)
+    if(!_gKV){
+      group.forEach(function(a){
+        if(_gKV) return;
+        var _dok=(db.dokumente||[]).find(function(x){return x.id===a.dokId;});
+        if(_dok&&parseFloat(_dok.kv_abzug)>0){
+          _gKV=Math.abs(parseFloat(_dok.kv_abzug));
+          _gRV=Math.abs(parseFloat(_dok.rv_abzug)||0);
+          _gPV=Math.abs(parseFloat(_dok.pv_abzug)||0);
+          _quelleName='dok';
+        }
+      });
+    }
+
+    // Termin-Quelle — aber SMART: wenn alle gleich → einmal nehmen (kein summieren)
+    if(!_gKV){
+      var kvVals = group.map(function(a){
+        var _t=a.terminId?(db.termine||[]).find(function(x){return x.id===a.terminId;}):null;
+        if(!_t&&a.id){_t=(db.termine||[]).find(function(x){return x.abId===a.id;});}
+        return _t ? {kv:Math.abs(parseFloat(_t.kv_abzug)||0), rv:Math.abs(parseFloat(_t.rv_abzug)||0), pv:Math.abs(parseFloat(_t.pv_abzug)||0)} : {kv:0,rv:0,pv:0};
+      });
+      var allKV = kvVals.map(function(v){return v.kv;});
+      var sumKV = allKV.reduce(function(s,v){return s+v;},0);
+      var maxKV = Math.max.apply(null,allKV);
+      var minKV = Math.min.apply(null,allKV.filter(function(v){return v>0;})||[0]);
+
+      if(sumKV > 0){
+        if(N > 1 && minKV > 0 && Math.abs(maxKV - minKV) < 0.5){
+          // Alle gleich → das ist der volle Betrag (jeder Termin hatte vollen Wert)
+          _gKV = maxKV;
+          _gRV = Math.max.apply(null,kvVals.map(function(v){return v.rv;}));
+          _gPV = Math.max.apply(null,kvVals.map(function(v){return v.pv;}));
+          _quelleName='termin-max';
+        } else {
+          // Unterschiedlich → korrekte Aufteilung, summieren
+          _gKV = sumKV;
+          _gRV = kvVals.reduce(function(s,v){return s+v.rv;},0);
+          _gPV = kvVals.reduce(function(s,v){return s+v.pv;},0);
+          _quelleName='termin-sum';
+        }
+      }
+    }
+
+    // Schritt 2: gesamt_kv + kv anteilig auf alle Abs setzen
+    if(_gKV > 0){
+      var groupBrutto = group.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+      group.forEach(function(a){
+        var changed = false;
+        if(Math.abs((parseFloat(a.gesamt_kv)||0)-_gKV)>0.01){ a.gesamt_kv=_gKV; a.gesamt_rv=_gRV; a.gesamt_pv=_gPV; changed=true; }
+        // kv anteilig wenn fehlt oder wenn es gleich gesamt_kv ist (= war voller Betrag falsch gesetzt)
+        var _curKV = parseFloat(a.kv)||0;
+        var needsKvFix = _curKV===0 || (N>1 && Math.abs(_curKV-_gKV)<0.5);
+        if(needsKvFix && groupBrutto>0 && parseFloat(a.brutto)>0){
+          var _ant=parseFloat(a.brutto)/groupBrutto;
+          a.kv=Math.round(_gKV*_ant*100)/100;
+          a.rv=Math.round(_gRV*_ant*100)/100;
+          a.pv=Math.round(_gPV*_ant*100)/100;
+          changed=true;
+        }
+        if(changed) _migChanged=true;
+      });
+    }
+  });
+  if(_migChanged) save(db);
 
   var termine = (db.termine||[]).filter(function(t){
     return (t.datum||'').startsWith(String(yr));
