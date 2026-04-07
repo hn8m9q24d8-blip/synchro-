@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '635';
+  if(el) el.textContent = '637';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2671,7 +2671,7 @@ function openDetail(id){
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
-      +'<div class="info-card-header"><span>💶 Abrechnung</span>'
+      +'<div class="info-card-header"><span>💶 Abrechnung'+(ab&&ab._editierbar?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(!hasDispo2?'<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;padding:6px 8px;background:#f9fafb;border-radius:6px">📋 Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
@@ -3023,6 +3023,21 @@ function saveMergeChanges(){
     });
   }
 
+  // Manuell zugeordnete Session: Abrechnung editierbar machen
+  if(ctid){
+    var _tForEdit=(db.termine||[]).find(function(x){return x.id===ctid;});
+    if(_tForEdit && _tForEdit.abId){
+      // Session war manuell zugeordnet? → _fromSessionIdx + _manuallyAssigned prüfen
+      var _snapSi = _mergeSnapshot ? _mergeSnapshot._fromSessionIdx : null;
+      var _snapDokId = _mergeSnapshot ? _mergeSnapshot._fromDokId : null;
+      var _snapDok = _snapDokId ? (db.dokumente||[]).find(function(x){return x.id===_snapDokId;}) : null;
+      var _wasManual = _snapDok && _snapSi!=null && _snapDok.sessions && _snapDok.sessions[_snapSi] && _snapDok.sessions[_snapSi]._manuallyAssigned;
+      if(_wasManual){
+        var _abEdit=(db.abrechnungen||[]).find(function(a){return a.id===_tForEdit.abId;});
+        if(_abEdit) _abEdit._editierbar=true;
+      }
+    }
+  }
   _mergeSnapshot=null;
   _mergeTerminId=null;
   save(db);
@@ -4076,6 +4091,87 @@ function toggleStatus(id){
   save(db);
   rTermine();updateBadge();
   openDetail(id);
+}
+
+// ── ABRECHNUNG MANUELL BEARBEITEN ────────────────────────────
+function abrechnungEditOpen(abId){
+  var ab=(db.abrechnungen||[]).find(function(a){return a.id===abId;});
+  if(!ab) return;
+  var t=ctid?(db.termine||[]).find(function(x){return x.id===ctid;}):null;
+  // USt-Satz ermitteln
+  var curUst=parseFloat(t&&t.ust_satz)||(
+    parseFloat(ab.mwst)>0&&parseFloat(ab.brutto)>parseFloat(ab.mwst)
+    ?(Math.abs(parseFloat(ab.mwst)/(parseFloat(ab.brutto)-parseFloat(ab.mwst))-0.19)<0.01?0.19:0.07)
+    :0.07);
+  window._aeUstSatz=curUst;
+  function fld(lbl,id,val,type){
+    return '<div><div style="font-size:11px;color:#666;margin-bottom:4px">'+lbl+'</div>'
+      +'<input id="'+id+'" type="'+(type||'number')+'" step="0.01" value="'+val+'" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px"></div>';
+  }
+  function ustBtn(satz){
+    var active=Math.abs(curUst-satz)<0.01;
+    return '<button type="button" onclick="abrechnungEditUst('+satz+')" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:14px;border:2px solid '+(active?'#7c3aed;background:#f3e8ff;color:#7c3aed':'#e5e7eb;background:#fff;color:#666')+'" id="ae-ust'+(satz*100)+'">'+(satz*100)+'%</button>';
+  }
+  var ov=document.createElement('div');
+  ov.id='ab-edit-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:flex-end';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px 18px 0 0;padding:20px 16px 44px;width:100%;box-sizing:border-box">'
+    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">✏️ Abrechnung bearbeiten</div>'
+    +'<div style="font-size:11px;color:#9ca3af;margin-bottom:16px">Werte aus KI-Auslesung — hier manuell korrigierbar</div>'
+    +'<div style="display:grid;gap:10px">'
+    +fld('Brutto gesamt €','ae-brutto',ab.brutto||0)
+    +fld('MwSt €','ae-mwst',ab.mwst||0)
+    +'<div><div style="font-size:11px;color:#666;margin-bottom:4px">USt-Satz</div>'
+    +'<div style="display:flex;gap:8px">'+ustBtn(0.07)+ustBtn(0.19)+'</div></div>'
+    +fld('Gutschrift-Nr.','ae-gnr',ab.gutschrift_nr||'','text')
+    +fld('Auszahlung €','ae-ausz',ab.auszahlung||0)
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:16px">'
+    +'<button type="button" onclick="abrechnungEditSave(\''+abId+'\')" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:12px;padding:14px;font-weight:800;font-size:15px">✓ Speichern</button>'
+    +'<button type="button" onclick="document.getElementById(\'ab-edit-ov\').remove()" style="background:#f3f4f6;border:none;border-radius:12px;padding:14px 20px;font-weight:700;font-size:14px">Abbrechen</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov) ov.remove();};
+}
+
+function abrechnungEditUst(satz){
+  window._aeUstSatz=satz;
+  [7,19].forEach(function(p){
+    var b=document.getElementById('ae-ust'+p);
+    if(!b) return;
+    var active=Math.abs(satz-p/100)<0.01;
+    b.style.border='2px solid '+(active?'#7c3aed':'#e5e7eb');
+    b.style.background=active?'#f3e8ff':'#fff';
+    b.style.color=active?'#7c3aed':'#666';
+  });
+}
+
+function abrechnungEditSave(abId){
+  var ab=(db.abrechnungen||[]).find(function(a){return a.id===abId;});
+  if(!ab){showToast('Abrechnung nicht gefunden');return;}
+  var t=ctid?(db.termine||[]).find(function(x){return x.id===ctid;}):null;
+  var brutto=parseFloat(document.getElementById('ae-brutto').value)||0;
+  var mwst=parseFloat(document.getElementById('ae-mwst').value)||0;
+  var ust=window._aeUstSatz||0.07;
+  var gnr=(document.getElementById('ae-gnr').value||'').trim();
+  var ausz=parseFloat(document.getElementById('ae-ausz').value)||null;
+  logAction('ab_edit','Abrechnung manuell bearbeitet · '+esc(ab.studio||''),{
+    abId:abId, terminId:ctid,
+    vorher:{brutto:ab.brutto,mwst:ab.mwst,ust_satz:ab._editUstSatz,gutschrift_nr:ab.gutschrift_nr,auszahlung:ab.auszahlung}
+  });
+  ab.brutto=brutto; ab.mwst=mwst; ab._editUstSatz=ust;
+  ab.gutschrift_nr=gnr||ab.gutschrift_nr||null;
+  if(ausz) ab.auszahlung=ausz;
+  if(t){
+    t.ust_satz=ust;
+    t.brutto_termin=brutto;
+    t.mwst_anteil=mwst;
+    if(gnr) t.gutschrift_nr=gnr;
+  }
+  save(db);
+  document.getElementById('ab-edit-ov').remove();
+  openDetail(ctid);
+  showToast('✓ Abrechnung aktualisiert');
 }
 
 function deleteCurrentTermin(){
@@ -7458,13 +7554,31 @@ function rUndoLog(){
   }
   var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎'};
   el.innerHTML = log.map(function(a){
-    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">'
-      +'<div style="font-size:22px;flex-shrink:0">'+(icons[a.typ]||'📝')+'</div>'
+    // Detail-Info aus undoData ermitteln
+    var detail='';
+    if(a.undoData){
+      if(a.undoData.terminId){
+        var _ut=(db.termine||[]).find(function(x){return x.id===a.undoData.terminId;});
+        if(_ut) detail=(_ut.titel||_ut.studio||'')+(_ut.datum?' · '+fd(_ut.datum):'');
+      }
+      if(!detail && a.undoData.dokId){
+        var _ud=(db.dokumente||[]).find(function(x){return x.id===a.undoData.dokId;});
+        if(_ud) detail=_ud.beschr||_ud.dateiname||'';
+      }
+      if(!detail && a.undoData.terminSnap){
+        var _us=a.undoData.terminSnap;
+        detail=(_us.titel||_us.studio||'')+(_us.datum?' · '+fd(_us.datum):'');
+      }
+    }
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:14px;padding:14px 16px;margin-bottom:10px">'
+      +'<div style="display:flex;align-items:flex-start;gap:10px">'
+      +'<div style="font-size:22px;flex-shrink:0;margin-top:2px">'+(icons[a.typ]||'📝')+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.beschr)+'</div>'
-      +'<div style="font-size:10px;color:#888;margin-top:2px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
-      +'</div>'
-      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rückgängig</button>'
+      +'<div style="font-size:13px;font-weight:700;line-height:1.4">'+esc(a.beschr)+'</div>'
+      +(detail?'<div style="font-size:11px;color:#6b7280;margin-top:3px">'+esc(detail)+'</div>':'')
+      +'<div style="font-size:10px;color:#9ca3af;margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
+      +'</div></div>'
+      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rükgängig</button>'
       +'</div>';
   }).join('');
 }
