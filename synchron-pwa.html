@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '615';
+  if(el) el.textContent = '616';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11553,16 +11553,14 @@ function dokBestaetigenMonat(dokId){
         var _dRV = Math.abs(parseFloat(d.rv_abzug)||0);
         var _dPV = Math.abs(parseFloat(d.pv_abzug)||0);
         if(!_sesKV && !_sesRV && !_sesPV && _dKV > 0){
-          // RC-Format: jede Session hat eigene Seite mit eigenem brutto_termin = eigene KV/RV/PV
-          // Arena/FFS: eine Gesamtabrechnung, KV/RV/PV anteilig verteilen
-          // Erkennung: wenn Session ein eigenes auszahlung-Feld hat → eigene Abrechnung → volle Werte
-          // Wenn keine eigene Auszahlung → Teil einer Gesamtabrechnung → anteilig
           var hatEigeneAuszahlung = s.auszahlung && parseFloat(s.auszahlung) > 0;
-          if(hatEigeneAuszahlung){
-            // RC-Format: volle KV/RV/PV dieser Session-Seite direkt übernehmen
-            _sesKV = _dKV; _sesRV = _dRV; _sesPV = _dPV;
+          if(hatEigeneAuszahlung && s.kv_abzug){
+            // Session hat eigene KV-Angabe (RC-Format: jede Seite eigene Abrechnung)
+            _sesKV = parseFloat(s.kv_abzug)||0;
+            _sesRV = parseFloat(s.rv_abzug)||0;
+            _sesPV = parseFloat(s.pv_abzug)||0;
           } else if(gesamtBrutto > 0 && sessionBrutto > 0){
-            // Monats-GS ohne eigene Auszahlung → anteilig verteilen
+            // Anteilig verteilen — auch wenn Session eigene Auszahlung hat (toneworx)
             var _anteil = sessionBrutto / gesamtBrutto;
             _sesKV = Math.round(_dKV * _anteil * 100)/100;
             _sesRV = Math.round(_dRV * _anteil * 100)/100;
