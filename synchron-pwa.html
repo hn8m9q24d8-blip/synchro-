@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '611';
+  if(el) el.textContent = '615';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3118,6 +3118,11 @@ function saveMergeChanges(){
             kv:Math.abs(parseFloat(dok.kv_abzug)||0),
             rv:Math.abs(parseFloat(dok.rv_abzug)||0),
             pv:Math.abs(parseFloat(dok.pv_abzug)||0),
+            // gesamt-Werte für Jahresabschluss-Fallback bei Split-Sessions
+            gesamt_brutto: parseFloat(dok.gesamt_brutto||dok.brutto)||_abBrutto,
+            gesamt_kv: Math.abs(parseFloat(dok.kv_abzug)||0),
+            gesamt_rv: Math.abs(parseFloat(dok.rv_abzug)||0),
+            gesamt_pv: Math.abs(parseFloat(dok.pv_abzug)||0),
             terminId:ctid, bezahlt:false
           };
           _abT.abId = _upsertAbrechnung(_abT.abId, _abFelder);
@@ -6993,6 +6998,16 @@ function rJahresabschluss(){
         _gkv += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
         _grv += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
         _gpv += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
+        // Letzter Fallback: Termin selbst
+        if(!_gkv){
+          var _ft = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
+          if(!_ft && a.id){ _ft = (db.termine||[]).find(function(x){return x.abId===a.id;}); }
+          if(_ft){
+            _gkv += Math.abs(parseFloat(_ft.kv_abzug)||0);
+            _grv += Math.abs(parseFloat(_ft.rv_abzug)||0);
+            _gpv += Math.abs(parseFloat(_ft.pv_abzug)||0);
+          }
+        }
       });
     }
     kvGesTab += _gkv; rvGesTab += _grv; pvGesTab += _gpv;
@@ -7002,9 +7017,15 @@ function rJahresabschluss(){
   Object.keys(gnrGruppen).forEach(function(k){ if(gnrGruppen[k].gnr) _gnrInTab[gnrGruppen[k].gnr]=true; });
   abListe.filter(function(a){ return !a.gutschrift_nr||!_gnrInTab[a.gutschrift_nr]; }).forEach(function(a){
     bruttoGesTab += parseFloat(a.brutto)||0;
-    kvGesTab += parseFloat(a.kv)||0;
-    rvGesTab += parseFloat(a.rv)||0;
-    pvGesTab += parseFloat(a.pv)||0;
+    var _akv = parseFloat(a.kv)||parseFloat(a.kv_abzug)||0;
+    var _arv = parseFloat(a.rv)||parseFloat(a.rv_abzug)||0;
+    var _apv = parseFloat(a.pv)||parseFloat(a.pv_abzug)||0;
+    if(!_akv){
+      var _fat = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
+      if(!_fat && a.id){ _fat = (db.termine||[]).find(function(x){return x.abId===a.id;}); }
+      if(_fat){ _akv=Math.abs(parseFloat(_fat.kv_abzug)||0); _arv=Math.abs(parseFloat(_fat.rv_abzug)||0); _apv=Math.abs(parseFloat(_fat.pv_abzug)||0); }
+    }
+    kvGesTab += _akv; rvGesTab += _arv; pvGesTab += _apv;
   });
   svGes = kvGesTab + rvGesTab + pvGesTab;
   // Überschreibe bruttoGes/kvGes mit Tabellen-Werten für konsistente Anzeige
@@ -7099,14 +7120,21 @@ function rJahresabschluss(){
       var _kv = parseFloat(a.kv)||parseFloat(a.kv_abzug)||0;
       var _rv = parseFloat(a.rv)||parseFloat(a.rv_abzug)||0;
       var _pv = parseFloat(a.pv)||parseFloat(a.pv_abzug)||0;
-      // Fallback: Termin direkt fragen wenn ab-Felder leer
+      // Fallback: Termin direkt fragen wenn ab-Felder leer — _tid statt a.terminId verwenden
       if(!_kv || !_rv){
-        var _abT2 = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
+        var _abT2 = _tid ? (db.termine||[]).find(function(x){return x.id===_tid;}) : null;
         if(_abT2){
           if(!_kv) _kv = Math.abs(parseFloat(_abT2.kv_abzug)||0);
           if(!_rv) _rv = Math.abs(parseFloat(_abT2.rv_abzug)||0);
           if(!_pv) _pv = Math.abs(parseFloat(_abT2.pv_abzug)||0);
         }
+      }
+      // Letzter Fallback: gesamt_kv proportional aufteilen (z.B. toneworx 3-Session-Split)
+      if(!_kv && parseFloat(a.gesamt_kv) > 0 && parseFloat(a.brutto) > 0 && parseFloat(a.gesamt_brutto) > 0){
+        var _anteil = parseFloat(a.brutto) / parseFloat(a.gesamt_brutto);
+        _kv = Math.round(parseFloat(a.gesamt_kv) * _anteil * 100) / 100;
+        _rv = Math.round((parseFloat(a.gesamt_rv)||0) * _anteil * 100) / 100;
+        _pv = Math.round((parseFloat(a.gesamt_pv)||0) * _anteil * 100) / 100;
       }
       var sv2 = _kv+_rv+_pv;
       return '<tr style="border-bottom:1px solid #f0f0f0">'
@@ -13501,6 +13529,30 @@ function runIntegrityCheck(silent){
     var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
     if(ab && ab.bezahlt === false){
       warnings.push('⚠ Status-Konflikt: '+esc(t.titel||'?')+' ('+fd(t.datum)+'): Termin=bezahlt aber Abrechnung.bezahlt=false');
+    }
+  });
+
+  // 0g. Termine mit mehr als einer Gutschrift-Nr. (Session-GNR vs. Haupt-GNR gemischt)
+  (db.termine||[]).forEach(function(t){
+    if(!t.gutschrift_nr) return;
+    // Alle Abrechnungen dieses Termins sammeln
+    var abGNRs = [];
+    if(t.abId){
+      var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(ab && ab.gutschrift_nr) abGNRs.push(ab.gutschrift_nr);
+    }
+    // Auch aus dokIds
+    (t.dokIds||[]).forEach(function(did){
+      var dok=(db.dokumente||[]).find(function(x){return x.id===did;});
+      if(dok && dok.gutschrift_nr && abGNRs.indexOf(dok.gutschrift_nr)<0) abGNRs.push(dok.gutschrift_nr);
+    });
+    abGNRs.push(t.gutschrift_nr);
+    // Unique GNRs
+    var unique = {};
+    abGNRs.forEach(function(g){ unique[g]=true; });
+    var keys = Object.keys(unique);
+    if(keys.length > 1){
+      warnings.push('⚠ Mehrere Gutschrift-Nr.: '+esc(t.titel||'?')+' ('+fd(t.datum)+'): '+keys.join(', ')+' — Holvi-Matching prüfen!');
     }
   });
   (db.abrechnungen||[]).forEach(function(ab){
