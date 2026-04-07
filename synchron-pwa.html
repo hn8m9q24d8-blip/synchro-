@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '604';
+  if(el) el.textContent = '607';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3135,7 +3135,11 @@ function saveMergeChanges(){
       }
       dok.bestaetigt = true;
       dok.awaitConfirm = false;
-      dok.dataURL = null; // Vollbild sofort freigeben — Speicher
+      // dataURL nur löschen wenn keine unbestätigten Split-Geschwister mehr vorhanden
+      var _splitSiblings = dok._splitGroup ? (db.dokumente||[]).filter(function(x){
+        return x._splitGroup===dok._splitGroup && x.id!==dok.id && !x.bestaetigt;
+      }) : [];
+      if(_splitSiblings.length === 0) dok.dataURL = null;
       dok._pendingDelete = true; // thumb auch löschen beim nächsten saveMerge
       _archiveDateiname(dok.dateiname||dok.beschr, ctid, dok.typ||'abrechn');
       _abT.abgerechnet = true;
@@ -11454,9 +11458,9 @@ function dokBestaetigenMonat(dokId){
       }
       if(s._mwst_anteil!=null) t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz!=null)    t.ust_satz     = s._ust_satz;
-      // Gutschrift-Nr. — session-eigene hat Vorrang, sonst Dok-Gutschrift
-      var sessionGutNr = s.gutschrift_nr||gutschriftNr;
-      if(sessionGutNr) t.gutschrift_nr = sessionGutNr;
+      // Gutschrift-Nr. am Termin = immer die Haupt-GNR des Dokuments (erscheint so auf dem Kontoauszug)
+      // Session-eigene GNR (z.B. 2559/20260302) ist app-intern und passt NICHT zur Bank
+      if(gutschriftNr) t.gutschrift_nr = gutschriftNr;
       // MwSt-Anteil aus Brutto berechnen falls noch nicht gesetzt
       // Buchhaltungsregel: mwst_anteil nicht selbst berechnen — nur aus Dokument
       // if(!t.mwst_anteil) → bleibt null, wird in USt-Voranmeldung als fehlend behandelt
@@ -11485,10 +11489,23 @@ function dokBestaetigenMonat(dokId){
       // Wenn 1-10-Regel: echte Takes = sTakes + 10
       var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
+      // Sonderfall: takes=0 + 1-10-Regel → Grundgage deckt ≤10 Takes ab
+      // Wenn Dispo ≤10 Takes → kein Fehler, Grundgage reicht
+      if(!sTakes && s1to10 && dispTakes > 0){
+        t.takes_abgerechnet = Math.max(dispTakes, 10);
+        sTakesEffektiv = t.takes_abgerechnet;
+      }
       if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
       if(s.grundgage) t.kommgage_abgerechnet = _effKomm;
-      if(sTakesEffektiv && dispTakes && sTakesEffektiv !== dispTakes){
-        t.takes_differenz = dispTakes - sTakesEffektiv;
+      // Takes-Differenz: nur wenn Differenz > 0 und nicht durch 1-10-Regel erklärbar
+      var _takeDiff = dispTakes - sTakesEffektiv;
+      if(dispTakes > 0 && sTakesEffektiv > 0 && _takeDiff !== 0){
+        // 1-10-Regel erklärt Differenzen von genau ±10
+        if(s1to10 && Math.abs(_takeDiff) <= 10){
+          t.takes_differenz = 0;
+        } else {
+          t.takes_differenz = _takeDiff;
+        }
       } else {
         t.takes_differenz = 0;
       }
