@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '607';
+  if(el) el.textContent = '610';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10267,7 +10267,8 @@ function dokOpenDetail(id){
           +(summeFehler
             ? '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#c2410c;font-weight:700">'
               +'⚠ Summe Einzelfolgen ('+detailSumme+') ≠ Gesamt-Takes ('+gesamtTakes+')<br>'
-              +'<span style="font-weight:400">Bitte Einzelwerte prüfen – KI hat möglicherweise eine Zahl falsch gelesen.</span>'
+              +'<span style="font-weight:400">Bitte Einzelwerte prüfen – KI hat möglicherweise eine Zahl falsch gelesen.</span><br>'
+              +'<button type="button" onclick="gvlAutoKorrigieren(\''+d.id+'\')" style="margin-top:6px;background:#c2410c;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">⚡ Differenz ('+(gesamtTakes-detailSumme>0?'+':'')+(gesamtTakes-detailSumme)+') auf letzte Folge addieren</button>'
               +'</div>'
             : '')
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
@@ -11703,6 +11704,21 @@ function _archiveDateiname(dateiname, terminId, typ){
       if(db._archivLog.length > 3000) db._archivLog = db._archivLog.slice(-3000);
     }
   }
+}
+
+function gvlAutoKorrigieren(dokId){
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d || !d.gvl_takes_detail || !d.gvl_takes_detail.length) return;
+  var gesamtTakes = parseInt(d.gvl_takes||d.takes||0);
+  var detailSumme = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+  var diff = gesamtTakes - detailSumme;
+  if(diff === 0){ showToast('Bereits ausgeglichen'); return; }
+  // Differenz auf letzte Folge addieren
+  var last = d.gvl_takes_detail[d.gvl_takes_detail.length-1];
+  last.takes = Math.max(0, (parseInt(last.takes)||0) + diff);
+  save(db);
+  showToast('✓ '+(diff>0?'+':'')+diff+' Takes auf letzte Folge addiert');
+  dokOpenDetail(dokId);
 }
 
 function gvlFolgeEdit(label, dokId, idx){
@@ -15205,10 +15221,13 @@ function abFindMatch(d){
     // DATUM ist Pflicht - kein Treffer ohne Datum in der Nähe
     var dateDiff=Math.abs(new Date(dat)-new Date(t.datum));
     var dateScore=0;
-    if(t.datum===dat) dateScore=100;          // exakter Treffer: dominiert alles
-    else if(dateDiff<2*86400000) dateScore=50; // ±1 Tag
-    else if(dateDiff<4*86400000) dateScore=20; // ±3 Tage
-    else return; // weiter als 3 Tage: komplett ignorieren
+    if(t.datum===dat) dateScore=100;          // exakter Treffer
+    else return; // Dispo: kein ±1 Tag — bei Serien mit tägl. Aufnahmen zu fehleranfällig
+    // Termin hat bereits bestätigte Dispo → weniger bevorzugen
+    var hatDispo = (db.dokumente||[]).some(function(dk){
+      return dk.terminId===t.id && dk.typ==='dispo' && dk.bestaetigt;
+    });
+    if(hatDispo) dateScore = Math.round(dateScore * 0.4);
     var ts=(t.studio||'').toLowerCase();
     var tt=(t.titel||'').toLowerCase();
     var score=dateScore;
