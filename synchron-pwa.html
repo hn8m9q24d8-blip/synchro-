@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '621';
+  if(el) el.textContent = '627';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2815,9 +2815,14 @@ function openDetail(id){
       var takeDiff = t.takes_differenz;
       var rateVal  = parseFloat(t.rate)||parseFloat(t.rate_abgerechnet)||0;
       var euroAust = takeDiff > 0 ? Math.round(takeDiff*rateVal*100)/100 : 0;
+      var euroZuviel = takeDiff < 0 ? Math.round(Math.abs(takeDiff)*rateVal*100)/100 : 0;
+      var takeText = takeDiff > 0
+        ? '<b>+'+takeDiff+' Takes</b> nicht abgerechnet'
+        : '<b>'+Math.abs(takeDiff)+' Take'+(Math.abs(takeDiff)>1?'s':'')+' zu viel</b> abgerechnet';
       diffLines += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
-        +'<div style="font-size:12px;color:#92400e"><b>'+(takeDiff>0?'+':'')+takeDiff+' Takes</b> nicht abgerechnet</div>'
+        +'<div style="font-size:12px;color:#92400e">'+takeText+'</div>'
         +(euroAust>0?'<div style="font-size:13px;font-weight:900;color:#c2410c">'+fmtEur(euroAust)+' ausstehend</div>':'')
+        +(euroZuviel>0?'<div style="font-size:13px;font-weight:900;color:#f97316">'+fmtEur(euroZuviel)+' überbezahlt</div>':'')
         +'</div>';
     }
     if(t.rate_differenz && t.rate_differenz !== 0){
@@ -2853,6 +2858,10 @@ function openDetail(id){
       var takeGageAbg = parseFloat(t.rate_abgerechnet||t.rate)||0;
       var kommgageAbg = parseFloat(t.kommgage_abgerechnet||t.kommgage)||0;
       var takesDiff   = t.takes_differenz||0;
+      // 1-10-Regel: wenn kommgageAbg ein bekannter Pauschalbetrag ist → aufsplitten
+      var _known1to10disp = [{total:120,komm:80,rate:4},{total:127,komm:85,rate:4.2},{total:150,komm:100,rate:5}];
+      var _m1to10disp = _known1to10disp.find(function(r){return Math.abs(kommgageAbg-r.total)<0.05 && (!takeGageAbg||Math.abs(takeGageAbg-r.rate)<0.05);});
+      if(_m1to10disp){ kommgageAbg=_m1to10disp.komm; if(!takeGageAbg) takeGageAbg=_m1to10disp.rate; }
 
       abHtml = '<div class="info-card" style="border-left:4px solid #22c55e">'
         +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
@@ -3012,6 +3021,14 @@ function closeDetail(){
   if(_lastSucheQuery){
     termineSuche(_lastSucheQuery);
   }
+  // Split-Navigation: wenn ausstehend → jetzt ausführen
+  if(window._pendingSplitNav){
+    var _nidClose = window._pendingSplitNav;
+    window._pendingSplitNav = null;
+    window._pendingSplitLabel = null;
+    switchView('dokumente');
+    setTimeout(function(){ dokOpenDetail(_nidClose); }, 250);
+  }
 }
 
 
@@ -3125,17 +3142,26 @@ function saveMergeChanges(){
     }
 
     var offeneSessions = dok && dok.sessions
-      ? dok.sessions.filter(function(s){return !s._done;}).length
+      ? dok.sessions.filter(function(s){return !s._done && !s.terminId;}).length
       : 0;
 
     var dp2=document.getElementById('detail-panel');
     if(dp2) dp2.classList.remove('open');
     ctid=null;
 
-    // Noch offene Sessions in diesem Dok? → zurück zum Session-Menü, NICHT zur nächsten Gutschrift
+    // Noch offene Sessions → direkt zur nächsten springen (kein manuelles Suchen)
     if(offeneSessions > 0){
+      var nextOpenIdx = -1;
+      dok.sessions.forEach(function(s, si){
+        if(nextOpenIdx < 0 && !s._done && !s.terminId) nextOpenIdx = si;
+      });
       switchView('dokumente');
-      setTimeout(function(){ dokOpenDetail(returnId); }, 200);
+      if(nextOpenIdx >= 0){
+        showToast('✓ Session gespeichert · Weiter: '+(nextOpenIdx+1)+' von '+dok.sessions.length);
+        setTimeout(function(){ dokOpenDetail(returnId); setTimeout(function(){ dokSessionPeek(returnId, nextOpenIdx); }, 400); }, 200);
+      } else {
+        setTimeout(function(){ dokOpenDetail(returnId); }, 200);
+      }
       return;
     }
 
@@ -10614,7 +10640,14 @@ function dokOpenDetail(id){
 
     // ── SESSIONS-BLOCK: monats_abrechn ODER abrechn mit mehreren Aufnahmetagen ──
     if((d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length){
-      var allDone = d.sessions.every(function(s){return s._done;});
+      var allDone = d.sessions.every(function(s){return s._done || s.terminId;});
+      // Auch aktivieren wenn alle Sessions entweder done ODER keinen Termin im Kalender haben
+      var allDoneOrNoTermin = allDone || d.sessions.every(function(s){
+        if(s._done || s.terminId) return true;
+        if(!s.datum) return true;
+        var match = (db.termine||[]).find(function(t){return t.datum===s.datum && (t.studio||'').toLowerCase().indexOf((d.studio||'').toLowerCase())>=0;});
+        return !match;
+      });
       body+='<div style="margin-bottom:12px">';
       body+='<div style="font-size:11px;font-weight:800;color:#1d6fa8;letter-spacing:.5px;margin-bottom:8px">📋 ERKANNTE TERMINE ('+d.sessions.length+')</div>';
       d.sessions.forEach(function(s, si){
@@ -10644,8 +10677,12 @@ function dokOpenDetail(id){
         body+='</div>';
         body+='</div>';
       });
-      if(allDone){
-        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle bestätigt — Foto löschen & abschließen</button>';
+      if(allDone || allDoneOrNoTermin){
+        var skippedCount = d.sessions.filter(function(s){return !s._done;}).length;
+        var btnLabel = skippedCount > 0
+          ? '✓ Abschließen ('+skippedCount+' Session'+(skippedCount>1?'s':'')+' ohne Kalendertermin)'
+          : '✓ Alle bestätigt — Foto löschen & abschließen';
+        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">'+btnLabel+'</button>';
       } else {
         var doneCount = d.sessions.filter(function(s){return s._done;}).length;
         // Nächste offene Session finden
@@ -10795,7 +10832,7 @@ function dokOpenDetail(id){
     }
     // PDF-Platzhalter + grüner Button nur bei Einzel-Dokumenten
     // Bei Monatsabrechnungen mit Sessions zählt nur der blaue "Alle übernehmen"-Button
-    var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
+    var isMonatsAbrechn = (d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length;
     if(!isMonatsAbrechn){
       if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:#f5f5f5;border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
       var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
@@ -11587,9 +11624,16 @@ function dokSessionSkip(dokId, si){
       return;
     }
   }
-  showToast('✓ Session übersprungen');
-  // Zurück zum Dok
-  dokOpenDetail(dokId);
+  // Noch offene Sessions → direkt zur nächsten springen
+  var nextIdx = -1;
+  d.sessions.forEach(function(s, i){ if(nextIdx<0 && !s._done) nextIdx=i; });
+  if(nextIdx >= 0){
+    showToast('✓ Übersprungen · Weiter: Session '+(nextIdx+1)+' von '+d.sessions.length);
+    setTimeout(function(){ dokOpenDetail(dokId); setTimeout(function(){ dokSessionPeek(dokId, nextIdx); }, 400); }, 200);
+  } else {
+    showToast('✓ Session übersprungen');
+    dokOpenDetail(dokId);
+  }
 }
 
 function dokBestaetigenMonat(dokId){
@@ -12493,6 +12537,7 @@ function _checkPendingDokLink(terminId){
     _pendingSessionIdx=null;
     dokLinkCancel();
     d.sessions[si].terminId=terminId;
+    d.sessions[si]._done=true;
     logAction('session_link', 'Session manuell zugeordnet · '+(d.beschr||d.dateiname||''),
       {dokId: d.id, sessionIdx: si, altesTerminId: _altesTerminId, neuesTerminId: terminId});
     save(db);
