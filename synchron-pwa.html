@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '616';
+  if(el) el.textContent = '619';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2693,8 +2693,36 @@ function openDetail(id){
       +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
         '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto = App-Netto</div>'+
         '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+fmtEur(ab.brutto)+'</div></div>'
-      +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
-        (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
+      +(function(){
+        var _kv=Math.abs(parseFloat(ab.kv)||0);
+        var _rv=Math.abs(parseFloat(ab.rv)||0);
+        var _pv=Math.abs(parseFloat(ab.pv)||0);
+        if(!_kv&&!_rv){
+          // Fallback 1: kv_abzug am Termin
+          _kv=Math.abs(parseFloat(t.kv_abzug)||0);
+          _rv=Math.abs(parseFloat(t.rv_abzug)||0);
+          _pv=Math.abs(parseFloat(t.pv_abzug)||0);
+        }
+        if(!_kv&&!_rv&&parseFloat(ab.gesamt_kv)>0&&parseFloat(ab.brutto)>0&&parseFloat(ab.gesamt_brutto)>0){
+          // Fallback 2: gesamt_kv proportional
+          var _ant=parseFloat(ab.brutto)/parseFloat(ab.gesamt_brutto);
+          _kv=Math.round(parseFloat(ab.gesamt_kv)*_ant*100)/100;
+          _rv=Math.round((parseFloat(ab.gesamt_rv)||0)*_ant*100)/100;
+          _pv=Math.round((parseFloat(ab.gesamt_pv)||0)*_ant*100)/100;
+        }
+        if(!_kv&&!_rv&&ab.dokId){
+          // Fallback 3: direkt vom Dokument, anteilig nach Anzahl Abrechnungen
+          var _dok2=(db.dokumente||[]).find(function(x){return x.id===ab.dokId;});
+          if(_dok2&&parseFloat(_dok2.kv_abzug)){
+            var _n=ab.gutschrift_nr?(db.abrechnungen||[]).filter(function(a){return a.gutschrift_nr===ab.gutschrift_nr;}).length:1;
+            _kv=Math.round(Math.abs(parseFloat(_dok2.kv_abzug)||0)/Math.max(1,_n)*100)/100;
+            _rv=Math.round(Math.abs(parseFloat(_dok2.rv_abzug)||0)/Math.max(1,_n)*100)/100;
+            _pv=Math.round(Math.abs(parseFloat(_dok2.pv_abzug)||0)/Math.max(1,_n)*100)/100;
+          }
+        }
+        return (_kv||_rv||_pv)?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
+          (_kv?'KV '+fmtEur(_kv)+' ':'')+(_rv?'RV '+fmtEur(_rv)+' ':'')+(_pv?'PV '+fmtEur(_pv):'')+'</div></div>':'';
+      })()
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
       +(ab.mwst?'<div class="info-row"><div class="ir-key" style="color:#888">MwSt ('+Math.round(ur*100)+'%)'
         +(ab.gesamt_mwst?' <span style="font-size:9px;color:#aaa;font-weight:400">anteilig</span>':'')
@@ -2857,6 +2885,34 @@ function openDetail(id){
       var _kvA=Math.abs(parseFloat(t.kv_abzug)||0);
       var _rvA=Math.abs(parseFloat(t.rv_abzug)||0);
       var _pvA=Math.abs(parseFloat(t.pv_abzug)||0);
+      // Fallback: aus Abrechnung lesen wenn Termin keine SV-Werte hat
+      if(!_kvA && !_rvA){
+        var _svAb = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+        if(_svAb){
+          _kvA = Math.abs(parseFloat(_svAb.kv)||parseFloat(_svAb.kv_abzug)||0);
+          _rvA = Math.abs(parseFloat(_svAb.rv)||parseFloat(_svAb.rv_abzug)||0);
+          _pvA = Math.abs(parseFloat(_svAb.pv)||parseFloat(_svAb.pv_abzug)||0);
+          // Wenn immer noch 0: gesamt_kv proportional aufteilen
+          if(!_kvA && parseFloat(_svAb.gesamt_kv) > 0 && parseFloat(_svAb.brutto) > 0 && parseFloat(_svAb.gesamt_brutto) > 0){
+            var _svAnteil = parseFloat(_svAb.brutto) / parseFloat(_svAb.gesamt_brutto);
+            _kvA = Math.round(parseFloat(_svAb.gesamt_kv) * _svAnteil * 100)/100;
+            _rvA = Math.round((parseFloat(_svAb.gesamt_rv)||0) * _svAnteil * 100)/100;
+            _pvA = Math.round((parseFloat(_svAb.gesamt_pv)||0) * _svAnteil * 100)/100;
+          }
+          // Letzter Fallback: direkt vom Dok
+          if(!_kvA && _svAb.dokId){
+            var _svDok = (db.dokumente||[]).find(function(x){return x.id===_svAb.dokId;});
+            if(_svDok){
+              // Anzahl Termine dieser GNR ermitteln für Aufteilung
+              var _svGnr = _svAb.gutschrift_nr;
+              var _svAnzahl = _svGnr ? (db.abrechnungen||[]).filter(function(a){return a.gutschrift_nr===_svGnr;}).length : 1;
+              _kvA = Math.round(Math.abs(parseFloat(_svDok.kv_abzug)||0) / Math.max(1,_svAnzahl) * 100)/100;
+              _rvA = Math.round(Math.abs(parseFloat(_svDok.rv_abzug)||0) / Math.max(1,_svAnzahl) * 100)/100;
+              _pvA = Math.round(Math.abs(parseFloat(_svDok.pv_abzug)||0) / Math.max(1,_svAnzahl) * 100)/100;
+            }
+          }
+        }
+      }
       if(_kvA||_rvA||_pvA)
         abHtml+='<div class="info-row"><div class="ir-key" style="color:#888">SV-Abzüge <span style="font-size:9px">(anteilig)</span></div><div class="ir-val" style="color:#888;font-size:11px">'
           +(_kvA?'KV '+fmtEur(_kvA)+' ':'')
@@ -6941,12 +6997,35 @@ function rJahresabschluss(){
     var gesamtRV = parseFloat(erstesAb.gesamt_rv)||0;
     var gesamtPV = parseFloat(erstesAb.gesamt_pv)||0;
     if(!gesamtKV && !gesamtRV && !gesamtPV){
-      // Summe über alle abs der Gruppe (Split-Docs haben Werte verteilt)
+      // Summe über alle abs der Gruppe
       abs.forEach(function(a){
         gesamtKV += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
         gesamtRV += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
         gesamtPV += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
       });
+    }
+    // Absolut letzter Fallback: Termin-Felder kv_abzug direkt lesen
+    if(!gesamtKV && !gesamtRV && !gesamtPV){
+      abs.forEach(function(a){
+        var _ft = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
+        if(!_ft && a.id){ _ft = (db.termine||[]).find(function(x){return x.abId===a.id;}); }
+        if(_ft){
+          gesamtKV += Math.abs(parseFloat(_ft.kv_abzug)||0);
+          gesamtRV += Math.abs(parseFloat(_ft.rv_abzug)||0);
+          gesamtPV += Math.abs(parseFloat(_ft.pv_abzug)||0);
+        }
+      });
+      // Wenn immer noch 0: gesamt_kv vom Dok holen via dokId
+      if(!gesamtKV){
+        abs.forEach(function(a){
+          var _dok = a.dokId ? (db.dokumente||[]).find(function(x){return x.id===a.dokId;}) : null;
+          if(_dok && !gesamtKV){
+            gesamtKV = Math.abs(parseFloat(_dok.kv_abzug)||0);
+            gesamtRV = Math.abs(parseFloat(_dok.rv_abzug)||0);
+            gesamtPV = Math.abs(parseFloat(_dok.pv_abzug)||0);
+          }
+        });
+      }
     }
     kvGes += gesamtKV;
     rvGes += gesamtRV;
