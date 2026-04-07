@@ -1823,7 +1823,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '610';
+  if(el) el.textContent = '611';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10015,8 +10015,8 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     if(!t.datum) return -1;
     var diff=Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
     if(strictDate && diff!==0) return -1; // Abrechnung: nur exaktes Datum
-    if(diff>1) return -1; // Dispo etc.: max 1 Tag Abstand
-    var sc=diff===0?20:8;
+    if(diff>0) return -1; // Dispo: exaktes Datum — bei Serien mit tägl. Aufnahmen zu fehleranfällig
+    var sc=20; // exakter Datumstreffer
     // Studio/Firma
     var ss=studio?bestStudioScore(t):0;
     if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
