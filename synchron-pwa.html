@@ -730,11 +730,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div id="view-mahnwesen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="background:#c2410c;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
     <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Mahnwesen</div><div style="color:rgba(255,255,255,.75);font-size:12px" id="mahn-sub">Offene Zahlungen & Differenzen</div></div>
-  </div>
-  <div style="display:flex;background:#a83216;flex-shrink:0">
-    <div id="mahn-tab-ueberfaellig" onclick="mahnSetTab('ueberfaellig')" style="flex:1;text-align:center;padding:10px 8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;border-bottom:3px solid #fff;touch-action:manipulation">📭 Überfällig<span id="mahn-tab-badge-ue" style="margin-left:5px;background:#fff;color:#c2410c;border-radius:10px;padding:1px 6px;font-size:10px"></span></div>
-    <div id="mahn-tab-differenzen" onclick="mahnSetTab('differenzen')" style="flex:1;text-align:center;padding:10px 8px;font-size:12px;font-weight:700;color:rgba(255,255,255,.65);cursor:pointer;border-bottom:3px solid transparent;touch-action:manipulation">⚠ Differenzen<span id="mahn-tab-badge-diff" style="margin-left:5px;background:rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px"></span></div>
+    <div><div style="color:#fff;font-size:18px;font-weight:900">Mahnwesen</div><div style="color:rgba(255,255,255,.75);font-size:12px">Überfällige Zahlungen</div></div>
   </div>
   <div class="scroll" id="mahn-scroll" style="padding:16px;padding-bottom:100px"></div>
 </div>
@@ -1823,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '627';
+  if(el) el.textContent = '633';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2197,7 +2193,7 @@ function openDetail(id){
 
   var monthNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var dayNames=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
-  var ur=db.profil&&db.profil.ust!=null?db.profil.ust:0.07;
+  var ur=parseFloat(t.ust_satz)||(db.profil&&db.profil.ust!=null?db.profil.ust:0.07); // t.ust_satz Vorrang
   // Takes: Kalender-Termin hat Vorrang, Abrechnung als Fallback
   var _abForTakes = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
   var rawTakes=parseInt(t.takes)||parseInt(_abForTakes&&_abForTakes.takes)||0;
@@ -2465,7 +2461,7 @@ function openDetail(id){
   // ── GVL ÜBERSICHT ──────────────────────────────────────────
   var gvlHtml='';
   var gvlDispo=dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
-  if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail||(parseInt(t.takes)>0)){
+  if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
     gvlHtml='<div class="info-card" style="border-left:4px solid #6d28d9">'
       +'<div class="info-card-header"><span>🎬 GVL-Übersicht</span>'
       +'<span class="ic-edit" onclick="gvlTerminBearbeiten(\''+id+'\')" style="color:#6d28d9">✎ Bearbeiten</span></div>'
@@ -2489,17 +2485,11 @@ function openDetail(id){
       // Chips aus Termin-eigenen gvl_takes_detail
       gvlHtml+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';
       t.gvl_takes_detail.forEach(function(td, ei){
-        var folgeVal = parseInt(td.folge);
-        var isFilmEntry = td.folge===0 || td.folge==='Film' || isNaN(folgeVal) || td.folge===null || td.folge===undefined;
-        var chipLabel;
-        if(isFilmEntry){
-          chipLabel = '🎬 Film';
-        } else {
-          var fs=String(folgeVal);
-          var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
-          var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(folgeVal||0);
-          chipLabel = 'S'+sNr+' F'+fNr;
-        }
+        var fs=String(td.folge);
+        var isFilmEntry = td.folge===0;
+        var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
+        var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
+        var chipLabel = isFilmEntry ? '🎬' : ('S'+sNr+' F'+fNr);
         gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:700;color:#7c3aed">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:900;color:#6d28d9">'+td.takes+'</div>'+'</div>';
       });
       gvlHtml+='</div>';
@@ -2693,36 +2683,8 @@ function openDetail(id){
       +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
         '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto = App-Netto</div>'+
         '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+fmtEur(ab.brutto)+'</div></div>'
-      +(function(){
-        var _kv=Math.abs(parseFloat(ab.kv)||0);
-        var _rv=Math.abs(parseFloat(ab.rv)||0);
-        var _pv=Math.abs(parseFloat(ab.pv)||0);
-        if(!_kv&&!_rv){
-          // Fallback 1: kv_abzug am Termin
-          _kv=Math.abs(parseFloat(t.kv_abzug)||0);
-          _rv=Math.abs(parseFloat(t.rv_abzug)||0);
-          _pv=Math.abs(parseFloat(t.pv_abzug)||0);
-        }
-        if(!_kv&&!_rv&&parseFloat(ab.gesamt_kv)>0&&parseFloat(ab.brutto)>0&&parseFloat(ab.gesamt_brutto)>0){
-          // Fallback 2: gesamt_kv proportional
-          var _ant=parseFloat(ab.brutto)/parseFloat(ab.gesamt_brutto);
-          _kv=Math.round(parseFloat(ab.gesamt_kv)*_ant*100)/100;
-          _rv=Math.round((parseFloat(ab.gesamt_rv)||0)*_ant*100)/100;
-          _pv=Math.round((parseFloat(ab.gesamt_pv)||0)*_ant*100)/100;
-        }
-        if(!_kv&&!_rv&&ab.dokId){
-          // Fallback 3: direkt vom Dokument, anteilig nach Anzahl Abrechnungen
-          var _dok2=(db.dokumente||[]).find(function(x){return x.id===ab.dokId;});
-          if(_dok2&&parseFloat(_dok2.kv_abzug)){
-            var _n=ab.gutschrift_nr?(db.abrechnungen||[]).filter(function(a){return a.gutschrift_nr===ab.gutschrift_nr;}).length:1;
-            _kv=Math.round(Math.abs(parseFloat(_dok2.kv_abzug)||0)/Math.max(1,_n)*100)/100;
-            _rv=Math.round(Math.abs(parseFloat(_dok2.rv_abzug)||0)/Math.max(1,_n)*100)/100;
-            _pv=Math.round(Math.abs(parseFloat(_dok2.pv_abzug)||0)/Math.max(1,_n)*100)/100;
-          }
-        }
-        return (_kv||_rv||_pv)?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
-          (_kv?'KV '+fmtEur(_kv)+' ':'')+(_rv?'RV '+fmtEur(_rv)+' ':'')+(_pv?'PV '+fmtEur(_pv):'')+'</div></div>':'';
-      })()
+      +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
+        (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
       +(ab.mwst?'<div class="info-row"><div class="ir-key" style="color:#888">MwSt ('+Math.round(ur*100)+'%)'
         +(ab.gesamt_mwst?' <span style="font-size:9px;color:#aaa;font-weight:400">anteilig</span>':'')
@@ -2815,14 +2777,9 @@ function openDetail(id){
       var takeDiff = t.takes_differenz;
       var rateVal  = parseFloat(t.rate)||parseFloat(t.rate_abgerechnet)||0;
       var euroAust = takeDiff > 0 ? Math.round(takeDiff*rateVal*100)/100 : 0;
-      var euroZuviel = takeDiff < 0 ? Math.round(Math.abs(takeDiff)*rateVal*100)/100 : 0;
-      var takeText = takeDiff > 0
-        ? '<b>+'+takeDiff+' Takes</b> nicht abgerechnet'
-        : '<b>'+Math.abs(takeDiff)+' Take'+(Math.abs(takeDiff)>1?'s':'')+' zu viel</b> abgerechnet';
       diffLines += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
-        +'<div style="font-size:12px;color:#92400e">'+takeText+'</div>'
+        +'<div style="font-size:12px;color:#92400e"><b>'+(takeDiff>0?'+':'')+takeDiff+' Takes</b> nicht abgerechnet</div>'
         +(euroAust>0?'<div style="font-size:13px;font-weight:900;color:#c2410c">'+fmtEur(euroAust)+' ausstehend</div>':'')
-        +(euroZuviel>0?'<div style="font-size:13px;font-weight:900;color:#f97316">'+fmtEur(euroZuviel)+' überbezahlt</div>':'')
         +'</div>';
     }
     if(t.rate_differenz && t.rate_differenz !== 0){
@@ -2858,10 +2815,6 @@ function openDetail(id){
       var takeGageAbg = parseFloat(t.rate_abgerechnet||t.rate)||0;
       var kommgageAbg = parseFloat(t.kommgage_abgerechnet||t.kommgage)||0;
       var takesDiff   = t.takes_differenz||0;
-      // 1-10-Regel: wenn kommgageAbg ein bekannter Pauschalbetrag ist → aufsplitten
-      var _known1to10disp = [{total:120,komm:80,rate:4},{total:127,komm:85,rate:4.2},{total:150,komm:100,rate:5}];
-      var _m1to10disp = _known1to10disp.find(function(r){return Math.abs(kommgageAbg-r.total)<0.05 && (!takeGageAbg||Math.abs(takeGageAbg-r.rate)<0.05);});
-      if(_m1to10disp){ kommgageAbg=_m1to10disp.komm; if(!takeGageAbg) takeGageAbg=_m1to10disp.rate; }
 
       abHtml = '<div class="info-card" style="border-left:4px solid #22c55e">'
         +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
@@ -2894,34 +2847,6 @@ function openDetail(id){
       var _kvA=Math.abs(parseFloat(t.kv_abzug)||0);
       var _rvA=Math.abs(parseFloat(t.rv_abzug)||0);
       var _pvA=Math.abs(parseFloat(t.pv_abzug)||0);
-      // Fallback: aus Abrechnung lesen wenn Termin keine SV-Werte hat
-      if(!_kvA && !_rvA){
-        var _svAb = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-        if(_svAb){
-          _kvA = Math.abs(parseFloat(_svAb.kv)||parseFloat(_svAb.kv_abzug)||0);
-          _rvA = Math.abs(parseFloat(_svAb.rv)||parseFloat(_svAb.rv_abzug)||0);
-          _pvA = Math.abs(parseFloat(_svAb.pv)||parseFloat(_svAb.pv_abzug)||0);
-          // Wenn immer noch 0: gesamt_kv proportional aufteilen
-          if(!_kvA && parseFloat(_svAb.gesamt_kv) > 0 && parseFloat(_svAb.brutto) > 0 && parseFloat(_svAb.gesamt_brutto) > 0){
-            var _svAnteil = parseFloat(_svAb.brutto) / parseFloat(_svAb.gesamt_brutto);
-            _kvA = Math.round(parseFloat(_svAb.gesamt_kv) * _svAnteil * 100)/100;
-            _rvA = Math.round((parseFloat(_svAb.gesamt_rv)||0) * _svAnteil * 100)/100;
-            _pvA = Math.round((parseFloat(_svAb.gesamt_pv)||0) * _svAnteil * 100)/100;
-          }
-          // Letzter Fallback: direkt vom Dok
-          if(!_kvA && _svAb.dokId){
-            var _svDok = (db.dokumente||[]).find(function(x){return x.id===_svAb.dokId;});
-            if(_svDok){
-              // Anzahl Termine dieser GNR ermitteln für Aufteilung
-              var _svGnr = _svAb.gutschrift_nr;
-              var _svAnzahl = _svGnr ? (db.abrechnungen||[]).filter(function(a){return a.gutschrift_nr===_svGnr;}).length : 1;
-              _kvA = Math.round(Math.abs(parseFloat(_svDok.kv_abzug)||0) / Math.max(1,_svAnzahl) * 100)/100;
-              _rvA = Math.round(Math.abs(parseFloat(_svDok.rv_abzug)||0) / Math.max(1,_svAnzahl) * 100)/100;
-              _pvA = Math.round(Math.abs(parseFloat(_svDok.pv_abzug)||0) / Math.max(1,_svAnzahl) * 100)/100;
-            }
-          }
-        }
-      }
       if(_kvA||_rvA||_pvA)
         abHtml+='<div class="info-row"><div class="ir-key" style="color:#888">SV-Abzüge <span style="font-size:9px">(anteilig)</span></div><div class="ir-val" style="color:#888;font-size:11px">'
           +(_kvA?'KV '+fmtEur(_kvA)+' ':'')
@@ -3021,42 +2946,12 @@ function closeDetail(){
   if(_lastSucheQuery){
     termineSuche(_lastSucheQuery);
   }
-  // Split-Navigation: wenn ausstehend → jetzt ausführen
-  if(window._pendingSplitNav){
-    var _nidClose = window._pendingSplitNav;
-    window._pendingSplitNav = null;
-    window._pendingSplitLabel = null;
-    switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(_nidClose); }, 250);
-  }
 }
 
 
 // ── ABRECHNUNG UPSERT — create oder update, nie blockieren ────
 function _upsertAbrechnung(abId, felder){
   if(!db.abrechnungen) db.abrechnungen = [];
-
-  // ── 1-10-Regel Auto-Aufspaltung ──────────────────────────────
-  // Bekannte Grundgage-1-10-Pauschalen → Komm.-Gage + Take-Gage aufteilen
-  var _gg = parseFloat(felder.grundgage)||0;
-  var _tg = parseFloat(felder.take_gage)||0;
-  var _known1to10 = [
-    {total:120.0, komm:80.0,  rate:4.00},  // TV
-    {total:127.0, komm:85.0,  rate:4.20},  // Streaming
-    {total:150.0, komm:100.0, rate:5.00},  // Kino
-  ];
-  if(_gg > 0 && !_tg){
-    var _match = _known1to10.find(function(r){ return Math.abs(_gg - r.total) < 0.05; });
-    if(_match){
-      // Grundgage aufsplitten: der übergebene Wert ist die Pauschale (z.B. 120)
-      // → echte Grundgage = Komm.-Gage (z.B. 80), take_gage = Rate (z.B. 4.00)
-      felder.grundgage = _match.komm;
-      felder.take_gage = _match.rate;
-      // Takes: wenn nicht gesetzt → 0 (bedeutet: ≤10 Takes, nur Mindestgage)
-      if(!felder.takes) felder.takes = 0;
-    }
-  }
-
   // Suche erst nach abId, dann nach terminId als Fallback
   var idx = abId ? db.abrechnungen.findIndex(function(a){return a.id===abId;}) : -1;
   if(idx < 0 && felder.terminId){
@@ -3142,26 +3037,17 @@ function saveMergeChanges(){
     }
 
     var offeneSessions = dok && dok.sessions
-      ? dok.sessions.filter(function(s){return !s._done && !s.terminId;}).length
+      ? dok.sessions.filter(function(s){return !s._done;}).length
       : 0;
 
     var dp2=document.getElementById('detail-panel');
     if(dp2) dp2.classList.remove('open');
     ctid=null;
 
-    // Noch offene Sessions → direkt zur nächsten springen (kein manuelles Suchen)
+    // Noch offene Sessions in diesem Dok? → zurück zum Session-Menü, NICHT zur nächsten Gutschrift
     if(offeneSessions > 0){
-      var nextOpenIdx = -1;
-      dok.sessions.forEach(function(s, si){
-        if(nextOpenIdx < 0 && !s._done && !s.terminId) nextOpenIdx = si;
-      });
       switchView('dokumente');
-      if(nextOpenIdx >= 0){
-        showToast('✓ Session gespeichert · Weiter: '+(nextOpenIdx+1)+' von '+dok.sessions.length);
-        setTimeout(function(){ dokOpenDetail(returnId); setTimeout(function(){ dokSessionPeek(returnId, nextOpenIdx); }, 400); }, 200);
-      } else {
-        setTimeout(function(){ dokOpenDetail(returnId); }, 200);
-      }
+      setTimeout(function(){ dokOpenDetail(returnId); }, 200);
       return;
     }
 
@@ -3200,11 +3086,6 @@ function saveMergeChanges(){
             kv:Math.abs(parseFloat(dok.kv_abzug)||0),
             rv:Math.abs(parseFloat(dok.rv_abzug)||0),
             pv:Math.abs(parseFloat(dok.pv_abzug)||0),
-            // gesamt-Werte für Jahresabschluss-Fallback bei Split-Sessions
-            gesamt_brutto: parseFloat(dok.gesamt_brutto||dok.brutto)||_abBrutto,
-            gesamt_kv: Math.abs(parseFloat(dok.kv_abzug)||0),
-            gesamt_rv: Math.abs(parseFloat(dok.rv_abzug)||0),
-            gesamt_pv: Math.abs(parseFloat(dok.pv_abzug)||0),
             terminId:ctid, bezahlt:false
           };
           _abT.abId = _upsertAbrechnung(_abT.abId, _abFelder);
@@ -3222,11 +3103,7 @@ function saveMergeChanges(){
       }
       dok.bestaetigt = true;
       dok.awaitConfirm = false;
-      // dataURL nur löschen wenn keine unbestätigten Split-Geschwister mehr vorhanden
-      var _splitSiblings = dok._splitGroup ? (db.dokumente||[]).filter(function(x){
-        return x._splitGroup===dok._splitGroup && x.id!==dok.id && !x.bestaetigt;
-      }) : [];
-      if(_splitSiblings.length === 0) dok.dataURL = null;
+      dok.dataURL = null; // Vollbild sofort freigeben — Speicher
       dok._pendingDelete = true; // thumb auch löschen beim nächsten saveMerge
       _archiveDateiname(dok.dateiname||dok.beschr, ctid, dok.typ||'abrechn');
       _abT.abgerechnet = true;
@@ -3238,18 +3115,6 @@ function saveMergeChanges(){
       save(db);
     }
     // ── Split-Navigation: nächste Gutschrift automatisch öffnen ──────────
-    // Erst _pendingSplitNav prüfen (aus dokBestaetigenMitTermin)
-    if(window._pendingSplitNav){
-      var _nid = window._pendingSplitNav;
-      var _nlabel = window._pendingSplitLabel||'';
-      window._pendingSplitNav = null;
-      window._pendingSplitLabel = null;
-      save(db);
-      showToast('✓ '+(_nlabel?'Gutschrift '+_nlabel+' gespeichert · ':'' )+'Weiter zur nächsten');
-      switchView('dokumente');
-      setTimeout(function(){ dokOpenDetail(_nid); }, 200);
-      return;
-    }
     var _navDok = _lastSplitDok || dok;
     if(_navDok && _navDok._splitGroup && _navDok._splitTotal > 1 && _navDok.bestaetigt){
       var dok = _navDok; // für den Rest des Blocks
@@ -3260,6 +3125,7 @@ function saveMergeChanges(){
       save(db);
       if(naechstesDok2){
         showToast('✓ Gutschrift '+(dok._splitIdx+1)+' von '+dok._splitTotal+' · Weiter: '+(naechstesIdx2+1));
+        // Direkt zur nächsten Gutschrift — kein Umweg über Dokumentenliste
         dokOpenDetail(naechstesDok2.id);
         return;
       } else {
@@ -3274,17 +3140,6 @@ function saveMergeChanges(){
     rDokumente();
     showToast('✓ Abrechnung bestätigt');
   } else {
-    // Kein returnId — aber vielleicht Split-Navigation ausstehend
-    if(window._pendingSplitNav){
-      var _nidE = window._pendingSplitNav;
-      window._pendingSplitNav = null;
-      window._pendingSplitLabel = null;
-      save(db);
-      showToast('✓ Bestätigt · Weiter zur nächsten Gutschrift');
-      switchView('dokumente');
-      setTimeout(function(){ dokOpenDetail(_nidE); }, 200);
-      return;
-    }
     openDetail(ctid);
   }
 }
@@ -3731,8 +3586,8 @@ function showDateinamen(el){
   var hasUUIDPattern = firstName.indexOf('-') >= 0 || firstName.indexOf('_') >= 0 || /^\d+[\/\-]\d+/.test(firstName);
   var isFallbackText = !firstName || firstName.length < 5
     || /^Dokument$|^Kurzbefehl-Foto$|^Unbekannt$/i.test(firstName)
-    || /bestätigt|Foto gelöscht|verknüpft|ausstehend/i.test(firstName)
-    || (!hasExt && !hasUUIDPattern && /Abrechnung \d|Dispo \d/i.test(firstName));
+    || /bestätigt|Foto gelöscht|verknüpft|ausstehend|Abrechnung \d|Dispo \d/i.test(firstName)
+    || (!hasExt && !hasUUIDPattern);
 
   // Sofort in Clipboard kopieren — nur wenn echter Dateiname
   if(!isFallbackText && navigator.clipboard){
@@ -3841,7 +3696,7 @@ function dokSessionPeek(elOrId, sessionIdx){
       var datumDiff = (s.datum && tCheck.datum)
         ? Math.abs(new Date(tCheck.datum) - new Date(s.datum)) / (1000*60*60*24)
         : 999;
-      var datumOk = datumDiff === 0; // Abrechnung: EXAKT — kein ±1 Tag!
+      var datumOk = datumDiff === 0 || !!s._manuallyAssigned; // Manuell: Datum-Check überspringen
       // Studio-Check: wenn Studio vorhanden, muss es grob passen
       var studioOk = true;
       if(d.studio && tCheck.studio){
@@ -4120,18 +3975,6 @@ function discardMergeChanges(){
   _mergeTerminId=null;
   _returnToDokId=null;
 
-  // Split-Navigation auch beim Verwerfen: nächste Gutschrift öffnen
-  if(window._pendingSplitNav){
-    var _nid2 = window._pendingSplitNav;
-    window._pendingSplitNav = null;
-    window._pendingSplitLabel = null;
-    closeDetail();
-    switchView('dokumente');
-    setTimeout(function(){ dokOpenDetail(_nid2); }, 200);
-    showToast('Verworfen · Weiter zur nächsten Gutschrift');
-    return;
-  }
-
   if(returnId){
     closeDetail();
     switchView('dokumente');
@@ -4323,35 +4166,11 @@ function saveTermin(){
   }
   if(!t.titel){showToast('⚠️ Bitte Titel eingeben');return;}
   if(!t.datum){showToast('⚠️ Bitte Datum eingeben');return;}
-
-  // Duplikat-Schutz: Gleicher Titel + Datum + Studio → Warnung
-  if(isNew){
-    var duplikat = db.termine.find(function(x){
-      if(x.id === t.id) return false;
-      if(x.datum !== t.datum) return false;
-      var titelMatch = x.titel && t.titel && x.titel.trim().toLowerCase() === t.titel.trim().toLowerCase();
-      var studioMatch = x.studio && t.studio && x.studio.trim().toLowerCase() === t.studio.trim().toLowerCase();
-      var uhrzeitMatch = !x.uhrzeit || !t.uhrzeit || x.uhrzeit === t.uhrzeit;
-      return titelMatch && (studioMatch || uhrzeitMatch);
-    });
-    if(duplikat){
-      if(!confirm('⚠️ Mögliches Duplikat!\n"'+duplikat.titel+'" am '+fd(duplikat.datum)+' existiert bereits.\nTrotzdem neu erstellen?')){
-        return;
-      }
-    }
-  }
   save(db);
   closeTerminSheet();
   rTermine();updateBadge();
   showToast('✓ Termin '+(isNew?'angelegt':'gespeichert'));
   if(!isNew&&ctid===id)openDetail(id);
-  // Wenn Dispo auf neuen Termin wartet → sofort direkt verknüpfen (kein Multi-Select)
-  if(isNew && _pendingDokLink){
-    var _pdl = _pendingDokLink;
-    _pendingDokLink = null;
-    dokLinkCancel();
-    setTimeout(function(){ dokAssignTermin(_pdl, t.id); }, 150);
-  }
 }
 
 function applyGagenprofil(gp){
@@ -5244,9 +5063,6 @@ function holviShowPreview(matches, gesamt){
   var box = document.createElement('div');
   box.style.cssText = 'background:#fff;border-radius:20px;margin:0 12px;padding:20px 16px;max-width:480px;margin-left:auto;margin-right:auto';
 
-  // ← Echter Index im matches-Array stampen — mitTermin/ohneTermin haben andere Indizes!
-  matches.forEach(function(m, i){ m._matchIdx = i; });
-
   var mitTermin = matches.filter(function(m){ return m.termin; });
   var ohneTermin = matches.filter(function(m){ return !m.termin; });
 
@@ -5255,12 +5071,12 @@ function holviShowPreview(matches, gesamt){
 
   if(mitTermin.length){
     html += '<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px;letter-spacing:.5px">✓ TERMIN GEFUNDEN ('+mitTermin.length+') — Tippen zum Ändern</div>';
-    mitTermin.forEach(function(m){
+    mitTermin.forEach(function(m,i){
       var mehrTermine = m.terminKandidaten && m.terminKandidaten.length > 1;
       var istMonats = !!m.monatsAbrechn;
       var anzTermine = m.termineAlle ? m.termineAlle.length : 1;
 
-      html += '<div onclick="'+(istMonats||m._gutschriftMatch?'':' holviTerminWechseln('+m._matchIdx+')')+'" '
+      html += '<div onclick="'+(istMonats||m._gutschriftMatch?'':' holviTerminWechseln('+i+')')+'" '
         +'style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(istMonats||m._gutschriftMatch?'':'cursor:pointer;touch-action:manipulation')+'">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
         +'<div style="font-size:13px;font-weight:800">'+fmtEur(m.zahlung.betrag)+'</div>'
@@ -5580,11 +5396,6 @@ function holviBestaetigen(){
       m.termin.status = 'bezahlt';
       m.termin.zahlungDatum = z.datum;
       m.termin.zahlungBetrag = z.betrag;
-      // Auch db.abrechnungen als bezahlt markieren
-      if(m.termin.abId){
-        var ab=(db.abrechnungen||[]).find(function(a){return a.id===m.termin.abId;});
-        if(ab){ ab.bezahlt=true; ab.zahlungDatum=z.datum; }
-      }
     }
     importiert++;
   });
@@ -6979,99 +6790,6 @@ function rJahresabschluss(){
   var yr = _jahresJahr;
   if(sub) sub.textContent = 'Steuerjahr ' + yr;
 
-  // ── AUTO-MIGRATION: gesamt_kv in db.abrechnungen nachfüllen ──
-  // Läuft jedes Mal beim Öffnen des Jahresabschlusses — idempotent
-  var _migChanged = false;
-  var _gnrAbMap = {};
-  (db.abrechnungen||[]).forEach(function(a){
-    var gKey = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
-    if(!_gnrAbMap[gKey]) _gnrAbMap[gKey]=[];
-    _gnrAbMap[gKey].push(a);
-  });
-
-  Object.keys(_gnrAbMap).forEach(function(gKey){
-    var group = _gnrAbMap[gKey];
-    var N = group.length;
-
-    // Schritt 1: Quelle für gesamt_kv ermitteln (Priorität: gesamt_kv → dok → termin)
-    var _gKV=0, _gRV=0, _gPV=0, _quelleName='';
-
-    // Bereits gesamt_kv gesetzt?
-    var withGesamt = group.filter(function(a){return parseFloat(a.gesamt_kv)>0;});
-    if(withGesamt.length > 0){
-      // Nehme den Maximum-Wert (falls mehrere unterschiedlich)
-      withGesamt.forEach(function(a){
-        var v=parseFloat(a.gesamt_kv);
-        if(v>_gKV){_gKV=v;_gRV=parseFloat(a.gesamt_rv)||0;_gPV=parseFloat(a.gesamt_pv)||0;}
-      });
-      _quelleName='gesamt_kv';
-    }
-
-    // Dok-Quelle (zuverlässigste externe Quelle)
-    if(!_gKV){
-      group.forEach(function(a){
-        if(_gKV) return;
-        var _dok=(db.dokumente||[]).find(function(x){return x.id===a.dokId;});
-        if(_dok&&parseFloat(_dok.kv_abzug)>0){
-          _gKV=Math.abs(parseFloat(_dok.kv_abzug));
-          _gRV=Math.abs(parseFloat(_dok.rv_abzug)||0);
-          _gPV=Math.abs(parseFloat(_dok.pv_abzug)||0);
-          _quelleName='dok';
-        }
-      });
-    }
-
-    // Termin-Quelle — aber SMART: wenn alle gleich → einmal nehmen (kein summieren)
-    if(!_gKV){
-      var kvVals = group.map(function(a){
-        var _t=a.terminId?(db.termine||[]).find(function(x){return x.id===a.terminId;}):null;
-        if(!_t&&a.id){_t=(db.termine||[]).find(function(x){return x.abId===a.id;});}
-        return _t ? {kv:Math.abs(parseFloat(_t.kv_abzug)||0), rv:Math.abs(parseFloat(_t.rv_abzug)||0), pv:Math.abs(parseFloat(_t.pv_abzug)||0)} : {kv:0,rv:0,pv:0};
-      });
-      var allKV = kvVals.map(function(v){return v.kv;});
-      var sumKV = allKV.reduce(function(s,v){return s+v;},0);
-      var maxKV = Math.max.apply(null,allKV);
-      var minKV = Math.min.apply(null,allKV.filter(function(v){return v>0;})||[0]);
-
-      if(sumKV > 0){
-        if(N > 1 && minKV > 0 && Math.abs(maxKV - minKV) < 0.5){
-          // Alle gleich → das ist der volle Betrag (jeder Termin hatte vollen Wert)
-          _gKV = maxKV;
-          _gRV = Math.max.apply(null,kvVals.map(function(v){return v.rv;}));
-          _gPV = Math.max.apply(null,kvVals.map(function(v){return v.pv;}));
-          _quelleName='termin-max';
-        } else {
-          // Unterschiedlich → korrekte Aufteilung, summieren
-          _gKV = sumKV;
-          _gRV = kvVals.reduce(function(s,v){return s+v.rv;},0);
-          _gPV = kvVals.reduce(function(s,v){return s+v.pv;},0);
-          _quelleName='termin-sum';
-        }
-      }
-    }
-
-    // Schritt 2: gesamt_kv + kv anteilig auf alle Abs setzen
-    if(_gKV > 0){
-      var groupBrutto = group.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-      group.forEach(function(a){
-        var changed = false;
-        if(Math.abs((parseFloat(a.gesamt_kv)||0)-_gKV)>0.01){ a.gesamt_kv=_gKV; a.gesamt_rv=_gRV; a.gesamt_pv=_gPV; changed=true; }
-        // kv anteilig wenn fehlt oder wenn es gleich gesamt_kv ist (= war voller Betrag falsch gesetzt)
-        var _curKV = parseFloat(a.kv)||0;
-        var needsKvFix = _curKV===0 || (N>1 && Math.abs(_curKV-_gKV)<0.5);
-        if(needsKvFix && groupBrutto>0 && parseFloat(a.brutto)>0){
-          var _ant=parseFloat(a.brutto)/groupBrutto;
-          a.kv=Math.round(_gKV*_ant*100)/100;
-          a.rv=Math.round(_gRV*_ant*100)/100;
-          a.pv=Math.round(_gPV*_ant*100)/100;
-          changed=true;
-        }
-        if(changed) _migChanged=true;
-      });
-    }
-  });
-  if(_migChanged) save(db);
-
   var termine = (db.termine||[]).filter(function(t){
     return (t.datum||'').startsWith(String(yr));
   }).sort(function(a,b){ return a.datum<b.datum?-1:1; });
@@ -7111,41 +6829,10 @@ function rJahresabschluss(){
     }
     bruttoGes += gesamtBrutto;
 
-    // SV: gesamt_kv (einmal) → Summe über alle abs → kv_abzug als letzter Fallback
-    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||0;
-    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||0;
-    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||0;
-    if(!gesamtKV && !gesamtRV && !gesamtPV){
-      // Summe über alle abs der Gruppe
-      abs.forEach(function(a){
-        gesamtKV += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
-        gesamtRV += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
-        gesamtPV += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
-      });
-    }
-    // Absolut letzter Fallback: Termin-Felder kv_abzug direkt lesen
-    if(!gesamtKV && !gesamtRV && !gesamtPV){
-      abs.forEach(function(a){
-        var _ft = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
-        if(!_ft && a.id){ _ft = (db.termine||[]).find(function(x){return x.abId===a.id;}); }
-        if(_ft){
-          gesamtKV += Math.abs(parseFloat(_ft.kv_abzug)||0);
-          gesamtRV += Math.abs(parseFloat(_ft.rv_abzug)||0);
-          gesamtPV += Math.abs(parseFloat(_ft.pv_abzug)||0);
-        }
-      });
-      // Wenn immer noch 0: gesamt_kv vom Dok holen via dokId
-      if(!gesamtKV){
-        abs.forEach(function(a){
-          var _dok = a.dokId ? (db.dokumente||[]).find(function(x){return x.id===a.dokId;}) : null;
-          if(_dok && !gesamtKV){
-            gesamtKV = Math.abs(parseFloat(_dok.kv_abzug)||0);
-            gesamtRV = Math.abs(parseFloat(_dok.rv_abzug)||0);
-            gesamtPV = Math.abs(parseFloat(_dok.pv_abzug)||0);
-          }
-        });
-      }
-    }
+    // SV: gesamt_kv (einmal) → kv direkt als Fallback
+    var gesamtKV = parseFloat(erstesAb.gesamt_kv)||Math.abs(parseFloat(erstesAb.kv)||0);
+    var gesamtRV = parseFloat(erstesAb.gesamt_rv)||Math.abs(parseFloat(erstesAb.rv)||0);
+    var gesamtPV = parseFloat(erstesAb.gesamt_pv)||Math.abs(parseFloat(erstesAb.pv)||0);
     kvGes += gesamtKV;
     rvGes += gesamtRV;
     pvGes += gesamtPV;
@@ -7188,42 +6875,18 @@ function rJahresabschluss(){
   Object.keys(gnrGruppen).forEach(function(key){
     var g=gnrGruppen[key]; var e=g.abs[0];
     bruttoGesTab += parseFloat(e.gesamt_brutto)||g.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-    var _gkv = parseFloat(e.gesamt_kv)||0;
-    var _grv = parseFloat(e.gesamt_rv)||0;
-    var _gpv = parseFloat(e.gesamt_pv)||0;
-    if(!_gkv && !_grv && !_gpv){
-      g.abs.forEach(function(a){
-        _gkv += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
-        _grv += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
-        _gpv += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
-        // Letzter Fallback: Termin selbst
-        if(!_gkv){
-          var _ft = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
-          if(!_ft && a.id){ _ft = (db.termine||[]).find(function(x){return x.abId===a.id;}); }
-          if(_ft){
-            _gkv += Math.abs(parseFloat(_ft.kv_abzug)||0);
-            _grv += Math.abs(parseFloat(_ft.rv_abzug)||0);
-            _gpv += Math.abs(parseFloat(_ft.pv_abzug)||0);
-          }
-        }
-      });
-    }
-    kvGesTab += _gkv; rvGesTab += _grv; pvGesTab += _gpv;
+    kvGesTab += parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0);
+    rvGesTab += parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0);
+    pvGesTab += parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0);
   });
   // abListe (Termin-Fallback, nicht in gnrGruppen)
   var _gnrInTab = {};
   Object.keys(gnrGruppen).forEach(function(k){ if(gnrGruppen[k].gnr) _gnrInTab[gnrGruppen[k].gnr]=true; });
   abListe.filter(function(a){ return !a.gutschrift_nr||!_gnrInTab[a.gutschrift_nr]; }).forEach(function(a){
     bruttoGesTab += parseFloat(a.brutto)||0;
-    var _akv = parseFloat(a.kv)||parseFloat(a.kv_abzug)||0;
-    var _arv = parseFloat(a.rv)||parseFloat(a.rv_abzug)||0;
-    var _apv = parseFloat(a.pv)||parseFloat(a.pv_abzug)||0;
-    if(!_akv){
-      var _fat = a.terminId ? (db.termine||[]).find(function(x){return x.id===a.terminId;}) : null;
-      if(!_fat && a.id){ _fat = (db.termine||[]).find(function(x){return x.abId===a.id;}); }
-      if(_fat){ _akv=Math.abs(parseFloat(_fat.kv_abzug)||0); _arv=Math.abs(parseFloat(_fat.rv_abzug)||0); _apv=Math.abs(parseFloat(_fat.pv_abzug)||0); }
-    }
-    kvGesTab += _akv; rvGesTab += _arv; pvGesTab += _apv;
+    kvGesTab += parseFloat(a.kv)||0;
+    rvGesTab += parseFloat(a.rv)||0;
+    pvGesTab += parseFloat(a.pv)||0;
   });
   svGes = kvGesTab + rvGesTab + pvGesTab;
   // Überschreibe bruttoGes/kvGes mit Tabellen-Werten für konsistente Anzeige
@@ -7301,49 +6964,15 @@ function rJahresabschluss(){
     // Hilfsfunktion: eine Zeile rendern
     function renderAbRow(a){
       var sv=(parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0);
-      // Fallback: terminId via gutschrift_nr oder dokId suchen
-      var _tid = a.terminId;
-      if(!_tid && a.gutschrift_nr){
-        var _t = (db.termine||[]).find(function(t){ return t.gutschrift_nr===a.gutschrift_nr; });
-        if(_t) _tid = _t.id;
-      }
-      if(!_tid && a.dokId){
-        var _t2 = (db.termine||[]).find(function(t){ return t.dokIds && t.dokIds.indexOf(a.dokId)>=0; });
-        if(_t2) _tid = _t2.id;
-      }
-      if(!_tid && a.id){
-        var _t3 = (db.termine||[]).find(function(t){ return t.abId===a.id; });
-        if(_t3) _tid = _t3.id;
-      }
-      var _kv = parseFloat(a.kv)||parseFloat(a.kv_abzug)||0;
-      var _rv = parseFloat(a.rv)||parseFloat(a.rv_abzug)||0;
-      var _pv = parseFloat(a.pv)||parseFloat(a.pv_abzug)||0;
-      // Fallback: Termin direkt fragen wenn ab-Felder leer — _tid statt a.terminId verwenden
-      if(!_kv || !_rv){
-        var _abT2 = _tid ? (db.termine||[]).find(function(x){return x.id===_tid;}) : null;
-        if(_abT2){
-          if(!_kv) _kv = Math.abs(parseFloat(_abT2.kv_abzug)||0);
-          if(!_rv) _rv = Math.abs(parseFloat(_abT2.rv_abzug)||0);
-          if(!_pv) _pv = Math.abs(parseFloat(_abT2.pv_abzug)||0);
-        }
-      }
-      // Letzter Fallback: gesamt_kv proportional aufteilen (z.B. toneworx 3-Session-Split)
-      if(!_kv && parseFloat(a.gesamt_kv) > 0 && parseFloat(a.brutto) > 0 && parseFloat(a.gesamt_brutto) > 0){
-        var _anteil = parseFloat(a.brutto) / parseFloat(a.gesamt_brutto);
-        _kv = Math.round(parseFloat(a.gesamt_kv) * _anteil * 100) / 100;
-        _rv = Math.round((parseFloat(a.gesamt_rv)||0) * _anteil * 100) / 100;
-        _pv = Math.round((parseFloat(a.gesamt_pv)||0) * _anteil * 100) / 100;
-      }
-      var sv2 = _kv+_rv+_pv;
       return '<tr style="border-bottom:1px solid #f0f0f0">'
         +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
         +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
-        +(_tid?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid+'\')},150)">'+esc(a.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>')
+        +(a.terminId?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+a.terminId+'\')},150)">'+esc(a.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(a.produktion||'?')+'</td>')
         +'<td style="'+colNum+'font-weight:700">'+fmtEur(a.brutto)+'</td>'
-        +'<td style="'+colNum+'">'+(_kv?fmtEur(_kv):'—')+'</td>'
-        +'<td style="'+colNum+'">'+(_rv?fmtEur(_rv):'—')+'</td>'
-        +'<td style="'+colNum+'">'+(_pv?fmtEur(_pv):'—')+'</td>'
-        +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv2?fmtEur(sv2):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(a.kv?fmtEur(a.kv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
+        +'<td style="'+colNum+'">'+(a.pv?fmtEur(a.pv):'—')+'</td>'
+        +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv?fmtEur(sv):'—')+'</td>'
         +'</tr>';
     }
 
@@ -7363,16 +6992,9 @@ function rJahresabschluss(){
         }).sort(function(a,b){return a.datum<b.datum?-1:1;});
         // Gesamt-Werte
         var gBrutto = parseFloat(erstesAb.gesamt_brutto)||abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-        var gKV = parseFloat(erstesAb.gesamt_kv)||0;
-        var gRV = parseFloat(erstesAb.gesamt_rv)||0;
-        var gPV = parseFloat(erstesAb.gesamt_pv)||0;
-        if(!gKV && !gRV && !gPV){
-          abs.forEach(function(a){
-            gKV += Math.abs(parseFloat(a.kv)||parseFloat(a.kv_abzug)||0);
-            gRV += Math.abs(parseFloat(a.rv)||parseFloat(a.rv_abzug)||0);
-            gPV += Math.abs(parseFloat(a.pv)||parseFloat(a.pv_abzug)||0);
-          });
-        }
+        var gKV = parseFloat(erstesAb.gesamt_kv)||Math.abs(parseFloat(erstesAb.kv)||0);
+        var gRV = parseFloat(erstesAb.gesamt_rv)||Math.abs(parseFloat(erstesAb.rv)||0);
+        var gPV = parseFloat(erstesAb.gesamt_pv)||Math.abs(parseFloat(erstesAb.pv)||0);
         var gSV = gKV+gRV+gPV;
         var gnr = gruppe.gnr||erstesAb.gutschrift_nr||'—';
         var studio = erstesAb.studio||'';
@@ -7408,17 +7030,6 @@ function rJahresabschluss(){
         } else {
           // Einzel-Abrechnung: eine Zeile
           var t = sessions[0]||null;
-          // Fallback: Termin via ab.terminId oder ab.dokId suchen
-          if(!t && erstesAb.terminId){
-            t = (db.termine||[]).find(function(x){ return x.id===erstesAb.terminId; })||null;
-          }
-          if(!t && erstesAb.dokId){
-            t = (db.termine||[]).find(function(x){ return x.dokIds && x.dokIds.indexOf(erstesAb.dokId)>=0; })||null;
-          }
-          // Stärkster Fallback: t.abId zeigt auf dieses ab
-          if(!t && erstesAb.id){
-            t = (db.termine||[]).find(function(x){ return x.abId===erstesAb.id; })||null;
-          }
           html += '<tr style="border-bottom:1px solid #f0f0f0">'
             +'<td style="'+colStyle+'color:#555">'+esc(gnr)
             +(dateiname?'<div style="font-size:9px;color:#aaa">📄 '+esc(dateiname)+'</div>':'')
@@ -7695,14 +7306,21 @@ function undoAction(actionId){
         if(action.undoData.abId){
           db.abrechnungen = (db.abrechnungen||[]).filter(function(a){return a.id!==action.undoData.abId;});
         }
-        // Termin-Verknüpfung lösen
+        // Termin-Verknüpfung lösen + Status/Felder zurücksetzen
         if(action.undoData.terminId){
           var t2 = (db.termine||[]).find(function(x){return x.id===action.undoData.terminId;});
-          if(t2){ t2.abId=null; t2.abgerechnet=false; }
+          if(t2){
+            t2.abId=null; t2.abgerechnet=false;
+            t2.status='offen';
+            t2.abrechn_dateiname='';
+            t2.brutto_termin=null; t2.mwst_anteil=null; t2.gutschrift_nr='';
+          }
         }
-        // importedFiles bereinigen — sonst wird Datei beim nächsten Scan übersprungen
-        if(d && d.dateiname && db.importedFiles){
-          db.importedFiles = db.importedFiles.filter(function(n){ return n !== d.dateiname; });
+        // importedFiles + _archivLog bereinigen
+        var _undoDatname = (d && d.dateiname) || null;
+        if(_undoDatname){
+          if(db.importedFiles) db.importedFiles = db.importedFiles.filter(function(n){ return n !== _undoDatname; });
+          if(db._archivLog) db._archivLog = db._archivLog.filter(function(e){ return e.dateiname !== _undoDatname; });
         }
         showToast('↩ Dokument zurück in Warteliste (Foto unwiederbringlich gelöscht)');
         break;
@@ -7833,52 +7451,15 @@ function rUndoLog(){
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Keine Aktionen</div><div class="empty-sub">Letzte 20 Aktionen erscheinen hier</div></div>';
     return;
   }
-  var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎',
-    merge_saved:'💾', session_link:'📎', dok_typ:'🏷', termin_geloescht:'🗑', holvi_undo:'↩'};
+  var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎'};
   el.innerHTML = log.map(function(a){
-    // Detail-Zeile aus undoData extrahieren
-    var detail = '';
-    var dateiname = '';
-    if(a.undoData){
-      var u = a.undoData;
-      if(u.terminId){
-        var t=(db.termine||[]).find(function(x){return x.id===u.terminId;});
-        if(t) detail = (t.titel||t.studio||'')+(t.datum?' · '+fd(t.datum):'');
-      }
-      if(!detail && u.dokId){
-        var d=(db.dokumente||[]).find(function(x){return x.id===u.dokId;});
-        if(d) detail = d.beschr||d.dateiname||'';
-      }
-      // Dateiname aus Dok holen
-      if(u.dokId){
-        var _d2=(db.dokumente||[]).find(function(x){return x.id===u.dokId;});
-        if(_d2 && _d2.dateiname && /\.(pdf|jpg|jpeg|png|heic)$/i.test(_d2.dateiname)) dateiname = _d2.dateiname;
-      }
-      if(!dateiname && u.terminIds){
-        u.terminIds.forEach(function(tid){
-          var _t2=(db.termine||[]).find(function(x){return x.id===tid;});
-          if(_t2 && _t2.abrechn_dateiname && !dateiname) dateiname = _t2.abrechn_dateiname;
-          if(_t2 && _t2._dispoDateiname && !dateiname) dateiname = _t2._dispoDateiname;
-        });
-      }
-      if(!detail && u.zahlungIds && u.zahlungIds.length){
-        detail = u.zahlungIds.length+' Zahlung'+(u.zahlungIds.length>1?'en':'');
-      }
-    }
-    // beschr aufteilen: oft "Aktion · Detail · Datum"
-    var parts = (a.beschr||'').split(' · ');
-    var hauptText = parts[0]||'';
-    var nebenText = parts.slice(1).join(' · ');
-    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px">'
-      +'<div style="font-size:22px;flex-shrink:0;margin-top:2px">'+(icons[a.typ]||'📝')+'</div>'
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">'
+      +'<div style="font-size:22px;flex-shrink:0">'+(icons[a.typ]||'📝')+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:700;color:#1a1a1a;line-height:1.3;word-break:break-word">'+esc(hauptText)+'</div>'
-      +(nebenText?'<div style="font-size:11px;color:#555;margin-top:3px;line-height:1.4;word-break:break-word">'+esc(nebenText)+'</div>':'')
-      +(detail && detail!==nebenText?'<div style="font-size:11px;color:#888;margin-top:2px;line-height:1.3">📅 '+esc(detail)+'</div>':'')
-      +(dateiname?'<div style="font-size:10px;color:#6d28d9;margin-top:3px;word-break:break-all;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+dateiname.replace(/'/g,"\\'")+'\')" title="Tippen = kopieren">📎 '+esc(dateiname)+'</div>':'')
-      +'<div style="font-size:10px;color:#bbb;margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
+      +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.beschr)+'</div>'
+      +'<div style="font-size:10px;color:#888;margin-top:2px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
       +'</div>'
-      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:2px">↩</button>'
+      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="flex-shrink:0;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rückgängig</button>'
       +'</div>';
   }).join('');
 }
@@ -8504,7 +8085,6 @@ function rDokumente(){
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
       +'<span style="font-size:10px;font-weight:700;color:'+t.color+';background:'+t.bg+';border:1px solid '+t.border+';padding:2px 6px;border-radius:6px">'+t.label+'</span>'
-      +(d._splitGroup && d._splitTotal > 1 ? '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;border:1px solid #c4b5fd;padding:2px 6px;border-radius:6px">'+(d._splitIdx+1)+'/'+d._splitTotal+'</span>' : '')
       +(linked?'<span style="font-size:10px;font-weight:700;color:'+linkedColor+'">'+linked+'</span>':'<span style="font-size:10px;color:#f97316;font-weight:600">nicht zugeordnet</span>')
       +'</div>'
       +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(d.beschr||d.dateiname||'Dokument')+'</div>'
@@ -8973,46 +8553,39 @@ function dokFooterBestaetigen(){
 function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
-  var datumVorher = d.datum; // Datum vor Edit merken
   _applyEditedFields(d);
   var undoSnap={dokId:d.id,typVorher:d.typ,terminId:d.terminId||null};
-
-  // Datum geändert → alten terminId verwerfen, neu suchen
-  if(d.terminId && datumVorher && d.datum && d.datum !== datumVorher){
-    var oldT=(db.termine||[]).find(function(x){return x.id===d.terminId;});
-    if(oldT && oldT.datum !== d.datum){
-      // Alten Termin aufräumen wenn Dispo dort gesetzt war
-      if(oldT.dispoDocId===d.id){
-        oldT.gvl_takes_detail=null; oldT.gvl_takes=null;
-        oldT.gvl_staffel=null; oldT.gvl_folge=null;
-        oldT.takes=null; oldT.dispoDocId=null;
-      }
-      d.terminId=null; // Neu suchen erzwingen
-    }
-  }
-
   d.bestaetigt=true; d.awaitConfirm=false;
+  // dataURL nur löschen wenn kein Split-Dok mehr drauf verweist
   var _dokNochGebraucht = (db.dokumente||[]).some(function(x){
     return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
   });
-  if(!_dokNochGebraucht){ d.dataURL=null; }
+  if(!_dokNochGebraucht){ d.dataURL=null; } // thumb behalten für Miniaturansicht
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, d.typ||null);
-
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
     if(t2){
-      if(d.typ==='dispo'){ t2._dispoDateiname = d.dateiname||d.beschr||''; t2.dispoDocId=d.id; }
+      // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
+      if(d.typ==='dispo'){ t2._dispoDateiname = d.dateiname||d.beschr||''; }
       else if(d.typ==='abrechn'||d.typ==='monats_abrechn'){ t2.abrechn_dateiname = d.dateiname||''; }
-      // Alle Felder via dokMergeIntoTermin — überall overwrite-Logik konsistent
-      dokMergeIntoTermin(d, t2);
+      if(d.rolle&&!t2.rolle) t2.rolle=d.rolle;
+      if(d.regie&&!t2.regie) t2.regie=d.regie;
+      if(d.titel&&!t2.titel) t2.titel=d.titel;
+      if(d.uhrzeit&&!t2.uhrzeit) t2.uhrzeit=d.uhrzeit;
+      if(d.takes&&!t2.takes) t2.takes=d.takes;
+      if(d.typ==='abrechn'&&d.auszahlung){t2.abgerechnet=true;t2.abrechnungBrutto=parseFloat(d.auszahlung);}
     }
-  } else if(d.datum){
-    var match=dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'', null, d.typ==='abrechn');
+  } else if(d.datum&&d.studio){
+    var match=dokFindTermin(d.datum,d.studio);
     if(match){
       d.terminId=match.id;
-      if(d.typ==='dispo'){ match._dispoDateiname = d.dateiname||d.beschr||''; match.dispoDocId=d.id; }
+      if(d.rolle&&!match.rolle) match.rolle=d.rolle;
+      if(d.regie&&!match.regie) match.regie=d.regie;
+      if(d.titel&&!match.titel) match.titel=d.titel;
+      if(d.takes&&!match.takes) match.takes=d.takes;
+      // Dateiname direkt am Termin speichern
+      if(d.typ==='dispo' && (d.dateiname||d.beschr)) match._dispoDateiname = d.dateiname||d.beschr||'';
       else if((d.typ==='abrechn'||d.typ==='monats_abrechn') && (d.dateiname||d.beschr)) match.abrechn_dateiname = d.dateiname||'';
-      dokMergeIntoTermin(d, match);
       _archiveDateiname(d.dateiname||d.beschr, match.id, d.typ||null);
     }
   }
@@ -9026,19 +8599,6 @@ function dokBestaetigen(){
     var naechstesDok = (db.dokumente||[]).find(function(x){
       return x._splitGroup===d._splitGroup && x._splitIdx===naechstesIdx;
     });
-    // Prüfen ob alle Seiten bestätigt
-    var alleSeitenBestaetigt = (db.dokumente||[]).filter(function(x){
-      return x._splitGroup===d._splitGroup;
-    }).every(function(x){ return x.bestaetigt; });
-    if(alleSeitenBestaetigt){
-      // Original-PDF-Dateiname (Parent) in importedFiles eintragen
-      var origDok = (db.dokumente||[]).find(function(x){ return x.id===d._splitFromPdf; });
-      if(origDok && origDok.dateiname){
-        _archiveDateiname(origDok.dateiname, d.terminId||null, d.typ||null);
-      }
-      showToast('✓ Alle '+d._splitTotal+' Abrechnungen bestätigt');
-      return;
-    }
     if(naechstesDok && !naechstesDok.bestaetigt){
       showToast('✓ Bestätigt · Weiter: '+(naechstesIdx+1)+' von '+d._splitTotal);
       setTimeout(function(){ dokOpenDetail(naechstesDok.id); }, 300);
@@ -9148,94 +8708,40 @@ function dokAnalyseDoc(d, key, cb){
     +'Bestimme typ:\n'
     +'  "dispo" = Synchron-Dispoblatt\n'
     +'  "abrechn" = EINZEL-Gagenabrechnung/Gutschrift für GENAU EINEN Aufnahmetag\n'
-    +'  "abrechn" AUCH = Selbst ausgestellte Rechnung von Tim Knauer an ein Studio/eine Firma\n'
-    +'    → Erkennbar an: "Tim Knauer" oben als Absender, "Bitte überweisen Sie", IBAN im Text, Rollenname\n'
-    +'    → NIEMALS "ausgabe" — Tim ist Rechnungssteller = Einnahme!\n'
     +'  "monats_abrechn" = Monats-Sammelabrechnung mit TABELLE die MEHRERE VERSCHIEDENE Aufnahmedaten auflistet\n'
     +'  WICHTIG: Eine Abrechnung mit NUR EINEM Aufnahmedatum ("von:/bis:" gleich) ist IMMER "abrechn", NIEMALS "monats_abrechn"!\n'
     +'  "Bisherige Jahressummen" unten auf der Seite = KUMULATIVWERTE, IGNORIEREN für Typerkennung und Beträge!\n'
-    +'  "ausgabe" = Quittung/Rechnung NUR wenn Tim der KÄUFER/EMPFÄNGER ist (er bezahlt jemand anderen)\n'
-    +'\n'
-    +'Bei selbst ausgestellten Rechnungen (Tim als Rechnungssteller):\n'
-    +'  datum = Leistungsdatum (steht als "Leistungsdatum:" oder "Aufnahmedatum:" — NICHT das Rechnungsdatum oben!)\n'
-    +'  studio = der Empfänger der Rechnung (Firmenname oben, z.B. "mobyDOK GmbH" → "mobyDOK")\n'
-    +'  titel = Projektname (steht in der Leistungsbeschreibung, z.B. "Arte42", "KI & Gefühle")\n'
-    +'  rolle = Rollenname aus der Leistungsbeschreibung\n'
-    +'  brutto = Gesamtbetrag inkl. MwSt ("zus.:" oder "Gesamt" Zeile)\n'
-    +'  netto = Betrag ohne MwSt\n'
-    +'  mwst = MwSt-Betrag\n'
-    +'  auszahlung = brutto\n'
+    +'  "ausgabe" = Quittung/Rechnung, "sonstig" = sonstiges\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
-    +'    ⚠ EVA-Format (Logo: "eva · a visual data company"): Kein Serientitel — stattdessen steht eine ZAHL prominent oben (z.B. "1086")\n'
-    +'      Diese Zahl ist die Produktionsnummer → als titel übernehmen: titel="1086"\n'
-    +'      So können mehrere Aufnahmetage derselben Produktion zugeordnet werden!\n'
-    +'    ⚠ Gattungsbezeichnungen am Ende NUR weglassen wenn sie AUCH als separates Feld auf dem Dokument stehen\n'
-    +'    (z.B. "Produktionsart: Game", "Gattung: Film", "Art: Serie")\n'
-    +'    Beispiel toneworx: Titel="Orbitals", Produktionsart="Game" → titel="Orbitals" (Game weglassen)\n'
-    +'    Beispiel FFS: Titel="10Dance Film" aber kein separates Gattungsfeld → titel="10Dance" (Film ist reine Gattung)\n'
-    +'    NIEMALS strippen wenn Gattungswort integraler Titelbestandteil ist: "Squid Game" bleibt "Squid Game"!\n'
     +'  datum: Aufnahmedatum YYYY-MM-DD (steht meist unten bei DATUM: oder oben)\n'
-    +'    ⚠ Datumsformat: ALLE Studios nutzen DD/MM/YYYY oder DD.MM.YYYY — IMMER europäisch!\n'
-    +'    ⚠ ERSTE ZAHL = TAG, ZWEITE ZAHL = MONAT — keine Ausnahmen!\n'
-    +'    ⚠ "06/11/2025" = 6. November 2025 = 2025-11-06 (NICHT Juni!)\n'
-    +'    ⚠ "03/02/2026" = 3. Februar 2026 = 2026-02-03 (NICHT März!)\n'
-    +'    ⚠ "11/12/2025" = 11. Dezember 2025 = 2025-12-11 (NICHT November!)\n'
-    +'    Merkhilfe: Kein deutsches Studio schreibt Monat zuerst — immer Tag.Monat.Jahr!\n'
+    +'    ⚠ Datumsformat: Interopa/deutsche Studios nutzen DD/MM/YYYY oder DD.MM.YYYY\n'
+    +'    ⚠ "03/02/2026" auf einer deutschen Dispo = 3. Februar 2026 = 2026-02-03 (NICHT 2026-03-02!)\n'
+    +'    ⚠ Immer europäisches Format annehmen: erster Teil = Tag, zweiter = Monat\n'
     +'  studio: Der KURZNAME des Synchronstudios/der Synchronfirma — steht meist als LOGO oder Firmenname ganz OBEN auf dem Dokument\n'
     +'    Beispiele: "FFS" (Film & Fernseh Synchron), "RC" (RC Production), "VSI", "Arena", "TNT", "Taunus", "Interopa"\n'
-    +'    ⚠ INTEROPA-Logo: Zwei Kreise oben links — ein ausgefüllter (●) und ein leerer (○) Kreis nebeneinander\n'
-    +'      Kein Text, nur dieses Symbol → studio="Interopa"\n'
-    +'    ⚠ IYUNO-Dispos: Erkennbar an "NAVISION #" oder "DEBER..." im Kopf — studio="Iyuno"\n'
-    +'    ⚠ Iyuno-Format hat kein prominentes Studio-Logo — stattdessen steht "NAVISION # DEBER1704-DE" o.ä. oben\n'
     +'    NICHT der Aufnahmeraum/Atelier (NICHT "BLN Studio E", NICHT "Atelier 4", NICHT "Studio 3", NICHT "Harzer Str.")\n'
     +'    Der Atelierraum steht separat als Kommentar/Notiz — dieser gehört NICHT ins studio-Feld!\n'
     +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
-    +'    ⚠ NICHT "Produktionsleitung" — das ist eine andere Person!\n'
-    +'    ⚠ NICHT "Aufnahmeleitung" — das ist ebenfalls eine andere Person!\n'
-    +'    VSI-Dispo-Beispiel (typische Reihenfolge):\n'
-    +'      Produktionsleitung: Amelie Dirks  ← IGNORIEREN für regie!\n'
-    +'      Regie:              Patrick Keller ← DAS ist regie!\n'
-    +'      Aufnahmeleitung:    Tommy Müller  ← IGNORIEREN für regie!\n'
-    +'    → regie = "Patrick Keller" (die Zeile die explizit "Regie:" heißt)\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
     +'  rolle + takes + EPS: NUR aus der Zeile mit "Tim Knauer" als Sprecher!\n'
     +'    ABLAUF — ZWINGEND in dieser Reihenfolge:\n'
-    +'    1) Scanne die SPRECHER-Spalte (nicht Rolle-Spalte!) von oben nach unten\n'
-    +'    2) Finde die Zeile wo "Tim Knauer" (oder "T. Knauer" o.ä.) in der SPRECHER-Spalte steht\n'
-    +'    3) Lies ALLE Werte NUR aus DIESER Zeile: Rolle (Spalte LINKS von Sprecher!), von, bis, EPS, Takes\n'
+    +'    1) Scanne die Sprecher-Spalte von oben nach unten\n'
+    +'    2) Finde die Zeile wo "Tim Knauer" (oder "T. Knauer" o.ä.) steht\n'
+    +'    3) Lies ALLE Werte NUR aus DIESER Zeile: Rolle, von, bis, EPS, Takes\n'
     +'    4) Alle anderen Zeilen komplett ignorieren — auch wenn sie ähnliche EPS-Nummern haben!\n'
-    +'    ⚠ TYPISCHES LAYOUT: Rolle | Sprecher | von | bis | Takes — Rolle steht LINKS vom Sprecher!\n'
-    +'    ⚠ KONKRETES BEISPIEL — so NICHT:\n'
-    +'      Zeile 1: Plum Squad_F | Lin Gothoni  | 18:40 | 19:00 | 10 | ...\n'
-    +'      Zeile 2: Tetsuo Tanba | Tim Knauer   | 19:00 | 20:30 | 50 | ...\n'
-    +'      → FALSCH: rolle="Plum Squad_F" (das ist Lin Gothonas Rolle!)\n'
-    +'      → RICHTIG: rolle="Tetsuo Tanba" (steht links von "Tim Knauer" in DERSELBEN Zeile!)\n'
-    +'    ⚠ WEITERES BEISPIEL (Iyuno-Format, Spalten: Character/Role | Actor | Start | End | Takes | Episodes):\n'
-    +'      Zeile 1: DIGBY | Stefan Krause | 09:00 | 09:30 | 12 | ...\n'
-    +'      Zeile 2: BOXER | Tim Knauer    | 09:30 | 12:15 | 101| ...\n'
-    +'      → FALSCH: rolle="DIGBY" (Stefan Krauses Rolle!)\n'
-    +'      → RICHTIG: rolle="BOXER" (steht in Tims Zeile in der Character/Role-Spalte)\n'
-    +'    ⚠ Die Rolle der Zeile ÜBER Tim gehört einem anderen Sprecher — NICHT Tims Rolle!\n'
-    +'    KREUZPRÜFUNG: Tims Zeile muss "Tim Knauer" in der Sprecher-Spalte haben — sonst falsche Zeile!\n'
+    +'    KREUZPRÜFUNG: Die Zeile muss eine Uhrzeit (von/bis) haben — das ist Tims Aufnahmezeit.\n'
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
-    +'    ⚠ ROLLENNAMEN BEREINIGEN: Technik-Suffixe aus Rollennamen entfernen!\n'
-    +'    Technik-Kürzel: VO, V.O., OV, ADR, ERYTMO, ERYTHMO, SB, SP, HF — gehören NICHT zum Rollennamen\n'
-    +'    Beispiele: "Kibi Vo" → rolle="Kibi" | "Bill VO" → rolle="Bill" | "Lee SPA SB?" → rolle="Lee"\n'
-    +'    Nur den eigentlichen Charakternamen behalten!\n'
     +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
-    +'    ⚠ FFS-Format: Spalte heißt "Stunden" und zeigt "09:30 - 11:30" als Zeitspanne → VON=09:30\n'
     +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
-    +'    ⚠ FFS-Format: Spalte "Stunden" zeigt "09:30 - 11:30" → BIS=11:30 — IMMER beide Zeiten extrahieren!\n'
-    +'    Bei "HH:MM - HH:MM" in einer Zelle: erster Wert = uhrzeit, zweiter Wert = bis_uhrzeit\n'
-    +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte) — immer aus der Tabelle ablesen!\n'
+    +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
+    +'    Wenn "Trailer", "TR", "Trailer-Aufnahme" o.ä. im Titel oder in der Zeile steht:\n'
+    +'    → produktionstyp_kino=false, takes=0, take_gage=0 (Trailer werden pauschal abgerechnet)\n'
     +'    ⚠ HANDSCHRIFTLICHE ERGÄNZUNG: Wenn neben der gedruckten Zahl noch eine handschriftliche Zahl steht\n'
     +'    (z.B. "72" gedruckt + "3+" handschriftlich), diese ADDIEREN: takes = 72+3 = 75\n'
     +'    Formate: "+3" vor der Zahl, "3+" nach der Zahl, "*3" → immer addieren!\n'
-    +'    ⚠ Auch bei Trailer-Dispos: takes trotzdem aus der Zeile ablesen (z.B. takes=1)!\n'
-    +'    (Die takes=0-Regel gilt nur für Abrechnungsdokumente, NICHT für Dispos)\n'
     +'\n'
     +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus TIM KNAUERs eigener Tabellenzeile:\n'
     +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen übernehmen!\n'
@@ -9263,20 +8769,13 @@ function dokAnalyseDoc(d, key, cb){
     +'    Beispiel: Tim Zeile hat Takes=100, Episode:Takes="604:100" → gvl_takes_detail=[{"folge":604,"takes":100}]\n'
     +'    Mehrere kommagetrennt: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
     +'    ⚠ WICHTIG: Diese Spalte hat VORRANG vor der normalen Takes-Spalte für gvl_takes_detail!\n'
-    +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Anmerkungen", "Notiz", "Notes", "Remarks")\n'
+    +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Notiz", "Notes", "Remarks")\n'
     +'    Manchmal steht der Folgen:Takes-Code nicht in einer EPS-Spalte sondern in der Bemerkung!\n'
     +'    Format: "104:46 Abgedreht" oder "104:46" oder "Ep104:46" in der Bemerkungsspalte\n'
     +'    → Zahl VOR Doppelpunkt = Folge, Zahl NACH Doppelpunkt = Takes\n'
     +'    Beispiel: Bemerkung="104:46 Abgedreht", Takes=46 → gvl_takes_detail=[{"folge":104,"takes":46}]\n'
     +'    Beispiel: Bemerkung="103:21 104:58" → [{"folge":103,"takes":21},{"folge":104,"takes":58}]\n'
     +'    ⚠ Wörter wie "Abgedreht", "Sprachberatung", "Akzentberatung" in Bemerkung IGNORIEREN — nur Zahlen:Zahlen auslesen!\n'
-    +'    ⚠ SONDERFALL VO/Dokumentation (z.B. EVA-Format): Takes-Spalte zeigt 0 weil Stundenvergütung statt Takevergütung\n'
-    +'      NUR dann: Folgen:Takes-Codes aus "Anmerkungen"-Spalte lesen (z.B. "8:76")\n'
-    +'      Erkennbar an: Takes=0 in Hauptspalte UND "Anmerkungen"-Spalte enthält Zahlen:Zahlen-Codes\n'
-    +'      → takes = Wert nach Doppelpunkt (76), folge = Wert vor Doppelpunkt (8)\n'
-    +'      → gvl_takes_detail=[{"folge":8,"takes":76}], takes=76\n'
-    +'      Mehrere Codes: "7:111, 8:7" → [{"folge":7,"takes":111},{"folge":8,"takes":7}]\n'
-    +'      ⚠ NICHT anwenden wenn Takes-Spalte eine echte Zahl >0 zeigt — dann die echten Takes nehmen!\n'
     +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
@@ -9309,11 +8808,6 @@ function dokAnalyseDoc(d, key, cb){
     +'  → Bei LAYOUT B/C (nur Gesamtzahl): Extra-Takes in Gesamtzahl einrechnen, dann gleichmäßig verteilen.\n'
     +'  MEHRERE TERMINE PRO FOLGE: Takes werden später pro Folge addiert (nicht ersetzen).\n'
     +'  Falls nicht vorhanden: null\n'
-    +'  ★ FILM-EINTRAG (EPS = "HF", "Film", leer oder keine Folgennummer):\n'
-    +'    Wenn EPS-Spalte "HF" (Halbfilm/Film) oder keinen Folgencode enthält:\n'
-    +'    → gvl_takes_detail=[{"folge":0,"takes":N}] — folge=0 ist das Kennzeichen für Film!\n'
-    +'    NIEMALS null für folge setzen — immer 0 für Filme!\n'
-    +'    Beispiel: Tim Zeile: Rolle=Shinya Suzuki, EPS=HF, Takes=118 → gvl_takes_detail=[{"folge":0,"takes":118}]\n'
     +'\n'
     +'  LAYOUT F: FFS-Format — EPS-Spalte enthält nur Folgennummer, Staffel steht im Kopf\n'
     +'    Kopf der Dispo: "Chicago Medical S11 Staffel 11" → gvl_staffel_header="11"\n'
@@ -9326,17 +8820,6 @@ function dokAnalyseDoc(d, key, cb){
     +'    Takes gleichmäßig aufteilen wenn mehrere Folgen!\n'
     +'    ⚠ Wenn EPS-Spalte einen vierstelligen Code enthält wie "1112" → direkt als Folgencode verwenden!\n'
     +'    ⚠ Wenn EPS-Spalte eine zweistellige Zahl enthält wie "17" + Staffel aus Kopf "11" → 1117\n'
-    +'\n'
-    +'  ★ MULTI-PRODUKTIONS-DISPO (Interopa & andere): Wenn der Titel im Kopf MEHRERE Produktionen enthält\n'
-    +'    (erkennbar an "+" zwischen Titeln, z.B. "Christmas in St. Anna Film + Beastars S3 Reste"):\n'
-    +'    → titel = die Produktion aus Tims EPS-Spalte, NICHT der Gesamttitel oben!\n'
-    +'    → Tims EPS-Spalte enthält den Serientitel: "BEASTARS #320 ERYTMO" → titel="Beastars"\n'
-    +'    → Technik-Kürzel in EPS IGNORIEREN: ERYTMO, ERYTHMO, ADR, OV, VO = Aufnahmetechnik\n'
-    +'    → "#320" = Seriencode: erste Ziffer(n) = Staffel (3), letzte 2 = Folge (20)\n'
-    +'      "BEASTARS #320 ERYTMO" → titel="Beastars", staffel=3, folge=20, takes=1\n'
-    +'      gvl_takes_detail=[{"folge":320,"takes":1}]\n'
-    +'    → Wenn EPS "SERIENTITEL #SFF TECHNIK": Serientitel extrahieren, #SFF = Staffel/Folge, Technik ignorieren\n'
-    +'    → studio = Interopa (Logo oben links auf dem Dokument!)\n'
     +'  "S3E5" → gvl_staffel_header="3", gvl_episode_header="5"\n'
     +'  Falls nicht im Kopf: null\n'
     +'\n'
@@ -9390,17 +8873,7 @@ function dokAnalyseDoc(d, key, cb){
     +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12) — "- Krankenversicherung" Zeile\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
-    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format oder einfache Rechnung):\n'
-    +'    Erkennbar an: Tim Knauer steht OBEN als Absender, "Bitte überweisen Sie", IBAN im Text\n'
-    +'    datum = Leistungsdatum ("Leistungsdatum:" Zeile) — NICHT das Rechnungsdatum oben rechts!\n'
-    +'    studio = Empfänger der Rechnung (Firma oben, z.B. "mobyDOK GmbH" → studio="mobyDOK")\n'
-    +'    EINFACHES FORMAT (nur Netto + MwSt + Gesamt, keine SV-Abzüge):\n'
-    +'      brutto = "zus.:" oder "Gesamt" Zeile (= Netto + MwSt)\n'
-    +'      netto = Nettobetrag vor MwSt\n'
-    +'      mwst = "zzgl. X% MWST." Betrag\n'
-    +'      auszahlung = brutto\n'
-    +'      kv_abzug=0, rv_abzug=0, pv_abzug=0\n'
-    +'    TONEWORX FORMAT (mit SV-Abzügen):\n'
+    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format):\n'
     +'    KV/RV/PV stehen als Prozentzeillen: "abzgl. anteiliger AN-Beitrag zur Krankenversicherung 8,345% → 91,80€"\n'
     +'    → kv_abzug = der BETRAG (91.80), NICHT der Prozentsatz!\n'
     +'    RV: "abzgl. anteiliger AN-Beitrag zur Rentenversicherung 9,300%" → rv_abzug = Betrag\n'
@@ -9688,11 +9161,11 @@ function dokAnalyseDoc(d, key, cb){
     xhr.setRequestHeader('anthropic-dangerous-direct-browser-access','true');
     xhr.onload = function(){
       var data;
-      try { data = JSON.parse(xhr.responseText); } catch(e){ showToast('Parse Fehler: '+e.message); d.awaitConfirm=true; if(cb) cb(); return; }
+      try { data = JSON.parse(xhr.responseText); } catch(e){ showToast('Parse Fehler: '+e.message); if(cb) cb(); return; }
       if(!data.content||!data.content[0]){
         var rawErr = (data.error&&data.error.message) || JSON.stringify(data).slice(0,200);
         showToast('API Fehler: '+rawErr);
-        d.awaitConfirm=true; if(cb) cb(); return;
+        if(cb) cb(); return;
       }
       if(data.stop_reason === 'max_tokens'){
         showToast('⚠ Antwort abgeschnitten — bitte nochmal analysieren');
@@ -9707,7 +9180,7 @@ function dokAnalyseDoc(d, key, cb){
       var end = txt.lastIndexOf('}');
       if(start<0||end<0){
         showToast('KI: kein JSON (' + (txt||'').slice(0,60) + ')');
-        d.typ='sonstig'; d.beschr=d.dateiname; d.awaitConfirm=true; if(cb) cb(); return;
+        d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return;
       }
       txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
@@ -9957,10 +9430,10 @@ function dokAnalyseDoc(d, key, cb){
     // Recherche nur auf Knopfdruck im Termin — nicht automatisch
     if(cb) cb();
     };
-    xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; d.awaitConfirm=true; if(cb) cb(); };
+    xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; if(cb) cb(); };
     xhr.timeout = 60000;
-    xhr.ontimeout = function(){ showToast('Timeout'); d.typ='sonstig'; d.awaitConfirm=true; if(cb) cb(); };
-    try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); d.awaitConfirm=true; if(cb) cb(); }
+    xhr.ontimeout = function(){ showToast('Timeout'); d.typ='sonstig'; if(cb) cb(); };
+    try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
   } // end _sendToAPI
 
   // PDF: zuerst bekanntes Passwort versuchen — Studio aus Dateinamen als Fallback
@@ -10241,8 +9714,8 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     if(!t.datum) return -1;
     var diff=Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
     if(strictDate && diff!==0) return -1; // Abrechnung: nur exaktes Datum
-    if(diff>0) return -1; // Dispo: exaktes Datum — bei Serien mit tägl. Aufnahmen zu fehleranfällig
-    var sc=20; // exakter Datumstreffer
+    if(diff>1) return -1; // Dispo etc.: max 1 Tag Abstand
+    var sc=diff===0?20:8;
     // Studio/Firma
     var ss=studio?bestStudioScore(t):0;
     if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
@@ -10268,41 +9741,10 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
 // ── DETAIL VIEW ──────────────────────────────────────────────
 function _editRow(field, label, val){
   var inputType = (field==='datum')?'date':(field==='uhrzeit')?'time':'text';
-  var extra = (field==='datum') ? ' onchange="dokDatumGeaendert(this.value)"' : '';
   return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
-    +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'"'+extra+' style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:#1a1a1a;outline:none;padding:0 2px">'
+    +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:#1a1a1a;outline:none;padding:0 2px">'
     +'</div>';
-}
-
-// Datum manuell geändert → Termin-Vorschlag neu suchen
-function dokDatumGeaendert(newDatum){
-  if(!newDatum || !_dokCurrentId) return;
-  var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
-  if(!d) return;
-  // Studio + Titel aus aktuellen Editfeldern lesen
-  var studioEl=document.getElementById('dedit-studio');
-  var titelEl=document.getElementById('dedit-titel');
-  var studio = (studioEl&&studioEl.value)||d.studio||'';
-  var titel = (titelEl&&titelEl.value)||d.titel||'';
-  // Neuen Match suchen
-  var match = dokFindTermin(newDatum, studio, titel, '', '', null, d.typ==='abrechn');
-  if(!match) match = dokFindTermin(newDatum, studio, '', '', '', null, d.typ==='abrechn');
-  // Termin-Vorschlagsbereich aktualisieren
-  var vorschlagEl = document.getElementById('dok-termin-vorschlag');
-  if(!vorschlagEl) return;
-  if(match){
-    d.terminId = match.id;
-    vorschlagEl.innerHTML = '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
-      +'<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:4px">📅 TERMIN GEFUNDEN</div>'
-      +'<div style="font-size:13px;font-weight:800">'+esc(match.titel||match.studio||'')+'</div>'
-      +'<div style="font-size:11px;color:#555;margin-top:2px">'+fd(match.datum)+(match.studio?' · '+esc(match.studio):'')+(match.uhrzeit?' · '+match.uhrzeit+' Uhr':'')+'</div>'
-      +'<button type="button" onclick="dokOpenDetail(\''+d.id+'\')" style="margin-top:6px;background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Öffnen</button>'
-      +'</div>';
-  } else {
-    d.terminId = null;
-    vorschlagEl.innerHTML = '<div style="font-size:11px;color:#888;padding:8px 0">Kein passender Termin für '+newDatum+' gefunden — manuell suchen</div>';
-  }
 }
 
 // Read-only Anzeigezeile (wie im Screenshot)
@@ -10360,11 +9802,10 @@ function dokOpenDetail(id){
     titleEl.textContent = d.beschr||d.dateiname||'Dokument';
   }
   var img = document.getElementById('dok-detail-img');
-  // dok-detail-img NUR in STATE 1 (noch nicht analysiert, kein awaitConfirm)
-  var inState1 = (!d.typ || d.typ==='offen') && !d.awaitConfirm;
-  if(d.dataURL && d.mime!=='application/pdf' && inState1){
+  var isNotAnalysed = !d.typ || d.typ==='offen' || d.typ==='sonstig';
+  if(d.dataURL && d.mime!=='application/pdf' && isNotAnalysed && !d.awaitConfirm){
     img.src=d.dataURL; img.style.display='block';
-  } else { img.src=''; img.style.display='none'; }
+  } else { img.style.display='none'; }
 
   // Termin holen — falls noch nicht verknüpft, jetzt noch versuchen
   if(!d.terminId && (d.typ==='dispo'||d.typ==='abrechn') && d.datum){
@@ -10446,12 +9887,7 @@ function dokOpenDetail(id){
         body+='</div>';
         body+='</div>';
       } else {
-        body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;text-align:center">'
-          +'<div style="font-size:28px;margin-bottom:6px">📄</div>'
-          +'<div style="font-size:13px;font-weight:700;color:#555">'+esc(d.dateiname||'PDF-Dokument')+'</div>'
-          +(d._splitPageNr?'<div style="font-size:11px;color:#999;margin-top:4px">Seite '+d._splitPageNr+' von '+(d._splitTotal||'?')+'</div>':'')
-          +'<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="margin-top:8px;background:#1d6fa8;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">📄 PDF öffnen</button>'
-          +'</div>';
+        body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
       }
     }
     // Nochmal analysieren (immer sichtbar in State 2)
@@ -10493,22 +9929,18 @@ function dokOpenDetail(id){
           +(summeFehler
             ? '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#c2410c;font-weight:700">'
               +'⚠ Summe Einzelfolgen ('+detailSumme+') ≠ Gesamt-Takes ('+gesamtTakes+')<br>'
-              +'<span style="font-weight:400">Bitte Einzelwerte prüfen – KI hat möglicherweise eine Zahl falsch gelesen.</span><br>'
-              +'<button type="button" onclick="gvlAutoKorrigieren(\''+d.id+'\')" style="margin-top:6px;background:#c2410c;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">⚡ Differenz ('+(gesamtTakes-detailSumme>0?'+':'')+(gesamtTakes-detailSumme)+') auf letzte Folge addieren</button>'
+              +'<span style="font-weight:400">Bitte Einzelwerte prüfen – KI hat möglicherweise eine Zahl falsch gelesen.</span>'
               +'</div>'
             : '')
           +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
         d.gvl_takes_detail.forEach(function(e, ei){
-          var folgeVal = parseInt(e.folge);
-          var isFilm = e.folge===0 || e.folge==='Film' || isNaN(folgeVal) || e.folge===null || e.folge===undefined;
+          var isFilm = e.folge===0;
+          var folgeStr=String(e.folge);
           var staffelNr, folgeNr;
-          if(!isFilm){
-            var folgeStr=String(folgeVal);
-            if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
-            else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
-            else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
-            else { staffelNr='1'; folgeNr=String(folgeVal||0); }
-          }
+          if(folgeStr.length===3){ staffelNr=folgeStr[0]; folgeNr=String(parseInt(folgeStr.slice(1))); }
+          else if(folgeStr.length===4){ staffelNr=folgeStr.slice(0,2); folgeNr=String(parseInt(folgeStr.slice(2))); }
+          else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
+          else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
           body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#fca5a5':'#86efac')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
             +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed #e5e7eb;margin-bottom:2px;padding-bottom:2px">'+(isFilm?'🎬 Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
             +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
@@ -10640,14 +10072,7 @@ function dokOpenDetail(id){
 
     // ── SESSIONS-BLOCK: monats_abrechn ODER abrechn mit mehreren Aufnahmetagen ──
     if((d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length){
-      var allDone = d.sessions.every(function(s){return s._done || s.terminId;});
-      // Auch aktivieren wenn alle Sessions entweder done ODER keinen Termin im Kalender haben
-      var allDoneOrNoTermin = allDone || d.sessions.every(function(s){
-        if(s._done || s.terminId) return true;
-        if(!s.datum) return true;
-        var match = (db.termine||[]).find(function(t){return t.datum===s.datum && (t.studio||'').toLowerCase().indexOf((d.studio||'').toLowerCase())>=0;});
-        return !match;
-      });
+      var allDone = d.sessions.every(function(s){return s._done;});
       body+='<div style="margin-bottom:12px">';
       body+='<div style="font-size:11px;font-weight:800;color:#1d6fa8;letter-spacing:.5px;margin-bottom:8px">📋 ERKANNTE TERMINE ('+d.sessions.length+')</div>';
       d.sessions.forEach(function(s, si){
@@ -10677,12 +10102,8 @@ function dokOpenDetail(id){
         body+='</div>';
         body+='</div>';
       });
-      if(allDone || allDoneOrNoTermin){
-        var skippedCount = d.sessions.filter(function(s){return !s._done;}).length;
-        var btnLabel = skippedCount > 0
-          ? '✓ Abschließen ('+skippedCount+' Session'+(skippedCount>1?'s':'')+' ohne Kalendertermin)'
-          : '✓ Alle bestätigt — Foto löschen & abschließen';
-        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">'+btnLabel+'</button>';
+      if(allDone){
+        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle bestätigt — Foto löschen & abschließen</button>';
       } else {
         var doneCount = d.sessions.filter(function(s){return s._done;}).length;
         // Nächste offene Session finden
@@ -10716,8 +10137,7 @@ function dokOpenDetail(id){
       var terminBannerBorder = terminHatDispo ? '#fed7aa' : '#86efac';
       var terminLabelColor = terminHatDispo ? '#c2410c' : '#15803d';
       var terminLabel = terminHatDispo ? '⚠ TERMIN HAT BEREITS EINE DISPO' : '📅 TERMIN GEFUNDEN';
-      body += '<div id="dok-termin-vorschlag">'
-        +'<div style="background:'+terminBannerBg+';border:1.5px solid '+terminBannerBorder+';border-radius:10px;padding:10px 14px;margin-bottom:10px">'
+      body += '<div style="background:'+terminBannerBg+';border:1.5px solid '+terminBannerBorder+';border-radius:10px;padding:10px 14px;margin-bottom:10px">'
         + '<div>'
         + '<div style="font-size:10px;font-weight:700;color:'+terminLabelColor+';margin-bottom:2px">'+terminLabel+'</div>'
         + '<div style="font-size:14px;font-weight:800">'+esc(termin.titel||termin.studio||'')+'</div>'
@@ -10725,8 +10145,7 @@ function dokOpenDetail(id){
         + (terminHatDispo ? '<div style="font-size:11px;color:#c2410c;margin-top:4px;font-weight:600">Trotzdem möglich — bitte prüfen ob es dieselbe Dispo ist.</div>' : '')
         + '</div>'
         + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:'+terminLabelColor+';color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
-        + '</div>'
-        +'</div>';
+        + '</div>';
       body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:#f8fafc;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
       // Storno-Hinweis bei negativem Brutto
       if(parseFloat(d.brutto||0) < 0){
@@ -10791,11 +10210,11 @@ function dokOpenDetail(id){
       if(vorschlaege.length){
         // Besten Vorschlag direkt zuordnen (wie dokFindTermin-Fallback)
         if(!d.terminId){ d.terminId=vorschlaege[0].id; save(db); }
-        body+='<div id="dok-termin-vorschlag">';
         body+='<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:8px">📅 PASSENDER TERMIN GEFUNDEN</div>';
         vorschlaege.forEach(function(tv){
           var diff3=d.datum?Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24):99;
           var ml=diff3===0?'✓ Gleicher Tag':(diff3<=1?'~1 Tag':'~'+Math.round(diff3)+' Tage');
+          // Zeige Merge-Vorschau für diesen Termin
           var preview=_buildMergePreview(d, tv);
           body+='<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:10px;margin-bottom:10px;overflow:hidden">'
             +'<div style="background:#fff7ed;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
@@ -10804,15 +10223,15 @@ function dokOpenDetail(id){
             +'<div style="font-size:10px;font-weight:700;color:#c2410c">'+ml+'</div>'
             +'</div>'
             +preview
-            +'<div style="padding:10px 12px"></div></div>';
+            +'<div style="padding:10px 12px">'
+            +''/* Button im fixen Footer */
+            +'</div></div>';
         });
-        body+='</div>';
       } else {
-        body+='<div id="dok-termin-vorschlag">'
-          +'<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+        body+='<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
           +'<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:6px">📅 Kein passender Termin gefunden</div>'
           +'<div style="font-size:12px;color:#666">Datum '+(d.datum?fd(d.datum):'?')+(d.studio?' · '+esc(d.studio):'')+'</div>'
-          +'</div></div>';
+          +'</div>';
       }
 
       // Fallback: manuell oder neuer Termin
@@ -10832,7 +10251,7 @@ function dokOpenDetail(id){
     }
     // PDF-Platzhalter + grüner Button nur bei Einzel-Dokumenten
     // Bei Monatsabrechnungen mit Sessions zählt nur der blaue "Alle übernehmen"-Button
-    var isMonatsAbrechn = (d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length;
+    var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
     if(!isMonatsAbrechn){
       if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:#f5f5f5;border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
       var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
@@ -11180,16 +10599,7 @@ function renderPDFCanvasPage(canvasId, dataURL, pageNr, password){
 
 function dokOpenPDF(id){
   var d=(db.dokumente||[]).find(function(x){return x.id===id;});
-  if(!d) return;
-  // Split-Dok: dataURL vom Parent holen
-  var pdfSrc = d.dataURL;
-  var pdfPage = null;
-  if(!pdfSrc && d._splitFromPdf){
-    var orig=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
-    if(orig && orig.dataURL) pdfSrc = orig.dataURL;
-  }
-  if(d._splitPageNr) pdfPage = d._splitPageNr;
-  if(!pdfSrc){ showToast('PDF nicht mehr im Speicher — bitte neu einlesen'); return; }
+  if(!d||!d.dataURL) return;
   // Sicheres Overlay statt window.open — schließbar mit × oder Tap
   _lockPageZoom();
   var ov=document.createElement('div');
@@ -11198,7 +10608,7 @@ function dokOpenPDF(id){
   // Header mit Schließen-Button
   var hdr=document.createElement('div');
   hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(0,0,0,.8);flex-shrink:0';
-  hdr.innerHTML='<div style="color:#fff;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%">'+esc(d.beschr||d.dateiname||'PDF')+(pdfPage?' · Seite '+pdfPage:'')+'</div>';
+  hdr.innerHTML='<div style="color:#fff;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%">'+esc(d.beschr||d.dateiname||'PDF')+'</div>';
   var btn=document.createElement('button');
   btn.type='button'; btn.textContent='✕ Schließen';
   btn.style.cssText='background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;touch-action:manipulation';
@@ -11206,9 +10616,9 @@ function dokOpenPDF(id){
   btn.onclick=function(){ _unlockPageZoom(); ov.remove(); };
   hdr.appendChild(btn);
   ov.appendChild(hdr);
-  // PDF iframe — zeigt immer das Original; bei Split-Dok springt iOS zur richtigen Seite
+  // PDF iframe
   var iframe=document.createElement('iframe');
-  iframe.src=pdfSrc;
+  iframe.src=d.dataURL;
   iframe.style.cssText='flex:1;border:none;width:100%;background:#fff';
   ov.appendChild(iframe);
   document.body.appendChild(ov);
@@ -11531,21 +10941,15 @@ function _buildMergePreview(d, t){
   // Nur wenn Abrechnung (nicht Dispo) und Termin hat bereits Werte
   var gageWarnungen = [];
   if(d.typ==='abrechn'||d.typ==='monats_abrechn'){
-    // 1-10-Regel: bekannte Pauschalen vor Vergleich aufsplitten
-    var _known1to10Preview = [{total:120.0,komm:80.0,rate:4.00},{total:127.0,komm:85.0,rate:4.20},{total:150.0,komm:100.0,rate:5.00}];
-    var dokGrundgageRaw = parseFloat(d.grundgage||0);
-    var dokTakeGageRaw  = parseFloat(d.take_gage||0);
-    var _m1 = !dokTakeGageRaw ? _known1to10Preview.find(function(r){return Math.abs(dokGrundgageRaw-r.total)<0.05;}) : null;
-    var dokGrundgage = _m1 ? _m1.komm : dokGrundgageRaw;
-    var dokTakeGage  = _m1 ? _m1.rate : dokTakeGageRaw;
-
-    // Komm.-Gage
-    var tKommgage = parseFloat(t.kommgage||0);
+    // Komm.-Gage (Grundgage aus Dok vs. kommgage am Termin)
+    var dokGrundgage = parseFloat(d.grundgage||0);
+    var tKommgage    = parseFloat(t.kommgage||0);
     if(dokGrundgage && tKommgage && Math.abs(dokGrundgage - tKommgage) > 0.5){
       gageWarnungen.push({label:'Komm.-Gage', termin: tKommgage+'€', dok: dokGrundgage+'€'});
     }
     // Take-Gage
-    var tTakeGage = parseFloat(t.rate||0);
+    var dokTakeGage = parseFloat(d.take_gage||0);
+    var tTakeGage   = parseFloat(t.rate||0);
     if(dokTakeGage && tTakeGage && Math.abs(dokTakeGage - tTakeGage) > 0.01){
       gageWarnungen.push({label:'Take-Gage', termin: tTakeGage+'€', dok: dokTakeGage+'€'});
     }
@@ -11624,16 +11028,9 @@ function dokSessionSkip(dokId, si){
       return;
     }
   }
-  // Noch offene Sessions → direkt zur nächsten springen
-  var nextIdx = -1;
-  d.sessions.forEach(function(s, i){ if(nextIdx<0 && !s._done) nextIdx=i; });
-  if(nextIdx >= 0){
-    showToast('✓ Übersprungen · Weiter: Session '+(nextIdx+1)+' von '+d.sessions.length);
-    setTimeout(function(){ dokOpenDetail(dokId); setTimeout(function(){ dokSessionPeek(dokId, nextIdx); }, 400); }, 200);
-  } else {
-    showToast('✓ Session übersprungen');
-    dokOpenDetail(dokId);
-  }
+  showToast('✓ Session übersprungen');
+  // Zurück zum Dok
+  dokOpenDetail(dokId);
 }
 
 function dokBestaetigenMonat(dokId){
@@ -11687,13 +11084,7 @@ function dokBestaetigenMonat(dokId){
       if(s.rolle && !t.rolle) t.rolle=s.rolle;
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
       if(s.take_gage && !t.rate) t.rate=s.take_gage;
-      // 1-10-Regel: grundgage vor Zuweisung aufsplitten
-      var _gg10 = parseFloat(s.grundgage)||0;
-      var _tg10 = parseFloat(s.take_gage)||0;
-      var _known10 = [{total:120,komm:80,rate:4},{total:127,komm:85,rate:4.2},{total:150,komm:100,rate:5}];
-      var _m10 = (!_tg10 && _gg10) ? _known10.find(function(r){return Math.abs(_gg10-r.total)<0.05;}) : null;
-      var _effKomm = _m10 ? _m10.komm : _gg10;
-      if(s.grundgage && !t.kommgage) t.kommgage=_effKomm;
+      if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage;
       if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
       else if(!t.brutto_termin && d.sessions && d.sessions.length===1 && parseFloat(d.brutto)) t.brutto_termin=parseFloat(d.brutto);
       // Sender aus Kürzel
@@ -11703,9 +11094,9 @@ function dokBestaetigenMonat(dokId){
       }
       if(s._mwst_anteil!=null) t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz!=null)    t.ust_satz     = s._ust_satz;
-      // Gutschrift-Nr. am Termin = immer die Haupt-GNR des Dokuments (erscheint so auf dem Kontoauszug)
-      // Session-eigene GNR (z.B. 2559/20260302) ist app-intern und passt NICHT zur Bank
-      if(gutschriftNr) t.gutschrift_nr = gutschriftNr;
+      // Gutschrift-Nr. — session-eigene hat Vorrang, sonst Dok-Gutschrift
+      var sessionGutNr = s.gutschrift_nr||gutschriftNr;
+      if(sessionGutNr) t.gutschrift_nr = sessionGutNr;
       // MwSt-Anteil aus Brutto berechnen falls noch nicht gesetzt
       // Buchhaltungsregel: mwst_anteil nicht selbst berechnen — nur aus Dokument
       // if(!t.mwst_anteil) → bleibt null, wird in USt-Voranmeldung als fehlend behandelt
@@ -11716,41 +11107,15 @@ function dokBestaetigenMonat(dokId){
       var sGG = parseFloat(s.grundgage)||0;
       var sRate = parseFloat(s.take_gage)||0;
       var tKomm = parseFloat(t.kommgage)||0;
-      // 1-10-Regel erkennen: ZWEI Formen
-      // Form A: sGG ist der Pauschalbetrag (120/127/150) — noch nicht aufgespaltet
-      // Form B: sGG ist die Basis-Komm.-Gage (80/85/100) + rate passt → sGG + 10*rate = bekannter Total
-      var _known1to10 = [
-        {total:120,komm:80,rate:4},
-        {total:127,komm:85,rate:4.2},
-        {total:150,komm:100,rate:5}
-      ];
-      var _isKnownTotal = sGG > 0 && _known1to10.some(function(r){
-        return Math.abs(sGG-r.total)<0.05 && Math.abs(sRate-r.rate)<0.05;
-      });
-      var _isKnownBase = sGG > 0 && sRate > 0 && _known1to10.some(function(r){
-        return Math.abs(sGG-r.komm)<0.05 && Math.abs(sRate-r.rate)<0.05;
-      });
-      var s1to10 = _isKnownTotal || _isKnownBase;
+      // 1-10-Regel erkennen: grundgage = kommgage + 10×rate
+      var s1to10 = sGG > 0 && sRate > 0 && Math.abs(sGG - (tKomm + 10*sRate)) < 1.5;
       // Wenn 1-10-Regel: echte Takes = sTakes + 10
       var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
-      // Sonderfall: takes=0 + 1-10-Regel → Grundgage deckt ≤10 Takes ab
-      // Wenn Dispo ≤10 Takes → kein Fehler, Grundgage reicht
-      if(!sTakes && s1to10 && dispTakes > 0){
-        t.takes_abgerechnet = Math.max(dispTakes, 10);
-        sTakesEffektiv = t.takes_abgerechnet;
-      }
       if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
-      if(s.grundgage) t.kommgage_abgerechnet = _effKomm;
-      // Takes-Differenz: nur wenn Differenz > 0 und nicht durch 1-10-Regel erklärbar
-      var _takeDiff = dispTakes - sTakesEffektiv;
-      if(dispTakes > 0 && sTakesEffektiv > 0 && _takeDiff !== 0){
-        // 1-10-Regel erklärt Differenzen von genau ±10
-        if(s1to10 && Math.abs(_takeDiff) <= 10){
-          t.takes_differenz = 0;
-        } else {
-          t.takes_differenz = _takeDiff;
-        }
+      if(s.grundgage) t.kommgage_abgerechnet = parseFloat(s.grundgage)||0;
+      if(sTakesEffektiv && dispTakes && sTakesEffektiv !== dispTakes){
+        t.takes_differenz = dispTakes - sTakesEffektiv;
       } else {
         t.takes_differenz = 0;
       }
@@ -11769,14 +11134,16 @@ function dokBestaetigenMonat(dokId){
         var _dRV = Math.abs(parseFloat(d.rv_abzug)||0);
         var _dPV = Math.abs(parseFloat(d.pv_abzug)||0);
         if(!_sesKV && !_sesRV && !_sesPV && _dKV > 0){
+          // RC-Format: jede Session hat eigene Seite mit eigenem brutto_termin = eigene KV/RV/PV
+          // Arena/FFS: eine Gesamtabrechnung, KV/RV/PV anteilig verteilen
+          // Erkennung: wenn Session ein eigenes auszahlung-Feld hat → eigene Abrechnung → volle Werte
+          // Wenn keine eigene Auszahlung → Teil einer Gesamtabrechnung → anteilig
           var hatEigeneAuszahlung = s.auszahlung && parseFloat(s.auszahlung) > 0;
-          if(hatEigeneAuszahlung && s.kv_abzug){
-            // Session hat eigene KV-Angabe (RC-Format: jede Seite eigene Abrechnung)
-            _sesKV = parseFloat(s.kv_abzug)||0;
-            _sesRV = parseFloat(s.rv_abzug)||0;
-            _sesPV = parseFloat(s.pv_abzug)||0;
+          if(hatEigeneAuszahlung){
+            // RC-Format: volle KV/RV/PV dieser Session-Seite direkt übernehmen
+            _sesKV = _dKV; _sesRV = _dRV; _sesPV = _dPV;
           } else if(gesamtBrutto > 0 && sessionBrutto > 0){
-            // Anteilig verteilen — auch wenn Session eigene Auszahlung hat (toneworx)
+            // Monats-GS ohne eigene Auszahlung → anteilig verteilen
             var _anteil = sessionBrutto / gesamtBrutto;
             _sesKV = Math.round(_dKV * _anteil * 100)/100;
             _sesRV = Math.round(_dRV * _anteil * 100)/100;
@@ -11946,21 +11313,6 @@ function _archiveDateiname(dateiname, terminId, typ){
       if(db._archivLog.length > 3000) db._archivLog = db._archivLog.slice(-3000);
     }
   }
-}
-
-function gvlAutoKorrigieren(dokId){
-  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
-  if(!d || !d.gvl_takes_detail || !d.gvl_takes_detail.length) return;
-  var gesamtTakes = parseInt(d.gvl_takes||d.takes||0);
-  var detailSumme = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
-  var diff = gesamtTakes - detailSumme;
-  if(diff === 0){ showToast('Bereits ausgeglichen'); return; }
-  // Differenz auf letzte Folge addieren
-  var last = d.gvl_takes_detail[d.gvl_takes_detail.length-1];
-  last.takes = Math.max(0, (parseInt(last.takes)||0) + diff);
-  save(db);
-  showToast('✓ '+(diff>0?'+':'')+diff+' Takes auf letzte Folge addiert');
-  dokOpenDetail(dokId);
 }
 
 function gvlFolgeEdit(label, dokId, idx){
@@ -12179,37 +11531,18 @@ function dokBestaetigenMitTermin(dokId, terminId){
   save(db);
   rDokumente();
   rTermine();
-
-  // Split-Navigation: merken für nach dem Termin-Speichern
-  if(d._splitGroup && d._splitTotal > 1){
-    var _nextSplitIdx = (d._splitIdx||0) + 1;
-    var _nextSplitDok = (db.dokumente||[]).find(function(x){
-      return x._splitGroup===d._splitGroup && x._splitIdx===_nextSplitIdx && !x.bestaetigt;
-    });
-    window._pendingSplitNav = _nextSplitDok ? _nextSplitDok.id : null;
-    window._pendingSplitLabel = _nextSplitDok ? ((d._splitIdx+1)+' von '+d._splitTotal) : null;
-  } else {
-    window._pendingSplitNav = null;
-  }
-
   showToast('✓ Bitte Termin-Änderungen prüfen und speichern');
   if(t){
+    // Dok-ID merken für Rücknavigation
     _returnToDokId = _dokCurrentId;
     dokDetailClose();
+    // Lock + View-Wechsel
     _openDetailLock = true;
     switchView('termine');
     setTimeout(function(){
       _openDetailLock = false;
       openDetail(terminId);
     }, 350);
-  } else if(window._pendingSplitNav){
-    // Kein Termin gefunden → direkt zur nächsten Gutschrift
-    var _nidDirect = window._pendingSplitNav;
-    window._pendingSplitNav = null;
-    window._pendingSplitLabel = null;
-    dokDetailClose();
-    showToast('✓ Bestätigt · Weiter zur nächsten Gutschrift');
-    setTimeout(function(){ dokOpenDetail(_nidDirect); }, 200);
   }
 }
 
@@ -12257,12 +11590,12 @@ function dokMergeIntoTermin(d, termin){
   mergeField('uhrzeit',     d.uhrzeit,     'Uhrzeit');
   mergeField('bis_uhrzeit', d.bis_uhrzeit, 'Bis-Uhrzeit');
   // Studio: nur überschreiben wenn Dispo-Studio spezifischer ist
-  // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat — oder umgekehrt)
+  // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat)
   if(d.studio){
     var curStudio = (termin.studio||'').toLowerCase().trim();
     var newStudio = d.studio.toLowerCase().trim();
-    // Überschreiben wenn: leer, oder einer enthält den anderen (Kürzel vs. Vollname)
-    if(!curStudio || newStudio.indexOf(curStudio) >= 0 || curStudio.indexOf(newStudio) >= 0) {
+    // Überschreiben wenn: leer, oder neues Studio enthält mehr Info als altes
+    if(!curStudio || newStudio.length > curStudio.length || newStudio.indexOf(curStudio) >= 0) {
       overwrite('studio', d.studio, 'Studio');
     }
   }
@@ -12279,13 +11612,8 @@ function dokMergeIntoTermin(d, termin){
   // ── Dispo-spezifisch ──────────────────────────────────────────────
   if(d.typ==='dispo'){
     if(!termin.dispoDocId) termin.dispoDocId=d.id;
-    // Takes aus Dispo setzen — overwrite wenn noch keine Abrechnung
-    var _dispTakes = parseInt(d.takes)||0;
-    if(!_dispTakes && d.gvl_takes_detail && d.gvl_takes_detail.length){
-      // Fallback: Summe aus gvl_takes_detail (Film-Dispos haben takes nur dort)
-      _dispTakes = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
-    }
-    if(_dispTakes && !termin.abId) overwrite('takes', _dispTakes, 'Takes (aus Dispo)');
+    // Takes aus Dispo setzen (wenn Abrechnung noch nicht da)
+    if(d.takes&&!termin.abId) fill('takes', d.takes, 'Takes (aus Dispo)');
   }
 
   // ── Abrechnung — alles antizipieren ───────────────────────────────
@@ -12384,6 +11712,7 @@ function dokMergeIntoTermin(d, termin){
       var abId = _upsertAbrechnung(termin.abId, abFelder);
       termin.abId=abId;
       termin.status='abrechnung';
+      if(d.ustSatz) termin.ust_satz = d.ustSatz; // USt-Satz vom Dok (z.B. 19%)
       // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
       if(parseFloat(d.kv_abzug)||0) termin.kv_abzug = Math.abs(parseFloat(d.kv_abzug));
       if(parseFloat(d.rv_abzug)||0) termin.rv_abzug = Math.abs(parseFloat(d.rv_abzug));
@@ -12499,28 +11828,12 @@ function dokAssignTermin(dokId, terminId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d||!t) return;
-
-  // Alten Termin aufräumen: GVL-Daten entfernen wenn Dispo umgezogen wird
-  var oldTerminId = d.terminId;
-  if(oldTerminId && oldTerminId !== terminId){
-    var oldTermin = (db.termine||[]).find(function(x){return x.id===oldTerminId;});
-    if(oldTermin && oldTermin.dispoDocId === dokId){
-      // Dieser Termin hatte die Dispo — GVL-Felder zurücksetzen
-      oldTermin.gvl_takes_detail = null;
-      oldTermin.gvl_takes = null;
-      oldTermin.gvl_staffel = null;
-      oldTermin.gvl_folge = null;
-      oldTermin.takes = null;
-      oldTermin.dispoDocId = null;
-    }
-  }
-
   d.terminId=terminId;
   var changed=dokMergeIntoTermin(d,t);
   save(db); rDokumente(); rTermine();
   showToast('✓ Mit "'+esc(t.titel||t.studio||t.datum)+'" verknüpft');
   if(changed.length) _showMergeSummary(t, changed, d);
-  dokOpenDetail(dokId);
+  dokOpenDetail(dokId); // Panel aktualisieren
 }
 
 function _checkPendingDokLink(terminId){
@@ -12537,9 +11850,10 @@ function _checkPendingDokLink(terminId){
     _pendingSessionIdx=null;
     dokLinkCancel();
     d.sessions[si].terminId=terminId;
-    d.sessions[si]._done=true;
+    d.sessions[si]._manuallyAssigned=true;
     logAction('session_link', 'Session manuell zugeordnet · '+(d.beschr||d.dateiname||''),
       {dokId: d.id, sessionIdx: si, altesTerminId: _altesTerminId, neuesTerminId: terminId});
+    _dokCurrentId = d.id;
     save(db);
     showToast('✓ Session mit Termin verknüpft');
     dokSessionPeek(d.id, si);
@@ -12847,6 +12161,7 @@ function rUstVoranmeldung(){
 
   var ym = _ustYear+'-'+String(_ustMonth+1).padStart(2,'0');
   var urEinn = db.profil&&db.profil.ust!=null ? db.profil.ust : 0.07;
+  var _snapUst = function(satz){ if(Math.abs(satz-0.07)<0.005) return 0.07; if(Math.abs(satz-0.19)<0.01) return 0.19; return Math.round(satz*100)/100; };
 
   // ── EINNAHMEN nach ZAHLUNGSEINGANG (Ist-Versteuerung) ────────
   // Strategie: Monats-Abrechnungen als Ganzes nehmen — nicht pro Termin
@@ -12905,12 +12220,14 @@ function rUstVoranmeldung(){
               if(_gestMwst > 0){
                 einnUstEcht += _gestMwst;
                 einnNetto += _gestBrutto;
+                var _gsUst=(_gestBrutto>_gestMwst&&_gestMwst>0)?_snapUst(_gestMwst/(_gestBrutto-_gestMwst)):urEinn;
                 einnZeilen.push({
                   label: esc(_abForDok.studio||'') + (_abForDok.gesamt_gutschrift_nr?' · '+_abForDok.gesamt_gutschrift_nr:''),
                   sub: 'Monats-GS (Dok gelöscht)',
                   zahlDatum: zahlDatum,
                   netto: _gestBrutto,
-                  ust: _gestMwst
+                  ust: _gestMwst,
+                  ust_satz: _gsUst
                 });
               }
             }
@@ -12928,11 +12245,13 @@ function rUstVoranmeldung(){
           var ust=mwst; // Buchhaltungsregel: nur aus Dokument
           einnNetto+=brutto;
           if(mwst>0) einnUstEcht+=mwst; // kein Fallback-Rechnen
+          var _mAUst=(mwst>0&&brutto>mwst)?_snapUst(mwst/(brutto-mwst)):(parseFloat(dok.ustSatz)||urEinn);
           einnZeilen.push({
             label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
             sub:'Monats-GS',
             zahlDatum:zahlDatum,
-            netto:brutto, ust:ust
+            netto:brutto, ust:ust,
+            ust_satz:_mAUst
           });
 
         // Fall B: Split-PDF (Iyuno 7-seitige PDF etc.) — jede Gutschrift ist ein eigenes abrechn-Dok
@@ -12945,11 +12264,13 @@ function rUstVoranmeldung(){
           var ustS=mwstS; // Buchhaltungsregel: nur aus Dokument
           einnNetto+=bruttoS;
           if(mwstS>0) einnUstEcht+=mwstS; // kein Fallback-Rechnen
+          var _spUst=(mwstS>0&&bruttoS>mwstS)?_snapUst(mwstS/(bruttoS-mwstS)):(parseFloat(dok.ustSatz)||urEinn);
           einnZeilen.push({
             label:esc(dok.studio||'')+(dok.gutschrift_nr?' · '+dok.gutschrift_nr:''),
             sub:'Gutschrift '+(dok._splitIdx!=null?(dok._splitIdx+1)+'/'+dok._splitTotal:''),
             zahlDatum:zahlDatum,
-            netto:bruttoS, ust:ustS
+            netto:bruttoS, ust:ustS,
+            ust_satz:_spUst
           });
         }
       });
@@ -12968,11 +12289,13 @@ function rUstVoranmeldung(){
       var ustAb=mwstAb; // Buchhaltungsregel: nur aus Dokument
       einnNetto+=bruttoAb;
       if(mwstAb>0) einnUstEcht+=mwstAb; // kein Fallback-Rechnen
+      var _eaUst=parseFloat(t.ust_satz)||(mwstAb>0&&bruttoAb>mwstAb?_snapUst(mwstAb/(bruttoAb-mwstAb)):urEinn);
       einnZeilen.push({
         label:esc(t.titel||t.studio||''),
         sub:(ab.gutschrift_nr||''),
         zahlDatum:zahlDatum,
-        netto:bruttoAb, ust:ustAb
+        netto:bruttoAb, ust:ustAb,
+        ust_satz:_eaUst
       });
     } else if(!ab || ab.aufgeteilt) {
       // Keine Abrechnung → kein USt-Wert, nicht schätzen (Buchhaltungsregel)
@@ -13007,27 +12330,52 @@ function rUstVoranmeldung(){
     +'<div style="font-size:22px;font-weight:900;color:'+zahlCol+'">'+fmtEur(zahllast)+'</div>'
     +'</div>'
     +'<div style="display:flex;gap:0;border-top:1px solid #e9d5ff;padding-top:10px">'
-    +'<div style="flex:1;font-size:12px"><div style="color:#999;margin-bottom:2px">USt aus Einnahmen</div><strong style="color:#c2410c">+'+fmtEur(einnUst)+'</strong></div>'
+    +'<div style="flex:1;font-size:12px"><div style="color:#999;margin-bottom:2px">USt aus Einnahmen</div>'
+    +(_einnRaten&&_einnRaten.length>1 ? _einnRaten.map(function(r){return '<div style="font-size:11px"><strong style="color:#c2410c">+'+fmtEur(Math.round((_einnGruppen[r]&&_einnGruppen[r].sumUst||0)*100)/100)+'</strong> <span style="color:#aaa">'+r+'%</span></div>';}).join('') : '<strong style="color:#c2410c">+'+fmtEur(einnUst)+'</strong>')
+    +'</div>'
     +'<div style="flex:1;font-size:12px;text-align:right"><div style="color:#999;margin-bottom:2px">Vorsteuer Ausgaben</div><strong style="color:#15803d">−'+fmtEur(vorstUst)+'</strong></div>'
     +'</div></div>';
+
+  // Gruppierung nach USt-Satz für Anzeige
+  var _einnGruppen = {};
+  einnZeilen.forEach(function(e){
+    var k=Math.round((e.ust_satz||urEinn)*100);
+    if(!_einnGruppen[k]) _einnGruppen[k]={zeilen:[],sumNetto:0,sumUst:0};
+    _einnGruppen[k].zeilen.push(e);
+    _einnGruppen[k].sumNetto+=e.netto||0;
+    _einnGruppen[k].sumUst+=e.ust||0;
+  });
+  var _einnRaten=Object.keys(_einnGruppen).map(Number).sort();
 
   html += '<div style="padding:0 16px;margin-bottom:4px">'
     +'<div style="font-size:12px;font-weight:800;color:#c2410c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Einnahmen ('+einnZeilen.length+' Zahlungseingänge)</div>';
   if(einnZeilen.length){
-    html += '<div style="background:#fff;border:1.5px solid #fecaca;border-radius:10px;overflow:hidden">';
-    einnZeilen.forEach(function(e, i){
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i>0?'border-top:1px solid #fef2f2':'')+'">'
-        +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.label+'</div>'
-        +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+(e.sub?' · '+esc(e.sub):'')+'  ·  Netto '+fmtEur(e.netto)+'  ·  USt '+Math.round(urEinn*100)+'%</div>'
-        +'</div>'
-        +'<div style="font-size:13px;font-weight:800;color:#c2410c;flex-shrink:0;margin-left:8px">+'+fmtEur(e.ust)+'</div>'
-        +'</div>';
+    _einnRaten.forEach(function(rPct){
+      var grp=_einnGruppen[rPct];
+      if(_einnRaten.length>1){
+        html += '<div style="font-size:11px;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 4px">'+rPct+'% Umsatzsteuer</div>';
+      }
+      html += '<div style="background:#fff;border:1.5px solid #fecaca;border-radius:10px;overflow:hidden;margin-bottom:8px">';
+      grp.zeilen.forEach(function(e,i){
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i>0?'border-top:1px solid #fef2f2':'')+'">'  
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.label+'</div>'
+          +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+(e.sub?' · '+esc(e.sub):'')+' · Netto '+fmtEur(e.netto)+' · USt '+Math.round((e.ust_satz||urEinn)*100)+'%</div>'
+          +'</div>'
+          +'<div style="font-size:13px;font-weight:800;color:#c2410c;flex-shrink:0;margin-left:8px">+'+fmtEur(e.ust)+'</div>'
+          +'</div>';
+      });
+      html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:#fef2f2;border-top:1.5px solid #fecaca">'
+        +'<div style="font-size:12px;font-weight:800">Gesamt USt '+rPct+'%</div>'
+        +'<div style="font-size:13px;font-weight:900;color:#c2410c">+'+fmtEur(Math.round(grp.sumUst*100)/100)+'</div>'
+        +'</div></div>';
     });
-    html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:#fef2f2;border-top:1.5px solid #fecaca">'
-      +'<div style="font-size:12px;font-weight:800">Gesamt USt ('+Math.round(urEinn*100)+'%)</div>'
-      +'<div style="font-size:13px;font-weight:900;color:#c2410c">+'+fmtEur(einnUst)+'</div>'
-      +'</div></div>';
+    if(_einnRaten.length>1){
+      html += '<div style="display:flex;justify-content:space-between;padding:8px 4px;border-top:2px solid #fecaca">'
+        +'<div style="font-size:12px;font-weight:800;color:#7c2d12">Gesamt USt (alle Sätze)</div>'
+        +'<div style="font-size:14px;font-weight:900;color:#c2410c">+'+fmtEur(einnUst)+'</div>'
+        +'</div>';
+    }
   } else {
     html += '<div style="text-align:center;padding:16px;color:#999;font-size:13px">Keine Zahlungseingänge in diesem Monat<br><span style="font-size:11px">Nur Termine mit erfasstem Zahlungseingang erscheinen hier</span></div>';
   }
@@ -13437,27 +12785,6 @@ function tlabel2(s){
   return 'offen';
 }
 
-var _mahnTab = 'ueberfaellig';
-function mahnSetTab(tab){
-  _mahnTab = tab;
-  var tabs = ['ueberfaellig','differenzen'];
-  tabs.forEach(function(t){
-    var el = document.getElementById('mahn-tab-'+t);
-    if(!el) return;
-    if(t===tab){
-      el.style.color='#fff';
-      el.style.borderBottomColor='#fff';
-    } else {
-      el.style.color='rgba(255,255,255,.65)';
-      el.style.borderBottomColor='transparent';
-    }
-    var badge = document.getElementById('mahn-tab-badge-'+(t==='ueberfaellig'?'ue':'diff'));
-    if(badge) badge.style.background = t===tab ? '#fff' : 'rgba(255,255,255,.3)';
-    if(badge) badge.style.color = t===tab ? '#c2410c' : '#fff';
-  });
-  rMahnwesen();
-}
-
 function rMahnwesen(){
   var el = document.getElementById('mahn-scroll');
   if(!el) return;
@@ -13465,10 +12792,15 @@ function rMahnwesen(){
   var heute = today();
   var FAELLIG_TAGE = 30;
 
-  // ── ÜBERFÄLLIGE TERMINE ──────────────────────────────────────
+  // Termine die überfällig sind:
+  // - haben eine Abrechnung (abId oder abrechn-Dok)
+  // - sind NICHT bezahlt
+  // - Abrechnungsdatum + 30 Tage < heute
   var ueberfaellig = (db.termine||[]).filter(function(t){
     if(t.status === 'bezahlt') return false;
     if(t.status === 'storno') return false;
+
+    // Abrechnungsdatum ermitteln
     var abDatum = null;
     if(t.abId){
       var ab = (db.abrechnungen||[]).find(function(a){ return a.id===t.abId; });
@@ -13480,142 +12812,74 @@ function rMahnwesen(){
       });
       if(dok && dok.datum) abDatum = dok.datum;
     }
+    // Fallback: wenn kein abDatum aber abgerechnet → t.datum nehmen
     if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum;
-    if(!abDatum) return false;
+    if(!abDatum) return false; // Keine Abrechnung → nicht fällig
+
+    // Fälligkeit prüfen
     var abDate = new Date(abDatum);
     var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
     return faelligAm < new Date(heute);
   });
 
-  // ── DIFFERENZEN sammeln ──────────────────────────────────────
-  var differenzen = [];
-  var known1to10 = [{total:120,komm:80,rate:4},{total:127,komm:85,rate:4.2},{total:150,komm:100,rate:5}];
-  function decompose(gg, tg){
-    if(gg && !tg){
-      var m = known1to10.find(function(r){return Math.abs(gg-r.total)<0.05;});
-      if(m) return {komm:m.komm, rate:m.rate};
-    }
-    return {komm:gg, rate:tg};
+  // Badge aktualisieren
+  _updateMahnBadge(ueberfaellig.length);
+
+  if(!ueberfaellig.length){
+    el.innerHTML = '<div class="empty-state">'
+      +'<div class="empty-icon">✅</div>'
+      +'<div class="empty-title">Alles bezahlt</div>'
+      +'<div class="empty-sub">Keine überfälligen Zahlungen</div>'
+      +'</div>';
+    return;
   }
 
-  (db.termine||[]).forEach(function(t){
-    // Gage-Differenz: falsche Komm.-Gage oder Take-Gage
-    if(t.takes_differenz && Math.abs(t.takes_differenz) > 0 && Math.abs(t.takes_differenz) !== 10){
-      differenzen.push({typ:'takes', termin:t,
-        text: 'Takes: '+Math.abs(t.takes_differenz)+' '+(t.takes_differenz>0?'zu wenig':'zu viel')+' abgerechnet',
-        details: 'Dispo: '+(parseInt(t.takes)||0)+' · Abrechn: '+(parseInt(t.takes_abgerechnet)||0)
-      });
-    }
-    // Komm.-Gage Differenz
-    var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-    if(ab && t.kommgage){
-      var d2 = decompose(parseFloat(ab.grundgage||0), parseFloat(ab.take_gage||0));
-      var abKomm = d2.komm;
-      var tKomm = parseFloat(t.kommgage)||0;
-      if(abKomm && tKomm && Math.abs(abKomm-tKomm) > 0.5 && t.status !== 'bezahlt'){
-        differenzen.push({typ:'gage', termin:t,
-          text: 'Komm.-Gage: '+fmtEur(abKomm)+' abgerechnet statt '+fmtEur(tKomm),
-          details: ab.gutschrift_nr||''
-        });
-      }
-    }
-    // Brutto-Differenz (aus rate_differenz)
-    if(t.rate_differenz && Math.abs(t.rate_differenz) > 0.01 && t.status !== 'bezahlt'){
-      differenzen.push({typ:'rate', termin:t,
-        text: 'Take-Gage: '+(t.rate_differenz>0?'-':'+')+''+fmtEur(Math.abs(t.rate_differenz))+' je Take',
-        details: ''
-      });
-    }
+  // Nach Überfälligkeit sortieren (älteste zuerst)
+  ueberfaellig.sort(function(a,b){
+    return (a.datum||'') < (b.datum||'') ? -1 : 1;
   });
 
-  // Badge aktualisieren
-  var gesamtCount = ueberfaellig.length + differenzen.length;
-  _updateMahnBadge(gesamtCount);
-  var badgeUe = document.getElementById('mahn-tab-badge-ue');
-  var badgeDiff = document.getElementById('mahn-tab-badge-diff');
-  if(badgeUe) badgeUe.textContent = ueberfaellig.length || '';
-  if(badgeDiff) badgeDiff.textContent = differenzen.length || '';
+  var html = '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
+    +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+ueberfaellig.length+' überfällige Zahlung'+(ueberfaellig.length>1?'en':'')+'</div>'
+    +'<div style="font-size:11px;color:#92400e">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
+    +'</div>';
 
-  var html = '';
-
-  if(_mahnTab === 'ueberfaellig'){
-    if(!ueberfaellig.length){
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Alles bezahlt</div><div class="empty-sub">Keine überfälligen Zahlungen</div></div>';
-      return;
-    }
-    ueberfaellig.sort(function(a,b){ return (a.datum||'') < (b.datum||'') ? -1 : 1; });
-    html += '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
-      +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+ueberfaellig.length+' überfällige Zahlung'+(ueberfaellig.length>1?'en':'')+'</div>'
-      +'<div style="font-size:11px;color:#92400e">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
-      +'</div>';
-    ueberfaellig.forEach(function(t){
-      var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-      var dok = (db.dokumente||[]).find(function(d){
-        return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
-      });
-      var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
-      if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum||'';
-      var abDate = new Date(abDatum);
-      var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
-      var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
-      var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
-      var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
-      var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
-      var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
-      html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
-        +'<div>'
-        +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
-        +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
-        +(gutschriftNr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(gutschriftNr)+'</div>':'')
-        +'</div>'
-        +'<div style="text-align:right">'
-        +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
-        +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
-        +'</div>'
-        +'</div>'
-        +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
-        +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+(!isNaN(faelligAm.getTime())?fd(faelligAm.toISOString().split('T')[0]):'?')
-        +'</div>'
-        +'<div style="display:flex;gap:8px">'
-        +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
-        +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
-        +'</div>'
-        +'</div>';
+  ueberfaellig.forEach(function(t){
+    var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+    var dok = (db.dokumente||[]).find(function(d){
+      return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
     });
+    var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
+    var abDate = new Date(abDatum);
+    var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
+    var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
+    var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
+    var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
 
-  } else {
-    // ── DIFFERENZEN TAB ──────────────────────────────────────
-    if(!differenzen.length){
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Keine Differenzen</div><div class="empty-sub">Alle Gagen stimmen überein</div></div>';
-      return;
-    }
-    html += '<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
-      +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+differenzen.length+' Differenz'+(differenzen.length>1?'en':'')+'</div>'
-      +'<div style="font-size:11px;color:#92400e">Falsche Gagensätze oder Abrechnungsdifferenzen — prüfen und ggf. reklamieren.</div>'
+    var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
+    var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
+
+    html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+      +'<div>'
+      +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
+      +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
+      +(gutschriftNr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(gutschriftNr)+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right">'
+      +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
+      +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
+      +'</div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
+      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
+      +'</div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
+      +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
+      +'</div>'
       +'</div>';
-    differenzen.forEach(function(item){
-      var t = item.termin;
-      var iconMap = {takes:'🔢', gage:'💶', rate:'📊'};
-      html += '<div style="background:#fff;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;margin-bottom:10px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
-        +'<div>'
-        +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
-        +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
-        +'</div>'
-        +'<div style="font-size:22px">'+( iconMap[item.typ]||'⚠')+'</div>'
-        +'</div>'
-        +'<div style="background:#fff7ed;border-radius:8px;padding:8px 10px;margin-bottom:8px">'
-        +'<div style="font-size:12px;font-weight:700;color:#c2410c">'+esc(item.text)+'</div>'
-        +(item.details?'<div style="font-size:10px;color:#92400e;margin-top:2px">'+esc(item.details)+'</div>':'')
-        +'</div>'
-        +'<div style="display:flex;gap:8px">'
-        +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Reklamation</button>'
-        +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
-        +'</div>'
-        +'</div>';
-    });
-  }
+  });
 
   el.innerHTML = html;
 }
@@ -13670,106 +12934,7 @@ function runIntegrityCheck(silent){
   var warnings = [];
   var fixes = 0;
 
-  // 0. Doppelte Termine (gleicher Titel + Datum + Studio)
-  var terminKeys = {};
-  (db.termine||[]).forEach(function(t){
-    if(!t.datum || !t.titel) return;
-    var key = (t.datum||'')+'|'+(t.titel||'').toLowerCase().trim()+'|'+(t.studio||'').toLowerCase().trim();
-    if(!terminKeys[key]) terminKeys[key] = [];
-    terminKeys[key].push(t);
-  });
-  Object.keys(terminKeys).forEach(function(key){
-    if(terminKeys[key].length > 1){
-      var ts = terminKeys[key];
-      warnings.push('⚠ Doppelter Termin: "'+esc(ts[0].titel)+'" am '+fd(ts[0].datum)+(ts[0].studio?' ('+esc(ts[0].studio)+')':'')+' — '+ts.length+'× vorhanden!');
-    }
-  });
-
-  // 0b. Doppelte Gutschrift-Nummern in db.abrechnungen (gleiche gnr, verschiedene Einträge)
-  var gnrAbMap = {};
-  (db.abrechnungen||[]).forEach(function(a){
-    if(!a.gutschrift_nr) return;
-    if(!gnrAbMap[a.gutschrift_nr]) gnrAbMap[a.gutschrift_nr] = [];
-    gnrAbMap[a.gutschrift_nr].push(a);
-  });
-  Object.keys(gnrAbMap).forEach(function(gnr){
-    var group = gnrAbMap[gnr];
-    // Erlaubt: mehrere Einträge wenn verschiedene terminIds (Split-Sessions)
-    var seenTermins = {};
-    group.forEach(function(a){ seenTermins[a.terminId||'null']=true; });
-    var uniqueCount = Object.keys(seenTermins).length;
-    if(uniqueCount === 1 && group.length > 1){
-      warnings.push('⚠ Doppelte Abrechnung: Gutschrift-Nr. '+esc(gnr)+' kommt '+group.length+'× in db.abrechnungen vor (gleicher Termin)');
-    }
-  });
-
-  // 0c. Verwaiste Abrechnungen (kein Termin zeigt auf sie)
-  var terminAbIds = {};
-  (db.termine||[]).forEach(function(t){ if(t.abId) terminAbIds[t.abId]=true; });
-  (db.abrechnungen||[]).forEach(function(a){
-    if(!a.terminId && !terminAbIds[a.id]){
-      warnings.push('⚠ Verwaiste Abrechnung: '+esc(a.gutschrift_nr||a.id)+' ('+fmtEur(a.brutto||0)+') — kein Termin verknüpft, wird nicht gezählt');
-    }
-  });
-
-  // 0d. Doppelte Holvi-Zahlungen (gleiche zahlungsId)
-  var zIdMap = {};
-  (db.zahlungen||[]).forEach(function(z){
-    if(!z.zahlungsId) return;
-    if(!zIdMap[z.zahlungsId]) zIdMap[z.zahlungsId] = 0;
-    zIdMap[z.zahlungsId]++;
-  });
-  Object.keys(zIdMap).forEach(function(zid){
-    if(zIdMap[zid] > 1){
-      warnings.push('⚠ Doppelte Holvi-Zahlung: zahlungsId '+zid+' ist '+zIdMap[zid]+'× importiert');
-    }
-  });
-
-  // 0f. Unvollständige Split-PDF-Gruppen (z.B. 1/3 bestätigt aber 2/3 und 3/3 fehlen noch)
-  var splitGruppen = {};
-  (db.dokumente||[]).forEach(function(d){
-    if(!d._splitGroup || !d._splitTotal || d._splitTotal <= 1) return;
-    if(!splitGruppen[d._splitGroup]) splitGruppen[d._splitGroup]={total:d._splitTotal, bestaetigt:0, name:d.dateiname||d.beschr||''};
-    if(d.bestaetigt) splitGruppen[d._splitGroup].bestaetigt++;
-  });
-  Object.keys(splitGruppen).forEach(function(key){
-    var g = splitGruppen[key];
-    if(g.bestaetigt > 0 && g.bestaetigt < g.total){
-      warnings.push('⚠ Unvollständige Split-PDF: "'+esc(g.name)+'" — '+g.bestaetigt+' von '+g.total+' Seiten bestätigt, '+( g.total-g.bestaetigt)+' noch offen');
-    }
-  });
-  (db.termine||[]).forEach(function(t){
-    if(t.status !== 'bezahlt') return;
-    if(!t.abId) return;
-    var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-    if(ab && ab.bezahlt === false){
-      warnings.push('⚠ Status-Konflikt: '+esc(t.titel||'?')+' ('+fd(t.datum)+'): Termin=bezahlt aber Abrechnung.bezahlt=false');
-    }
-  });
-
-  // 0g. Termine mit mehr als einer Gutschrift-Nr. (Session-GNR vs. Haupt-GNR gemischt)
-  (db.termine||[]).forEach(function(t){
-    if(!t.gutschrift_nr) return;
-    // Alle Abrechnungen dieses Termins sammeln
-    var abGNRs = [];
-    if(t.abId){
-      var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-      if(ab && ab.gutschrift_nr) abGNRs.push(ab.gutschrift_nr);
-    }
-    // Auch aus dokIds
-    (t.dokIds||[]).forEach(function(did){
-      var dok=(db.dokumente||[]).find(function(x){return x.id===did;});
-      if(dok && dok.gutschrift_nr && abGNRs.indexOf(dok.gutschrift_nr)<0) abGNRs.push(dok.gutschrift_nr);
-    });
-    abGNRs.push(t.gutschrift_nr);
-    // Unique GNRs
-    var unique = {};
-    abGNRs.forEach(function(g){ unique[g]=true; });
-    var keys = Object.keys(unique);
-    if(keys.length > 1){
-      warnings.push('⚠ Mehrere Gutschrift-Nr.: '+esc(t.titel||'?')+' ('+fd(t.datum)+'): '+keys.join(', ')+' — Holvi-Matching prüfen!');
-    }
-  });
+  // 1. Aufgeteilte Original-Abrechnungen dürfen nicht in Summen eingehen
   (db.abrechnungen||[]).forEach(function(ab){
     if(ab.aufgeteilt && ab.aufgeteiltIn && ab.aufgeteiltIn.length){
       // Prüfen ob Teilabrechnungen existieren
@@ -13956,20 +13121,14 @@ function runIntegrityCheck(silent){
   });
 
   // 2. Monats-GS: Summe aller brutto_termin der Sessions = gesamt_brutto
-  // GNR-Normalisierung: "2559/20260301" → "2559/202603" (Tagesdatum → Monatspräfix)
-  var normalizeGnr = function(gnr){
-    var m = (gnr||'').match(/^(.+\/\d{6})\d{2}$/);
-    return m ? m[1] : (gnr||'');
-  };
   var gnrMap = {};
   (db.termine||[]).forEach(function(t){
     if(!t.gutschrift_nr || !t.brutto_termin) return;
     var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
     var gestBrutto = ab ? parseFloat(ab.gesamt_brutto)||0 : 0;
     if(!gestBrutto) return;
-    var key = normalizeGnr(t.gutschrift_nr);
-    if(!gnrMap[key]) gnrMap[key]={sum:0, gesamt:gestBrutto, titel:t.titel||t.studio||'?'};
-    gnrMap[key].sum += parseFloat(t.brutto_termin)||0;
+    if(!gnrMap[t.gutschrift_nr]) gnrMap[t.gutschrift_nr]={sum:0, gesamt:gestBrutto, titel:t.titel||t.studio||'?'};
+    gnrMap[t.gutschrift_nr].sum += parseFloat(t.brutto_termin)||0;
   });
   Object.keys(gnrMap).forEach(function(gnr){
     var e = gnrMap[gnr];
@@ -13985,9 +13144,8 @@ function runIntegrityCheck(silent){
     var ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
     var gestKV = ab ? parseFloat(ab.gesamt_kv)||0 : 0;
     if(!gestKV) return;
-    var key = normalizeGnr(t.gutschrift_nr);
-    if(!gnrKvMap[key]) gnrKvMap[key]={sum:0, gesamt:gestKV};
-    gnrKvMap[key].sum += parseFloat(t.kv_abzug)||0;
+    if(!gnrKvMap[t.gutschrift_nr]) gnrKvMap[t.gutschrift_nr]={sum:0, gesamt:gestKV};
+    gnrKvMap[t.gutschrift_nr].sum += parseFloat(t.kv_abzug)||0;
   });
   Object.keys(gnrKvMap).forEach(function(gnr){
     var e = gnrKvMap[gnr];
@@ -15342,7 +14500,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel (bei FFS/Taunus: "TITEL FILMCODE" → nur Titel nehmen, Zahl weglassen; z.B. "FUZE 25112589" → "FUZE"). grundgage=Pauschale bei "Pauschale 1-10"/""Mindestgage 1-10" (z.B. 120.00), takes/take_gage nur wenn explizit. brutto/netto/auszahlung/mwst=Geldbetraege, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
@@ -15488,13 +14646,10 @@ function abFindMatch(d){
     // DATUM ist Pflicht - kein Treffer ohne Datum in der Nähe
     var dateDiff=Math.abs(new Date(dat)-new Date(t.datum));
     var dateScore=0;
-    if(t.datum===dat) dateScore=100;          // exakter Treffer
-    else return; // Dispo: kein ±1 Tag — bei Serien mit tägl. Aufnahmen zu fehleranfällig
-    // Termin hat bereits bestätigte Dispo → weniger bevorzugen
-    var hatDispo = (db.dokumente||[]).some(function(dk){
-      return dk.terminId===t.id && dk.typ==='dispo' && dk.bestaetigt;
-    });
-    if(hatDispo) dateScore = Math.round(dateScore * 0.4);
+    if(t.datum===dat) dateScore=100;          // exakter Treffer: dominiert alles
+    else if(dateDiff<2*86400000) dateScore=50; // ±1 Tag
+    else if(dateDiff<4*86400000) dateScore=20; // ±3 Tage
+    else return; // weiter als 3 Tage: komplett ignorieren
     var ts=(t.studio||'').toLowerCase();
     var tt=(t.titel||'').toLowerCase();
     var score=dateScore;
@@ -16058,20 +15213,6 @@ function suchHL(text,q){
       if(badge){ badge.textContent=warnings.length; badge.style.display='inline'; }
     }
   }, 1500);
-
-  // iOS Safari: Tabellen nach Orientierungswechsel neu rendern
-  // (overflow-x:auto shrinkst nicht automatisch beim Zurückdrehen)
-  window.addEventListener('orientationchange', function(){
-    setTimeout(function(){
-      var activeView = document.querySelector('.view.active');
-      if(!activeView) return;
-      var id = activeView.id;
-      if(id === 'view-jahresabschluss') rJahresabschluss();
-      else if(id === 'view-sozialabgaben') rSozialStat();
-      else if(id === 'view-gagenabrechnungen') rZahlungen();
-      else if(id === 'view-gvl') rGVL();
-    }, 350); // 350ms: Rotation-Animation abwarten
-  });
 })();
 
 </script>
