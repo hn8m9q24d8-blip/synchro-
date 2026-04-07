@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '633';
+  if(el) el.textContent = '635';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2193,7 +2193,12 @@ function openDetail(id){
 
   var monthNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var dayNames=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
-  var ur=parseFloat(t.ust_satz)||(db.profil&&db.profil.ust!=null?db.profil.ust:0.07); // t.ust_satz Vorrang
+  // ur: t.ust_satz (Build 632+) → aus Abrechnung berechnet → Profil-Default
+  var _abForUr = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+  var _urFromAb = (_abForUr&&parseFloat(_abForUr.mwst)>0&&parseFloat(_abForUr.brutto)>parseFloat(_abForUr.mwst))
+    ? (function(){ var s=parseFloat(_abForUr.mwst)/(parseFloat(_abForUr.brutto)-parseFloat(_abForUr.mwst)); return Math.abs(s-0.19)<0.01?0.19:Math.abs(s-0.07)<0.005?0.07:Math.round(s*100)/100; })()
+    : null;
+  var ur = parseFloat(t.ust_satz) || _urFromAb || (db.profil&&db.profil.ust!=null?db.profil.ust:0.07);
   // Takes: Kalender-Termin hat Vorrang, Abrechnung als Fallback
   var _abForTakes = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
   var rawTakes=parseInt(t.takes)||parseInt(_abForTakes&&_abForTakes.takes)||0;
@@ -2802,7 +2807,7 @@ function openDetail(id){
 
   // ── MONATS-ABRECH. TERMIN-ANTEIL ──────────────────────────
   if(t.mwst_anteil!=null || t.gutschrift_nr){
-    var ustProzent = t.ust_satz ? Math.round(t.ust_satz*100)+'%' : '7%';
+    var ustProzent = Math.round(ur*100)+'%'; // ur bereits aus t.ust_satz / ab.mwst / Profil
     if(!abHtml){
       var bruttoAnteil = parseFloat(t.brutto_termin)||0;
       var mwstAnteil   = t.mwst_anteil!=null ? parseFloat(t.mwst_anteil) : 0;
