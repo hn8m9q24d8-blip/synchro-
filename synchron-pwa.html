@@ -1819,7 +1819,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '637';
+  if(el) el.textContent = '641';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2671,7 +2671,7 @@ function openDetail(id){
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
-      +'<div class="info-card-header"><span>💶 Abrechnung'+(ab&&ab._editierbar?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
+      +'<div class="info-card-header"><span>💶 Abrechnung'+((ab&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(!hasDispo2?'<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;padding:6px 8px;background:#f9fafb;border-radius:6px">📋 Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
@@ -6976,9 +6976,10 @@ function rJahresabschluss(){
   Object.keys(gnrGruppen).forEach(function(key){
     var g=gnrGruppen[key]; var e=g.abs[0];
     bruttoGesTab += parseFloat(e.gesamt_brutto)||g.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
-    kvGesTab += parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0);
-    rvGesTab += parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0);
-    pvGesTab += parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0);
+    var _tKV=terminByAbId[e.id]; // Termin-Fallback wenn ab.kv fehlt
+    kvGesTab += parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0)||Math.abs(parseFloat(_tKV&&_tKV.kv_abzug)||0);
+    rvGesTab += parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0)||Math.abs(parseFloat(_tKV&&_tKV.rv_abzug)||0);
+    pvGesTab += parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0)||Math.abs(parseFloat(_tKV&&_tKV.pv_abzug)||0);
   });
   // abListe (Termin-Fallback, nicht in gnrGruppen)
   var _gnrInTab = {};
