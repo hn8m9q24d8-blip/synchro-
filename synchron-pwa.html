@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '657';
+  if(el) el.textContent = '660';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7129,8 +7129,11 @@ function rJahresabschluss(){
         va=(ga.abs[0]&&ga.abs[0].studio||'').toLowerCase();
         vb=(gb.abs[0]&&gb.abs[0].studio||'').toLowerCase();
       } else if(_jahresSortCol==='produktion'){
-        va=(ga.abs[0]&&ga.abs[0].produktion||'').toLowerCase();
-        vb=(gb.abs[0]&&gb.abs[0].produktion||'').toLowerCase();
+        // Termin-Titel hat Vorrang über ab.produktion (wird so auch angezeigt)
+        var _taA=(db.termine||[]).find(function(t){return t.gutschrift_nr===ga.gnr&&(t.datum||'').startsWith(String(yr));});
+        var _taB=(db.termine||[]).find(function(t){return t.gutschrift_nr===gb.gnr&&(t.datum||'').startsWith(String(yr));});
+        va=((_taA&&_taA.titel)||ga.abs[0].produktion||'').toLowerCase();
+        vb=((_taB&&_taB.titel)||gb.abs[0].produktion||'').toLowerCase();
       } else if(_jahresSortCol==='brutto'){
         va=ga.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
         vb=gb.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
@@ -7157,7 +7160,14 @@ function rJahresabschluss(){
 
     if(!gruppenSorted.length){
       // Nur Termin-Fallback — alle aus abListe
-      abListe.sort(function(a,b){return a.datum<b.datum?-1:1;}).forEach(function(a){
+      abListe.sort(function(a,b){
+        var va,vb;
+        if(_jahresSortCol==='studio'){ va=(a.studio||'').toLowerCase(); vb=(b.studio||'').toLowerCase(); }
+        else if(_jahresSortCol==='produktion'){ va=(a.produktion||'').toLowerCase(); vb=(b.produktion||'').toLowerCase(); }
+        else if(_jahresSortCol==='brutto'){ va=parseFloat(a.brutto)||0; vb=parseFloat(b.brutto)||0; }
+        else { va=a.datum||''; vb=b.datum||''; }
+        return va<vb?-_jahresSortDir:va>vb?_jahresSortDir:0;
+      }).forEach(function(a){
         html += renderAbRow(a);
       });
     } else {
@@ -7227,7 +7237,14 @@ function rJahresabschluss(){
       var gnrInGruppen = {};
       gruppenSorted.forEach(function(key){ if(gnrGruppen[key].gnr) gnrInGruppen[gnrGruppen[key].gnr]=true; });
       abListe.filter(function(a){ return !a.gutschrift_nr || !gnrInGruppen[a.gutschrift_nr]; })
-        .sort(function(a,b){return a.datum<b.datum?-1:1;})
+        .sort(function(a,b){
+          var va,vb;
+          if(_jahresSortCol==='studio'){ va=(a.studio||'').toLowerCase(); vb=(b.studio||'').toLowerCase(); }
+          else if(_jahresSortCol==='produktion'){ va=(a.produktion||'').toLowerCase(); vb=(b.produktion||'').toLowerCase(); }
+          else if(_jahresSortCol==='brutto'){ va=parseFloat(a.brutto)||0; vb=parseFloat(b.brutto)||0; }
+          else { va=a.datum||''; vb=b.datum||''; }
+          return va<vb?-_jahresSortDir:va>vb?_jahresSortDir:0;
+        })
         .forEach(function(a){ html += renderAbRow(a); });
     }
 
@@ -13411,6 +13428,45 @@ function runIntegrityCheck(silent){
     }
   });
 
+  // 5. Jahresabschluss-Tabelle Quer-Summen-Check
+  // Prüft: Summe aller ab.brutto = Summe aller gnrGruppen-Gesamt-Bruttos
+  jahre.forEach(function(jahr){
+    var sumAbrechnungen = 0, sumGnrGruppen = {};
+    (db.abrechnungen||[]).forEach(function(a){
+      if(!(a.datum||'').startsWith(jahr)) return;
+      if(a.aufgeteilt) return; // Original überspringen — Teile werden gezählt
+      sumAbrechnungen += parseFloat(a.brutto)||0;
+    });
+    // Dedupliziert nach gutschrift_nr (wie Jahresabschluss)
+    var gnrSeen = {};
+    var sumTabelle = 0, kvTabelle = 0, rvTabelle = 0, pvTabelle = 0;
+    (db.abrechnungen||[]).forEach(function(a){
+      if(!(a.datum||'').startsWith(jahr)) return;
+      if(a.aufgeteilt) return;
+      var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
+      if(gnrSeen[key]) return;
+      gnrSeen[key] = true;
+      var gb = parseFloat(a.gesamt_brutto)||parseFloat(a.brutto)||0;
+      var gk = parseFloat(a.gesamt_kv)||Math.abs(parseFloat(a.kv)||0);
+      var gr = parseFloat(a.gesamt_rv)||Math.abs(parseFloat(a.rv)||0);
+      var gp = parseFloat(a.gesamt_pv)||Math.abs(parseFloat(a.pv)||0);
+      sumTabelle += gb;
+      kvTabelle  += gk;
+      rvTabelle  += gr;
+      pvTabelle  += gp;
+    });
+    sumTabelle = Math.round(sumTabelle*100)/100;
+    sumAbrechnungen = Math.round(sumAbrechnungen*100)/100;
+    if(Math.abs(sumTabelle - sumAbrechnungen) > 0.10){
+      warnings.push('⚠ Jahresabschluss '+jahr+': Tabelle '+fmtEur(sumTabelle)+' ≠ Summe db.abrechnungen '+fmtEur(sumAbrechnungen)+' — mögliche Doppelzählung oder fehlende Einträge');
+    }
+    // KV+RV+PV sollten < Brutto sein (Plausibilität)
+    var svTabelle = Math.round((kvTabelle+rvTabelle+pvTabelle)*100)/100;
+    if(svTabelle > sumTabelle && sumTabelle > 0){
+      warnings.push('⚠ Jahresabschluss '+jahr+': SV-Summe '+fmtEur(svTabelle)+' > Brutto '+fmtEur(sumTabelle)+' — SV-Werte unplausibel');
+    }
+  });
+
   // Ergebnis speichern
   db._lastIntegrityCheck = {
     datum: today(),
@@ -13451,8 +13507,8 @@ function runIntegrityCheckAndShow(){
       +'</div>';
   } else {
     // Kategorien trennen
-    var strukturFehler = warnings.filter(function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0; });
-    var finanzFehler = warnings.filter(function(w){ return w.indexOf('MwSt')>=0||w.indexOf('Zahlung')>=0||w.indexOf('zahlungsdatum')>=0||w.indexOf('bezahlt')>=0; });
+    var strukturFehler = warnings.filter(function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0||w.indexOf('Doppelte')>=0||w.indexOf('Fehlender')>=0; });
+    var finanzFehler = warnings.filter(function(w){ return w.indexOf('MwSt')>=0||w.indexOf('Zahlung')>=0||w.indexOf('zahlungsdatum')>=0||w.indexOf('bezahlt')>=0||w.indexOf('Brutto')>=0||w.indexOf('Jahresabschluss')>=0||w.indexOf('Tabelle')>=0||w.indexOf('SV-Summe')>=0||w.indexOf('Monats-GS')>=0; });
     var sonstige = warnings.filter(function(w){ return strukturFehler.indexOf(w)<0&&finanzFehler.indexOf(w)<0; });
 
     function renderKat(titel, liste, farbe){
