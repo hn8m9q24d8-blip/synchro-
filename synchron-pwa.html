@@ -1842,7 +1842,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '645';
+  if(el) el.textContent = '647';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8852,6 +8852,12 @@ function resizeImageB64(dataURL, maxPx, quality, cb){
 
 function dokAnalyseDoc(d, key, cb){
   // Bild nicht mehr im Speicher — iOS hat es verworfen
+  // Wenn dataURL fehlt: bei Split-Child im Parent suchen (nur temporaer fuer Analyse)
+  var _dataURLGeliehen = false;
+  if(!d.dataURL && d._splitFromPdf){
+    var _parFallback=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+    if(_parFallback && _parFallback.dataURL){ d.dataURL = _parFallback.dataURL; _dataURLGeliehen=true; }
+  }
   if(!d.dataURL && d.mime!=='application/pdf'){
     showToast('⚠ Bild nicht mehr im Speicher — bitte Dokument löschen und neu einlesen');
     if(cb) cb(); return;
@@ -9592,6 +9598,7 @@ function dokAnalyseDoc(d, key, cb){
       console.error('dokAnalyseDoc parse error:', e, 'raw:', txt&&txt.slice(0,200));
     }
     // Recherche nur auf Knopfdruck im Termin — nicht automatisch
+    if(_dataURLGeliehen){ d.dataURL=null; } // Geliehenes Parent-dataURL freigeben
     if(cb) cb();
     };
     xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; if(cb) cb(); };
@@ -12230,7 +12237,16 @@ function dokAnalyseOne(){
   if(!d) return;
   var key = (db.profil&&db.profil.apiKey) || localStorage.getItem('anthropic_api_key') || null;
   if(!key){ showToast('Kein API-Key gesetzt'); return; }
-  if(!d.dataURL){ showToast('Kein Bild vorhanden'); return; }
+  // dataURL kann beim Split-Child fehlen — dann vom Parent holen
+  var _analyseDataURL = d.dataURL;
+  if(!_analyseDataURL && d._splitFromPdf){
+    var _par=(db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
+    if(_par && _par.dataURL) _analyseDataURL = _par.dataURL;
+  }
+  if(!_analyseDataURL){ showToast('PDF nicht mehr im Speicher — bitte Dokument neu einlesen'); return; }
+  // Temporaer zuweisen damit dokAnalyseDoc es findet
+  var _hadDataURL = !!d.dataURL;
+  if(!_hadDataURL) d.dataURL = _analyseDataURL;
 
   // Spinner-Overlay anzeigen
   var overlay = document.createElement('div');
@@ -12252,6 +12268,8 @@ function dokAnalyseOne(){
     // Overlay entfernen
     var ol = document.getElementById('_analyse-overlay');
     if(ol && ol.parentNode) ol.parentNode.removeChild(ol);
+    // Temporäre dataURL wieder entfernen wenn sie nur für die Analyse geliehen war
+    if(!_hadDataURL) d.dataURL = null; // Geliehenes dataURL wieder entfernen
     save(db);
     rDokumente();
     // Panel kurz schließen + neu öffnen → zwingt iOS zu frischem Render
