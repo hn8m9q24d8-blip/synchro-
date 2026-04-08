@@ -1742,6 +1742,29 @@ function save(d){
     }
   }
 }
+
+// ── DATURL-SCHUTZ: immer diese Funktion verwenden, niemals direkt dok.dataURL=null setzen ──
+// Prueft ob ein Geschwister-Split-Dok das dataURL noch braucht, bevor es geloescht wird.
+// splitSafe=true  → nur loeschen wenn kein unbestaedigtes Geschwister mehr existiert (Standard)
+// splitSafe=false → sofort loeschen (z.B. Storno, Speicher-Notfall)
+function _releaseDokDataURL(dok, splitSafe){
+  if(!dok) return;
+  if(splitSafe !== false){
+    var parentId = dok._splitFromPdf || dok.id;
+    var nochGebraucht = (db.dokumente||[]).some(function(x){
+      return x.id !== dok.id && x._splitFromPdf === parentId && !x.bestaetigt;
+    });
+    if(nochGebraucht) return; // Geschwister braucht es noch — NICHT loeschen
+    // Parent ebenfalls freigeben wenn vorhanden
+    if(dok._splitFromPdf){
+      var par=(db.dokumente||[]).find(function(x){return x.id===dok._splitFromPdf;});
+      if(par){ par.dataURL=null; par.thumb=null; }
+    }
+  }
+  dok.dataURL=null;
+}
+
+
 var db=load();
 
 // ── MIGRATION: bestätigte Dokumente + _archivLog → importedFiles ────────
@@ -1819,7 +1842,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '641';
+  if(el) el.textContent = '645';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2781,10 +2804,16 @@ function openDetail(id){
     if(t.takes_differenz && t.takes_differenz !== 0){
       var takeDiff = t.takes_differenz;
       var rateVal  = parseFloat(t.rate)||parseFloat(t.rate_abgerechnet)||0;
-      var euroAust = takeDiff > 0 ? Math.round(takeDiff*rateVal*100)/100 : 0;
+      // takeDiff = Dispo - Abrechnung
+      // positiv = Studio hat zu wenig gezahlt (ausstehend)
+      // negativ = Studio hat zu viel gezahlt (Overpayment)
+      var euroAust = Math.abs(Math.round(takeDiff*rateVal*100)/100);
+      var takeMsg = takeDiff > 0
+        ? '<b>+'+takeDiff+' Takes</b> nicht abgerechnet'
+        : '<b>'+Math.abs(takeDiff)+' Take'+(Math.abs(takeDiff)>1?'s':'')+' zu viel</b> abgerechnet (Studio zahlte mehr als Dispo)';
       diffLines += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
-        +'<div style="font-size:12px;color:#92400e"><b>'+(takeDiff>0?'+':'')+takeDiff+' Takes</b> nicht abgerechnet</div>'
-        +(euroAust>0?'<div style="font-size:13px;font-weight:900;color:#c2410c">'+fmtEur(euroAust)+' ausstehend</div>':'')
+        +'<div style="font-size:12px;color:#92400e">'+takeMsg+'</div>'
+        +(euroAust>0?'<div style="font-size:13px;font-weight:900;color:'+(takeDiff>0?'#c2410c':'#15803d')+'">'+fmtEur(euroAust)+(takeDiff<0?' zu viel':' ausstehend')+'</div>':'')
         +'</div>';
     }
     if(t.rate_differenz && t.rate_differenz !== 0){
@@ -2995,10 +3024,8 @@ function saveMergeChanges(){
         return x.id !== dok.id && x._splitFromPdf === parentId && !x.bestaetigt;
       });
       if(!nochGebraucht){
-        // Parent-dataURL löschen
-        var parentDok = parentId !== dok.id ? (db.dokumente||[]).find(function(x){return x.id===parentId;}) : dok;
-        if(parentDok){ parentDok.dataURL=null; parentDok.thumb=null; }
-        dok.dataURL=null; dok.thumb=null;
+        _releaseDokDataURL(dok, false); // thumb separat
+        dok.thumb=null;
       }
       dok._pendingDelete=false;
       _archiveDateiname(dok.dateiname||dok.beschr, dok.terminId||null, dok.typ||null);
@@ -3064,10 +3091,19 @@ function saveMergeChanges(){
     if(dp2) dp2.classList.remove('open');
     ctid=null;
 
-    // Noch offene Sessions in diesem Dok? → zurück zum Session-Menü, NICHT zur nächsten Gutschrift
+    // Noch offene Sessions → direkt zur nächsten Session (kein manueller Klick nötig)
     if(offeneSessions > 0){
+      var _naechsteIdx = -1;
+      if(dok && dok.sessions){
+        dok.sessions.forEach(function(s,si){ if(!s._done && _naechsteIdx<0) _naechsteIdx=si; });
+      }
       switchView('dokumente');
-      setTimeout(function(){ dokOpenDetail(returnId); }, 200);
+      if(_naechsteIdx >= 0){
+        showToast('✓ Session gespeichert · Weiter: '+(+_naechsteIdx+1)+' von '+dok.sessions.length);
+        setTimeout(function(){ dokSessionPeek(returnId, _naechsteIdx); }, 300);
+      } else {
+        setTimeout(function(){ dokOpenDetail(returnId); }, 200);
+      }
       return;
     }
 
@@ -3123,8 +3159,16 @@ function saveMergeChanges(){
       }
       dok.bestaetigt = true;
       dok.awaitConfirm = false;
-      dok.dataURL = null; // Vollbild sofort freigeben — Speicher
-      dok._pendingDelete = true; // thumb auch löschen beim nächsten saveMerge
+      // dataURL nur loeschen wenn keine unbestaetigten Split-Geschwister mehr
+      var _splitPId = dok._splitFromPdf || dok.id;
+      var _nochOffene = (db.dokumente||[]).some(function(x){
+        return x.id !== dok.id && x._splitFromPdf === _splitPId && !x.bestaetigt;
+      });
+      if(!_nochOffene){
+        _releaseDokDataURL(dok, false); // splitSafe=false: guard schon oben gemacht
+        dok.thumb=null;
+        dok._pendingDelete = true;
+      }
       _archiveDateiname(dok.dateiname||dok.beschr, ctid, dok.typ||'abrechn');
       _abT.abgerechnet = true;
       if(dok.dateiname||dok.beschr) _abT.abrechn_dateiname = dok.dateiname||'';
@@ -7955,7 +7999,7 @@ function syncAnalyseNew(ids,cb){
           var nochGebrauchtNachAnalyse = (db.dokumente||[]).some(function(x){
             return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
           });
-          if(!nochGebrauchtNachAnalyse) d.dataURL=null;
+          if(!nochGebrauchtNachAnalyse) _releaseDokDataURL(d, false);
         });
         save(db);cb(results);showSyncReview(ids);
       }
@@ -8680,7 +8724,7 @@ function dokBestaetigen(){
   var _dokNochGebraucht = (db.dokumente||[]).some(function(x){
     return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
   });
-  if(!_dokNochGebraucht){ d.dataURL=null; } // thumb behalten für Miniaturansicht
+  if(!_dokNochGebraucht){ _releaseDokDataURL(d, false); } // splitSafe=false: guard oben
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, d.typ||null);
   if(d.terminId){
     var t2=(db.termine||[]).find(function(x){return x.id===d.terminId;});
@@ -11341,7 +11385,7 @@ function dokBestaetigenMonat(dokId){
   // Abrechnung als Ganzes bestätigen
   d.bestaetigt=true;
   d.awaitConfirm=false;
-  d.dataURL=null; // RAM freigeben
+  // dataURL via Schutzfunktion — prueft Geschwister-Split-Docs
   var allSessionsDone = d.sessions.every(function(s){return s._done;});
   if(allSessionsDone){
     // dataURL NUR löschen wenn alle Sessions dieser Gruppe bestätigt sind
@@ -11350,12 +11394,7 @@ function dokBestaetigenMonat(dokId){
       return x.id !== d.id && x._splitFromPdf === _parentId2 && !x.bestaetigt;
     });
     if(!istNochReferenziert){
-      // Auch Parent-Dok dataURL löschen
-      if(d._splitFromPdf){
-        var _par = (db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
-        if(_par){ _par.dataURL=null; _par.thumb=null; }
-      }
-      d.dataURL=null;
+      _releaseDokDataURL(d, false); // splitSafe=false: guard schon oben gemacht
       d.thumb=null;
     }
   }
@@ -11592,7 +11631,7 @@ function dokStornoAlsAusgabe(dokId){
   d.storno = true;
   d.bestaetigt = true;
   d.awaitConfirm = false;
-  d.dataURL = null;
+  _releaseDokDataURL(d, false); // Storno: sofort freigeben
   d._pendingDelete = true;
   // Notiz am Kalendertermin hinterlassen wenn vorhanden
   var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
@@ -11634,7 +11673,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
   var _nochGebraucht = (db.dokumente||[]).some(function(x){
     return x.id !== d.id && x._splitFromPdf === _parentId && !x.bestaetigt;
   });
-  if(!_nochGebraucht){ d.dataURL = null; }
+  if(!_nochGebraucht){ _releaseDokDataURL(d, false); } // splitSafe=false: guard oben
   // _archivLog jetzt schon — Foto-Löschung kommt später via _pendingDelete
   _archiveDateiname(d.dateiname||d.beschr, terminId, d.typ||'dispo');
   // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
@@ -12105,7 +12144,7 @@ function dokLinkMultiConfirm(){
       var _multiNochGebraucht = (db.dokumente||[]).some(function(x){
         return x.id !== d.id && x._splitFromPdf === d.id && !x.bestaetigt;
       });
-      if(!_multiNochGebraucht){ d.dataURL=null; d.thumb=null; }
+      if(!_multiNochGebraucht){ _releaseDokDataURL(d, false); d.thumb=null; } // splitSafe=false: guard oben
       // Archiv-Log für alle aufgeteilten Termine
       (terminIds||[]).forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid, d.typ||'abrechn'); });
       if(!(terminIds&&terminIds.length)) _archiveDateiname(d.dateiname||d.beschr, null);
