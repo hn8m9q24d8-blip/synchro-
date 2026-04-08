@@ -940,15 +940,16 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <!-- Hero Banner -->
   <div style="background:linear-gradient(135deg,#1a2332 0%,#263238 100%);padding:16px 16px 14px;flex-shrink:0">
-    <div style="color:#90a4ae;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px">GESAMTVERDIENST</div>
-    <div style="font-size:32px;font-weight:900;color:#fff;letter-spacing:-1px;margin-bottom:10px" id="zahl-total">€ 0,00</div>
+    <div style="color:#90a4ae;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px">KALKULIERT (DISPO)</div>
+    <div style="font-size:32px;font-weight:900;color:#fff;letter-spacing:-1px;margin-bottom:2px" id="zahl-total">€ 0,00</div>
+    <div style="color:#78909c;font-size:10px;margin-bottom:8px">Aus Kalender-Dispo · Steuerzahlen im Jahresabschluss</div>
     <div style="display:flex;gap:0">
       <div style="flex:1">
         <div style="color:#ef9a9a;font-size:10px;font-weight:600;margin-bottom:2px">OFFEN</div>
         <div id="zahl-offen" style="color:#ef9a9a;font-size:15px;font-weight:800">€ 0,00</div>
       </div>
       <div style="flex:1">
-        <div style="color:#ffcc80;font-size:10px;font-weight:600;margin-bottom:2px">ABGERECHNET</div>
+        <div style="color:#ffcc80;font-size:10px;font-weight:600;margin-bottom:2px">ABGR. (DISPO)</div>
         <div id="zahl-abgerechnet" style="color:#ffcc80;font-size:15px;font-weight:800">€ 0,00</div>
       </div>
       <div style="flex:1;text-align:right">
@@ -1842,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '649';
+  if(el) el.textContent = '657';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3075,11 +3076,18 @@ function saveMergeChanges(){
   if(returnId){
     var dok=(db.dokumente||[]).find(function(x){return x.id===returnId;});
 
-    // Session _done setzen (immer zuerst — auch bei Split-Docs mit Sessions)
+    // Session _done setzen — NUR die erste noch nicht erledigte Session mit dieser terminId
+    // (verhindert dass doppelte terminIds alle Sessions gleichzeitig als done markieren)
     if(dok && dok.sessions){
+      var _gesetzt = false;
       dok.sessions.forEach(function(s){
-        if(s.terminId===ctid) s._done=true;
+        if(!_gesetzt && s.terminId===ctid && !s._done){
+          s._done=true;
+          _gesetzt=true;
+        }
       });
+      // Fallback: wenn keine offene Session gefunden, alle mit dieser ID als done markieren
+      if(!_gesetzt) dok.sessions.forEach(function(s){ if(s.terminId===ctid) s._done=true; });
       save(db);
     }
 
@@ -6891,6 +6899,8 @@ function rUstStat(){
 }
 
 var _jahresJahr = new Date().getFullYear();
+var _jahresSortCol = 'datum'; // 'datum'|'studio'|'produktion'
+var _jahresSortDir = 1; // 1=asc, -1=desc
 
 function jahresJahrWechsel(d){
   _jahresJahr += d;
@@ -6928,6 +6938,12 @@ function migrateAbrechungen(){
   else showToast('Nichts zu migrieren');
   rJahresabschluss();
 }
+function _jahresSort(col){
+  if(_jahresSortCol===col) _jahresSortDir*=-1;
+  else { _jahresSortCol=col; _jahresSortDir=1; }
+  rJahresabschluss();
+}
+
 function rJahresabschluss(){
   var el = document.getElementById('jahres-content');
   var sub = document.getElementById('jahres-sub');
@@ -6954,6 +6970,9 @@ function rJahresabschluss(){
   var gnrGruppen = {}; // key → {abs:[], gnr, datum, studio, produktion}
   (db.abrechnungen||[]).forEach(function(a){
     if(!(a.datum||'').startsWith(String(yr))) return;
+    // aufgeteilt-Original NICHT zählen — nur die teilAb-Einträge (_aufgeteiltVon gesetzt)
+    // verhindert Doppelzählung: Original + Teile haben dieselbe gutschrift_nr
+    if(a.aufgeteilt) return;
     var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
     if(!gnrGruppen[key]) gnrGruppen[key]={abs:[], key:key, gnr:a.gutschrift_nr, datum:a.datum, studio:a.studio, produktion:a.produktion, dateiname:a.dateiname};
     gnrGruppen[key].abs.push(a);
@@ -7093,18 +7112,32 @@ function rJahresabschluss(){
       +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
       +'<thead><tr>'
       +'<th style="'+colHead+'text-align:left">Gutschrift-Nr.</th>'
-      +'<th style="'+colHead+'text-align:left">Studio</th>'
-      +'<th style="'+colHead+'text-align:left">Produktion</th>'
-      +'<th style="'+colNumH+'">Brutto</th>'
+      +'<th style="'+colHead+'text-align:left;cursor:pointer;user-select:none" onclick="_jahresSort(\'studio\')">Studio'+(_jahresSortCol==='studio'?(_jahresSortDir>0?' ▲':' ▼'):'')+'</th>'
+      +'<th style="'+colHead+'text-align:left;cursor:pointer;user-select:none" onclick="_jahresSort(\'produktion\')">Produktion'+(_jahresSortCol==='produktion'?(_jahresSortDir>0?' ▲':' ▼'):'')+'</th>'
+      +'<th style="'+colNumH+'cursor:pointer;user-select:none" onclick="_jahresSort(\'brutto\')">Brutto'+(_jahresSortCol==='brutto'?(_jahresSortDir>0?' ▲':' ▼'):'')+'</th>'
       +'<th style="'+colNumH+'">KV</th>'
       +'<th style="'+colNumH+'">RV</th>'
       +'<th style="'+colNumH+'">PV</th>'
       +'<th style="'+colNumH+'">SV</th>'
       +'</tr></thead><tbody>';
 
-    // Gruppen nach Datum sortieren
+    // Gruppen sortieren nach aktiver Spalte
     var gruppenSorted = Object.keys(gnrGruppen||{}).sort(function(a,b){
-      return (gnrGruppen[a].datum||'') < (gnrGruppen[b].datum||'') ? -1 : 1;
+      var ga=gnrGruppen[a], gb=gnrGruppen[b];
+      var va,vb;
+      if(_jahresSortCol==='studio'){
+        va=(ga.abs[0]&&ga.abs[0].studio||'').toLowerCase();
+        vb=(gb.abs[0]&&gb.abs[0].studio||'').toLowerCase();
+      } else if(_jahresSortCol==='produktion'){
+        va=(ga.abs[0]&&ga.abs[0].produktion||'').toLowerCase();
+        vb=(gb.abs[0]&&gb.abs[0].produktion||'').toLowerCase();
+      } else if(_jahresSortCol==='brutto'){
+        va=ga.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+        vb=gb.abs.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0);
+      } else {
+        va=ga.datum||''; vb=gb.datum||'';
+      }
+      return va<vb ? -_jahresSortDir : va>vb ? _jahresSortDir : 0;
     });
 
     // Hilfsfunktion: eine Zeile rendern
@@ -9412,9 +9445,10 @@ function dokAnalyseDoc(d, key, cb){
       if(d.typ==='monats_abrechn' && j.sessions && Array.isArray(j.sessions)){
         // Prüfen ob jede Session eigene vollständige Finanzdaten hat (FFS-Stil, mehrere Seiten)
         // In dem Fall: aufteilen in separate abrechn-Dokumente statt monats_abrechn
-        // Split wenn jede Session eigenes brutto_termin hat (auszahlung optional — KI liefert es nicht immer)
+        // Split NUR wenn jede Session eigene vollständige Finanzdaten hat (FFS-Stil: brutto_termin UND auszahlung)
+        // VSI-Stil: Sessions haben brutto_termin aber kein eigenes auszahlung → bleibt monats_abrechn!
         var alleHabenFinanzen = j.sessions.length > 1 && j.sessions.every(function(s){
-          return s.brutto_termin || s.auszahlung; // mind. eines muss vorhanden sein
+          return s.brutto_termin && s.auszahlung;
         });
 
         if(alleHabenFinanzen){
@@ -11199,8 +11233,9 @@ function dokSessionSkip(dokId, si){
 }
 
 function dokBestaetigenMonat(dokId){
+  try {
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
-  if(!d||!d.sessions) return;
+  if(!d||!d.sessions){ showToast('⚠ Dok nicht gefunden: '+dokId); return; }
 
   // Alle Eingabefelder übernehmen — Nutzer-Korrekturen am Dok (Titel, Studio etc.)
   _applyEditedFields(d);
@@ -11447,6 +11482,11 @@ function dokBestaetigenMonat(dokId){
   showToast('\u2713 '+logLabel+msg);
   dokDetailClose();
   rDokumente();
+  } catch(e){
+    console.error('dokBestaetigenMonat Fehler:', e);
+    showToast('\u26a0 Fehler beim Abschließen: '+e.message.slice(0,60));
+    save(db); rDokumente();
+  }
 }
 
 // Liest alle dedit-* Eingabefelder zurück ins Dokument-Objekt
@@ -12744,9 +12784,41 @@ function ustExport(){
   var einnTermine = (db.termine||[]).filter(function(t){return t.datum&&t.datum.startsWith(ym);});
   var ausgaben = (db.ausgaben||[]).filter(function(a){return a.datum&&a.datum.startsWith(ym);});
 
-  var einnNetto=0;
-  einnTermine.forEach(function(t){einnNetto+=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);});
-  var einnUst=einnNetto*urEinn;
+  // Export nutzt dieselbe Berechnung wie die USt-Anzeige (Ist-Versteuerung aus Abrechnungen)
+  // NICHT aus kommgage berechnen — nur bestätigte Abrechnungen mit Zahlungseingang zählen
+  // einnZeilen durch dieselbe Loop-Logik aufbauen wie in rUstVoranmeldung
+  var _snapUstExp = function(satz){ if(Math.abs(satz-0.07)<0.005) return 0.07; if(Math.abs(satz-0.19)<0.01) return 0.19; return Math.round(satz*100)/100; };
+  var einnZeilenExp = [];
+  var _gezDokExp = {}, _gezTermExp = {};
+  (db.termine||[]).forEach(function(t){
+    var zd=null;
+    if(t.abId){ var _a=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}); if(_a&&_a.zahlungDatum) zd=_a.zahlungDatum; }
+    if(!zd&&t.zahlungDatum) zd=t.zahlungDatum;
+    if(!zd){ var _z=(db.zahlungen||[]).find(function(z){return z.terminId===t.id||(z.terminIds&&z.terminIds.indexOf(t.id)>=0);}); if(_z) zd=_z.datum; }
+    if(!zd||!zd.startsWith(ym)) return;
+    if(t.dokIds&&t.dokIds.length){
+      t.dokIds.forEach(function(did){
+        if(_gezDokExp[did]) return;
+        var dk=(db.dokumente||[]).find(function(d){return d.id===did&&d.bestaetigt;});
+        if(!dk) return;
+        if(dk.typ==='monats_abrechn'||dk.typ==='abrechn'){
+          _gezDokExp[did]=true;
+          var br=parseFloat(dk.brutto)||0, mw=parseFloat(dk.mwst)||0;
+          if(br) einnZeilenExp.push({label:esc(dk.studio||'')+(dk.gutschrift_nr?' · '+dk.gutschrift_nr:''),netto:br,ust:mw,zahlDatum:zd});
+        }
+      });
+      return;
+    }
+    if(_gezTermExp[t.id]) return;
+    _gezTermExp[t.id]=true;
+    var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+    if(ab&&ab.brutto&&!ab.aufgeteilt){
+      var br=parseFloat(ab.brutto)||0, mw=parseFloat(ab.mwst)||0;
+      if(br) einnZeilenExp.push({label:esc(t.titel||t.studio||'')+(ab.gutschrift_nr?' · '+ab.gutschrift_nr:''),netto:br,ust:mw,zahlDatum:zd});
+    }
+  });
+  var einnNetto=einnZeilenExp.reduce(function(s,e){return s+e.netto;},0);
+  var einnUst=Math.round(einnZeilenExp.reduce(function(s,e){return s+e.ust;},0)*100)/100;
   var vorstUst=0; ausgaben.forEach(function(a){vorstUst+=parseFloat(a.vorsteuer)||0;});
   var zahllast=einnUst-vorstUst;
 
@@ -12754,14 +12826,13 @@ function ustExport(){
     +'<style>body{font-family:Arial,sans-serif;font-size:12px;margin:24px}h1{font-size:16px}table{width:100%;border-collapse:collapse;margin-bottom:16px}'
     +'th{background:#7c3aed;color:#fff;padding:6px 8px;text-align:left}td{padding:5px 8px;border-bottom:1px solid #eee}'
     +'.total{font-weight:bold;background:#f3f4f6}.zahllast{font-size:18px;font-weight:900;color:#7c3aed}</style></head><body>'
-    +'<h1>USt-Voranmeldung – '+MONTH_NAMES[_ustMonth]+' '+_ustYear+'</h1>'
-    +'<p>Erstellt: '+(new Date().toLocaleDateString('de-DE'))+'</p>'
-    +'<h2>Einnahmen</h2><table><tr><th>Datum</th><th>Produktion</th><th>Studio</th><th>Netto</th><th>USt '+Math.round(urEinn*100)+'%</th></tr>';
-  einnTermine.forEach(function(t){
-    var n=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-    html+='<tr><td>'+fd(t.datum)+'</td><td>'+esc(t.titel||'')+'</td><td>'+esc(t.studio||'')+'</td><td>'+fmtEur(n)+'</td><td>'+fmtEur(n*urEinn)+'</td></tr>';
+    +'<h1>USt-Voranmeldung – '+MONTH_NAMES[_ustMonth]+' '+_ustYear+' (Ist-Versteuerung)</h1>'
+    +'<p>Erstellt: '+(new Date().toLocaleDateString('de-DE'))+'  · Nur Zahlungseingänge in diesem Monat</p>'
+    +'<h2>Einnahmen mit Zahlungseingang</h2><table><tr><th>Zahldatum</th><th>Abrechnung</th><th>Brutto</th><th>USt</th></tr>';
+  einnZeilenExp.forEach(function(e){
+    html+='<tr><td>'+fd(e.zahlDatum)+'</td><td>'+e.label+'</td><td>'+fmtEur(e.netto)+'</td><td>'+fmtEur(e.ust)+'</td></tr>';
   });
-  html+='<tr class="total"><td colspan="3">Summe</td><td>'+fmtEur(einnNetto)+'</td><td>'+fmtEur(einnUst)+'</td></tr></table>';
+  html+='<tr class="total"><td colspan="2">Summe</td><td>'+fmtEur(einnNetto)+'</td><td>'+fmtEur(einnUst)+'</td></tr></table>';
   html+='<h2>Ausgaben / Vorsteuer</h2><table><tr><th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th>Brutto</th><th>Vorsteuer</th></tr>';
   ausgaben.forEach(function(a){
     html+='<tr><td>'+fd(a.datum)+'</td><td>'+esc(a.beschr||'')+'</td><td>'+esc(a.kat||'')+'</td><td>'+fmtEur(a.brutto)+'</td><td>'+fmtEur(a.vorsteuer)+'</td></tr>';
@@ -13144,7 +13215,24 @@ function runIntegrityCheck(silent){
     }
   });
 
-  // 5. ab.bezahlt=true aber t.status nicht bezahlt → auto-fix
+  // 5. Termin abgerechnet=true aber kein abId — Jahresabschluss und USt blind
+  (db.termine||[]).forEach(function(t){
+    if(t.abgerechnet && !t.abId){
+      warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): abgerechnet=true aber keine Abrechnung verknüpft — taucht nicht in Jahresabschluss/USt auf');
+    }
+    // Abrechnung ohne MwSt → USt-Voranmeldung schweigt
+    if(t.abId){
+      var abMwst=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(abMwst && parseFloat(abMwst.brutto)>0 && !parseFloat(abMwst.mwst)){
+        // Nur warnen wenn keine gesamt_mwst als Fallback vorhanden
+        if(!parseFloat(abMwst.gesamt_mwst)){
+          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): Abrechnung hat kein MwSt-Feld — USt-Voranmeldung unvollständig');
+        }
+      }
+    }
+  });
+
+  // 5b. ab.bezahlt=true aber t.status nicht bezahlt → auto-fix
   (db.termine||[]).forEach(function(t){
     if(t.status==='bezahlt') return;
     if(t.abId){
