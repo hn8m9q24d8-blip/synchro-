@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '660';
+  if(el) el.textContent = '663';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3108,7 +3108,12 @@ function saveMergeChanges(){
       switchView('dokumente');
       if(_naechsteIdx >= 0){
         showToast('✓ Session gespeichert · Weiter: '+(+_naechsteIdx+1)+' von '+dok.sessions.length);
-        setTimeout(function(){ dokSessionPeek(returnId, _naechsteIdx); }, 300);
+        var _advanceId = returnId; // returnId sichern vor dem Timeout
+        var _advanceIdx = _naechsteIdx;
+        setTimeout(function(){
+          _dokCurrentId = _advanceId; // sicherstellen dass _dokCurrentId korrekt gesetzt ist
+          dokSessionPeek(_advanceId, _advanceIdx);
+        }, 300);
       } else {
         setTimeout(function(){ dokOpenDetail(returnId); }, 200);
       }
@@ -7435,7 +7440,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
-  else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');setTimeout(rMahnwesen,50);}
+  else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');setTimeout(function(){var _mel=document.getElementById('mahn-scroll');if(_mel)rMahnwesen();else setTimeout(rMahnwesen,200);},100);}
   else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
   else if(v==='gagenabrechnungen'){rZahlungen();}
@@ -9175,6 +9180,24 @@ function dokAnalyseDoc(d, key, cb){
     +'  auszahlung = Auszahlungsbetrag\n'
     +'  sessions = Array aller Einzeltermine:\n'
     +'    ⚠⚠⚠ REGEL JE NACH PDF-TYP:\n'
+    +'\n'
+    +'    STUDIO HAMBURG SYNCHRON — SESAM-JAHRESKORREKTUR-FORMAT (nur bei diesem Studio!):\n'
+    +'    Erkennbar an: "Studio Hamburg Synchron GmbH" + "Korrektur Gehaltsabrechnung X/YEAR (für Y/YEAR)"\n'
+    +'    ⚠ DIESE REGELN NUR BEI STUDIO HAMBURG ANWENDEN — NICHT auf andere Studios übertragen!\n'
+    +'    Das PDF hat 12-24 Seiten — NUR SEITEN MIT GESAMTBRUTTO > 0 SIND RELEVANT!\n'
+    +'    Seiten mit "Gesamtbrutto: 0,00" → KOMPLETT IGNORIEREN (reine Verrechnungsseiten ohne Buchungswirkung)\n'
+    +'    Seiten mit echtem Brutto (z.B. 172,00 oder 820,00 oder 616,00) → als session aufnehmen\n'
+    +'    Pro session: brutto_termin = der "Gesamtbrutto"-Wert dieser Seite\n'
+    +'    kv_abzug = "Techniker Krankenversicherung" lfd. Betrag (z.B. -12,04 oder -57,40)\n'
+    +'    rv_abzug = "Rentenversicherung lfd." Betrag\n'
+    +'    pv_abzug = "Pflegeversicherung lfd." Betrag\n'
+    +'    mwst = "Umsatzsteuer 7%" Betrag dieser Seite\n'
+    +'    auszahlung = "Differenz für Folgemonate" Betrag (NICHT Auszahlungsbetrag aus der Zusammenfassung!)\n'
+    +'    datum = erstes Aufnahmedatum auf dieser Seite aus dem Zeitraum-Feld\n'
+    +'    titel = Produktionsname aus der Positionszeile (z.B. "Power Play 2" oder "Espe ce menace")\n'
+    +'    gutschrift_nr = leer lassen (dieses Format hat keine eigene GS-Nr. pro Seite)\n'
+    +'    typ = "monats_abrechn"\n'
+    +'    Mehrere Produktionen auf einer Seite: alle summieren für brutto_termin\n'
     +'\n'
     +'    FALL A — PDF hat MEHRERE SEITEN (erkennbar an mehreren "GAGE / Gutschrift" Überschriften oder mehreren "AUSZAHLUNG" Blöcken):\n'
     +'    → JEDE SEITE = GENAU EINE session. 2 Seiten = 2 sessions. 7 Seiten = 7 sessions.\n'
