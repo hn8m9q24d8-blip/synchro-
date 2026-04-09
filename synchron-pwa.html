@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '663';
+  if(el) el.textContent = '669';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8949,7 +8949,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    ABLAUF — ZWINGEND in dieser Reihenfolge:\n'
     +'    1) Scanne die Sprecher-Spalte von oben nach unten\n'
     +'    2) Finde die Zeile wo "Tim Knauer" (oder "T. Knauer" o.ä.) steht\n'
-    +'    3) Lies ALLE Werte NUR aus DIESER Zeile: Rolle, von, bis, EPS, Takes\n'
+    +'    3) Die ROLLE steht in der Spalte LINKS neben dem Sprecher-Namen — lies sie aus TIM KNAUERs Zeile\n'
+    +'    ⚠⚠⚠ TABELLENFORMAT-FALLE: Manchmal steht die Rolle LINKS und der Sprecher RECHTS.\n'
+    +'       Beispiel: "Dave | Tim Knauer | 14:00 | 14:20 | 12 | 110:12"\n'
+    +'       → Rolle = "Dave" (links), Sprecher = "Tim Knauer" (rechts davon)\n'
+    +'       Die Rolle gehört zur Zeile wo Tim Knauers Name steht — NICHT zur Zeile darüber oder darunter!\n'
     +'    4) Alle anderen Zeilen komplett ignorieren — auch wenn sie ähnliche EPS-Nummern haben!\n'
     +'    KREUZPRÜFUNG: Die Zeile muss eine Uhrzeit (von/bis) haben — das ist Tims Aufnahmezeit.\n'
     +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
@@ -9111,6 +9115,9 @@ function dokAnalyseDoc(d, key, cb){
     +'  auszahlung = Auszahlungsbetrag (Netto + MwSt)\n'
     +'  produktionstyp_kino = true wenn "Kino" in den Positionen steht\n'
     +'  Wenn "Trailer", "TR" oder "Trailer-Aufnahme" im Titel/Positionen: grundgage = Pauschalgage, takes=0\n'
+    +'  ⚠ HANDSCHRIFTLICHE ANNOTATIONEN: Wenn neben einer gedruckten Zahl handschriftlich "+N" oder "-N" steht\n'
+    +'    (z.B. gedruckt "12" mit handgeschriebenem "+1" daneben) → takes = 12 + 1 = 13\n'
+    +'    Handschriftliche Korrekturen haben Vorrang vor dem gedruckten Wert!\n'
     +'  ⚠ WICHTIG — 1-10 Take-Pauschalzeilen in Abrechnungstabellen:\n'
     +'    "Streaming 1-10 Ta", "TV 1-10 Ta", "Grundgage 1-10", "Streaming 1-10 Takes" = Pauschalzeile für 1-10 Takes\n'
     +'    Diese Zeile enthält bereits die Grundgage für min. 10 Takes — NICHT als eigene session!\n'
@@ -9181,23 +9188,45 @@ function dokAnalyseDoc(d, key, cb){
     +'  sessions = Array aller Einzeltermine:\n'
     +'    ⚠⚠⚠ REGEL JE NACH PDF-TYP:\n'
     +'\n'
-    +'    STUDIO HAMBURG SYNCHRON — SESAM-JAHRESKORREKTUR-FORMAT (nur bei diesem Studio!):\n'
-    +'    Erkennbar an: "Studio Hamburg Synchron GmbH" + "Korrektur Gehaltsabrechnung X/YEAR (für Y/YEAR)"\n'
-    +'    ⚠ DIESE REGELN NUR BEI STUDIO HAMBURG ANWENDEN — NICHT auf andere Studios übertragen!\n'
-    +'    Das PDF hat 12-24 Seiten — NUR SEITEN MIT GESAMTBRUTTO > 0 SIND RELEVANT!\n'
-    +'    Seiten mit "Gesamtbrutto: 0,00" → KOMPLETT IGNORIEREN (reine Verrechnungsseiten ohne Buchungswirkung)\n'
-    +'    Seiten mit echtem Brutto (z.B. 172,00 oder 820,00 oder 616,00) → als session aufnehmen\n'
-    +'    Pro session: brutto_termin = der "Gesamtbrutto"-Wert dieser Seite\n'
-    +'    kv_abzug = "Techniker Krankenversicherung" lfd. Betrag (z.B. -12,04 oder -57,40)\n'
-    +'    rv_abzug = "Rentenversicherung lfd." Betrag\n'
-    +'    pv_abzug = "Pflegeversicherung lfd." Betrag\n'
+    +'    STUDIO HAMBURG SYNCHRON — SESAM-JAHRESKORREKTUR-FORMAT (NUR bei diesem Studio!):\n'
+    +'    Erkennbar an: "Studio Hamburg Synchron GmbH" + Überschrift "Korrektur Gehaltsabrechnung X/YEAR (für Y/YEAR)"\n'
+    +'    ⚠⚠⚠ DIESE REGELN NUR BEI STUDIO HAMBURG ANWENDEN — NICHT auf andere Studios übertragen!\n'
+    +'\n'
+    +'    SCHRITT 1: WELCHE SEITEN RELEVANT SIND\n'
+    +'    Das PDF hat 12-24 Seiten. NUR Seiten mit Gesamtbrutto > 0 ergeben sessions!\n'
+    +'    Seite überspringen (keine session!) wenn: "Gesamtbrutto: 0,00" → egal ob "Differenz für Folgemonate" einen Wert hat\n'
+    +'    ⚠ FALLE: "Differenz für Folgemonate: 9,12 K" auf einer 0,00-Seite → TROTZDEM überspringen!\n'
+    +'    ⚠ FALLE: "Verbindlichkeit X/YEAR: 0,00" und "Differenz aus Vormonat" → NIEMALS als brutto_termin verwenden!\n'
+    +'\n'
+    +'    SCHRITT 2: WERTE PRO SEITE LESEN\n'
+    +'    brutto_termin = "Gesamtbrutto" Wert dieser Seite (z.B. 172,00 oder 820,00 oder 616,00)\n'
+    +'    ⚠⚠⚠ kv_abzug = SUMME aus BEIDEN KV-Zeilen: "KV-Brutto lfd. X,XX%" + "KV-Zusatz lfd. X,XX%"\n'
+    +'      Beispiel Seite 2: -12,04 (7,00%) + -1,03 (0,60%) = kv_abzug=13.07\n'
+    +'      Beispiel Seite 3: -57,40 (7,00%) + -4,92 (0,60%) = kv_abzug=62.32\n'
+    +'      ⚠ NICHT nur eine der beiden Zeilen nehmen — IMMER beide addieren!\n'
+    +'    rv_abzug = "RV-Brutto lfd." Betrag (z.B. 16,00 oder 76,26)\n'
+    +'    pv_abzug = "PV-Brutto lfd." Betrag (z.B. 2,92 oder 13,94)\n'
     +'    mwst = "Umsatzsteuer 7%" Betrag dieser Seite\n'
-    +'    auszahlung = "Differenz für Folgemonate" Betrag (NICHT Auszahlungsbetrag aus der Zusammenfassung!)\n'
-    +'    datum = erstes Aufnahmedatum auf dieser Seite aus dem Zeitraum-Feld\n'
-    +'    titel = Produktionsname aus der Positionszeile (z.B. "Power Play 2" oder "Espe ce menace")\n'
-    +'    gutschrift_nr = leer lassen (dieses Format hat keine eigene GS-Nr. pro Seite)\n'
+    +'    auszahlung = "Differenz für Folgemonate" Betrag (z.B. 152,05 oder 725,91) — NICHT "Auszahlung" aus der Zusammenfassung!\n'
+    +'    ust_satz = 0.07\n'
+    +'\n'
+    +'    SCHRITT 3: DATUM UND TITEL\n'
+    +'    datum = erstes Datum aus dem "Zeitraum" Feld (z.B. "18.03.-19.03. PGS 118" → datum=YEAR-03-18)\n'
+    +'    Jahreszahl: aus der Seitenüberschrift "Korrektur Gehaltsabrechnung 3/2024" → Jahr = 2024\n'
+    +'    titel = Produktionsname aus der Positionszeile (z.B. "Power Play 2" oder "Espèce menacée")\n'
+    +'    studio = "Studio Hamburg" (Kurzname)\n'
+    +'    gutschrift_nr = leer lassen (kein GS-Nr.-Format)\n'
     +'    typ = "monats_abrechn"\n'
-    +'    Mehrere Produktionen auf einer Seite: alle summieren für brutto_termin\n'
+    +'\n'
+    +'    SCHRITT 4: SONDERFÄLLE\n'
+    +'    Mehrere Produktionen auf EINER Seite (z.B. Seite 13: Anaon 452,00 + Boarders I 164,00 = 616,00):\n'
+    +'    → brutto_termin = Summe aller Positionen (616,00)\n'
+    +'    → termine-Array mit einem Eintrag pro Produktion/Datum:\n'
+    +'      termine: [{"datum":"2025-01-20","titel":"Anaon","grundgage":452.0},\n'
+    +'                {"datum":"2025-01-27","titel":"Boarders I","grundgage":164.0}]\n'
+    +'    Mehrere Aufnahmetage gleicher Produktion auf EINER Seite (z.B. 18.03.-19.03.):\n'
+    +'    → datum = erster Tag, brutto_termin = Gesamtbetrag der Seite, EINE session\n'
+    +'    ⚠ Bisherige Jahressummen-Tabelle am Seitenende (KVAN, KVAG etc.) — KOMPLETT IGNORIEREN!\n'
     +'\n'
     +'    FALL A — PDF hat MEHRERE SEITEN (erkennbar an mehreren "GAGE / Gutschrift" Überschriften oder mehreren "AUSZAHLUNG" Blöcken):\n'
     +'    → JEDE SEITE = GENAU EINE session. 2 Seiten = 2 sessions. 7 Seiten = 7 sessions.\n'
@@ -10156,7 +10185,13 @@ function dokOpenDetail(id){
       body+=_editRow('rolle','Rolle(n)',d.rolle||'');
       body+=_editRow('uhrzeit','Beginn',d.uhrzeit||'');
       body+=_editRow('bis_uhrzeit','Ende',d.bis_uhrzeit||'');
-      body+=_editRow('takes','Takes',d.takes||'');
+      // Takes: bei Änderung automatisch gvl_takes nachziehen (wenn kein gvl_takes_detail)
+      body+='<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">'
+        +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">Takes</div>'
+        +'<input id="dedit-takes" type="text" value="'+esc(String(d.takes||''))+'" '
+        +'oninput="var v=this.value; var gvl=document.getElementById(\'dedit-gvl_takes\'); if(gvl&&!'+JSON.stringify(!!(d.gvl_takes_detail&&d.gvl_takes_detail.length))+') gvl.value=v;" '
+        +'style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:#1a1a1a;outline:none;padding:0 2px">'
+        +'</div>';
       if(d.gvl_takes_detail && d.gvl_takes_detail.length){
         // Summen-Validierung
         var detailSumme = d.gvl_takes_detail.reduce(function(s,e){ return s + (parseInt(e.takes)||0); }, 0);
@@ -12151,9 +12186,13 @@ function dokLinkMultiConfirm(){
 
     // Beträge — aus abRec falls vorhanden, sonst direkt aus Dokument
     var brutto   = parseFloat((abRec&&abRec.brutto)   || d.brutto)   || 0;
-    var auszahlung=parseFloat((abRec&&abRec.auszahlung)|| d.auszahlung) || null; // Buchhaltungsregel: nicht zu brutto fallen
+    var auszahlung=parseFloat((abRec&&abRec.auszahlung)|| d.auszahlung) || null;
     var mwst     = parseFloat((abRec&&abRec.mwst)     || d.mwst)     || 0;
     var netto    = parseFloat((abRec&&abRec.netto)     || d.netto)    || 0;
+    // KV/RV/PV: aus Dok oder bestehender Abrechnung (toneworx-Format hat AN-Beiträge)
+    var gesamtKV = Math.abs(parseFloat((abRec&&abRec.kv)||(abRec&&abRec.kv_abzug)||d.kv_abzug)||0);
+    var gesamtRV = Math.abs(parseFloat((abRec&&abRec.rv)||(abRec&&abRec.rv_abzug)||d.rv_abzug)||0);
+    var gesamtPV = Math.abs(parseFloat((abRec&&abRec.pv)||(abRec&&abRec.pv_abzug)||d.pv_abzug)||0);
     var gutschriftNr = (abRec&&abRec.gutschrift_nr)||d.gutschrift_nr||'';
     var dateiname    = (abRec&&abRec.dateiname)||d.dateiname||'';
 
@@ -12168,14 +12207,17 @@ function dokLinkMultiConfirm(){
           ? ((parseInt(t.takes)||0)/totalTakes)
           : (1/n);
         // Letzter Termin bekommt Rest (Cent-Ausgleich)
-        var teilBrutto, teilAusz, teilMwst, teilNetto;
+        var teilBrutto, teilAusz, teilMwst, teilNetto, teilKV, teilRV, teilPV;
         if(i < n-1){
           teilBrutto = Math.round(brutto*anteil*100)/100;
           teilAusz   = Math.round(auszahlung*anteil*100)/100;
           teilMwst   = Math.round(mwst*anteil*100)/100;
           teilNetto  = Math.round(netto*anteil*100)/100;
+          teilKV     = Math.round(gesamtKV*anteil*100)/100;
+          teilRV     = Math.round(gesamtRV*anteil*100)/100;
+          teilPV     = Math.round(gesamtPV*anteil*100)/100;
         } else {
-          // Letzter: Differenz damit Summe stimmt
+          // Letzter: Differenz damit Summe stimmt (Cent-Ausgleich)
           var prevBrutto=termine.slice(0,i).reduce(function(s,_,j){
             return s+Math.round(brutto*(useTakes?(parseInt(termine[j].takes)||0)/totalTakes:1/n)*100)/100;
           },0);
@@ -12183,6 +12225,9 @@ function dokLinkMultiConfirm(){
           teilAusz   = Math.round(auszahlung*anteil*100)/100;
           teilMwst   = Math.round(mwst*anteil*100)/100;
           teilNetto  = Math.round(netto*anteil*100)/100;
+          teilKV     = Math.round(gesamtKV*anteil*100)/100;
+          teilRV     = Math.round(gesamtRV*anteil*100)/100;
+          teilPV     = Math.round(gesamtPV*anteil*100)/100;
         }
 
         var teilAb={
@@ -12204,13 +12249,23 @@ function dokLinkMultiConfirm(){
           _aufgeteiltVon:brutto,      // Original-Gesamtbetrag
           _aufgeteiltN:n,             // Anzahl Teile
           _aufgeteiltIdx:i,           // Index (0-basiert)
+          kv: teilKV||0,
+          rv: teilRV||0,
+          pv: teilPV||0,
           gesamt_mwst: mwst||null,
           gesamt_brutto: brutto||null,
           gesamt_auszahlung: auszahlung||null,
-          gesamt_gutschrift_nr: gutschriftNr||null
+          gesamt_gutschrift_nr: gutschriftNr||null,
+          gesamt_kv: gesamtKV||null,
+          gesamt_rv: gesamtRV||null,
+          gesamt_pv: gesamtPV||null
         };
         var _teilId = _upsertAbrechnung(t.abId||null, teilAb);
         t.abId=_teilId;
+        // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
+        if(teilKV) t.kv_abzug=teilKV;
+        if(teilRV) t.rv_abzug=teilRV;
+        if(teilPV) t.pv_abzug=teilPV;
         if(d.rolle&&!t.rolle) t.rolle=d.rolle;
         if(d.regie&&!t.regie) t.regie=d.regie;
         if(d.titel&&!t.titel) t.titel=d.titel;
@@ -13116,6 +13171,7 @@ function rMahnwesen(){
     +'</div>';
 
   ueberfaellig.forEach(function(t){
+    try {
     var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
     var dok = (db.dokumente||[]).find(function(d){
       return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
@@ -13143,13 +13199,14 @@ function rMahnwesen(){
       +'</div>'
       +'</div>'
       +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
-      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
+      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+(faelligAm&&!isNaN(faelligAm.getTime())?fd(faelligAm.toISOString().split('T')[0]):'?')
       +'</div>'
       +'<div style="display:flex;gap:8px">'
       +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
       +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
       +'</div>'
       +'</div>';
+    } catch(e){ html += '<div style="font-size:11px;color:#999;margin-bottom:8px">⚠ Fehler bei Termin: '+esc(t.titel||t.datum||'?')+'</div>'; }
   });
 
   el.innerHTML = html;
