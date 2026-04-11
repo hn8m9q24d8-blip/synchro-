@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '680';
+  if(el) el.textContent = '683';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2220,7 +2220,13 @@ function openDetail(id){
   // ur: t.ust_satz (Build 632+) → aus Abrechnung berechnet → Profil-Default
   var _abForUr = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
   var _urFromAb = (_abForUr&&parseFloat(_abForUr.mwst)>0&&parseFloat(_abForUr.brutto)>parseFloat(_abForUr.mwst))
-    ? (function(){ var s=parseFloat(_abForUr.mwst)/(parseFloat(_abForUr.brutto)-parseFloat(_abForUr.mwst)); return Math.abs(s-0.19)<0.01?0.19:Math.abs(s-0.07)<0.005?0.07:Math.round(s*100)/100; })()
+    ? (function(){ var s=parseFloat(_abForUr.mwst)/(parseFloat(_abForUr.brutto)-parseFloat(_abForUr.mwst));
+      // Gültige deutsche USt-Sätze: 0.07 (ermäßigt), 0.19 (voll), 0 (befreit)
+      // Toleranz 0.01 für 7% (12,88/171,12=0.0753 liegt leicht über 0.07)
+      if(Math.abs(s-0.19)<0.02) return 0.19;
+      if(Math.abs(s-0.07)<0.015) return 0.07;
+      return 0.07; // Fallback: im Synchronbereich immer 7%
+    })()
     : null;
   var ur = parseFloat(t.ust_satz) || _urFromAb || (db.profil&&db.profil.ust!=null?db.profil.ust:0.07);
   // Takes: Kalender-Termin hat Vorrang, Abrechnung als Fallback
@@ -4158,7 +4164,7 @@ function abrechnungEditOpen(abId){
   // USt-Satz ermitteln
   var curUst=parseFloat(t&&t.ust_satz)||(
     parseFloat(ab.mwst)>0&&parseFloat(ab.brutto)>parseFloat(ab.mwst)
-    ?(Math.abs(parseFloat(ab.mwst)/(parseFloat(ab.brutto)-parseFloat(ab.mwst))-0.19)<0.01?0.19:0.07)
+    ?(function(){ var _s=parseFloat(ab.mwst)/(parseFloat(ab.brutto)-parseFloat(ab.mwst)); return Math.abs(_s-0.19)<0.02?0.19:0.07; })()
     :0.07);
   window._aeUstSatz=curUst;
   function fld(lbl,id,val,type){
@@ -9221,7 +9227,10 @@ function dokAnalyseDoc(d, key, cb){
     +'    pv_abzug = "PV-Brutto lfd." Betrag (z.B. 2,92 oder 13,94 oder 11,09)\n'
     +'    mwst = "Umsatzsteuer 7%" Betrag dieser Seite\n'
     +'    auszahlung = "Differenz für Folgemonate" Betrag — NICHT "Auszahlung" aus der Verdienstbescheinigung!\n'
-    +'    ust_satz = 0.07\n'
+    +'    ust_satz = 0.07 (IMMER 0.07 — NIEMALS 0.09 oder 0.093!)\n'
+    +'    ⚠⚠⚠ FALLE: "RV-Brutto lfd. 9,30%" = RENTENVERSICHERUNG, NICHT MwSt!\n'
+    +'    ⚠⚠⚠ FALLE: "KV-Zusatz lfd. 1,345%" / "PV-Brutto lfd. 1,55%" = SV-Beiträge, NICHT MwSt!\n'
+    +'    Die MwSt steht nur bei "996 Umsatzsteuer 7%" — immer 7%, nie ein anderer Satz!\n'
     +'\n'
     +'    SCHRITT 3: DATUM UND TITEL\n'
     +'    datum = erstes Datum aus dem "Zeitraum" Feld, kombiniert mit dem Jahr aus der Überschrift\n'
@@ -9568,6 +9577,15 @@ function dokAnalyseDoc(d, key, cb){
       d.kv_abzug = j.kv_abzug || null;
       d.rv_abzug = j.rv_abzug || null;
       d.pv_abzug = j.pv_abzug || null;
+      // USt-Satz sanitieren: nur gültige deutsche Sätze erlaubt (0, 0.07, 0.19)
+      // KI verwechselt manchmal RV (9,3%) oder PV (1,8%) mit MwSt
+      if(j.ust_satz!=null){
+        var _rawUst = parseFloat(j.ust_satz)||0;
+        if(Math.abs(_rawUst-0.19)<0.02) d.ustSatz=0.19;
+        else if(Math.abs(_rawUst-0.07)<0.02) d.ustSatz=0.07;
+        else if(_rawUst===0) d.ustSatz=0;
+        else d.ustSatz=0.07; // ungültiger Wert → Fallback 7% (Synchron-Standard)
+      }
       d.ustSatz    = j.ust_satz || null;
       d.ust_details = j.ust_details || null;
       d.ausgabe_kat = j.ausgabe_kat || null;
@@ -9849,6 +9867,8 @@ function dokAnalyseDoc(d, key, cb){
             d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
             d.auszahlung=_j.auszahlung||null; d.gutschrift_nr=_j.gutschrift_nr||null;
             d.kv_abzug=_j.kv_abzug||null; d.rv_abzug=_j.rv_abzug||null; d.pv_abzug=_j.pv_abzug||null;
+            // USt-Satz sanitieren
+            if(_j.ust_satz!=null){ var _ru=parseFloat(_j.ust_satz)||0; d.ustSatz=Math.abs(_ru-0.19)<0.02?0.19:Math.abs(_ru-0.07)<0.02?0.07:_ru===0?0:0.07; }
             d.sessions=_j.sessions||null;
             showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
             save(db); rDokumente(); if(cb) cb();
@@ -11469,7 +11489,7 @@ function dokBestaetigenMonat(dokId){
   // MwSt proportional auf Einzeltermine verteilen
   var gesamtBrutto = parseFloat(d.brutto)||0;
   var gesamtMwst   = parseFloat(d.mwst)||0;
-  var ustSatz      = d.ustSatz || (gesamtBrutto>0&&gesamtMwst>0 ? Math.round((gesamtMwst/(gesamtBrutto-gesamtMwst))*100)/100 : 0.07);
+  var ustSatz      = d.ustSatz || (gesamtBrutto>0&&gesamtMwst>0 ? (function(s){return Math.abs(s-0.19)<0.02?0.19:0.07;})(gesamtMwst/(gesamtBrutto-gesamtMwst)) : 0.07);
   var gutschriftNr = d.gutschrift_nr||'';
 
   // Sessions mit Termin + Brutto sammeln
@@ -12600,7 +12620,7 @@ function rUstVoranmeldung(){
 
   var ym = _ustYear+'-'+String(_ustMonth+1).padStart(2,'0');
   var urEinn = db.profil&&db.profil.ust!=null ? db.profil.ust : 0.07;
-  var _snapUst = function(satz){ if(Math.abs(satz-0.07)<0.005) return 0.07; if(Math.abs(satz-0.19)<0.01) return 0.19; return Math.round(satz*100)/100; };
+  var _snapUst = function(satz){ if(Math.abs(satz-0.19)<0.02) return 0.19; if(Math.abs(satz-0.07)<0.015) return 0.07; return 0.07; /* nur 0/7/19% gültig — nie auf 8% runden */ };
 
   // ── EINNAHMEN nach ZAHLUNGSEINGANG (Ist-Versteuerung) ────────
   // Strategie: Monats-Abrechnungen als Ganzes nehmen — nicht pro Termin
@@ -13026,7 +13046,7 @@ function ustExport(){
   // Export nutzt dieselbe Berechnung wie die USt-Anzeige (Ist-Versteuerung aus Abrechnungen)
   // NICHT aus kommgage berechnen — nur bestätigte Abrechnungen mit Zahlungseingang zählen
   // einnZeilen durch dieselbe Loop-Logik aufbauen wie in rUstVoranmeldung
-  var _snapUstExp = function(satz){ if(Math.abs(satz-0.07)<0.005) return 0.07; if(Math.abs(satz-0.19)<0.01) return 0.19; return Math.round(satz*100)/100; };
+  var _snapUstExp = function(satz){ if(Math.abs(satz-0.19)<0.02) return 0.19; if(Math.abs(satz-0.07)<0.015) return 0.07; return 0.07; /* nur 0/7/19% gültig */ };
   var einnZeilenExp = [];
   var _gezDokExp = {}, _gezTermExp = {};
   (db.termine||[]).forEach(function(t){
