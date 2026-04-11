@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '669';
+  if(el) el.textContent = '674';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2467,7 +2467,7 @@ function openDetail(id){
   var stamm='<div class="info-card">'
     +'<div class="info-card-header"><span>Stammdaten</span></div>'
     +_inlineField(id,'regie','Regie',t.regie||'')
-    +(t.sender?'<div class="info-row"><div class="ir-key" style="color:#6d28d9">Sender</div><div class="ir-val" style="color:#6d28d9;font-weight:700">'+esc(t.sender)+(t.sender_kuerzel&&t.sender_kuerzel!==t.sender?' <span style="font-size:10px;color:#9ca3af">('+esc(t.sender_kuerzel)+')</span>':'')+'</div></div>':'')
+    +_inlineField(id,'sender','Sender',t.sender||'')
     +_inlineField(id,'atelier','Atelier',t.atelier||t.notizen||'')
     +_inlineField(id,'episode','Episode',t.episode||'')
     +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time')
@@ -9093,7 +9093,10 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠⚠⚠ Beispiel IYUNO: "BBGrundlage KV: 1.284,00" → grundgage ist NICHT 1284! Das ist die SV-Bemessungsgrundlage!\n'
     +'    ⚠⚠⚠ Die echte grundgage steht in der Positionstabelle: "+ Grundgage Streaming  17.03.2026  1x 150,00 = 150,00" → grundgage=150.0\n'
     +'  brutto = BRUTTO GAGE gesamt (= Summe aller Positions-Zeilen)\n'
-    +'  kv_abzug = NUR Krankenversicherungs-Abzug (z.B. 27.12) — "- Krankenversicherung" Zeile\n'
+    +'  kv_abzug = SUMME aus BEIDEN KV-Zeilen: "Techniker Krankenversicherung" lfd. % UND "Techniker Krankenversicherung" KV-Zusatz lfd. %\n'
+    +'    Beispiel: KV-Brutto lfd. 7,00% = -12,88 PLUS KV-Zusatz lfd. 1,345% = -2,47 → kv_abzug = 15.35\n'
+    +'    Auch bei anderen Formaten: KVAN aus Verdienstbescheinigung = korrekte KV-Gesamtsumme → zur Verifikation nutzen!\n'
+    +'    ⚠ NIEMALS nur eine KV-Zeile nehmen — immer alle KV-Zeilen dieser Abrechnung addieren!\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
     +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format):\n'
@@ -9211,8 +9214,11 @@ function dokAnalyseDoc(d, key, cb){
     +'    ust_satz = 0.07\n'
     +'\n'
     +'    SCHRITT 3: DATUM UND TITEL\n'
-    +'    datum = erstes Datum aus dem "Zeitraum" Feld (z.B. "18.03.-19.03. PGS 118" → datum=YEAR-03-18)\n'
-    +'    Jahreszahl: aus der Seitenüberschrift "Korrektur Gehaltsabrechnung 3/2024" → Jahr = 2024\n'
+    +'    datum = erstes Datum aus dem "Zeitraum" Feld, kombiniert mit dem Jahr aus der Überschrift\n'
+    +'    ⚠⚠⚠ JAHRESZAHL: IMMER aus "Korrektur Gehaltsabrechnung X/YEAR" Überschrift nehmen!\n'
+    +'    Beispiel: Überschrift = "Korrektur Gehaltsabrechnung 1/2026" + Zeitraum = "23.01.-23.01." → datum = 2026-01-23\n'
+    +'    NICHT: die letzte 2-stellige Zahl im Datum als Jahr interpretieren ("23" ist der TAG, nicht 2023!)\n'
+    +'    NICHT: das Druckdatum oder Verdienstbescheinigungsdatum als Jahr nehmen\n'
     +'    titel = Produktionsname aus der Positionszeile (z.B. "Power Play 2" oder "Espèce menacée")\n'
     +'    studio = "Studio Hamburg" (Kurzname)\n'
     +'    gutschrift_nr = leer lassen (kein GS-Nr.-Format)\n'
@@ -10220,7 +10226,9 @@ function dokOpenDetail(id){
             +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'#c2410c':'#15803d')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
             +'</div>';
         });
-        body+='</div><div style="font-size:10px;color:#888;margin-top:5px">Gesamt: <b>'+(d.gvl_takes||'')+'</b> Takes</div>'
+        var _gvlSum = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
+        if(!d.gvl_takes && _gvlSum>0){ d.gvl_takes=_gvlSum; }
+        body+='</div><div style="font-size:10px;color:#888;margin-top:5px">Gesamt: <b>'+(d.gvl_takes||_gvlSum||'')+'</b> Takes</div>'
           +'<button type="button" onclick="gvlDokBearbeiten(\''+d.id+'\')" style="margin-top:8px;width:100%;background:#ede9fe;color:#6d28d9;border:1.5px solid #c4b5fd;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✎ GVL Folgen & Takes bearbeiten</button>'
           +'</div>';
       } else {
@@ -13177,9 +13185,11 @@ function rMahnwesen(){
       return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
     });
     var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
-    var abDate = new Date(abDatum);
-    var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
-    var tageSeit = Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24));
+    // Wenn kein abDatum: Termin-Datum als Fallback
+    var _effAbDatum = abDatum || t.datum || '';
+    var abDate = _effAbDatum ? new Date(_effAbDatum) : null;
+    var faelligAm = abDate && !isNaN(abDate.getTime()) ? new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000) : null;
+    var tageSeit = faelligAm ? Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24)) : 0;
     var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
     var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
 
