@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '674';
+  if(el) el.textContent = '680';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9193,6 +9193,8 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'    STUDIO HAMBURG SYNCHRON — SESAM-JAHRESKORREKTUR-FORMAT (NUR bei diesem Studio!):\n'
     +'    Erkennbar an: "Studio Hamburg Synchron GmbH" + Überschrift "Korrektur Gehaltsabrechnung X/YEAR (für Y/YEAR)"\n'
+    +'    Das "(für Y/YEAR)" variiert — kann "für 12/2025" (Jahreskorrektur) ODER "für 2/2026" (laufende Korrektur) sein\n'
+    +'    Auch "Gehaltsabrechnung X/YEAR" ohne "Korrektur" = Nullseite — überspringen!\n'
     +'    ⚠⚠⚠ DIESE REGELN NUR BEI STUDIO HAMBURG ANWENDEN — NICHT auf andere Studios übertragen!\n'
     +'\n'
     +'    SCHRITT 1: WELCHE SEITEN RELEVANT SIND\n'
@@ -9202,15 +9204,23 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ FALLE: "Verbindlichkeit X/YEAR: 0,00" und "Differenz aus Vormonat" → NIEMALS als brutto_termin verwenden!\n'
     +'\n'
     +'    SCHRITT 2: WERTE PRO SEITE LESEN\n'
-    +'    brutto_termin = "Gesamtbrutto" Wert dieser Seite (z.B. 172,00 oder 820,00 oder 616,00)\n'
-    +'    ⚠⚠⚠ kv_abzug = SUMME aus BEIDEN KV-Zeilen: "KV-Brutto lfd. X,XX%" + "KV-Zusatz lfd. X,XX%"\n'
-    +'      Beispiel Seite 2: -12,04 (7,00%) + -1,03 (0,60%) = kv_abzug=13.07\n'
-    +'      Beispiel Seite 3: -57,40 (7,00%) + -4,92 (0,60%) = kv_abzug=62.32\n'
-    +'      ⚠ NICHT nur eine der beiden Zeilen nehmen — IMMER beide addieren!\n'
-    +'    rv_abzug = "RV-Brutto lfd." Betrag (z.B. 16,00 oder 76,26)\n'
-    +'    pv_abzug = "PV-Brutto lfd." Betrag (z.B. 2,92 oder 13,94)\n'
+    +'    brutto_termin = "Gesamtbrutto" Wert dieser Seite\n'
+    +'    ⚠⚠⚠ kv_abzug = SUMME aus BEIDEN KV-Zeilen (KV-Zusatz-Prozentsatz variiert je Jahr!)::\n'
+    +'      "Techniker Krankenkasse KV-Brutto lfd. 7,00%" + "Techniker Krankenkasse KV-Zusatz lfd. X,XX%"\n'
+    +'      Beispiele (KV-Zusatz variiert je Zeitraum — immer den tatsächlichen Prozentsatz nutzen!)::\n'
+    +'        2/2024: -12,04 (7,00%) + -1,03 (0,60%) = kv_abzug=13.07\n'
+    +'        3/2024: -57,40 (7,00%) + -4,92 (0,60%) = kv_abzug=62.32\n'
+    +'        5/2024: -36,96 (7,00%) + -3,17 (0,60%) = kv_abzug=40.13\n'
+    +'        1/2025: -43,12 (7,00%) + -7,55 (1,225%) = kv_abzug=50.67\n'
+    +'        5/2025: -12,04 (7,00%) + -2,11 (1,225%) = kv_abzug=14.15\n'
+    +'        7/2025: -19,88 (7,00%) + -3,48 (1,225%) = kv_abzug=23.36\n'
+    +'        1/2026: -12,88 (7,00%) + -2,47 (1,345%) = kv_abzug=15.35\n'
+    +'      Verifikation: KVAN aus Verdienstbescheinigung = korrekte KV-Summe\n'
+    +'      ⚠ IMMER beide Zeilen addieren — NIE nur eine!\n'
+    +'    rv_abzug = "RV-Brutto lfd." Betrag (z.B. 16,00 oder 76,26 oder 57,29)\n'
+    +'    pv_abzug = "PV-Brutto lfd." Betrag (z.B. 2,92 oder 13,94 oder 11,09)\n'
     +'    mwst = "Umsatzsteuer 7%" Betrag dieser Seite\n'
-    +'    auszahlung = "Differenz für Folgemonate" Betrag (z.B. 152,05 oder 725,91) — NICHT "Auszahlung" aus der Zusammenfassung!\n'
+    +'    auszahlung = "Differenz für Folgemonate" Betrag — NICHT "Auszahlung" aus der Verdienstbescheinigung!\n'
     +'    ust_satz = 0.07\n'
     +'\n'
     +'    SCHRITT 3: DATUM UND TITEL\n'
@@ -9225,14 +9235,16 @@ function dokAnalyseDoc(d, key, cb){
     +'    typ = "monats_abrechn"\n'
     +'\n'
     +'    SCHRITT 4: SONDERFÄLLE\n'
-    +'    Mehrere Produktionen auf EINER Seite (z.B. Seite 13: Anaon 452,00 + Boarders I 164,00 = 616,00):\n'
-    +'    → brutto_termin = Summe aller Positionen (616,00)\n'
+    +'    Mehrere Produktionen auf EINER Seite (1/2025: Anaon 452,00 + Boarders I 164,00 = 616,00):\n'
+    +'    → brutto_termin = Summe (616,00), kv/rv/pv = Gesamtwerte der Seite\n'
     +'    → termine-Array mit einem Eintrag pro Produktion/Datum:\n'
     +'      termine: [{"datum":"2025-01-20","titel":"Anaon","grundgage":452.0},\n'
     +'                {"datum":"2025-01-27","titel":"Boarders I","grundgage":164.0}]\n'
-    +'    Mehrere Aufnahmetage gleicher Produktion auf EINER Seite (z.B. 18.03.-19.03.):\n'
-    +'    → datum = erster Tag, brutto_termin = Gesamtbetrag der Seite, EINE session\n'
-    +'    ⚠ Bisherige Jahressummen-Tabelle am Seitenende (KVAN, KVAG etc.) — KOMPLETT IGNORIEREN!\n'
+    +'    Mehrere Aufnahmetage gleicher Produktion (3/2024: Power Play 2, 18.03.+19.03., Brutto 820,00):\n'
+    +'    → datum = 2024-03-18 (erster Tag), EINE session, brutto_termin=820.00\n'
+    +'    Letzte Seite "Gehaltsabrechnung 12/2025" (ohne "Korrektur") mit Saldo 0,00 → Überspringen!\n'
+    +'    ⚠ Verdienstbescheinigungen am Seitenende (KVAN, KVAG, Auszahlung) — KOMPLETT IGNORIEREN!\n'
+    +'    ⚠ "Differenz aus Vormonat" / "bereits erhalten" — NICHT als brutto oder auszahlung verwenden!\n'
     +'\n'
     +'    FALL A — PDF hat MEHRERE SEITEN (erkennbar an mehreren "GAGE / Gutschrift" Überschriften oder mehreren "AUSZAHLUNG" Blöcken):\n'
     +'    → JEDE SEITE = GENAU EINE session. 2 Seiten = 2 sessions. 7 Seiten = 7 sessions.\n'
@@ -9407,6 +9419,64 @@ function dokAnalyseDoc(d, key, cb){
     });
   }
 
+  // Rendert alle Seiten eines passwortgeschützten PDFs als separate Bilder
+  function _renderPdfPagesMulti(dataURL, password, onDone, onPwNeeded){
+    if(typeof pdfjsLib==='undefined'){ onDone([dataURL], 1); return; }
+    var b64 = dataURL.split(',')[1];
+    var bin = atob(b64);
+    var arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var params = {data: arr};
+    if(password) params.password = password;
+    pdfjsLib.getDocument(params).promise.then(function(pdf){
+      var numPages = pdf.numPages;
+      var pagesToCheck = Math.min(numPages, 24);
+      // Schritt 1: Text pro Seite extrahieren und Nullseiten herausfiltern
+      var textChecks = [];
+      for(var p=1; p<=pagesToCheck; p++) textChecks.push(pdf.getPage(p));
+      return Promise.all(textChecks).then(function(pages){
+        var textExtracts = pages.map(function(page){
+          return page.getTextContent().then(function(tc){
+            // Text aller Items zusammenfügen
+            var txt = tc.items.map(function(i){return i.str;}).join(' ');
+            // Studio Hamburg: Seite überspringen wenn Gesamtbrutto = 0,00
+            // Erkennbar an 'Gesamtbrutto' gefolgt von '0,00' im selben Bereich
+            var hatGesamtbrutto = txt.indexOf('Gesamtbrutto') >= 0;
+            var hatNullBrutto = /Gesamtbrutto[\s\S]{0,60}?0,00/.test(txt);
+            var hatEchtenBetrag = hatGesamtbrutto && !hatNullBrutto;
+            // Fallback: Seite ohne 'Gesamtbrutto' immer mitsenden (könnte andere Infos haben)
+            var relevant = !hatGesamtbrutto || hatEchtenBetrag;
+            return {page: page, relevant: relevant, txt: txt.slice(0,100)};
+          });
+        });
+        return Promise.all(textExtracts).then(function(results){
+          var relevantPages = results.filter(function(r){ return r.relevant; });
+          var skipped = results.length - relevantPages.length;
+          if(skipped > 0) showToast('⏭ '+skipped+' Nullseiten übersprungen · '+relevantPages.length+' relevante Seiten');
+          if(!relevantPages.length){
+            // Alle hatten 0,00 — unwahrscheinlich, aber als Fallback alle senden
+            relevantPages = results;
+          }
+          // Schritt 2: Nur relevante Seiten als Bild rendern
+          var renders = relevantPages.map(function(r){
+            var vp = r.page.getViewport({scale: 1.5});
+            var cv = document.createElement('canvas');
+            cv.width = vp.width; cv.height = vp.height;
+            return r.page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise.then(function(){
+              return cv.toDataURL('image/jpeg', 0.82);
+            });
+          });
+          return Promise.all(renders).then(function(dataURLs){
+            onDone(dataURLs, numPages);
+          });
+        });
+      });
+    }).catch(function(e){
+      if(e && e.name==='PasswordException') onPwNeeded();
+      else onDone([dataURL], 1);
+    });
+  }
+
   function _sendToAPI(dataURL){
     if(!dataURL){ showToast('Kein PDF-Inhalt — bitte neu einlesen'); if(cb) cb(); return; }
     var b64 = dataURL.split(',')[1];
@@ -9423,7 +9493,17 @@ function dokAnalyseDoc(d, key, cb){
       showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
     }
     
-    showToast('⏳ Sende '+Math.round(bodyStr.length/1024)+'KB…');
+    var _kb = Math.round(bodyStr.length/1024);
+    var _mb = (_kb/1024).toFixed(1);
+    // Timeout dynamisch nach Dateigröße:
+    // < 3MB (normale Einzelseite): 60s reicht
+    // >= 3MB (mehrseitige PDFs wie Studio Hamburg): 180s
+    xhr.timeout = _kb > 3000 ? 180000 : 60000;
+    if(_kb > 3000){
+      showToast('⚠ Großes PDF ('+_mb+'MB) — Analyse kann 2–3 Min dauern…');
+    } else {
+      showToast('⏳ Analysiere PDF ('+_kb+'KB)…');
+    }
     
     // XHR statt fetch — stabiler in iOS Safari für große Bodies
     var xhr = new XMLHttpRequest();
@@ -9705,8 +9785,8 @@ function dokAnalyseDoc(d, key, cb){
     if(cb) cb();
     };
     xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; if(cb) cb(); };
-    xhr.timeout = 60000;
-    xhr.ontimeout = function(){ showToast('Timeout'); d.typ='sonstig'; if(cb) cb(); };
+    // Timeout wird dynamisch nach Dateigröße gesetzt (siehe unten vor xhr.send)
+    xhr.ontimeout = function(){ showToast('⚠ Timeout — PDF zu groß oder Verbindung zu langsam. Bitte nochmal versuchen.'); d.typ='sonstig'; if(cb) cb(); };
     try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
   } // end _sendToAPI
 
@@ -9715,12 +9795,68 @@ function dokAnalyseDoc(d, key, cb){
     var pwStudio = d.studio || d.dateiname || '';
     var autoPw = _findPdfPassword(pwStudio);
     if(autoPw){
-      // Passwortgeschütztes PDF → als Bild-Screenshot (entschlüsselt) an KI
-      _renderPdfPageAsImage(d.dataURL, autoPw, function(imgDataURL){
-        var origMime = mime;
-        mime = 'image/jpeg';
-        _sendToAPI(imgDataURL);
-        mime = origMime;
+      // Passwortgeschütztes PDF → Seiten einzeln rendern und als separate image-Blöcke senden
+      // (zusammengeklebtes Riesenbild war zu groß für API bei 20+ Seiten)
+      _renderPdfPagesMulti(d.dataURL, autoPw, function(pageDataURLs, numPages){
+        var _pwUsed = true; // Passwort wurde verwendet → längerer Timeout
+        if(!pageDataURLs || !pageDataURLs.length){ showToast('PDF konnte nicht gerendert werden'); if(cb) cb(); return; }
+        var b64first = pageDataURLs[0].split(',')[1];
+        if(!b64first){ showToast('Bild konnte nicht gelesen werden'); if(cb) cb(); return; }
+        // Mehrere Seiten → mehrere image-Blöcke in einem API-Call
+        var contentBlocks = pageDataURLs.map(function(url){
+          return {type:'image',source:{type:'base64',media_type:'image/jpeg',data:url.split(',')[1]}};
+        });
+        contentBlocks.push({type:'text',text:prompt});
+        var bodyStr;
+        try {
+          bodyStr = JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
+            messages:[{role:'user',content:contentBlocks}]});
+        } catch(e) {
+          showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
+        }
+        var _kb = Math.round(bodyStr.length/1024);
+        showToast('⏳ Sende '+pageDataURLs.length+' Seiten ('+_kb+'KB)…');
+        var xhr2 = new XMLHttpRequest();
+        xhr2.open('POST','https://api.anthropic.com/v1/messages');
+        xhr2.setRequestHeader('Content-Type','application/json');
+        xhr2.setRequestHeader('x-api-key', key);
+        xhr2.setRequestHeader('anthropic-version','2023-06-01');
+        xhr2.setRequestHeader('anthropic-dangerous-direct-browser-access','true');
+        xhr2.timeout = 180000; // 3 Min für passwortgeschützte (= Studio Hamburg) PDFs
+        xhr2.ontimeout = function(){ showToast('⚠ Timeout — bitte nochmal versuchen'); if(cb) cb(); };
+        xhr2.onerror = function(){ showToast('Netzfehler'); if(cb) cb(); };
+        xhr2.onload = function(){
+          // Response-Verarbeitung identisch zu _sendToAPI xhr.onload
+          var _resp = xhr2.responseText;
+          var _data;
+          try { _data = JSON.parse(_resp); } catch(e){ showToast('Parse Fehler: '+e.message); if(cb) cb(); return; }
+          if(!_data.content||!_data.content[0]){
+            showToast('API Fehler: '+((_data.error&&_data.error.message)||JSON.stringify(_data).slice(0,100)));
+            if(cb) cb(); return;
+          }
+          if(_data.stop_reason==='max_tokens') showToast('⚠ Antwort abgeschnitten — nochmal versuchen');
+          try{
+            var _txt = _data.content[0].text;
+            _txt = _txt.replace(/```json/gi,'').replace(/```/g,'');
+            var _s = _txt.indexOf('{'); var _e = _txt.lastIndexOf('}');
+            if(_s<0||_e<0){ showToast('KI: kein JSON'); d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return; }
+            _txt = _txt.slice(_s,_e+1);
+            var _j = JSON.parse(_txt);
+            // Felder direkt übernehmen (gleiche Logik wie _sendToAPI)
+            d.typ = _j.typ||'sonstig'; d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
+            d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
+            d.regie=_j.regie||null; d.rolle=_j.rolle||null; d.uhrzeit=_j.uhrzeit||null;
+            d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
+            d.auszahlung=_j.auszahlung||null; d.gutschrift_nr=_j.gutschrift_nr||null;
+            d.kv_abzug=_j.kv_abzug||null; d.rv_abzug=_j.rv_abzug||null; d.pv_abzug=_j.pv_abzug||null;
+            d.sessions=_j.sessions||null;
+            showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
+            save(db); rDokumente(); if(cb) cb();
+          } catch(e){
+            showToast('Parse Fehler: '+e.message); d.typ='sonstig'; if(cb) cb();
+          }
+        };
+        try { xhr2.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
       }, function(){
         _askPdfPassword(d, key, cb);
       });
