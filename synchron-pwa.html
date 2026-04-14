@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '683';
+  if(el) el.textContent = '688';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4698,7 +4698,7 @@ function isGageEingang(eingang){
   // Auch hardcoded Bekannte
   var knownStudios = ['synchron','arena','interopa','vsi','iyuno','sdi','berliner','cinephon',
     'globaloc','lavendel','oxygen','o2 studio','tnt','studio hamburg','ffs','neue tonfilm',
-    'sesam','lohn','gehalt'];
+    'sesam','lohn','gehalt','level45','level 45','think global','toneworx','transperfect','cinephon','splendid','g&g','oxygen','eurosync'];
   var allStudios = studioNames.concat(knownStudios);
 
   // Prüfe Gegenpartei
@@ -4708,7 +4708,7 @@ function isGageEingang(eingang){
 
   // 2. Keywords im Verwendungszweck
   var keywords = ['gage','gutschrift','synchron','sesam','lohn/gehalt','lohn gehalt',
-    'gagenabrechnung','auszahlung gage','honorar','synchronsprecher'];
+    'gagenabrechnung','auszahlung gage','honorar','synchronsprecher','honorar rg','proj.'];
   for(var j=0;j<keywords.length;j++){
     if(nachricht.indexOf(keywords[j])>=0) return {ja:true, grund:'Keyword: '+keywords[j]};
   }
@@ -4879,10 +4879,38 @@ function holviImport(inp){
 
         // ── STUFE 1: Gutschrift-Nummern aus Nachricht ──
         var gutschriftNummern = [];
-        // Format 1: "2449/20260201" (mit Slash)
+        // Bereinigung: FFS-Stil " / 957090" und interne Refs entfernen
+        var _nachrichtClean = z.nachricht
+          .replace(/\s*\/\s*\d{5,7}(?=\s|$)/g, '')
+          .replace(/\s*\([a-z]{1,3}\d{6,10}\)/gi, '');
+
+        // Format 2: GNR-Range mit "bis" ODER "-" als Trenner
+        // "2449/20260301 bis 2449/20260303" ODER "2449/20260301-2449/20260303"
+        // ODER "2449/20260301-20260303" (Präfix nur einmal)
+        var _gnrRangeRex = /(\d{3,6})\/((\d{4})(\d{2})(\d{2}))\s*(?:bis|-(?!\s))\s*(?:\d{3,6}\/)?((\d{4})(\d{2})(\d{2}))/ig;
+        var _grm;
+        while((_grm = _gnrRangeRex.exec(_nachrichtClean)) !== null){
+          var _gnrPfx = _grm[1]; // z.B. "2449"
+          var _vonY=parseInt(_grm[3]),_vonM=parseInt(_grm[4]),_vonD=parseInt(_grm[5]);
+          var _bisY=parseInt(_grm[7]),_bisM=parseInt(_grm[8]),_bisD=parseInt(_grm[9]);
+          var _cur = new Date(_vonY, _vonM-1, _vonD);
+          var _bis = new Date(_bisY, _bisM-1, _bisD);
+          var _limit = 0;
+          while(_cur <= _bis && _limit++ < 60){
+            var _yy=_cur.getFullYear(), _mm=String(_cur.getMonth()+1).padStart(2,'0'), _dd=String(_cur.getDate()).padStart(2,'0');
+            var _gnr = _gnrPfx+'/'+_yy+_mm+_dd;
+            if(gutschriftNummern.indexOf(_gnr)<0) gutschriftNummern.push(_gnr);
+            _cur.setDate(_cur.getDate()+1);
+          }
+          // Range aus Clean entfernen damit Einzel-Regex nicht nochmal matched
+          _nachrichtClean = _nachrichtClean.replace(_grm[0], ' ');
+        }
+
+        // Format 1: Einzelne GNRs "2449/20260201"
         var gutRex = /(\d{3,6}\/\d{6,12})/g;
+        var _gNachricht = _nachrichtClean;
         var gm;
-        while((gm = gutRex.exec(z.nachricht)) !== null){
+        while((gm = gutRex.exec(_nachrichtClean)) !== null){
           // Personalnummern (5-stellig ohne Monats-Format) herausfiltern
           var gnr = gm[1];
           var parts = gnr.split('/');
@@ -5003,13 +5031,28 @@ function holviImport(inp){
         }
 
         // ── STUFE 2: Monats-Abrechnung in DB (Betrag + Studio) ──
+        // Für Studio Hamburg: kein GNR, Matching über auszahlung-Betrag
+        // Prüft auch ab.auszahlung der verknüpften Termine als Fallback
         var monatsMatch = (db.dokumente||[]).find(function(d){
           if(d.typ !== 'monats_abrechn') return false;
           if(!d.bestaetigt) return false;
+          if(!studioPasst(d.studio)) return false;
           var dAusz = parseFloat(d.auszahlung)||0;
-          if(dAusz <= 0) return false;
-          if(Math.abs(dAusz - z.betrag) > Math.max(0.50, dAusz*0.01)) return false;
-          return studioPasst(d.studio);
+          // Primär: d.auszahlung
+          if(dAusz > 0 && Math.abs(dAusz - z.betrag) <= Math.max(0.50, dAusz*0.01)) return true;
+          // Fallback: Summe der ab.auszahlung der verknüpften Termine
+          if(d.sessions){
+            var sumAbAusz = 0;
+            d.sessions.forEach(function(s){
+              if(!s.terminId) return;
+              var _t=(db.termine||[]).find(function(x){return x.id===s.terminId;});
+              if(!_t||!_t.abId) return;
+              var _ab=(db.abrechnungen||[]).find(function(a){return a.id===_t.abId;});
+              if(_ab && parseFloat(_ab.auszahlung)) sumAbAusz += parseFloat(_ab.auszahlung);
+            });
+            if(sumAbAusz > 0 && Math.abs(sumAbAusz - z.betrag) <= Math.max(0.50, sumAbAusz*0.01)) return true;
+          }
+          return false;
         });
 
         if(monatsMatch){
@@ -5095,9 +5138,19 @@ function holviImport(inp){
           }
         }
 
+        // ── STUFE 3b: Toneworx/Sonder-Rechnungsnummer "HONORAR RG. DD.MM.YYYY NNNN" ──
+        var honorarRef = _nachrichtClean.match(/(?:HONORAR|RG\.?)\s+[\d.]+\s+(\d{3,6})\s+(?:PROJ\.?\s*)?([A-Z][A-Za-z0-9 ]+)/i);
+        if(!gutschriftNummern.length && honorarRef){
+          // Kein GNR aber Rechnungs-Referenz → via Betrag + Studio matchen
+          // Projekttitel aus Nachricht extrahieren für besseres Display
+          var _hwTitle = honorarRef[2] ? honorarRef[2].trim() : '';
+          var _hwBetrag = z.betrag;
+          // Direkt Betrag-Match via STUFE 3 — fällt durch automatisch
+        }
+
         // ── STUFE 4: Zeitraum ZUERST prüfen (Gage 20260301 bis 20260304) ──
         // WICHTIG: Zeitraum vor Datum-Ref — sonst matcht "20260301" fälschlich als Einzeldatum
-        var zeitraumRef = z.nachricht.match(/(\d{8})\s+bis\s+(\d{8})/i);
+        var zeitraumRef = _nachrichtClean.match(/(\d{8})\s+bis\s+(\d{8})/i);
         if(zeitraumRef){
           var vonISO = zeitraumRef[1].slice(0,4)+'-'+zeitraumRef[1].slice(4,6)+'-'+zeitraumRef[1].slice(6,8);
           var bisISO = zeitraumRef[2].slice(0,4)+'-'+zeitraumRef[2].slice(4,6)+'-'+zeitraumRef[2].slice(6,8);
@@ -5122,7 +5175,7 @@ function holviImport(inp){
         }
 
         // ── STUFE 5: Datum-Referenz aus Nachricht (GAGE 20260301) ──
-        var datRef = z.nachricht.match(/(?:^|\s)(?:GAGE|Gage)\s+(\d{4})(\d{2})(\d{2})(?:\s|$)/i);
+        var datRef = _nachrichtClean.match(/(?:^|\s)(?:GAGE|Gage)\s+(\d{4})(\d{2})(\d{2})(?:\s|$|\.|\/|\()/i);
         if(datRef){
           var datISO = datRef[1]+'-'+datRef[2]+'-'+datRef[3];
           var datTermin = (db.termine||[]).find(function(t){
@@ -9226,7 +9279,9 @@ function dokAnalyseDoc(d, key, cb){
     +'    rv_abzug = "RV-Brutto lfd." Betrag (z.B. 16,00 oder 76,26 oder 57,29)\n'
     +'    pv_abzug = "PV-Brutto lfd." Betrag (z.B. 2,92 oder 13,94 oder 11,09)\n'
     +'    mwst = "Umsatzsteuer 7%" Betrag dieser Seite\n'
-    +'    auszahlung = "Differenz für Folgemonate" Betrag — NICHT "Auszahlung" aus der Verdienstbescheinigung!\n'
+    +'    auszahlung = "Differenz für Folgemonate" Betrag (letzte Zeile der Abrechnung, z.B. 161,57 oder 725,91)\n'
+    +'    ⚠⚠⚠ auszahlung ist NIEMALS der Gesamtbrutto-Betrag! Beispiel: brutto=184,00 aber auszahlung=161,57!\n'
+    +'    ⚠ NICHT nehmen: "Auszahlung" aus der Verdienstbescheinigung (KVAN/KVAG-Tabelle) am Seitenende!\n'
     +'    ust_satz = 0.07 (IMMER 0.07 — NIEMALS 0.09 oder 0.093!)\n'
     +'    ⚠⚠⚠ FALLE: "RV-Brutto lfd. 9,30%" = RENTENVERSICHERUNG, NICHT MwSt!\n'
     +'    ⚠⚠⚠ FALLE: "KV-Zusatz lfd. 1,345%" / "PV-Brutto lfd. 1,55%" = SV-Beiträge, NICHT MwSt!\n'
