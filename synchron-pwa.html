@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '688';
+  if(el) el.textContent = '690';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8948,6 +8948,8 @@ function makeThumbnail(dataURL, cb){
 }
 
 function resizeImageB64(dataURL, maxPx, quality, cb){
+  var _done=false;
+  var _safeCb=function(r){ if(!_done){ _done=true; cb(r); } };
   var img=new Image();
   img.onload=function(){
     var w=img.width,h=img.height;
@@ -8958,9 +8960,11 @@ function resizeImageB64(dataURL, maxPx, quality, cb){
     var c=document.createElement('canvas');
     c.width=w;c.height=h;
     c.getContext('2d').drawImage(img,0,0,w,h);
-    cb(c.toDataURL('image/jpeg',quality||0.82));
+    _safeCb(c.toDataURL('image/jpeg',quality||0.82));
   };
-  img.onerror=function(){cb(dataURL);};
+  img.onerror=function(){ _safeCb(dataURL); };
+  // Fallback: wenn img.onload nach 8s nicht feuert (HEIC/iOS-Bug) → Original weitergeben
+  setTimeout(function(){ _safeCb(dataURL); }, 8000);
   img.src=dataURL;
 }
 
@@ -9559,19 +9563,17 @@ function dokAnalyseDoc(d, key, cb){
     
     var _kb = Math.round(bodyStr.length/1024);
     var _mb = (_kb/1024).toFixed(1);
-    // Timeout dynamisch nach Dateigröße:
-    // < 3MB (normale Einzelseite): 60s reicht
-    // >= 3MB (mehrseitige PDFs wie Studio Hamburg): 180s
-    xhr.timeout = _kb > 3000 ? 180000 : 60000;
     if(_kb > 3000){
       showToast('⚠ Großes PDF ('+_mb+'MB) — Analyse kann 2–3 Min dauern…');
     } else {
-      showToast('⏳ Analysiere PDF ('+_kb+'KB)…');
+      showToast('⏳ Analysiere ('+_kb+'KB)…');
     }
     
     // XHR statt fetch — stabiler in iOS Safari für große Bodies
     var xhr = new XMLHttpRequest();
     xhr.open('POST','https://api.anthropic.com/v1/messages');
+    // Timeout MUSS nach open() gesetzt werden (iOS Safari Spec)
+    xhr.timeout = _kb > 3000 ? 180000 : 60000;
     xhr.setRequestHeader('Content-Type','application/json');
     xhr.setRequestHeader('x-api-key', key);
     xhr.setRequestHeader('anthropic-version','2023-06-01');
@@ -12601,9 +12603,15 @@ function dokAnalyseOne(){
     document.head.appendChild(st);
   }
   document.body.appendChild(overlay);
+  // Sicherheits-Timeout: Spinner spätestens nach 4 Min entfernen (verhindert ewiges Drehen)
+  var _overlayTimeout = setTimeout(function(){
+    var ol = document.getElementById('_analyse-overlay');
+    if(ol && ol.parentNode){ ol.parentNode.removeChild(ol); showToast('⚠ Analyse abgebrochen — bitte nochmal versuchen'); }
+  }, 240000);
 
   var _analyseDocId = d.id;
   dokAnalyseDoc(d, key, function(){
+    clearTimeout(_overlayTimeout);
     // Overlay entfernen
     var ol = document.getElementById('_analyse-overlay');
     if(ol && ol.parentNode) ol.parentNode.removeChild(ol);
