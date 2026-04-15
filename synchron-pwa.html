@@ -1843,7 +1843,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '690';
+  if(el) el.textContent = '692';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2507,8 +2507,13 @@ function openDetail(id){
       if(gvlDispo.gvl_takes_detail&&gvlDispo.gvl_takes_detail.length){
         gvlDispo.gvl_takes_detail.forEach(function(td){
           var fs=String(td.folge||'');
-          // Nur Folge-Nummer anzeigen, nicht den kombinierten StaffelFolge-Code
-          var folgeLabel = td.folge===0 ? 'Film' : (fs.length>=3 ? parseInt(fs.slice(-2)) : fs);
+          // Staffel+Folge immer explizit anzeigen (auch S1)
+          var folgeLabel;
+          if(td.folge===0) { folgeLabel='Film'; }
+          else if(fs.length===3){ folgeLabel='S'+fs[0]+' F'+parseInt(fs.slice(1)); }
+          else if(fs.length===4){ folgeLabel='S'+fs.slice(0,2)+' F'+parseInt(fs.slice(2)); }
+          else if(fs.length>4){ folgeLabel='S'+parseInt(fs.slice(0,-2))+' F'+parseInt(fs.slice(-2)); }
+          else { folgeLabel='F'+fs; } // nur Folge ohne Staffel
           gvlHtml+='<div class="info-row"><div class="ir-key">'+folgeLabel+'</div><div class="ir-val">'+esc(String(td.takes||0))+' Takes</div></div>';
         });
       }
@@ -4923,15 +4928,25 @@ function holviImport(inp){
         if(gutschriftNummern.length > 0){
           var gnTermine = [];
           var gnAbIds = [];
+          // GNR-Match: exakt ODER Prefix-Match (Holvi: 2449/20260301, App: 2449/202603)
+          var _gnrPasst = function(stored, holvi){
+            if(!stored || !holvi) return false;
+            if(stored === holvi) return true;
+            // Prefix: App-GNR ist Anfang der Holvi-GNR (2449/202603 ⊂ 2449/20260301)
+            if(holvi.indexOf(stored) === 0) return true;
+            // Reverse: Holvi-GNR ist Anfang der App-GNR
+            if(stored.indexOf(holvi) === 0) return true;
+            return false;
+          };
           gutschriftNummern.forEach(function(gnr){
             // Suche 1: Termin direkt via t.gutschrift_nr (monats_abrechn flow)
             (db.termine||[]).forEach(function(t){
-              if(t.gutschrift_nr===gnr && t.status!=='bezahlt' && gnTermine.indexOf(t)<0)
+              if(_gnrPasst(t.gutschrift_nr, gnr) && t.status!=='bezahlt' && gnTermine.indexOf(t)<0)
                 gnTermine.push(t);
             });
             // Suche 2: Via db.abrechnungen (split/einzel flow)
             (db.abrechnungen||[]).forEach(function(ab){
-              if(ab.gutschrift_nr===gnr){
+              if(_gnrPasst(ab.gutschrift_nr, gnr)){
                 var tAb=(db.termine||[]).find(function(x){ return x.id===ab.terminId && x.status!=='bezahlt'; });
                 if(tAb && gnTermine.indexOf(tAb)<0) gnTermine.push(tAb);
                 if(gnAbIds.indexOf(ab.id)<0) gnAbIds.push(ab.id);
