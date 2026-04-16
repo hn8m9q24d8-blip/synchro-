@@ -616,6 +616,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:10px">
 
+    <div onclick="abHolviOpen()" class="buch-menu-row" id="konto-menu-row">
+      <div class="buch-menu-icon" style="background:#f0fdf4;color:#15803d">🏦</div>
+      <div class="buch-menu-body">
+        <div class="buch-menu-title">Kontoabgleich <span id="konto-menu-badge" style="display:none;background:#16a34a;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
+        <div class="buch-menu-sub">Holvi / Haspa · Excel importieren</div>
+      </div>
+      <div class="buch-menu-arrow">›</div>
+    </div>
+
     <div onclick="switchView('mahnwesen')" class="buch-menu-row" id="mahn-menu-row">
       <div class="buch-menu-icon" style="background:#fef2f2;color:#c2410c">⚠</div>
       <div class="buch-menu-body">
@@ -1819,7 +1828,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '701';
+  if(el) el.textContent = '702';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13583,7 +13592,7 @@ function zahlTab(tab){
     el.style.fontWeight = active ? '700' : '600';
   });
   var tb = document.getElementById('zahl-toolbar');
-  if(tb) tb.style.display = tab==='studio' ? 'flex' : 'none';
+  if(tb) tb.style.display = 'flex';
   if(tab==='zahldauer'){
     var el2 = document.getElementById('zahlungen-list');
     if(el2) el2.innerHTML = rZahlungsStatistik(_zahlYear)||'<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-title">Noch keine Daten</div><div class="empty-sub">Zahlungseingänge importieren um die Statistik zu sehen</div></div>';
@@ -14796,16 +14805,9 @@ function abHolviAbgleich(eingaenge){
   });
 
   if(!neu.length){
-    var reAnalyse=confirm('Alle Eingänge bereits importiert.\nNochmal analysieren? (verbesserte Zuordnung / neue Abrechnungen)');
-    if(!reAnalyse){
-      document.getElementById('ab-holvi-result').innerHTML=
-        '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px;color:#15803d;font-weight:700">Alle Eingänge bereits importiert</div>';
-      return;
-    }
-    // IDs dieser Datei temporär entfernen → Neu-Analyse mit aktuellem Abrechnungsstand
-    var thisIds=gageEingaenge.map(function(z){return z.zahlungsId;});
-    db.holviImportIds=db.holviImportIds.filter(function(id){return thisIds.indexOf(id)<0;});
-    neu=gageEingaenge;
+    document.getElementById('ab-holvi-result').innerHTML=
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px;color:#15803d;font-weight:700">Alle Eingänge bereits importiert</div>';
+    return;
   }
 
   window._holviSkipped=skippedEingaenge;
