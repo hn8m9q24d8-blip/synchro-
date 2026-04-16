@@ -1868,7 +1868,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '696';
+  if(el) el.textContent = '697';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13562,19 +13562,41 @@ function _holviAbgleichMatch(z){
   }
 
   // Summe berechnen
+  // Priorität: Monatsdokument-Auszahlung (enthält SV-Abzüge) > Einzel-Auszahlungen > Einzel-Brutto
   var sumAusz=0, alleHaben=true;
-  termine.forEach(function(t){
-    var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
-    var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
-    if(ausz>0) sumAusz+=ausz; else alleHaben=false;
-  });
-  sumAusz=Math.round(sumAusz*100)/100;
+
+  // Suche Monatsdokument das alle Termine abdeckt (gleiche GNR-Basis)
+  var _monatsDoc=null;
+  if(gnrs.length && termine.length > 1){
+    // GNR-Prefix: aus '2449/20260201' → '2449/202602'
+    var _gnrBase=gnrs[0].slice(0, gnrs[0].length > 10 ? gnrs[0].length-2 : gnrs[0].length);
+    _monatsDoc=(db.dokumente||[]).find(function(d){
+      if(!d.bestaetigt||!d.auszahlung) return false;
+      var dg=d.gutschrift_nr||'';
+      return (dg===_gnrBase||dg.indexOf(_gnrBase)===0||_gnrBase.indexOf(dg)===0) && parseFloat(d.auszahlung)>0;
+    });
+  }
+
+  if(_monatsDoc && parseFloat(_monatsDoc.auszahlung)>0){
+    // Monatsdokument gefunden → dessen Auszahlung ist der korrekte Vergleichswert
+    sumAusz=Math.round(parseFloat(_monatsDoc.auszahlung)*100)/100;
+    alleHaben=true;
+  } else {
+    // Fallback: Einzel-Auszahlungen summieren
+    termine.forEach(function(t){
+      var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+      var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
+      if(ausz>0) sumAusz+=ausz; else alleHaben=false;
+    });
+    sumAusz=Math.round(sumAusz*100)/100;
+  }
+
   var tol=Math.max(0.50,(termine.length||1)*0.05);
   var konfidenz=termine.length===0?'OFFEN':
     (alleHaben&&Math.abs(sumAusz-z.betrag)<=tol)?'AUTO':
     (!alleHaben||sumAusz===0)?'PRÜFEN':'ABWEICHUNG';
 
-  return {termine:termine, gnrs:gnrs, sumAusz:sumAusz, konfidenz:konfidenz, abIds:abIds};
+  return {termine:termine, gnrs:gnrs, sumAusz:sumAusz, monatsDoc:_monatsDoc, konfidenz:konfidenz, abIds:abIds};
 }
 
 function rHolviAbgleich(){
