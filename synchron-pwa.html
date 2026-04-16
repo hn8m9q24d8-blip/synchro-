@@ -1868,7 +1868,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '697';
+  if(el) el.textContent = '699';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7563,7 +7563,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
-  else if(v==='holvi-abgleich'){setTimeout(rHolviAbgleich,80);}
+  else if(v==='holvi-abgleich'){rHolviAbgleich();}
   else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');setTimeout(function(){var _mel=document.getElementById('mahn-scroll');if(_mel)rMahnwesen();else setTimeout(rMahnwesen,200);},100);}
   else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
@@ -13440,11 +13440,14 @@ function holviAbgleichLoad(inp){
         };
       });
       if(!eingaenge.length){ showToast('Keine Zahlungseingänge gefunden'); return; }
-      // Bereits bestätigte IDs übernehmen — aus holviAbgleich UND holviImportIds
-      var vorher = (db.holviAbgleich||[]).reduce(function(m,e){ if(e.bestaetigt) m[e.id]=true; return m; },{});
-      var importIds = db.holviImportIds||[];
+      // Nur Kontoabgleich-eigene Bestätigungen übernehmen
+      // (holviImportIds = alter Flow, darf hier nicht auto-bestätigen)
+      var vorher = (db.holviAbgleich||[]).reduce(function(m,e){
+        if(e.bestaetigt) m[e.zahlungsId||e.id]=true;
+        return m;
+      },{});
       eingaenge.forEach(function(e){
-        if(vorher[e.id] || importIds.indexOf(e.zahlungsId)>=0) e.bestaetigt=true;
+        if(vorher[e.zahlungsId||e.id]) e.bestaetigt=true;
       });
       // Bestätigte Einträge älter als 2 Jahre entfernen (Speicher-Schutz)
       var _cutoff = new Date(); _cutoff.setFullYear(_cutoff.getFullYear()-2);
@@ -13565,20 +13568,37 @@ function _holviAbgleichMatch(z){
   // Priorität: Monatsdokument-Auszahlung (enthält SV-Abzüge) > Einzel-Auszahlungen > Einzel-Brutto
   var sumAusz=0, alleHaben=true;
 
-  // Suche Monatsdokument das alle Termine abdeckt (gleiche GNR-Basis)
+  // Suche Monatsdokument das unsere Termine verlinkt — 3 Strategien
   var _monatsDoc=null;
-  if(gnrs.length && termine.length > 1){
-    // GNR-Prefix: aus '2449/20260201' → '2449/202602'
-    var _gnrBase=gnrs[0].slice(0, gnrs[0].length > 10 ? gnrs[0].length-2 : gnrs[0].length);
+  var _terminIds=termine.map(function(t){return t.id;});
+
+  // Strategie 1: via terminId in d.sessions (sicherste Methode)
+  _monatsDoc=(db.dokumente||[]).find(function(d){
+    if(!d.auszahlung||parseFloat(d.auszahlung)<=0) return false;
+    if(!d.sessions||!d.sessions.length) return false;
+    return d.sessions.some(function(s){ return _terminIds.indexOf(s.terminId)>=0; });
+  });
+
+  // Strategie 2: via GNR-Basis (2449/20260201 → 2449/202602)
+  if(!_monatsDoc && gnrs.length){
+    var _gnrBase=gnrs[0].replace(/\/(\d{4})(\d{2})\d{2}$/,'/$1$2');
     _monatsDoc=(db.dokumente||[]).find(function(d){
-      if(!d.bestaetigt||!d.auszahlung) return false;
+      if(!d.auszahlung||parseFloat(d.auszahlung)<=0) return false;
       var dg=d.gutschrift_nr||'';
-      return (dg===_gnrBase||dg.indexOf(_gnrBase)===0||_gnrBase.indexOf(dg)===0) && parseFloat(d.auszahlung)>0;
+      return dg===_gnrBase||dg.indexOf(_gnrBase)===0||_gnrBase.indexOf(dg)===0;
+    });
+  }
+
+  // Strategie 3: Studio + Betrag-Match (Fallback wenn kein GNR/sessions)
+  if(!_monatsDoc && termine.length > 1){
+    _monatsDoc=(db.dokumente||[]).find(function(d){
+      if(!d.auszahlung||parseFloat(d.auszahlung)<=0) return false;
+      if(!studioPasst(d.studio)) return false;
+      return Math.abs(parseFloat(d.auszahlung)-z.betrag)<=0.50;
     });
   }
 
   if(_monatsDoc && parseFloat(_monatsDoc.auszahlung)>0){
-    // Monatsdokument gefunden → dessen Auszahlung ist der korrekte Vergleichswert
     sumAusz=Math.round(parseFloat(_monatsDoc.auszahlung)*100)/100;
     alleHaben=true;
   } else {
