@@ -897,7 +897,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <strong>Holvi:</strong> Konto → Transaktionen → Export → Excel (CSV)<br>
     <strong>Haspa / Sparkasse:</strong> Umsätze → Exportieren → Excel (CSV - gefilterte Einträge)
   </div>
-  <input id="ab-holvi-file" type="file" accept=".csv,.xls,.xlsx,text/csv" style="display:none" onchange="holviImport(this)">
+  <input id="ab-holvi-file" type="file" accept=".csv,.xls,.xlsx,text/csv" style="display:none" onchange="abHolviImport(this)">
   <div onclick="document.getElementById('ab-holvi-file').click()" style="border:2px dashed #86efac;border-radius:12px;padding:24px;text-align:center;cursor:pointer;background:#f0fdf4;margin-bottom:14px">
     <div style="font-size:28px">📂</div>
     <div style="font-size:13px;font-weight:700;color:#15803d;margin-top:6px">CSV oder Excel hochladen</div>
@@ -1832,7 +1832,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '703';
+  if(el) el.textContent = '704';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5423,8 +5423,10 @@ function holviBestaetigen(){
 
   save(db);
   rTermine();
-  document.getElementById('holvi-ov').remove();
+  var ovEl = document.getElementById('holvi-ov');
+  if(ovEl) ovEl.remove();
   window._holviMatches = null;
+  window._abHolviMatches = null;
   var statusEl = document.getElementById('holvi-import-status');
   if(statusEl) statusEl.textContent = importiert+' importiert';
   showToast('✓ '+importiert+' Zahlungseingänge importiert');
@@ -14938,9 +14940,19 @@ function abHolviAbgleich(eingaenge){
     return {zahlung:z,termin:kandidaten[0]||null,termineAlle:null,monatsAbrechn:null,terminKandidaten:kandidaten};
   });
 
-  // Sheet schließen, Preview öffnen
-  abHolviClose();
-  holviShowPreview(matches, eingaenge.length);
+  // In neue Kontoabgleich-View rendern (kein altes Overlay)
+  window._abHolviMatches = matches;
+  window._abHolviGesamt = eingaenge.length;
+  switchView('abrechnungen');
+  _abRenderHolviKarten();
+}
+
+function _abRenderHolviKarten(){
+  var matches = window._abHolviMatches;
+  var gesamt  = window._abHolviGesamt || 0;
+  if(!matches || !matches.length) return;
+  // Bestehende holviShowPreview wiederverwenden — Overlay erscheint über der View
+  holviShowPreview(matches, gesamt);
 }
 
 function abMonatRender(){
