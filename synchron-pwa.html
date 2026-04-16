@@ -616,6 +616,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:10px">
 
+    <div onclick="switchView('holvi-abgleich')" class="buch-menu-row" id="holvi-menu-row">
+      <div class="buch-menu-icon" style="background:#f0fdf4;color:#166534">🏦</div>
+      <div class="buch-menu-body">
+        <div class="buch-menu-title">Kontoabgleich <span id="holvi-abgleich-badge" style="display:none;background:#16a34a;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
+        <div class="buch-menu-sub">Holvi-Zahlungen bestätigen</div>
+      </div>
+      <div class="buch-menu-arrow">›</div>
+    </div>
+
     <div onclick="switchView('mahnwesen')" class="buch-menu-row" id="mahn-menu-row">
       <div class="buch-menu-icon" style="background:#fef2f2;color:#c2410c">⚠</div>
       <div class="buch-menu-body">
@@ -724,6 +733,22 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div><div style="color:#fff;font-size:18px;font-weight:900">Zahlungseingänge</div><div style="color:rgba(255,255,255,.75);font-size:12px">Importierte Holvi-Zahlungen</div></div>
   </div>
   <div class="scroll" id="zahlungseingaenge-list" style="padding:16px;padding-bottom:100px"></div>
+</div>
+
+<!-- ══════ HOLVI KONTOABGLEICH ══════════════════════════ -->
+<div id="view-holvi-abgleich" class="view" style="overflow:hidden;display:flex;flex-direction:column">
+  <div class="app-header" style="background:#166534;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div style="flex:1">
+      <div style="color:#fff;font-size:18px;font-weight:900">Kontoabgleich</div>
+      <div style="color:rgba(255,255,255,.75);font-size:12px" id="holvi-abgleich-sub">Holvi-Zahlungen prüfen &amp; bestätigen</div>
+    </div>
+    <label style="color:#fff;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.2);border-radius:8px;padding:6px 10px;white-space:nowrap">
+      📂 Excel laden
+      <input type="file" accept=".xlsx,.xls" style="display:none" onchange="holviAbgleichLoad(this)">
+    </label>
+  </div>
+  <div class="scroll" id="holvi-abgleich-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ MAHNWESEN ════════════════════════════════════ -->
@@ -1843,7 +1868,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '692';
+  if(el) el.textContent = '696';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2455,6 +2480,7 @@ function openDetail(id){
     +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
     +ampelDot('Abrechnung',hasAbrechn,'#f5c518',abDateinamen)
     +ampelDot('Zahlung',hasZahlung,'#22c55e',zahlungDatumLabel)
+    +(hasZahlung&&t._holviZahlungsId?'<span onclick="holviAbgleichZeigeEintrag(\''+t._holviZahlungsId+'\')" style="font-size:9px;color:#16a34a;cursor:pointer;text-decoration:underline;display:block;margin-top:-2px;margin-left:2px">→ Holvi</span>':'')
     +'</div>';
 
   // ── HEADER ─────────────────────────────────────────────────
@@ -5173,17 +5199,40 @@ function holviImport(inp){
             return t.datum>=vonISO && t.datum<=bisISO && studioPasst(t.studio) && t.status!=='bezahlt';
           });
           if(zeitraumTermine.length > 0){
-            var bCheck2 = betragsCheck(zeitraumTermine, 0.10);
+            // Betrag-Check: Summe der ab.auszahlung aller Zeitraum-Termine
+            var _zrSumAusz = 0; var _zrAlleHaben = true;
+            zeitraumTermine.forEach(function(t){
+              var _ab = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+              var _ausz = _ab ? parseFloat(_ab.auszahlung)||parseFloat(_ab.brutto)||0 : 0;
+              if(_ausz) _zrSumAusz += _ausz; else _zrAlleHaben = false;
+            });
+            var _zrTol = Math.max(0.50, zeitraumTermine.length*0.05);
+            var _zrBetrOk = _zrAlleHaben && _zrSumAusz > 0 && Math.abs(_zrSumAusz - z.betrag) <= _zrTol;
+            var _zrPassend = zeitraumTermine;
+            if(!_zrBetrOk && zeitraumTermine.length > 1){
+              // Teilmenge mit passender Betrag-Summe suchen
+              var _zrTeil = zeitraumTermine.filter(function(t){
+                var _ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+                return _ab && (parseFloat(_ab.auszahlung)||parseFloat(_ab.brutto)||0) > 0;
+              });
+              var _zrTeilSum = _zrTeil.reduce(function(s,t){
+                var _ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+                return s+(_ab?parseFloat(_ab.auszahlung)||parseFloat(_ab.brutto)||0:0);
+              },0);
+              if(_zrTeil.length > 0 && Math.abs(_zrTeilSum - z.betrag) <= Math.max(0.50, _zrTeil.length*0.05)){
+                _zrPassend = _zrTeil; _zrBetrOk = true;
+              }
+            }
             return {
-              zahlung:z, termin:zeitraumTermine[0], termineAlle:zeitraumTermine,
-              sessionsOhneTermin:[], gesamtSessions:zeitraumTermine.length,
-              monatsAbrechn:zeitraumTermine.length>1?{
-                id:'zr_'+Date.now(), typ:'abrechn', studio:zeitraumTermine[0].studio,
+              zahlung:z, termin:_zrPassend[0], termineAlle:_zrPassend,
+              sessionsOhneTermin:[], gesamtSessions:_zrPassend.length,
+              monatsAbrechn:_zrPassend.length>1?{
+                id:'zr_'+Date.now(), typ:'abrechn', studio:_zrPassend[0].studio,
                 auszahlung:z.betrag, beschr:'Zeitraum '+vonISO+' – '+bisISO,
-                sessions:zeitraumTermine.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};})
+                sessions:_zrPassend.map(function(t){return {terminId:t.id,datum:t.datum,titel:t.titel||''};})
               }:null,
               betragsAbweichung:0,
-              _konfidenz:'MANUELL',
+              _konfidenz: _zrBetrOk ? 'AUTO' : 'MANUELL',
               terminKandidaten:[]
             };
           }
@@ -7494,7 +7543,7 @@ function switchView(v){
   // bottom nav highlight
   var navMap = {
     'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
-    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch','undo':'buch',
+    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch','undo':'buch','holvi-abgleich':'buch',
     'rechnungen':'buch','zahlungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
@@ -7514,6 +7563,7 @@ function switchView(v){
   else if(v==='ust-voranmeldung'){var uv=document.getElementById('view-ust-voranmeldung');if(uv)uv.classList.add('active');rUstVoranmeldung();}
   else if(v==='dokumente'){var dv=document.getElementById('view-dokumente');if(dv)dv.classList.add('active');_unlockPageZoom();var _fo=document.getElementById('dok-fullimg-overlay');if(_fo)_fo.remove();rDokumente();}
   else if(v==='verdienstübersicht'){rVerdienst();}
+  else if(v==='holvi-abgleich'){setTimeout(rHolviAbgleich,80);}
   else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');setTimeout(function(){var _mel=document.getElementById('mahn-scroll');if(_mel)rMahnwesen();else setTimeout(rMahnwesen,200);},100);}
   else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
@@ -13353,6 +13403,350 @@ function tlabel2(s){
   return 'offen';
 }
 
+// ══════════════════════════════════════════════════════════════
+// HOLVI KONTOABGLEICH
+// ══════════════════════════════════════════════════════════════
+
+function holviAbgleichLoad(inp){
+  var file = inp.files[0];
+  if(!file){ return; }
+  inp.value='';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:'array'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+      var headerIdx = rows.findIndex(function(r){ return r && r[0]==='Valutadatum'; });
+      if(headerIdx < 0){ showToast('⚠ Kein Holvi-Format erkannt'); return; }
+      var dataRows = rows.slice(headerIdx+1).filter(function(r){ return r && r[0] && r[2]; });
+      var eingaenge = dataRows.filter(function(r){
+        return parseFloat(String(r[2]).replace(',','.')) > 0;
+      }).map(function(r){
+        var betrag = parseFloat(String(r[2]).replace(',','.'));
+        var datRaw = String(r[0]||'');
+        var datISO = '';
+        var m = datRaw.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if(m) datISO = m[3]+'-'+m[2]+'-'+m[1];
+        return {
+          id: String(r[8]||'').trim() || ('ha'+Date.now()+Math.random()),
+          datum: datISO,
+          betrag: betrag,
+          gegenpartei: String(r[4]||'').trim(),
+          nachricht: String(r[7]||'').trim(),
+          bestaetigt: false,
+          zahlungsId: String(r[8]||'').trim()
+        };
+      });
+      if(!eingaenge.length){ showToast('Keine Zahlungseingänge gefunden'); return; }
+      // Bereits bestätigte IDs übernehmen — aus holviAbgleich UND holviImportIds
+      var vorher = (db.holviAbgleich||[]).reduce(function(m,e){ if(e.bestaetigt) m[e.id]=true; return m; },{});
+      var importIds = db.holviImportIds||[];
+      eingaenge.forEach(function(e){
+        if(vorher[e.id] || importIds.indexOf(e.zahlungsId)>=0) e.bestaetigt=true;
+      });
+      // Bestätigte Einträge älter als 2 Jahre entfernen (Speicher-Schutz)
+      var _cutoff = new Date(); _cutoff.setFullYear(_cutoff.getFullYear()-2);
+      var _cutoffISO = _cutoff.toISOString().slice(0,10);
+      eingaenge = eingaenge.filter(function(e){
+        return !e.bestaetigt || (e.datum||'') >= _cutoffISO;
+      });
+      db.holviAbgleich = eingaenge;
+      save(db);
+      _updateHolviAbgleichBadge();
+      rHolviAbgleich();
+      showToast('✓ '+eingaenge.length+' Eingänge geladen');
+    } catch(ex){ showToast('Fehler: '+ex.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function _holviAbgleichMatch(z){
+  // Nutzt dieselbe Matching-Logik wie holviImport
+  // Gibt {termine, summe, konfidenz, abweichung} zurück
+  var gegenpartei = (z.gegenpartei||'').toLowerCase();
+  var nachricht = (z.nachricht||'').toLowerCase();
+
+  // GNR expandieren
+  var _clean = z.nachricht
+    .replace(/\s*\/\s*\d{5,7}(?=\s|$)/g, '')
+    .replace(/\s*\([a-z]{1,3}\d{6,10}\)/gi, '');
+  var gnrs = [];
+  var _grex = /(\d{3,6})\/((\d{4})(\d{2})(\d{2}))\s*(?:bis|-(?!\s))\s*(?:\d{3,6}\/)?(\d{4})(\d{2})(\d{2})/ig;
+  var _gm;
+  while((_gm=_grex.exec(_clean))!==null){
+    var _pfx=_gm[1];
+    var _von=new Date(parseInt(_gm[3]),parseInt(_gm[4])-1,parseInt(_gm[5]));
+    var _bis=new Date(parseInt(_gm[6]),parseInt(_gm[7])-1,parseInt(_gm[8]));
+    var _c=new Date(_von), _lim=0;
+    while(_c<=_bis&&_lim++<60){
+      gnrs.push(_pfx+'/'+_c.getFullYear()+String(_c.getMonth()+1).padStart(2,'0')+String(_c.getDate()).padStart(2,'0'));
+      _c.setDate(_c.getDate()+1);
+    }
+    _clean=_clean.replace(_gm[0],' ');
+  }
+  var _gr2=/(\d{3,6}\/\d{6,12})/g, _gm2;
+  while((_gm2=_gr2.exec(_clean))!==null){ if(gnrs.indexOf(_gm2[1])<0) gnrs.push(_gm2[1]); }
+
+  var _gnrPasst=function(stored,holvi){ if(!stored||!holvi) return false; if(stored===holvi) return true; if(holvi.indexOf(stored)===0) return true; if(stored.indexOf(holvi)===0) return true; return false; };
+  var studioNorm=function(s){ return (s||'').toLowerCase().replace(/gmbh|ag|kg|synchron|film|fernseh|sound|studios?/gi,' ').replace(/[^a-z0-9äöüß]/g,' ').replace(/\s+/g,' ').trim(); };
+  var zSt=studioNorm(z.gegenpartei);
+  var studioPasst=function(ts){ var n=studioNorm(ts); if(!n||!zSt) return false; if(n===zSt||zSt.indexOf(n)>=0||n.indexOf(zSt)>=0) return true; return n.split(' ').some(function(t){return t.length>=2&&zSt.indexOf(t)>=0;}); };
+
+  var termine=[], abIds=[];
+  if(gnrs.length){
+    (db.termine||[]).forEach(function(t){
+      if(_gnrPasst(t.gutschrift_nr,gnrs[0])||gnrs.some(function(g){return _gnrPasst(t.gutschrift_nr,g);})){
+        if(termine.indexOf(t)<0) termine.push(t);
+      }
+    });
+    (db.abrechnungen||[]).forEach(function(ab){
+      if(gnrs.some(function(g){return _gnrPasst(ab.gutschrift_nr,g);})){
+        var t=(db.termine||[]).find(function(x){return x.id===ab.terminId;});
+        if(t&&termine.indexOf(t)<0) termine.push(t);
+        if(abIds.indexOf(ab.id)<0) abIds.push(ab.id);
+      }
+    });
+  }
+
+  // Datum-Range
+  if(!termine.length){
+    var zrm=z.nachricht.match(/(\d{8})\s+bis\s+(\d{8})/i);
+    if(zrm){
+      var von=zrm[1].slice(0,4)+'-'+zrm[1].slice(4,6)+'-'+zrm[1].slice(6,8);
+      var bis=zrm[2].slice(0,4)+'-'+zrm[2].slice(4,6)+'-'+zrm[2].slice(6,8);
+      (db.termine||[]).forEach(function(t){ if(t.datum>=von&&t.datum<=bis&&studioPasst(t.studio)) termine.push(t); });
+    }
+  }
+
+  // Datum-Ref
+  if(!termine.length){
+    var drm=z.nachricht.match(/(?:GAGE|Gage)\s+(\d{4})(\d{2})(\d{2})/i);
+    if(drm){
+      var datISO=drm[1]+'-'+drm[2]+'-'+drm[3];
+      var t=(db.termine||[]).find(function(x){return x.datum===datISO&&studioPasst(x.studio);});
+      if(t) termine=[t];
+    }
+  }
+
+  // Lohn/Gehalt → Betrag-Match
+  if(!termine.length&&/Lohn.*Gehalt/i.test(z.nachricht)){
+    var lm=z.nachricht.match(/(\d{2})\/(\d{4})/);
+    if(lm){
+      var lMonat=lm[2]+'-'+lm[1];
+      (db.dokumente||[]).forEach(function(d){
+        if(d.typ!=='monats_abrechn'||!d.bestaetigt||!studioPasst(d.studio)) return;
+        if(!(d.datum||'').startsWith(lMonat)) return;
+        var ausz=parseFloat(d.auszahlung)||0;
+        if(ausz>0&&Math.abs(ausz-z.betrag)<=0.50){
+          (d.sessions||[]).forEach(function(s){
+            var t=(db.termine||[]).find(function(x){return x.id===s.terminId;});
+            if(t&&termine.indexOf(t)<0) termine.push(t);
+          });
+        }
+      });
+      // Fallback: ab.auszahlung match für Studio Hamburg
+      if(!termine.length){
+        (db.abrechnungen||[]).forEach(function(ab){
+          if(!studioPasst(ab.studio)) return;
+          if(!(ab.datum||'').startsWith(lMonat)) return;
+          var ausz=parseFloat(ab.auszahlung)||0;
+          if(ausz>0&&Math.abs(ausz-z.betrag)<=0.50){
+            var t=(db.termine||[]).find(function(x){return x.id===ab.terminId;});
+            if(t&&termine.indexOf(t)<0) termine.push(t);
+          }
+        });
+      }
+    }
+  }
+
+  // Summe berechnen
+  var sumAusz=0, alleHaben=true;
+  termine.forEach(function(t){
+    var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+    var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
+    if(ausz>0) sumAusz+=ausz; else alleHaben=false;
+  });
+  sumAusz=Math.round(sumAusz*100)/100;
+  var tol=Math.max(0.50,(termine.length||1)*0.05);
+  var konfidenz=termine.length===0?'OFFEN':
+    (alleHaben&&Math.abs(sumAusz-z.betrag)<=tol)?'AUTO':
+    (!alleHaben||sumAusz===0)?'PRÜFEN':'ABWEICHUNG';
+
+  return {termine:termine, gnrs:gnrs, sumAusz:sumAusz, konfidenz:konfidenz, abIds:abIds};
+}
+
+function rHolviAbgleich(){
+  var el=document.getElementById('holvi-abgleich-list');
+  if(!el) return;
+  var liste=db.holviAbgleich||[];
+  var sub=document.getElementById('holvi-abgleich-sub');
+
+  if(!liste.length){
+    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:#aaa">'      +'<div style="font-size:40px;margin-bottom:12px">🏦</div>'      +'<div style="font-size:15px;font-weight:700;color:#555;margin-bottom:8px">Kein Kontoauszug geladen</div>'      +'<div style="font-size:13px;color:#999">Excel-Datei oben rechts laden</div>'      +'</div>';
+    if(sub) sub.textContent='Holvi-Zahlungen prüfen & bestätigen';
+    return;
+  }
+
+  var offen=liste.filter(function(e){return !e.bestaetigt;}).length;
+  if(sub) sub.textContent=offen+' offen · '+liste.length+' gesamt';
+  _updateHolviAbgleichBadge();
+
+  var html='';
+
+  // Offene zuerst, dann bestätigte
+  var sorted=liste.slice().sort(function(a,b){
+    if(a.bestaetigt&&!b.bestaetigt) return 1;
+    if(!a.bestaetigt&&b.bestaetigt) return -1;
+    return (a.datum||'')<(b.datum||'')?-1:1;
+  });
+
+  sorted.forEach(function(z){
+    var match=_holviAbgleichMatch(z);
+    var kf=z.bestaetigt?'OK':match.konfidenz;
+
+    var bgCol=z.bestaetigt?'#f0fdf4':
+      kf==='AUTO'?'#f0fdf4':
+      kf==='PRÜFEN'?'#fffbeb':
+      kf==='ABWEICHUNG'?'#fff7ed':'#f9fafb';
+    var borderCol=z.bestaetigt?'#86efac':
+      kf==='AUTO'?'#86efac':
+      kf==='PRÜFEN'?'#fde68a':
+      kf==='ABWEICHUNG'?'#fed7aa':'#e5e7eb';
+    var statusLabel=z.bestaetigt?'<span style="background:#16a34a;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">✓ BESTÄTIGT</span>':
+      kf==='AUTO'?'<span style="background:#16a34a;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">🟢 PASST</span>':
+      kf==='PRÜFEN'?'<span style="background:#d97706;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">🟡 PRÜFEN</span>':
+      kf==='ABWEICHUNG'?'<span style="background:#ea580c;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">🟠 DIFFERENZ</span>':
+      '<span style="background:#6b7280;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">⚪ OFFEN</span>';
+
+    html+='<div style="background:'+bgCol+';border:1.5px solid '+borderCol+';border-radius:14px;padding:14px;margin-bottom:12px;'+(z.bestaetigt?'opacity:0.7':'')+'">'      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'      +'<div>'      +'<div style="font-size:16px;font-weight:900">'+fmtEur(z.betrag)+'</div>'      +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(z.gegenpartei)+'</div>'      +'<div style="font-size:10px;color:#999;margin-top:1px">'+fd(z.datum)+(z.nachricht?' · '+esc(z.nachricht.slice(0,50)):'')+'</div>'      +'</div>'      +'<div style="text-align:right">'+statusLabel+'</div>'      +'</div>';
+
+    // Zugeordnete Termine
+    if(match.termine.length){
+      html+='<div style="background:rgba(255,255,255,.7);border-radius:8px;padding:8px 10px;margin-bottom:8px">';
+      match.termine.forEach(function(t){
+        var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+        var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
+        var gnrLabel=ab&&ab.gutschrift_nr?ab.gutschrift_nr:(t.gutschrift_nr||'');
+        var _tid=t.id;
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer" onclick="_holviGotoTermin(\''+_tid+'\')">'          +'<div>'          +'<div style="font-size:12px;font-weight:700;color:#1d4ed8">'+esc(t.titel||t.studio||'?')+'</div>'          +'<div style="font-size:10px;color:#888">'+fd(t.datum)+(gnrLabel?' · '+esc(gnrLabel):'')+'</div>'          +'</div>'          +'<div style="font-size:12px;font-weight:800;color:'+(ausz>0?'#15803d':'#9ca3af')+'">'+( ausz>0?fmtEur(ausz):'—')+'</div>'          +'</div>';
+      });
+      // Summe
+      if(match.termine.length>1){
+        var diffCol=Math.abs(match.sumAusz-z.betrag)<=0.50?'#15803d':'#ea580c';
+        html+='<div style="display:flex;justify-content:space-between;padding-top:6px;margin-top:2px;border-top:2px solid rgba(0,0,0,.1)">'          +'<div style="font-size:11px;font-weight:700;color:#555">Summe ('+match.termine.length+' Termine)</div>'          +'<div style="font-size:12px;font-weight:900;color:'+diffCol+'">'+fmtEur(match.sumAusz)+' / '+fmtEur(z.betrag)+'</div>'          +'</div>';
+      }
+      html+='</div>';
+    } else if(!z.bestaetigt){
+      html+='<div style="font-size:11px;color:#9ca3af;padding:6px 0;margin-bottom:6px">Keine passenden Termine gefunden — bitte Abrechnungen einpflegen</div>';
+    }
+
+    // Buttons
+    if(!z.bestaetigt){
+      var _zid=z.id;
+      html+='<div style="display:flex;gap:8px">'
+        +'<button type="button" onclick="holviAbgleichBestaetigen(\''+_zid+'\')" '
+        +'style="flex:1;background:'+(kf==='AUTO'?'#16a34a':'#374151')+';color:#fff;border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation">'
+        +(kf==='AUTO'?'✓ Bestätigen':'✓ Trotzdem bestätigen')+'</button>'
+        +'</div>';
+    } else {
+      html+='<div style="font-size:10px;color:#16a34a;font-weight:700">✓ Bezahlt · Zahlungsdatum gesetzt</div>';
+    }
+
+    html+='</div>';
+  });
+
+  // Neue Excel laden Button wenn alles bestätigt
+  if(offen===0&&liste.length>0){
+    html+='<div style="text-align:center;padding:20px 0;color:#16a34a;font-size:13px;font-weight:700">🎉 Alle Zahlungen bestätigt!</div>';
+    html+='<div style="text-align:center"><button type="button" onclick="holviAbgleichReset()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">🗑 Zurücksetzen</button></div>';
+  }
+
+  el.innerHTML=html;
+}
+
+function holviAbgleichZeigeEintrag(zahlungsId){
+  // Zur Holvi-Kontoabgleich-Ansicht springen und Eintrag hervorheben
+  switchView('holvi-abgleich');
+  setTimeout(function(){
+    var liste=db.holviAbgleich||[];
+    var idx=liste.findIndex(function(e){return (e.zahlungsId||e.id)===zahlungsId;});
+    if(idx>=0){
+      var el=document.getElementById('holvi-abgleich-list');
+      if(el){
+        var cards=el.querySelectorAll('div[data-zid]');
+        // Scroll to entry - find by position
+        var allCards=el.children;
+        if(allCards[idx]) allCards[idx].scrollIntoView({behavior:'smooth',block:'center'});
+      }
+    }
+    showToast('🏦 Holvi-Eintrag: '+zahlungsId.slice(0,8)+'…');
+  }, 300);
+}
+
+function holviAbgleichReset(){
+  if(!confirm('Alle Eingänge löschen und neu laden?')) return;
+  db.holviAbgleich=[];
+  save(db);
+  rHolviAbgleich();
+}
+
+function holviAbgleichBestaetigen(zahlungsId){
+  var liste=db.holviAbgleich||[];
+  var z=liste.find(function(e){return e.id===zahlungsId;});
+  if(!z) return;
+  var match=_holviAbgleichMatch(z);
+
+  // Alle gematchten Termine auf bezahlt setzen
+  match.termine.forEach(function(t){
+    if(t.status!=='bezahlt'){
+      t.status='bezahlt';
+      t.zahlungDatum=z.datum;
+      t._holviZahlungsId=z.zahlungsId||z.id; // Link zurück zum Holvi-Eintrag
+      if(t.abId){
+        var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+        if(ab){ ab.bezahlt=true; ab.zahlungDatum=z.datum; }
+      }
+    }
+  });
+
+  // Auch in db.zahlungen speichern
+  if(!db.zahlungen) db.zahlungen=[];
+  var zahlungsRec={
+    id:'hz'+Date.now(),
+    datum:z.datum,
+    betrag:z.betrag,
+    gegenpartei:z.gegenpartei,
+    nachricht:z.nachricht,
+    zahlungsId:z.zahlungsId,
+    terminIds:match.termine.map(function(t){return t.id;}),
+    _holviAbgleich:true
+  };
+  db.zahlungen.push(zahlungsRec);
+  if(!db.holviImportIds) db.holviImportIds=[];
+  if(z.zahlungsId&&db.holviImportIds.indexOf(z.zahlungsId)<0) db.holviImportIds.push(z.zahlungsId);
+
+  // Als bestätigt markieren
+  z.bestaetigt=true;
+  save(db);
+  _updateHolviAbgleichBadge();
+  rHolviAbgleich();
+  showToast('✓ '+match.termine.length+' Termin'+(match.termine.length!==1?'e':'')+' als bezahlt markiert');
+}
+
+function _holviGotoTermin(id){
+  switchView('termine');
+  setTimeout(function(){ openDetail(id); }, 150);
+}
+
+function _updateHolviAbgleichBadge(){
+  var liste=db.holviAbgleich||[];
+  var offen=liste.filter(function(e){return !e.bestaetigt;}).length;
+  var badge=document.getElementById('holvi-abgleich-badge');
+  if(badge){ badge.textContent=offen||''; badge.style.display=offen>0?'inline':'none'; }
+}
+
 function rMahnwesen(){
   var el = document.getElementById('mahn-scroll');
   if(!el) return;
@@ -15833,6 +16227,7 @@ function suchHL(text,q){
   switchView('termine');
   updateBadge();
   updateMahnBadgeOnLoad();
+  _updateHolviAbgleichBadge();
   // Integritäts-Check beim Start (still, nur bei Problemen Toast)
   setTimeout(function(){
     var warnings = runIntegrityCheck(true);
