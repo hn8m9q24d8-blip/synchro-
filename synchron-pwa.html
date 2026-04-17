@@ -743,8 +743,9 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div style="color:#fff;font-size:18px;font-weight:900">Kontoabgleich</div>
       <div style="color:rgba(255,255,255,.75);font-size:12px" id="holvi-abgleich-sub">Holvi-Zahlungen prüfen &amp; bestätigen</div>
     </div>
+    <div onclick="holviAbgleichRefresh()" style="color:#fff;font-size:16px;cursor:pointer;background:rgba(255,255,255,.2);border-radius:8px;padding:6px 10px;white-space:nowrap;margin-right:6px;line-height:1" title="Neu matchen">🔄</div>
     <label style="color:#fff;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.2);border-radius:8px;padding:6px 10px;white-space:nowrap">
-      📂 Excel laden
+      📂 Excel
       <input type="file" accept=".xlsx,.xls" style="display:none" onchange="holviAbgleichLoad(this)">
     </label>
   </div>
@@ -1868,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '700';
+  if(el) el.textContent = '702';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2703,6 +2704,22 @@ function openDetail(id){
   // Nur Takes-Zahl und Grundgage sind relevante Differenzquellen.
   var abHtml='';
   if(ab){
+    // Build 702: Tochter-teilAb → kompakte "Teil von Master"-Card statt volle Abrechnung
+    if(ab._nurMarker && ab._masterAbId){
+      var masterAb=(db.abrechnungen||[]).find(function(a){return a.id===ab._masterAbId;});
+      var masterTermin=masterAb?(db.termine||[]).find(function(x){return x.id===masterAb.terminId;}):null;
+      var _mLabel=masterTermin?(masterTermin.titel||masterTermin.studio||'Master-Termin'):'Master-Termin';
+      var _mDatum=masterTermin?fd(masterTermin.datum):'';
+      var _masterBezahlt=masterAb&&masterAb.bezahlt;
+      abHtml='<div class="info-card" style="border-left:4px solid '+(_masterBezahlt?'#22c55e':'#8b5cf6')+'">'
+        +'<div class="info-card-header"><span>🔗 Teil einer Sammel-Abrechnung</span>'
+        +'<span style="font-size:11px;color:'+(_masterBezahlt?'#15803d':'#7c3aed')+';font-weight:700">'+(_masterBezahlt?'✓ bezahlt':'Tochter-Termin')+'</span></div>'
+        +'<div style="padding:0 16px 14px">'
+        +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
+        +(masterTermin?'<div class="info-row" style="cursor:pointer" onclick="openDetail(\''+masterTermin.id+'\')"><div class="ir-key">Master-Termin</div><div class="ir-val" style="color:#7c3aed;font-weight:700;text-decoration:underline">'+esc(_mLabel)+(_mDatum?' · '+_mDatum:'')+' ›</div></div>':'')
+        +'<div style="font-size:11px;color:#6b7280;margin-top:8px;padding:6px 8px;background:#faf5ff;border-radius:6px">Dieser Termin teilt sich eine Abrechnung mit anderen Terminen. Finanz- und SV-Werte stehen am Master-Termin.</div>'
+        +'</div></div>';
+    } else {
     var abBrutto=parseFloat(ab.brutto)||0;
     var netBruttoOk=Math.abs(net-abBrutto)<0.02;
     var matchCol=netBruttoOk?'#15803d':'#c2410c';
@@ -2732,7 +2749,9 @@ function openDetail(id){
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
-      +'<div class="info-card-header"><span>💶 Abrechnung'+((ab&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
+      +'<div class="info-card-header"><span>💶 Abrechnung'
+      +(ab._isMultiMaster&&ab._multiAnzahl>1?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700">🔗 Master · '+ab._multiAnzahl+' Termine</span>':'')
+      +((ab&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(!hasDispo2?'<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;padding:6px 8px;background:#f9fafb;border-radius:6px">📋 Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
@@ -2766,15 +2785,28 @@ function openDetail(id){
         +'</div></div>'
       +(!netBruttoOk?'<div style="font-size:12px;color:#c2410c;padding-top:6px;font-weight:700;border-top:1px solid #fecaca;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+'</div>':'')
       +'</div></div>';
+    } // end else (non-Marker branch)
   }
 
   // ── AUTO-FIX: ab.bezahlt=true aber t.status noch nicht bezahlt ──
   if(t.status !== 'bezahlt' && t.abId){
     var abFix=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-    if(abFix && abFix.bezahlt && abFix.zahlungDatum){
-      t.status='bezahlt';
-      if(!t.zahlungDatum) t.zahlungDatum=abFix.zahlungDatum;
-      save(db);
+    if(abFix){
+      // Build 702: Bei Tochter-teilAb auf Master-Status schauen
+      if(abFix._nurMarker && abFix._masterAbId){
+        var masterAb=(db.abrechnungen||[]).find(function(a){return a.id===abFix._masterAbId;});
+        if(masterAb && masterAb.bezahlt && masterAb.zahlungDatum){
+          t.status='bezahlt';
+          if(!t.zahlungDatum) t.zahlungDatum=masterAb.zahlungDatum;
+          abFix.bezahlt=true;
+          if(!abFix.zahlungDatum) abFix.zahlungDatum=masterAb.zahlungDatum;
+          save(db);
+        }
+      } else if(abFix.bezahlt && abFix.zahlungDatum){
+        t.status='bezahlt';
+        if(!t.zahlungDatum) t.zahlungDatum=abFix.zahlungDatum;
+        save(db);
+      }
     }
   }
   // Auch via dokIds prüfen (Monats-Abrechnung)
@@ -3040,6 +3072,30 @@ function _upsertAbrechnung(abId, felder){
     felder.id = newId;
     db.abrechnungen.push(felder);
     return newId;
+  }
+}
+
+// Build 702: Bezahlt-Status setzen mit Propagation Master → Töchter
+// Wenn ab ein Master-teilAb ist, werden alle Tochter-teilAbs + deren Termine mitmarkiert
+function _setAbBezahlt(ab, zahlDatum){
+  if(!ab) return;
+  ab.bezahlt = true;
+  if(zahlDatum) ab.zahlungDatum = zahlDatum;
+  // Master → Töchter + ihre Termine
+  if(ab._isMultiMaster && ab._childTerminIds && ab._childTerminIds.length){
+    (db.abrechnungen||[]).forEach(function(child){
+      if(child._nurMarker && child._masterAbId === ab.id){
+        child.bezahlt = true;
+        if(zahlDatum) child.zahlungDatum = zahlDatum;
+      }
+    });
+    ab._childTerminIds.forEach(function(tid){
+      var t = (db.termine||[]).find(function(x){return x.id===tid;});
+      if(t){
+        t.status = 'bezahlt';
+        if(zahlDatum && !t.zahlungDatum) t.zahlungDatum = zahlDatum;
+      }
+    });
   }
 }
 
@@ -4842,35 +4898,15 @@ function holviImport(inp){
 
       // Abgleich gegen Termine + Monats-Abrechnungen
       var matches = gageEingaenge.map(function(z){
-        var studioNorm = function(s){ return (s||'').toLowerCase().replace(/\s+gmbh.*|synchron.*|film.*|berlin.*/,'').replace(/[^a-z0-9äöüß]/g,' ').trim(); };
-        var zStudio = studioNorm(z.gegenpartei);
 
         // ══════════════════════════════════════════════════════════════
         // HOLVI MATCHING ENGINE — Bombensicher für Steuer
         // Priorität: GutNr > Datum > Betrag-Summe > Lohn/Gehalt
         // ══════════════════════════════════════════════════════════════
 
-        // ── Hilfsfunktionen ──
-        var studioNorm2 = function(s){
-          return (s||'').toLowerCase()
-            .replace(/gmbh|ag|kg|mbh|synchron|film|fernseh|sound|studios?|production|productions|gesellschaft|und|fur|für|\+/gi,' ')
-            .replace(/[^a-z0-9äöüß]/g,' ').replace(/\s+/g,' ').trim();
-        };
-        var zStudio = studioNorm2(z.gegenpartei);
-
-        // Studio-Plausibilität: mind. 4 Zeichen aus Studioname in Gegenpartei
-        var studioPasst = function(terminStudio){
-          var ts = studioNorm2(terminStudio);
-          if(!ts || !zStudio) return false;
-          // Direkter Match (für Kürzel wie FFS, VSI, TNT)
-          if(ts === zStudio) return true;
-          if(zStudio.indexOf(ts) >= 0 || ts.indexOf(zStudio) >= 0) return true;
-          // Token-Match: mind. 2 Zeichen (fängt FFS, VSI etc.)
-          var tsTokens = ts.split(' ').filter(function(t){ return t.length >= 2; });
-          var zsTokens = zStudio.split(' ').filter(function(t){ return t.length >= 2; });
-          return tsTokens.some(function(t){ return t.length>=2 && zStudio.indexOf(t)>=0; }) ||
-                 zsTokens.some(function(t){ return t.length>=2 && ts.indexOf(t)>=0; });
-        };
+        // ── Hilfsfunktionen (Build 701: zentrale Helpers _studioNorm/_studioPasst) ──
+        var zStudio = _studioNorm(z.gegenpartei);
+        var studioPasst = function(terminStudio){ return _studioPasst(terminStudio, z.gegenpartei); };
 
         // Betrag-Check: Summe der Auszahlungen ±(N × 0,05€)
         var betragsCheck = function(termine, toleranzProTermin){
@@ -4910,15 +4946,15 @@ function holviImport(inp){
 
         // ── STUFE 1: Gutschrift-Nummern aus Nachricht ──
         var gutschriftNummern = [];
-        // Bereinigung: FFS-Stil " / 957090" und interne Refs entfernen
+        // Bereinigung: FFS-Stil " / 957090" (Space VOR Slash zwingend) und interne Refs entfernen
         var _nachrichtClean = z.nachricht
-          .replace(/\s*\/\s*\d{5,7}(?=\s|$)/g, '')
+          .replace(/\s+\/\s*\d{5,7}(?=\s|$)/g, '')
           .replace(/\s*\([a-z]{1,3}\d{6,10}\)/gi, '');
 
-        // Format 2: GNR-Range mit "bis" ODER "-" als Trenner
-        // "2449/20260301 bis 2449/20260303" ODER "2449/20260301-2449/20260303"
-        // ODER "2449/20260301-20260303" (Präfix nur einmal)
-        var _gnrRangeRex = /(\d{3,6})\/((\d{4})(\d{2})(\d{2}))\s*(?:bis|-(?!\s))\s*(?:\d{3,6}\/)?((\d{4})(\d{2})(\d{2}))/ig;
+        // Format 2: GNR-Range mit "bis" ODER "-" (auch mit Whitespace) als Trenner
+        // "2449/20260301 bis 2449/20260303" / "2449/20260301-2449/20260303" / "2449/20260301 - 20260303"
+        // Build 701: Bindestrich mit Whitespace erlaubt (vor/nach muss GNR-Struktur stehen)
+        var _gnrRangeRex = /(\d{3,6})\/((\d{4})(\d{2})(\d{2}))\s*(?:bis|-|–|—)\s*(?:\d{3,6}\/)?((\d{4})(\d{2})(\d{2}))/ig;
         var _grm;
         while((_grm = _gnrRangeRex.exec(_nachrichtClean)) !== null){
           var _gnrPfx = _grm[1]; // z.B. "2449"
@@ -4954,16 +4990,7 @@ function holviImport(inp){
         if(gutschriftNummern.length > 0){
           var gnTermine = [];
           var gnAbIds = [];
-          // GNR-Match: exakt ODER Prefix-Match (Holvi: 2449/20260301, App: 2449/202603)
-          var _gnrPasst = function(stored, holvi){
-            if(!stored || !holvi) return false;
-            if(stored === holvi) return true;
-            // Prefix: App-GNR ist Anfang der Holvi-GNR (2449/202603 ⊂ 2449/20260301)
-            if(holvi.indexOf(stored) === 0) return true;
-            // Reverse: Holvi-GNR ist Anfang der App-GNR
-            if(stored.indexOf(holvi) === 0) return true;
-            return false;
-          };
+          // GNR-Match: nutzt globalen _gnrPasst (Build 701: mit Längen-Safety)
           gutschriftNummern.forEach(function(gnr){
             // Suche 1: Termin direkt via t.gutschrift_nr (monats_abrechn flow)
             (db.termine||[]).forEach(function(t){
@@ -5666,7 +5693,7 @@ function holviBestaetigen(){
           var dok=(db.dokumente||[]).find(function(d){return d.id===abId;});
           if(dok){ dok.bezahlt=true; dok.zahlungDatum=z.datum; }
           var ab=(db.abrechnungen||[]).find(function(a){return a.dokId===abId;});
-          if(ab){ ab.bezahlt=true; ab.zahlungDatum=z.datum; }
+          if(ab){ _setAbBezahlt(ab, z.datum); }
         });
       } else {
         m.monatsAbrechn.zahlungDatum = z.datum;
@@ -7101,6 +7128,8 @@ function rJahresabschluss(){
     // aufgeteilt-Original NICHT zählen — nur die teilAb-Einträge (_aufgeteiltVon gesetzt)
     // verhindert Doppelzählung: Original + Teile haben dieselbe gutschrift_nr
     if(a.aufgeteilt) return;
+    // Build 702: Tochter-teilAbs sind reine Marker ohne Finanzwerte
+    if(a._nurMarker) return;
     var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
     if(!gnrGruppen[key]) gnrGruppen[key]={abs:[], key:key, gnr:a.gutschrift_nr, datum:a.datum, studio:a.studio, produktion:a.produktion, dateiname:a.dateiname};
     gnrGruppen[key].abs.push(a);
@@ -10214,6 +10243,80 @@ function _dokResearchProduktion(d, key, cb){
   }).catch(function(){ if(cb) cb(); });
 }
 
+// Build 701: Zentrale Match-Helpers für Holvi-Abgleich & Import
+// Single source of truth für Studio-Normalisierung und GNR-Extraktion
+// WICHTIG: Beide Stellen (holviImport + _holviAbgleichMatch) nutzen diese Helpers
+function _studioNorm(s){
+  // Normalisiert Firmennamen auf Kern-Tokens
+  // Entfernt Rechtsformen, generische Branchenbegriffe, Sonderzeichen
+  // Stadtnamen bleiben drin (oft Teil des Identitäts-Tokens, z.B. "Studio Hamburg")
+  return (s||'').toLowerCase()
+    .replace(/\bgmbh\b|\bag\b|\bkg\b|\bmbh\b|\bohg\b|\bgbr\b|\bco\b|\be\.?k\.?\b/gi,' ')
+    .replace(/synchron|filmproduktions?|film|fernseh|sound|studios?|productions?|tonproduktion|produktions?|gesellschaft|media|dienstleistung|\+/gi,' ')
+    .replace(/\bund\b|\bfur\b|\bfür\b|\b&\b/gi,' ')
+    .replace(/[^a-z0-9\u00e4\u00f6\u00fc\u00df]/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function _studioPasst(terminStudio, gegenpartei){
+  // True wenn terminStudio und gegenpartei plausibel dieselbe Firma sind
+  var n = _studioNorm(terminStudio);
+  var g = _studioNorm(gegenpartei);
+  if(!n || !g) return false;
+  if(n === g) return true;
+  if(g.indexOf(n) >= 0 || n.indexOf(g) >= 0) return true;
+  // Token-basiert: mind. 1 Token mit >=3 Zeichen muss in beiden vorkommen
+  // (Zweizeichen-Tokens wie "co" wären zu generisch)
+  var nT = n.split(' ').filter(function(t){ return t.length >= 3; });
+  var gT = g.split(' ').filter(function(t){ return t.length >= 3; });
+  return nT.some(function(t){ return g.indexOf(t) >= 0; }) ||
+         gT.some(function(t){ return n.indexOf(t) >= 0; });
+}
+function _gnrExtract(nachricht){
+  // Extrahiert alle GNRs aus einer Holvi-Nachricht
+  // Bereinigt FFS-Interne-Refs und Klammer-Refs
+  // Expandiert Ranges ("2449/20260301 bis 2449/20260303" oder mit Bindestrich)
+  var _clean = String(nachricht||'')
+    .replace(/\s+\/\s*\d{5,7}(?=\s|$)/g, '')        // FFS " / 957090" (Space VOR Slash zwingend, sonst wird GNR-Monatsbasis verschluckt)
+    .replace(/\s*\([a-z]{1,3}\d{6,10}\)/gi, '');    // "(lo2603003)"
+  var gnrs = [];
+  // Range-Regex: "bis" ODER "-" (mit oder ohne Whitespace)
+  // Präfix nach Trenner optional: "2449/20260301 - 20260303" valide
+  // False-positive-Schutz: vor UND nach Trenner muss YYYYMMDD stehen
+  var rangeRex = /(\d{3,6})\/((\d{4})(\d{2})(\d{2}))\s*(?:bis|-|–|—)\s*(?:\d{3,6}\/)?((\d{4})(\d{2})(\d{2}))/ig;
+  var rm;
+  while((rm = rangeRex.exec(_clean)) !== null){
+    var pfx = rm[1];
+    // Gruppen: 1=pfx, 2=dat1, 3=Y1, 4=M1, 5=D1, 6=dat2, 7=Y2, 8=M2, 9=D2
+    var von = new Date(parseInt(rm[3]), parseInt(rm[4])-1, parseInt(rm[5]));
+    var bis = new Date(parseInt(rm[7]), parseInt(rm[8])-1, parseInt(rm[9]));
+    var cur = new Date(von), lim = 0;
+    while(cur <= bis && lim++ < 60){
+      var g = pfx+'/'+cur.getFullYear()+String(cur.getMonth()+1).padStart(2,'0')+String(cur.getDate()).padStart(2,'0');
+      if(gnrs.indexOf(g) < 0) gnrs.push(g);
+      cur.setDate(cur.getDate()+1);
+    }
+    _clean = _clean.replace(rm[0], ' ');
+  }
+  // Einzelne GNRs: "2449/20260301" oder "2449/202602" (Monatsbasis)
+  var singleRex = /(\d{3,6}\/\d{6,12})/g, sm;
+  while((sm = singleRex.exec(_clean)) !== null){
+    if(gnrs.indexOf(sm[1]) < 0) gnrs.push(sm[1]);
+  }
+  return gnrs;
+}
+function _gnrPasst(stored, holvi){
+  // Prefix-Matching mit Längen-Safety
+  // "2449/202603" matcht "2449/20260301" in beide Richtungen
+  if(!stored || !holvi) return false;
+  if(stored === holvi) return true;
+  var sp = stored.split('/')[1] || '';
+  var hp = holvi.split('/')[1] || '';
+  if(sp.length < 6 || hp.length < 6) return false;
+  if(holvi.indexOf(stored) === 0) return true;
+  if(stored.indexOf(holvi) === 0) return true;
+  return false;
+}
+
 function _studioScore(a,b){
   // Studio-Ähnlichkeit 0-1: exact, contains, first-word, word-overlap, trigram
   if(!a||!b) return 0;
@@ -12488,70 +12591,91 @@ function dokLinkMultiConfirm(){
 
       if(!db.abrechnungen) db.abrechnungen=[];
 
-      termine.forEach(function(t,i){
-        var anteil = useTakes
-          ? ((parseInt(t.takes)||0)/totalTakes)
-          : (1/n);
-        // Letzter Termin bekommt Rest (Cent-Ausgleich)
-        var teilBrutto, teilAusz, teilMwst, teilNetto, teilKV, teilRV, teilPV;
-        if(i < n-1){
-          teilBrutto = Math.round(brutto*anteil*100)/100;
-          teilAusz   = Math.round(auszahlung*anteil*100)/100;
-          teilMwst   = Math.round(mwst*anteil*100)/100;
-          teilNetto  = Math.round(netto*anteil*100)/100;
-          teilKV     = Math.round(gesamtKV*anteil*100)/100;
-          teilRV     = Math.round(gesamtRV*anteil*100)/100;
-          teilPV     = Math.round(gesamtPV*anteil*100)/100;
-        } else {
-          // Letzter: Differenz damit Summe stimmt (Cent-Ausgleich)
-          var prevBrutto=termine.slice(0,i).reduce(function(s,_,j){
-            return s+Math.round(brutto*(useTakes?(parseInt(termine[j].takes)||0)/totalTakes:1/n)*100)/100;
-          },0);
-          teilBrutto = Math.round((brutto-prevBrutto)*100)/100;
-          teilAusz   = Math.round(auszahlung*anteil*100)/100;
-          teilMwst   = Math.round(mwst*anteil*100)/100;
-          teilNetto  = Math.round(netto*anteil*100)/100;
-          teilKV     = Math.round(gesamtKV*anteil*100)/100;
-          teilRV     = Math.round(gesamtRV*anteil*100)/100;
-          teilPV     = Math.round(gesamtPV*anteil*100)/100;
-        }
+      // Build 702: Master + Tochter-Architektur
+      // Cleanup: bestehende teilAbs der beteiligten Termine löschen (sauberes Re-Link)
+      // Verhindert Dubletten wenn derselbe Termin-Set erneut verknüpft wird
+      var _alteAbIds = termine.map(function(t){return t.abId;}).filter(Boolean);
+      if(_alteAbIds.length){
+        db.abrechnungen = db.abrechnungen.filter(function(a){ return _alteAbIds.indexOf(a.id)<0; });
+        termine.forEach(function(t){
+          t.abId = null;
+          t.kv_abzug = null;
+          t.rv_abzug = null;
+          t.pv_abzug = null;
+        });
+      }
 
-        var teilAb={
-          id:'ab'+Date.now()+i,
-          datum:d.datum||'',
-          studio:d.studio||'',
-          produktion:d.titel||d.beschr||'',
-          gutschrift_nr:gutschriftNr,
-          dateiname:dateiname,
-          brutto:teilBrutto,
-          netto:teilNetto,
-          mwst:teilMwst,
-          auszahlung:teilAusz,
-          takes:parseInt(t.takes)||0,
-          terminId:t.id,
-          dokId:d.id,
-          bezahlt:false,
-          erstelltAm:new Date().toISOString(),
-          _aufgeteiltVon:brutto,      // Original-Gesamtbetrag
-          _aufgeteiltN:n,             // Anzahl Teile
-          _aufgeteiltIdx:i,           // Index (0-basiert)
-          kv: teilKV||0,
-          rv: teilRV||0,
-          pv: teilPV||0,
-          gesamt_mwst: mwst||null,
-          gesamt_brutto: brutto||null,
-          gesamt_auszahlung: auszahlung||null,
-          gesamt_gutschrift_nr: gutschriftNr||null,
-          gesamt_kv: gesamtKV||null,
-          gesamt_rv: gesamtRV||null,
-          gesamt_pv: gesamtPV||null
+      // Master-teilAb (Termin 0) — trägt ALLE Finanz- und SV-Werte
+      var masterTermin = termine[0];
+      var childTerminIds = termine.slice(1).map(function(t){return t.id;});
+      var _nowMs = Date.now();
+
+      var masterAb = {
+        id: 'ab'+_nowMs+'_m',
+        datum: d.datum||'',
+        studio: d.studio||'',
+        produktion: d.titel||d.beschr||'',
+        gutschrift_nr: gutschriftNr,
+        dateiname: dateiname,
+        brutto: brutto,                // VOLLWERT
+        netto: netto,                  // VOLLWERT
+        mwst: mwst,                    // VOLLWERT
+        auszahlung: auszahlung||0,     // VOLLWERT
+        kv: gesamtKV||0,               // VOLLWERT — direkt die Gesamt-SV hier
+        rv: gesamtRV||0,
+        pv: gesamtPV||0,
+        takes: parseInt(masterTermin.takes)||0,
+        terminId: masterTermin.id,
+        dokId: d.id,
+        bezahlt: false,
+        erstelltAm: new Date().toISOString(),
+        _isMultiMaster: n>1,          // true nur bei echtem Multi-Link
+        _childTerminIds: childTerminIds,
+        _multiAnzahl: n,
+        gesamt_mwst: mwst||null,
+        gesamt_brutto: brutto||null,
+        gesamt_auszahlung: auszahlung||null,
+        gesamt_gutschrift_nr: gutschriftNr||null,
+        gesamt_kv: gesamtKV||null,
+        gesamt_rv: gesamtRV||null,
+        gesamt_pv: gesamtPV||null
+      };
+      var masterAbId = _upsertAbrechnung(null, masterAb);
+      masterTermin.abId = masterAbId;
+      // SV-Beträge am Master-Termin (für Kalenderblatt-Anzeige)
+      if(gesamtKV) masterTermin.kv_abzug = gesamtKV;
+      if(gesamtRV) masterTermin.rv_abzug = gesamtRV;
+      if(gesamtPV) masterTermin.pv_abzug = gesamtPV;
+      if(d.rolle&&!masterTermin.rolle) masterTermin.rolle=d.rolle;
+      if(d.regie&&!masterTermin.regie) masterTermin.regie=d.regie;
+      if(d.titel&&!masterTermin.titel) masterTermin.titel=d.titel;
+
+      // Tochter-teilAbs (Termin 1..n-1) — reine Marker, keine Finanzwerte
+      termine.slice(1).forEach(function(t, idx){
+        var childAb = {
+          id: 'ab'+_nowMs+'_c'+idx,
+          datum: d.datum||'',
+          studio: d.studio||'',
+          produktion: d.titel||d.beschr||'',
+          gutschrift_nr: gutschriftNr,
+          dateiname: dateiname,
+          brutto: 0,
+          netto: 0,
+          mwst: 0,
+          auszahlung: 0,
+          kv: 0,
+          rv: 0,
+          pv: 0,
+          takes: parseInt(t.takes)||0,
+          terminId: t.id,
+          dokId: d.id,
+          bezahlt: false,
+          erstelltAm: new Date().toISOString(),
+          _nurMarker: true,             // ← Jahresabschluss skipt diesen Eintrag
+          _masterAbId: masterAbId       // ← Referenz auf Master
         };
-        var _teilId = _upsertAbrechnung(t.abId||null, teilAb);
-        t.abId=_teilId;
-        // KV/RV/PV direkt am Termin für Kalenderblatt-Anzeige
-        if(teilKV) t.kv_abzug=teilKV;
-        if(teilRV) t.rv_abzug=teilRV;
-        if(teilPV) t.pv_abzug=teilPV;
+        var childId = _upsertAbrechnung(null, childAb);
+        t.abId = childId;
         if(d.rolle&&!t.rolle) t.rolle=d.rolle;
         if(d.regie&&!t.regie) t.regie=d.regie;
         if(d.titel&&!t.titel) t.titel=d.titel;
@@ -12571,17 +12695,18 @@ function dokLinkMultiConfirm(){
       (terminIds||[]).forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid, d.typ||'abrechn'); });
       if(!(terminIds&&terminIds.length)) _archiveDateiname(d.dateiname||d.beschr, null);
 
-      var methode = useTakes ? 'nach Takes' : 'gleichmäßig (÷'+n+')';
+      var methode = n===1 ? 'einzeln' : (useTakes ? 'Master/Tochter (Takes)' : 'Master/Tochter');
       var teilAbIds = termine.map(function(t){ return t.abId; }).filter(Boolean);
       logAction('multi_link',
         n+' Termine verknüpft · '+(d.beschr||d.dateiname||'')+' · '+methode,
         {
           dokId: d.id,
           terminSnapshots: termine.map(function(t){ return {id:t.id, abId:null, status:t.status||'ausstehend', titel:t.titel}; }),
-          teilAbIds: teilAbIds
+          teilAbIds: teilAbIds,
+          _masterAbId: masterAbId
         }
       );
-      showToast('✓ '+n+' Termine · Betrag '+methode+' aufgeteilt');
+      showToast(n===1 ? '✓ Termin verknüpft' : '✓ Master + '+(n-1)+' Tochter-Termin'+(n>2?'e':'')+' angelegt');
     }
   }
 
@@ -13199,7 +13324,7 @@ function ustExport(){
     if(_gezTermExp[t.id]) return;
     _gezTermExp[t.id]=true;
     var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
-    if(ab&&ab.brutto&&!ab.aufgeteilt){
+    if(ab&&ab.brutto&&!ab.aufgeteilt&&!ab._nurMarker){
       var br=parseFloat(ab.brutto)||0, mw=parseFloat(ab.mwst)||0;
       if(br) einnZeilenExp.push({label:esc(t.titel||t.studio||'')+(ab.gutschrift_nr?' · '+ab.gutschrift_nr:''),netto:br,ust:mw,zahlDatum:zd});
     }
@@ -13466,51 +13591,10 @@ function holviAbgleichLoad(inp){
 }
 
 function _holviAbgleichMatch(z){
-  // GNR expandieren + Bereinigung
-  var _clean = z.nachricht
-    .replace(/\s*\/\s*\d{5,7}(?=\s|$)/g, '')
-    .replace(/\s*\([a-z]{1,3}\d{6,10}\)/gi, '');
-  var gnrs = [];
-  var _grex = /(\d{3,6})\/((\d{4})(\d{2})(\d{2}))\s*(?:bis|-(?!\s))\s*(?:\d{3,6}\/)?((\d{4})(\d{2})(\d{2}))/ig;
-  var _gm;
-  while((_gm=_grex.exec(_clean))!==null){
-    var _pfx=_gm[1];
-    var _von=new Date(parseInt(_gm[3]),parseInt(_gm[4])-1,parseInt(_gm[5]));
-    var _bis=new Date(parseInt(_gm[6]),parseInt(_gm[7])-1,parseInt(_gm[8]));
-    var _c=new Date(_von), _lim=0;
-    while(_c<=_bis&&_lim++<60){
-      gnrs.push(_pfx+'/'+_c.getFullYear()+String(_c.getMonth()+1).padStart(2,'0')+String(_c.getDate()).padStart(2,'0'));
-      _c.setDate(_c.getDate()+1);
-    }
-    _clean=_clean.replace(_gm[0],' ');
-  }
-  var _gr2=/(\d{3,6}\/\d{6,12})/g, _gm2;
-  while((_gm2=_gr2.exec(_clean))!==null){ if(gnrs.indexOf(_gm2[1])<0) gnrs.push(_gm2[1]); }
+  // Build 701: Nutzt zentrale Helpers _gnrExtract / _studioPasst / _gnrPasst
+  var gnrs = _gnrExtract(z.nachricht);
 
-  // FIX 7: _gnrPasst nur bei ausreichender Länge (min 6 Zeichen nach Slash)
-  var _gnrPasst=function(stored,holvi){
-    if(!stored||!holvi) return false;
-    if(stored===holvi) return true;
-    var sp=stored.split('/')[1]||'', hp=holvi.split('/')[1]||'';
-    if(sp.length<6||hp.length<6) return false;
-    if(holvi.indexOf(stored)===0) return true;
-    if(stored.indexOf(holvi)===0) return true;
-    return false;
-  };
-
-  // FIX 4: studioNorm vereinheitlicht mit holviImport
-  var studioNorm=function(s){
-    return (s||'').toLowerCase()
-      .replace(/gmbh|ag|kg|mbh|synchron|film|fernseh|sound|studios?|production|productions|gesellschaft|und|fur|für|\+/gi,' ')
-      .replace(/[^a-z0-9\u00e4\u00f6\u00fc\u00df]/g,' ').replace(/\s+/g,' ').trim();
-  };
-  var zSt=studioNorm(z.gegenpartei);
-  var studioPasst=function(ts){
-    var n=studioNorm(ts); if(!n||!zSt) return false;
-    if(n===zSt||zSt.indexOf(n)>=0||n.indexOf(zSt)>=0) return true;
-    var tsT=n.split(' ').filter(function(t){return t.length>=2;});
-    return tsT.some(function(t){return zSt.indexOf(t)>=0;});
-  };
+  var studioPasst = function(ts){ return _studioPasst(ts, z.gegenpartei); };
 
   var termine=[], abIds=[];
 
@@ -13747,6 +13831,18 @@ function holviAbgleichReset(){
   rHolviAbgleich();
 }
 
+// Build 701: Refresh ohne Excel-Reupload — matcht alle Einträge neu gegen aktuellen db-Stand
+// Nützlich nachdem Abrechnungen / Monatsdokumente frisch importiert wurden
+function holviAbgleichRefresh(){
+  if(!db.holviAbgleich||!db.holviAbgleich.length){
+    showToast('Noch kein Kontoauszug geladen');
+    return;
+  }
+  rHolviAbgleich();
+  var offen=(db.holviAbgleich||[]).filter(function(e){return !e.bestaetigt;}).length;
+  showToast('🔄 '+db.holviAbgleich.length+' Eingänge neu gematcht · '+offen+' offen');
+}
+
 function holviAbgleichBestaetigen(zahlungsId){
   var liste=db.holviAbgleich||[];
   var z=liste.find(function(e){return e.id===zahlungsId;});
@@ -13761,7 +13857,7 @@ function holviAbgleichBestaetigen(zahlungsId){
       t._holviZahlungsId=z.zahlungsId||z.id; // Link zurück zum Holvi-Eintrag
       if(t.abId){
         var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-        if(ab){ ab.bezahlt=true; ab.zahlungDatum=z.datum; }
+        if(ab){ _setAbBezahlt(ab, z.datum); }
       }
     }
   });
@@ -14076,10 +14172,11 @@ function runIntegrityCheck(silent){
       }
     });
 
-    // Alle Einzel-Abrechnungen summieren (nicht aufgeteilt)
+    // Alle Einzel-Abrechnungen summieren (nicht aufgeteilt, nicht _nurMarker)
     (db.abrechnungen||[]).forEach(function(a){
       if(!(a.datum||'').startsWith(jahr)) return;
       if(a.aufgeteilt) return;
+      if(a._nurMarker) return;
       sumEinzelAbr += parseFloat(a.brutto)||0;
     });
 
@@ -14208,6 +14305,7 @@ function runIntegrityCheck(silent){
     (db.abrechnungen||[]).forEach(function(a){
       if(!(a.datum||'').startsWith(jahr)) return;
       if(a.aufgeteilt) return; // Original überspringen — Teile werden gezählt
+      if(a._nurMarker) return; // Tochter-teilAbs ignorieren (Build 702)
       sumAbrechnungen += parseFloat(a.brutto)||0;
     });
     // Dedupliziert nach gutschrift_nr (wie Jahresabschluss)
@@ -14216,6 +14314,7 @@ function runIntegrityCheck(silent){
     (db.abrechnungen||[]).forEach(function(a){
       if(!(a.datum||'').startsWith(jahr)) return;
       if(a.aufgeteilt) return;
+      if(a._nurMarker) return;
       var key = a.gutschrift_nr ? 'gnr_'+a.gutschrift_nr : 'id_'+a.id;
       if(gnrSeen[key]) return;
       gnrSeen[key] = true;
@@ -15924,10 +16023,8 @@ function abHolviAbgleich(eingaenge){
 
   window._holviSkipped=skippedEingaenge;
 
-  // Matching — gleiche Logik wie holviImport
-  var studioNorm=function(s){return (s||'').toLowerCase().replace(/\s+gmbh.*|synchron.*|film.*|berlin.*/,'').replace(/[^a-z0-9äöüß]/g,' ').trim();};
+  // Matching — Build 701: nutzt zentralen _studioPasst (bisher lokal defekt: "berlin" wurde abgeschnitten)
   var matches=neu.map(function(z){
-    var zStudio=studioNorm(z.gegenpartei);
 
     // 1. Monats-Abrechnung
     var monatsMatch=(db.dokumente||[]).find(function(d){
@@ -15935,8 +16032,7 @@ function abHolviAbgleich(eingaenge){
       var dAusz=parseFloat(d.auszahlung)||0;
       if(dAusz<=0) return false;
       if(Math.abs(dAusz-z.betrag)>Math.max(1.0,dAusz*0.01)) return false;
-      var dStudio=studioNorm(d.studio||'');
-      return dStudio&&zStudio&&(dStudio.indexOf(zStudio)>=0||zStudio.indexOf(dStudio)>=0);
+      return _studioPasst(d.studio, z.gegenpartei);
     });
     if(monatsMatch){
       var sessionTermine=[];
@@ -15985,8 +16081,7 @@ function abHolviAbgleich(eingaenge){
     // 2b. Sammel-Match via Studio + Betragssumme
     var studioAbs=(db.dokumente||[]).filter(function(d){
       if(d.typ!=='abrechn'||!d.bestaetigt) return false;
-      var dStudio=studioNorm(d.studio||'');
-      return dStudio&&zStudio&&(dStudio.indexOf(zStudio)>=0||zStudio.indexOf(dStudio)>=0);
+      return _studioPasst(d.studio, z.gegenpartei);
     });
     var unbezahlteAbs=studioAbs.filter(function(d){
       var t=d.terminId?(db.termine||[]).find(function(x){return x.id===d.terminId;}):null;
@@ -16025,9 +16120,7 @@ function abHolviAbgleich(eingaenge){
     // Betrag + Studio Match — max 3 Vorschläge
     var kandidaten=(db.termine||[]).filter(function(t){
       if(t.status==='bezahlt') return false;
-      var tStudio=studioNorm(t.studio||'');
-      if(!tStudio||!zStudio) return false;
-      return tStudio.indexOf(zStudio)>=0||zStudio.indexOf(tStudio)>=0;
+      return _studioPasst(t.studio, z.gegenpartei);
     });
     var betrag=z.betrag;
     function score(t){
@@ -16060,7 +16153,7 @@ function abMonatRender(){
   var prefix=yr+'-'+(mo+1<10?'0'+(mo+1):(''+(mo+1)));
   // ⚠ Aufgeteilte Original-Abrechnungen ausschließen (Teilabrechnungen sind in db.abrechnungen)
   var abs=(db.abrechnungen||[]).filter(function(a){
-    return (a.datum||'').startsWith(prefix) && !a.aufgeteilt;
+    return (a.datum||'').startsWith(prefix) && !a.aufgeteilt && !a._nurMarker;
   });
   var totalBrutto=0,totalAuszahlung=0,totalMwst=0;
   abs.forEach(function(a){totalBrutto+=a.brutto||0;totalAuszahlung+=a.auszahlung||0;totalMwst+=a.mwst||0;});
