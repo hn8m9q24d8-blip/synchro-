@@ -1869,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '706';
+  if(el) el.textContent = '708';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10302,6 +10302,16 @@ function _gnrExtract(nachricht){
   while((sm = singleRex.exec(_clean)) !== null){
     if(gnrs.indexOf(sm[1]) < 0) gnrs.push(sm[1]);
   }
+  // Build 707: Bare-Date-GNRs (z.B. "GAGE 20260301" ohne Präfix/Slash)
+  // Nur nach GAGE/Gutschrift/Rg-Keyword, mit Datums-Validierung YYYY/MM/DD
+  var bareRex = /(?:gage|gutschrift|rg\.?)\s+(\d{8})\b/gi, bm;
+  while((bm = bareRex.exec(_clean)) !== null){
+    var bd = bm[1];
+    var by = parseInt(bd.slice(0,4)), bmo = parseInt(bd.slice(4,6)), bday = parseInt(bd.slice(6,8));
+    if(by>=2020 && by<=2035 && bmo>=1 && bmo<=12 && bday>=1 && bday<=31){
+      if(gnrs.indexOf(bd) < 0) gnrs.push(bd);
+    }
+  }
   return gnrs;
 }
 function _gnrPasst(stored, holvi){
@@ -10309,6 +10319,15 @@ function _gnrPasst(stored, holvi){
   // "2449/202603" matcht "2449/20260301" in beide Richtungen
   if(!stored || !holvi) return false;
   if(stored === holvi) return true;
+  // Build 707: Bare-Date-GNR (nur 8 Ziffern ohne Slash) → Suffix-Match
+  // z.B. stored="1992/20260301" matcht holvi="20260301" oder umgekehrt
+  if(holvi.indexOf('/') < 0 && /^\d{8}$/.test(holvi)){
+    return stored.length >= 8 && stored.slice(-8) === holvi;
+  }
+  if(stored.indexOf('/') < 0 && /^\d{8}$/.test(stored)){
+    return holvi.length >= 8 && holvi.slice(-8) === stored;
+  }
+  // Standard: beide mit Slash, Prefix-Match
   var sp = stored.split('/')[1] || '';
   var hp = holvi.split('/')[1] || '';
   if(sp.length < 6 || hp.length < 6) return false;
@@ -11817,9 +11836,13 @@ function dokBestaetigenMonat(dokId){
         var sessionNetto = Math.round((sessionBrutto - _sesKV - _sesRV - _sesPV)*100)/100;
         // Auszahlung: NUR aus Dokument — niemals selbst berechnen (Buchhaltungsregel!)
         // Wenn KI auszahlung=null → null lassen, Nutzer muss manuell prüfen
+        // Build 708: Bei Single-Session (1 Termin) → d.auszahlung = Session-Auszahlung
+        // (bei Einzel-PDFs gibt es keine separate s.auszahlung, nur d.auszahlung vom Dok)
         var sessionAuszahlung = s.auszahlung
           ? parseFloat(s.auszahlung)
-          : null;
+          : (d.sessions && d.sessions.length === 1 && parseFloat(d.auszahlung)
+              ? parseFloat(d.auszahlung)
+              : null);
         var newAb = {
           id: t.abId||null,  // upsert: bestehende ID beibehalten wenn vorhanden
           dokId: dokId,
@@ -13599,15 +13622,19 @@ function _holviAbgleichMatch(z){
   var termine=[], abIds=[];
 
   // GNR-Suche — FIX 1: bezahlte Termine nicht nochmal matchen
+  // Build 707: Bei Bare-Date-GNRs zusätzlich Studio-Filter (sonst false positives)
+  var _anyBare = gnrs.some(function(g){return g.indexOf('/')<0;});
   if(gnrs.length){
     (db.termine||[]).forEach(function(t){
       if(t.status==='bezahlt') return;
       if(_gnrPasst(t.gutschrift_nr,gnrs[0])||gnrs.some(function(g){return _gnrPasst(t.gutschrift_nr,g);})){
+        if(_anyBare && !studioPasst(t.studio||'')) return;
         if(termine.indexOf(t)<0) termine.push(t);
       }
     });
     (db.abrechnungen||[]).forEach(function(ab){
       if(gnrs.some(function(g){return _gnrPasst(ab.gutschrift_nr,g);})){
+        if(_anyBare && !studioPasst(ab.studio||'')) return;
         var t=(db.termine||[]).find(function(x){return x.id===ab.terminId&&x.status!=='bezahlt';});
         if(t&&termine.indexOf(t)<0) termine.push(t);
         if(abIds.indexOf(ab.id)<0) abIds.push(ab.id);
