@@ -614,7 +614,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div onclick="switchView('profil')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div><div style="color:#fff;font-size:18px;font-weight:900">Buchhaltung</div><div style="color:rgba(255,255,255,.75);font-size:12px">Gagen &amp; Finanzen</div></div>
   </div>
-  <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+  <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:10px">
 
     <div onclick="switchView('holvi-abgleich')" class="buch-menu-row" id="holvi-menu-row">
       <div class="buch-menu-icon" style="background:#f0fdf4;color:#166534">🏦</div>
@@ -1183,7 +1183,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
-  <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
       <div class="info-card-header"><span>Name &amp; Beruf</span></div>
       <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
@@ -1216,7 +1216,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
-  <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
       <div class="info-card-header"><span>Kontodaten</span></div>
       <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
@@ -1237,7 +1237,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
-  <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
       <div class="info-card-header"><span>Versicherungsdaten</span></div>
       <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
@@ -1263,7 +1263,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
-  <div class="view-scroll" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
       <div class="info-card-header"><span>Steuerdaten</span></div>
       <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
@@ -1869,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '702';
+  if(el) el.textContent = '705';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13696,6 +13696,26 @@ function _holviAbgleichMatch(z){
     });
   }
 
+  // Build 705: Strategie 4 — via gesamt_auszahlung an Einzel-Abrechnungen
+  // Deckt Fall ab: Monats-PDF wurde pro Termin einzeln bestätigt (keine monats_abrechn-Doc),
+  // aber die Einzel-Abrechnungen tragen das gesamt_auszahlung-Feld als Rückverweis.
+  // Wenn alle gematchten Termine denselben gesamt_auszahlung-Wert haben und der passt → AUTO.
+  if(!_monatsDoc && termine.length > 1){
+    var _gesamtAusz = null, _alleGleich = true;
+    termine.forEach(function(t){
+      if(!t.abId){ _alleGleich = false; return; }
+      var _ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(!_ab || !_ab.gesamt_auszahlung){ _alleGleich = false; return; }
+      var _ga = parseFloat(_ab.gesamt_auszahlung);
+      if(_gesamtAusz === null) _gesamtAusz = _ga;
+      else if(Math.abs(_gesamtAusz - _ga) > 0.02) _alleGleich = false;
+    });
+    if(_alleGleich && _gesamtAusz !== null && Math.abs(_gesamtAusz - z.betrag) <= 0.50){
+      // Synthetisches Pseudo-Doc, damit der nachfolgende Code konsistent bleibt
+      _monatsDoc = { auszahlung: _gesamtAusz, _viaGesamtAuszahlung: true };
+    }
+  }
+
   if(_monatsDoc && parseFloat(_monatsDoc.auszahlung)>0){
     sumAusz=Math.round(parseFloat(_monatsDoc.auszahlung)*100)/100;
     alleHaben=true;
@@ -13713,7 +13733,22 @@ function _holviAbgleichMatch(z){
     (alleHaben&&Math.abs(sumAusz-z.betrag)<=tol)?'AUTO':
     (!alleHaben||sumAusz===0)?'PRÜFEN':'ABWEICHUNG';
 
-  return {termine:termine, gnrs:gnrs, sumAusz:sumAusz, monatsDoc:_monatsDoc, konfidenz:konfidenz, abIds:abIds};
+  // Build 703: Diagnose — alle Monats-/Abrechnungs-Dokumente des Studios sammeln
+  // (um bei Differenz zu zeigen was es gibt bzw. was fehlt)
+  var _studioDocs = (db.dokumente||[]).filter(function(d){
+    if(!d.bestaetigt) return false;
+    if(d.typ!=='monats_abrechn' && d.typ!=='abrechn') return false;
+    if(!studioPasst(d.studio)) return false;
+    return parseFloat(d.auszahlung)>0;
+  }).map(function(d){
+    return {
+      id:d.id, typ:d.typ, datum:d.datum||'', studio:d.studio||'',
+      auszahlung:parseFloat(d.auszahlung)||0, gutschrift_nr:d.gutschrift_nr||'',
+      beschr:d.beschr||d.dateiname||''
+    };
+  });
+
+  return {termine:termine, gnrs:gnrs, sumAusz:sumAusz, monatsDoc:_monatsDoc, konfidenz:konfidenz, abIds:abIds, studioDocs:_studioDocs};
 }
 
 function rHolviAbgleich(){
@@ -13774,9 +13809,34 @@ function rHolviAbgleich(){
       // Summe
       if(match.termine.length>1){
         var diffCol=Math.abs(match.sumAusz-z.betrag)<=0.50?'#15803d':'#ea580c';
-        html+='<div style="display:flex;justify-content:space-between;padding-top:6px;margin-top:2px;border-top:2px solid rgba(0,0,0,.1)">'          +'<div style="font-size:11px;font-weight:700;color:#555">Summe ('+match.termine.length+' Termine)</div>'          +'<div style="font-size:12px;font-weight:900;color:'+diffCol+'">'+fmtEur(match.sumAusz)+' / '+fmtEur(z.betrag)+'</div>'          +'</div>';
+        html+='<div style="display:flex;justify-content:space-between;padding-top:6px;margin-top:2px;border-top:2px solid rgba(0,0,0,.1)">'          +'<div style="font-size:11px;font-weight:700;color:#555">'+(match.monatsDoc&&match.monatsDoc._viaGesamtAuszahlung?'Gesamt-Auszahlung':'Summe')+' ('+match.termine.length+' Termine)</div>'          +'<div style="font-size:12px;font-weight:900;color:'+diffCol+'">'+fmtEur(match.sumAusz)+' / '+fmtEur(z.betrag)+'</div>'          +'</div>';
       }
       html+='</div>';
+
+      // Build 703: Diagnose bei Differenz — zeigt welche Monatsdocs existieren und was fehlt
+      if(!z.bestaetigt && !match.monatsDoc && Math.abs(match.sumAusz-z.betrag)>0.50){
+        var _sd=match.studioDocs||[];
+        html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px">'
+          +'<div style="font-weight:800;color:#92400e;margin-bottom:4px">🔍 Warum Differenz?</div>'
+          +'<div style="color:#78350f;line-height:1.5">Kein Monatsdokument mit Auszahlung <strong>'+fmtEur(z.betrag)+'</strong> gefunden. Stattdessen: Summe der Einzel-Bruttos der Termine ('+fmtEur(match.sumAusz)+').</div>'
+          +'<div style="color:#78350f;margin-top:6px"><strong>'+_sd.length+'</strong> '+esc(z.gegenpartei)+'-Dokument'+(_sd.length===1?'':'e')+' in der App:</div>';
+        if(_sd.length===0){
+          html+='<div style="color:#92400e;font-weight:700;margin-top:4px">→ Monats-Abrechnung muss noch eingepflegt werden</div>';
+        } else {
+          var _exakt=_sd.filter(function(d){return Math.abs(d.auszahlung-z.betrag)<=0.50;});
+          _sd.slice(0,5).forEach(function(d){
+            var _ok=Math.abs(d.auszahlung-z.betrag)<=0.50;
+            html+='<div style="margin-top:3px;padding:3px 6px;background:'+(_ok?'#d1fae5':'#fff')+';border-radius:4px;'+(_ok?'border:1px solid #86efac':'')+'">'
+              +'<span style="font-weight:700">'+fmtEur(d.auszahlung)+'</span> · '+fd(d.datum)+(d.gutschrift_nr?' · '+esc(d.gutschrift_nr):'')+(d.beschr?' · '+esc(d.beschr.slice(0,30)):'')
+              +(_ok?' <span style="color:#15803d;font-weight:800">✓ passt</span>':'')
+              +'</div>';
+          });
+          if(_exakt.length===0){
+            html+='<div style="color:#92400e;font-weight:700;margin-top:6px">→ Kein Dokument mit passender Auszahlung. Eventuell neu einpflegen.</div>';
+          }
+        }
+        html+='</div>';
+      }
     } else if(!z.bestaetigt){
       html+='<div style="font-size:11px;color:#9ca3af;padding:6px 0;margin-bottom:6px">Keine passenden Termine gefunden — bitte Abrechnungen einpflegen</div>';
     }
