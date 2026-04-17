@@ -1869,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '708';
+  if(el) el.textContent = '709';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13868,8 +13868,30 @@ function rHolviAbgleich(){
         var _sd=match.studioDocs||[];
         html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px">'
           +'<div style="font-weight:800;color:#92400e;margin-bottom:4px">🔍 Warum Differenz?</div>'
-          +'<div style="color:#78350f;line-height:1.5">Kein Monatsdokument mit Auszahlung <strong>'+fmtEur(z.betrag)+'</strong> gefunden. Stattdessen: Summe der Einzel-Bruttos der Termine ('+fmtEur(match.sumAusz)+').</div>'
-          +'<div style="color:#78350f;margin-top:6px"><strong>'+_sd.length+'</strong> '+esc(z.gegenpartei)+'-Dokument'+(_sd.length===1?'':'e')+' in der App:</div>';
+          +'<div style="color:#78350f;line-height:1.5">Kein Monatsdokument mit Auszahlung <strong>'+fmtEur(z.betrag)+'</strong> gefunden. Stattdessen: Summe der Einzel-Bruttos der Termine ('+fmtEur(match.sumAusz)+').</div>';
+
+        // Build 709: Wenn Termine gematcht aber Summe 0 → teilAb-Werte zeigen (Daten-Problem)
+        if(match.termine.length>0 && match.sumAusz===0){
+          html+='<div style="color:#78350f;margin-top:8px;font-weight:700">Werte der gematchten teilAbs:</div>';
+          match.termine.forEach(function(t){
+            var _ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+            if(_ab){
+              html+='<div style="margin-top:3px;padding:3px 6px;background:#fff;border-radius:4px;font-size:10px">'
+                +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+'<br>'
+                +'brutto: <strong>'+fmtEur(parseFloat(_ab.brutto)||0)+'</strong> · '
+                +'mwst: '+fmtEur(parseFloat(_ab.mwst)||0)+' · '
+                +'SV: '+fmtEur(Math.abs(parseFloat(_ab.kv)||0)+Math.abs(parseFloat(_ab.rv)||0)+Math.abs(parseFloat(_ab.pv)||0))+' · '
+                +'ausz: '+fmtEur(parseFloat(_ab.auszahlung)||0)
+                +(_ab._nurMarker?' · <span style="color:#7c3aed;font-weight:700">MARKER (Tochter)</span>':'')
+                +'</div>';
+            } else {
+              html+='<div style="margin-top:3px;padding:3px 6px;background:#fff;border-radius:4px;font-size:10px;color:#dc2626">'
+                +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+' — KEINE ABRECHNUNG</div>';
+            }
+          });
+        }
+
+        html+='<div style="color:#78350f;margin-top:6px"><strong>'+_sd.length+'</strong> '+esc(z.gegenpartei)+'-Dokument'+(_sd.length===1?'':'e')+' in der App:</div>';
         if(_sd.length===0){
           html+='<div style="color:#92400e;font-weight:700;margin-top:4px">→ Monats-Abrechnung muss noch eingepflegt werden</div>';
         } else {
