@@ -1869,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '705';
+  if(el) el.textContent = '706';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13716,6 +13716,29 @@ function _holviAbgleichMatch(z){
     }
   }
 
+  // Build 706: Strategie 5 — Auszahlung aus Brutto + MwSt - SV rekonstruieren
+  // Deckt Fälle ab bei denen Monats-PDF nicht (mehr) in db.dokumente steht,
+  // aber die Einzel-Abrechnungen brutto/mwst/kv/rv/pv haben.
+  // Formel: Auszahlung = Σ brutto + Σ mwst − Σ (kv+rv+pv)
+  // Stimmt bei FFS, Interopa, Studio Hamburg, toneworx — alle klassischen SV-Abrechnungen.
+  if(!_monatsDoc && termine.length > 0){
+    var _sumBrutto = 0, _sumMwst = 0, _sumSV = 0, _alleAbs = true;
+    termine.forEach(function(t){
+      if(!t.abId){ _alleAbs = false; return; }
+      var _ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      if(!_ab){ _alleAbs = false; return; }
+      _sumBrutto += parseFloat(_ab.brutto)||0;
+      _sumMwst += parseFloat(_ab.mwst)||0;
+      _sumSV += Math.abs(parseFloat(_ab.kv)||0) + Math.abs(parseFloat(_ab.rv)||0) + Math.abs(parseFloat(_ab.pv)||0);
+    });
+    if(_alleAbs && _sumBrutto > 0){
+      var _berechnet = Math.round((_sumBrutto + _sumMwst - _sumSV) * 100) / 100;
+      if(Math.abs(_berechnet - z.betrag) <= 0.50){
+        _monatsDoc = { auszahlung: _berechnet, _viaBerechnung: true };
+      }
+    }
+  }
+
   if(_monatsDoc && parseFloat(_monatsDoc.auszahlung)>0){
     sumAusz=Math.round(parseFloat(_monatsDoc.auszahlung)*100)/100;
     alleHaben=true;
@@ -13809,7 +13832,7 @@ function rHolviAbgleich(){
       // Summe
       if(match.termine.length>1){
         var diffCol=Math.abs(match.sumAusz-z.betrag)<=0.50?'#15803d':'#ea580c';
-        html+='<div style="display:flex;justify-content:space-between;padding-top:6px;margin-top:2px;border-top:2px solid rgba(0,0,0,.1)">'          +'<div style="font-size:11px;font-weight:700;color:#555">'+(match.monatsDoc&&match.monatsDoc._viaGesamtAuszahlung?'Gesamt-Auszahlung':'Summe')+' ('+match.termine.length+' Termine)</div>'          +'<div style="font-size:12px;font-weight:900;color:'+diffCol+'">'+fmtEur(match.sumAusz)+' / '+fmtEur(z.betrag)+'</div>'          +'</div>';
+        html+='<div style="display:flex;justify-content:space-between;padding-top:6px;margin-top:2px;border-top:2px solid rgba(0,0,0,.1)">'          +'<div style="font-size:11px;font-weight:700;color:#555">'+(match.monatsDoc&&match.monatsDoc._viaBerechnung?'Berechnete Auszahlung':(match.monatsDoc&&match.monatsDoc._viaGesamtAuszahlung?'Gesamt-Auszahlung':'Summe'))+' ('+match.termine.length+' Termine)</div>'          +'<div style="font-size:12px;font-weight:900;color:'+diffCol+'">'+fmtEur(match.sumAusz)+' / '+fmtEur(z.betrag)+'</div>'          +'</div>';
       }
       html+='</div>';
 
