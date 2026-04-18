@@ -1869,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '710';
+  if(el) el.textContent = '711';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13903,8 +13903,27 @@ function rHolviAbgleich(){
                 +(_ab._nurMarker?' · <span style="color:#7c3aed;font-weight:700">MARKER (Tochter)</span>':'')
                 +'</div>';
             } else {
+              // Build 711: Deep-Scan nach Orphan-Records
+              // Sucht nach Abrechnungen an diesem Datum oder mit dieser GNR,
+              // die NICHT korrekt mit dem Termin verknüpft sind
+              var _orphans = (db.abrechnungen||[]).filter(function(a){
+                if(a._nurMarker) return false;
+                if(a.datum === t.datum && _studioPasst(a.studio||'', t.studio||'')) return true;
+                if(t.gutschrift_nr && a.gutschrift_nr && _gnrPasst(a.gutschrift_nr, t.gutschrift_nr)) return true;
+                return false;
+              });
               html+='<div style="margin-top:3px;padding:3px 6px;background:#fff;border-radius:4px;font-size:10px;color:#dc2626">'
-                +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+' — KEINE ABRECHNUNG</div>';
+                +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+' — KEINE ABRECHNUNG verknüpft'
+                +'<br>t.abId: <code>'+esc(t.abId||'null')+'</code> · t.id: <code>'+esc(t.id||'?').slice(-8)+'</code>';
+              if(_orphans.length){
+                html+='<div style="margin-top:3px;color:#92400e">'+_orphans.length+' Orphan-Record'+(_orphans.length===1?'':'s')+' an Datum/GNR gefunden:</div>';
+                _orphans.slice(0,3).forEach(function(o){
+                  html+='<div style="margin-top:2px;color:#555">→ id '+esc((o.id||'').slice(-8))+' · terminId <code>'+esc((o.terminId||'null').slice(-8))+'</code> · brutto '+fmtEur(parseFloat(o.brutto)||0)+(o.gutschrift_nr?' · '+esc(o.gutschrift_nr):'')+'</div>';
+                });
+              } else {
+                html+='<div style="margin-top:3px;color:#92400e">Keine Orphan-Records an Datum/GNR</div>';
+              }
+              html+='</div>';
             }
           });
         }
