@@ -1869,7 +1869,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '709';
+  if(el) el.textContent = '710';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10314,6 +10314,25 @@ function _gnrExtract(nachricht){
   }
   return gnrs;
 }
+// Build 710: Robuster Abrechnungs-Lookup für einen Termin
+// Primär über t.abId, Fallback über a.terminId==t.id (bei dangling abId nach Re-Import)
+// Fängt den Fall: altes Doc bestätigt → teilAb gelöscht → Re-Import legt neuen teilAb an,
+// aber t.abId zeigt noch auf alte ID (oder ist leer). Sucht dann über terminId.
+function _abForTermin(t){
+  if(!t) return null;
+  if(t.abId){
+    var byId = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+    if(byId) return byId;
+  }
+  var byTermin = (db.abrechnungen||[]).filter(function(a){return a.terminId===t.id && !a._nurMarker;});
+  if(byTermin.length === 0) return null;
+  if(byTermin.length === 1) return byTermin[0];
+  byTermin.sort(function(a,b){
+    return (b.erstelltAm||'') < (a.erstelltAm||'') ? -1 : 1;
+  });
+  return byTermin[0];
+}
+
 function _gnrPasst(stored, holvi){
   // Prefix-Matching mit Längen-Safety
   // "2449/202603" matcht "2449/20260301" in beide Richtungen
@@ -13614,6 +13633,7 @@ function holviAbgleichLoad(inp){
 }
 
 function _holviAbgleichMatch(z){
+  // Build 710: nutzt globalen _abForTermin-Helper
   // Build 701: Nutzt zentrale Helpers _gnrExtract / _studioPasst / _gnrPasst
   var gnrs = _gnrExtract(z.nachricht);
 
@@ -13730,8 +13750,7 @@ function _holviAbgleichMatch(z){
   if(!_monatsDoc && termine.length > 1){
     var _gesamtAusz = null, _alleGleich = true;
     termine.forEach(function(t){
-      if(!t.abId){ _alleGleich = false; return; }
-      var _ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      var _ab = _abForTermin(t);
       if(!_ab || !_ab.gesamt_auszahlung){ _alleGleich = false; return; }
       var _ga = parseFloat(_ab.gesamt_auszahlung);
       if(_gesamtAusz === null) _gesamtAusz = _ga;
@@ -13751,8 +13770,7 @@ function _holviAbgleichMatch(z){
   if(!_monatsDoc && termine.length > 0){
     var _sumBrutto = 0, _sumMwst = 0, _sumSV = 0, _alleAbs = true;
     termine.forEach(function(t){
-      if(!t.abId){ _alleAbs = false; return; }
-      var _ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
+      var _ab = _abForTermin(t);
       if(!_ab){ _alleAbs = false; return; }
       _sumBrutto += parseFloat(_ab.brutto)||0;
       _sumMwst += parseFloat(_ab.mwst)||0;
@@ -13771,7 +13789,7 @@ function _holviAbgleichMatch(z){
     alleHaben=true;
   } else {
     termine.forEach(function(t){
-      var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+      var ab = _abForTermin(t);
       var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
       if(ausz>0) sumAusz+=ausz; else alleHaben=false;
     });
@@ -13850,7 +13868,7 @@ function rHolviAbgleich(){
     if(match.termine.length){
       html+='<div style="background:rgba(255,255,255,.7);border-radius:8px;padding:8px 10px;margin-bottom:8px">';
       match.termine.forEach(function(t){
-        var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+        var ab = _abForTermin(t);
         var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
         var gnrLabel=ab&&ab.gutschrift_nr?ab.gutschrift_nr:(t.gutschrift_nr||'');
         var _tid=t.id;
@@ -13874,7 +13892,7 @@ function rHolviAbgleich(){
         if(match.termine.length>0 && match.sumAusz===0){
           html+='<div style="color:#78350f;margin-top:8px;font-weight:700">Werte der gematchten teilAbs:</div>';
           match.termine.forEach(function(t){
-            var _ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
+            var _ab = _abForTermin(t);
             if(_ab){
               html+='<div style="margin-top:3px;padding:3px 6px;background:#fff;border-radius:4px;font-size:10px">'
                 +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+'<br>'
