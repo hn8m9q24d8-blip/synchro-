@@ -1921,7 +1921,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '714';
+  if(el) el.textContent = '715';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3804,11 +3804,12 @@ function showDateinamen(el){
 
   // Generische Fallback-Texte erkennen — kein echter Dateiname
   // Echter Dateiname = hat Extension ODER UUID-Muster (Bindestriche/Unterstriche)
+  // Build 715: Extension-Check hat Vorrang — echte Dateinamen wie "Abrechnung 3.pdf" sind KEIN Fallback
   var hasExt = /\.(pdf|jpg|jpeg|png|heic|tiff|bmp)$/i.test(firstName);
   var hasUUIDPattern = firstName.indexOf('-') >= 0 || firstName.indexOf('_') >= 0 || /^\d+[\/\-]\d+/.test(firstName);
   var isFallbackText = !firstName || firstName.length < 5
     || /^Dokument$|^Kurzbefehl-Foto$|^Unbekannt$/i.test(firstName)
-    || /bestätigt|Foto gelöscht|verknüpft|ausstehend|Abrechnung \d|Dispo \d/i.test(firstName)
+    || (!hasExt && /bestätigt|Foto gelöscht|verknüpft|ausstehend|Abrechnung \d|Dispo \d/i.test(firstName))
     || (!hasExt && !hasUUIDPattern);
 
   // Sofort in Clipboard kopieren — nur wenn echter Dateiname
