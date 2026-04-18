@@ -1859,6 +1859,43 @@ var db=load();
         changed = true;
       }
     }
+    // Build 713: Termin hat brutto_termin + KV/RV/PV am Termin, aber keine db.abrechnungen
+    // Passiert durch _skipAbCreate-Pfad im Peek-Flow (Split-PDF-Bug).
+    // Keine Zahlen-Erfindung: alle Werte waren bereits am Termin gespeichert aus dem PDF.
+    if(!t.abId && parseFloat(t.brutto_termin) > 0){
+      if(!db.abrechnungen) db.abrechnungen = [];
+      // Build 714: Dateiname aus _archivLog rekonstruieren wenn nicht direkt am Termin
+      var _dateinameReco = t.abrechn_dateiname || '';
+      if(!_dateinameReco && db._archivLog){
+        var _archEntry = db._archivLog.find(function(e){
+          return e.terminId===t.id && (e.typ==='abrechn'||e.typ==='monats_abrechn') && e.dateiname;
+        });
+        if(_archEntry) _dateinameReco = _archEntry.dateiname;
+      }
+      if(_dateinameReco && !t.abrechn_dateiname) t.abrechn_dateiname = _dateinameReco;
+      var newAbId = 'ab'+Date.now()+'_m'+Math.random().toString(36).slice(2,6);
+      db.abrechnungen.push({
+        id: newAbId,
+        datum: t.datum || '',
+        studio: t.studio || '',
+        produktion: t.titel || '',
+        gutschrift_nr: t.gutschrift_nr || '',
+        dateiname: _dateinameReco,
+        brutto: parseFloat(t.brutto_termin) || 0,
+        mwst: parseFloat(t.mwst_anteil) || null,
+        auszahlung: null,  // wird NICHT erfunden
+        kv: Math.abs(parseFloat(t.kv_abzug)||0),
+        rv: Math.abs(parseFloat(t.rv_abzug)||0),
+        pv: Math.abs(parseFloat(t.pv_abzug)||0),
+        terminId: t.id,
+        bezahlt: t.status==='bezahlt',
+        zahlungDatum: t.zahlungDatum || null,
+        erstelltAm: new Date().toISOString(),
+        _migriertAusTermin: true
+      });
+      t.abId = newAbId;
+      changed = true;
+    }
   });
   if(changed) try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
 })();
@@ -1884,7 +1921,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '712';
+  if(el) el.textContent = '714';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12352,6 +12389,8 @@ function dokMergeIntoTermin(d, termin){
 
     // Session-Vergleich: keine neue Abrechnung anlegen — nur Diff zeigen
     if(d._skipAbCreate){
+      // Build 714: Dateiname am Termin setzen — damit Ampel-Klick zum PDF führt
+      if(d.dateiname) termin.abrechn_dateiname = d.dateiname;
       // Diff-Check gegen bestehende Dispo-Werte
       var dispTakes2 = parseInt(termin.takes)||0;
       var dispRate2  = parseFloat(termin.rate)||0;
@@ -12382,6 +12421,36 @@ function dokMergeIntoTermin(d, termin){
       if(d.kuerzel && !termin.sender){
         var sn=erkenneSender(d.kuerzel);
         if(sn){termin.sender=sn;termin.sender_kuerzel=d.kuerzel;}
+      }
+      // Build 713: db.abrechnungen-Record trotzdem anlegen für Buchhaltungs-Konsistenz
+      // Ohne diesen Record: Kontoabgleich + Jahresabschluss finden die Abrechnung nicht,
+      // obwohl die Werte am Termin gespeichert sind (Split-PDF-Bug). Keine Zahlen-Erfindung —
+      // alle Werte stammen direkt aus d (= Dokument/PDF).
+      if(brutto > 0 && !termin.abId){
+        if(!db.abrechnungen) db.abrechnungen = [];
+        var peekAbId = _upsertAbrechnung(null, {
+          dokId: d._peekSourceDokId || d.id || null,
+          dateiname: d.dateiname || '',
+          datum: d.datum || termin.datum || '',
+          studio: d.studio || termin.studio || '',
+          produktion: d.titel || termin.titel || '',
+          gutschrift_nr: d.gutschrift_nr || '',
+          brutto: brutto,
+          netto: netto || null,
+          mwst: parseFloat(d.mwst) || null,
+          auszahlung: parseFloat(d.auszahlung) || null,
+          takes: takes, take_gage: takeGage, grundgage: grundgage,
+          kv: Math.abs(parseFloat(d.kv_abzug)||0),
+          rv: Math.abs(parseFloat(d.rv_abzug)||0),
+          pv: Math.abs(parseFloat(d.pv_abzug)||0),
+          terminId: termin.id,
+          bezahlt: termin.status==='bezahlt',
+          erstelltAm: new Date().toISOString(),
+          _viaPeek: true
+        });
+        termin.abId = peekAbId;
+        // Dateiname auch direkt am Termin
+        if(d.dateiname) termin.abrechn_dateiname = d.dateiname;
       }
       changed.push('Abrechnung: '+fmtEur(brutto)+(d.gutschrift_nr?' · '+d.gutschrift_nr:''));
       return changed;
