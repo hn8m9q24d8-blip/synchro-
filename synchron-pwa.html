@@ -1921,7 +1921,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '715';
+  if(el) el.textContent = '716';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11831,6 +11831,141 @@ function dokBestaetigenMonat(dokId){
   });
 
   var linked=0, notFound=[];
+
+  // Build 716: Sub-Sessions auf EINER Gutschrift (FFS/Iyuno Hail Mary Fall)
+  // Erkennung: Alle Sessions teilen dieselbe GNR UND das Dok hat KV/RV/PV/Auszahlung
+  // → Master+Tochter-Architektur wie bei Multi-Link
+  // Master bekommt Vollwerte (brutto=Summe der subs, SV komplett, auszahlung komplett)
+  // Töchter sind Marker
+  var _dokKV_716 = Math.abs(parseFloat(d.kv_abzug)||0);
+  var _dokAusz_716 = parseFloat(d.auszahlung)||0;
+  var _dokBrutto_716 = parseFloat(d.brutto)||0;
+  var _sessionsMitTermin_716 = d.sessions.filter(function(s){
+    return s.terminId && (db.termine||[]).find(function(t){return t.id===s.terminId;});
+  });
+  // Alle Sessions derselben GNR? (oder keine eigene GNR → Dok-GNR teilen)
+  var _alleGleicheGNR = _sessionsMitTermin_716.length > 1 && _sessionsMitTermin_716.every(function(s){
+    return (s.gutschrift_nr||gutschriftNr) === (_sessionsMitTermin_716[0].gutschrift_nr||gutschriftNr);
+  });
+  // Sub-Sessions-Fall: gemeinsame GNR, Dok trägt SV/Auszahlung
+  var _isSubSessions = _alleGleicheGNR && _dokKV_716 > 0 && _dokAusz_716 > 0;
+
+  if(_isSubSessions){
+    // ── Master+Tochter-Pfad ─────────────────────────────────────
+    // Master = erste Session, trägt ALLE Finanz- und SV-Werte des Dok
+    // Töchter = weitere Sessions, reine Marker
+    if(!db.abrechnungen) db.abrechnungen=[];
+    var _masterSession = _sessionsMitTermin_716[0];
+    var _masterT = (db.termine||[]).find(function(x){return x.id===_masterSession.terminId;});
+    var _childSessions = _sessionsMitTermin_716.slice(1);
+    var _childTerminIds = _childSessions.map(function(s){return s.terminId;});
+    var _nowMs716 = Date.now();
+
+    // Alte teilAbs der beteiligten Termine aufräumen
+    var _alteAbIds = _sessionsMitTermin_716.map(function(s){
+      var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
+      return _t ? _t.abId : null;
+    }).filter(Boolean);
+    if(_alteAbIds.length){
+      db.abrechnungen = db.abrechnungen.filter(function(a){ return _alteAbIds.indexOf(a.id)<0; });
+      _sessionsMitTermin_716.forEach(function(s){
+        var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
+        if(_t){ _t.abId = null; _t.kv_abzug = null; _t.rv_abzug = null; _t.pv_abzug = null; }
+      });
+    }
+
+    // Termin-Felder aus Session-Werten setzen (brutto_termin, takes, grundgage etc.)
+    _sessionsMitTermin_716.forEach(function(s){
+      var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
+      if(!_t) return;
+      if(s.takes) _t.takes = parseInt(s.takes)||0;
+      if(s.rolle && !_t.rolle) _t.rolle = s.rolle;
+      if(s.titel && (!_t.titel||_t.titel===_t.studio)) _t.titel = s.titel;
+      if(s.take_gage) _t.rate = parseFloat(s.take_gage)||0;
+      if(s.grundgage) _t.kommgage = parseFloat(s.grundgage)||0;
+      if(s.brutto_termin) _t.brutto_termin = parseFloat(s.brutto_termin)||0;
+      if(s._mwst_anteil != null) _t.mwst_anteil = s._mwst_anteil;
+      if(s._ust_satz != null) _t.ust_satz = s._ust_satz;
+      var _sGutNr = s.gutschrift_nr || gutschriftNr;
+      if(_sGutNr) _t.gutschrift_nr = _sGutNr;
+    });
+
+    // Master-teilAb (trägt Vollwerte des gesamten Dokuments)
+    var masterAb716 = {
+      id: 'ab'+_nowMs716+'_m',
+      datum: _masterSession.datum || d.datum || _masterT.datum || '',
+      studio: d.studio || _masterT.studio || '',
+      produktion: _masterSession.titel || d.titel || _masterT.titel || '',
+      gutschrift_nr: _masterSession.gutschrift_nr || gutschriftNr || '',
+      dateiname: d.dateiname || d.beschr || '',
+      brutto: _dokBrutto_716,                        // Vollwert
+      netto: parseFloat(d.netto) || null,
+      mwst: parseFloat(d.mwst) || null,              // Vollwert
+      auszahlung: _dokAusz_716,                      // Vollwert
+      kv: _dokKV_716,
+      rv: Math.abs(parseFloat(d.rv_abzug)||0),
+      pv: Math.abs(parseFloat(d.pv_abzug)||0),
+      takes: parseInt(_masterSession.takes)||0,
+      take_gage: parseFloat(_masterSession.take_gage)||0,
+      grundgage: parseFloat(_masterSession.grundgage)||0,
+      terminId: _masterT.id,
+      dokId: d.id,
+      bezahlt: false,
+      erstelltAm: new Date().toISOString(),
+      _isMultiMaster: true,
+      _childTerminIds: _childTerminIds,
+      _multiAnzahl: _sessionsMitTermin_716.length,
+      gesamt_brutto: _dokBrutto_716,
+      gesamt_mwst: parseFloat(d.mwst) || null,
+      gesamt_auszahlung: _dokAusz_716,
+      gesamt_gutschrift_nr: gutschriftNr || null,
+      gesamt_kv: _dokKV_716,
+      gesamt_rv: Math.abs(parseFloat(d.rv_abzug)||0),
+      gesamt_pv: Math.abs(parseFloat(d.pv_abzug)||0)
+    };
+    var _masterAbId716 = _upsertAbrechnung(null, masterAb716);
+    _masterT.abId = _masterAbId716;
+    _masterT.status = 'abrechnung';
+    _masterT.abrechn_dateiname = d.dateiname || '';
+    if(_dokKV_716) _masterT.kv_abzug = _dokKV_716;
+    if(d.rv_abzug) _masterT.rv_abzug = Math.abs(parseFloat(d.rv_abzug)||0);
+    if(d.pv_abzug) _masterT.pv_abzug = Math.abs(parseFloat(d.pv_abzug)||0);
+
+    // Tochter-teilAbs
+    _childSessions.forEach(function(s, idx){
+      var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
+      if(!_t) return;
+      var childAb716 = {
+        id: 'ab'+_nowMs716+'_c'+idx,
+        datum: s.datum || d.datum || _t.datum || '',
+        studio: d.studio || _t.studio || '',
+        produktion: s.titel || d.titel || _t.titel || '',
+        gutschrift_nr: s.gutschrift_nr || gutschriftNr || '',
+        dateiname: d.dateiname || '',
+        brutto: 0, netto: 0, mwst: 0, auszahlung: 0,
+        kv: 0, rv: 0, pv: 0,
+        takes: parseInt(s.takes)||0,
+        take_gage: parseFloat(s.take_gage)||0,
+        grundgage: parseFloat(s.grundgage)||0,
+        terminId: _t.id,
+        dokId: d.id,
+        bezahlt: false,
+        erstelltAm: new Date().toISOString(),
+        _nurMarker: true,
+        _masterAbId: _masterAbId716
+      };
+      var _childId = _upsertAbrechnung(null, childAb716);
+      _t.abId = _childId;
+      _t.status = 'abrechnung';
+      _t.abrechn_dateiname = d.dateiname || '';
+    });
+
+    linked = _sessionsMitTermin_716.length;
+    d.sessions.forEach(function(s){
+      if(!s.terminId) notFound.push(s.datum||'?');
+    });
+  } else {
+  // ── Klassischer Sessions-Pfad (wie bisher) ───────────────────
   d.sessions.forEach(function(s){
     var t=s.terminId?(db.termine||[]).find(function(x){return x.id===s.terminId;}):null;
     if(t){
@@ -11969,6 +12104,7 @@ function dokBestaetigenMonat(dokId){
       notFound.push(s.datum);
     }
   });
+  } // Build 716: end else (klassischer Sessions-Pfad)
 
   // Primären terminId auf Dok setzen (erster verknüpfter Termin)
   // Wichtig für Dispoampel, CSV-Export und openDetail-Anzeige
