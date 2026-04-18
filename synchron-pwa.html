@@ -1844,6 +1844,21 @@ var db=load();
       var ab = (db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(ab && ab.dateiname){ t.abrechn_dateiname = ab.dateiname; changed=true; }
     }
+    // Build 712: Split-PDF-Fix — t.abId leer, aber Abrechnung existiert über terminId
+    // Passiert bei Multi-Seiten-PDFs wenn Split-Navigation die abId-Verknüpfung verliert
+    if(!t.abId){
+      var abByTerm = (db.abrechnungen||[]).filter(function(a){
+        return a.terminId===t.id && !a._nurMarker;
+      });
+      if(abByTerm.length){
+        // Aktuellsten nehmen
+        abByTerm.sort(function(a,b){ return (b.erstelltAm||'') < (a.erstelltAm||'') ? -1 : 1; });
+        var abFix = abByTerm[0];
+        t.abId = abFix.id;
+        if(!t.abrechn_dateiname && abFix.dateiname) t.abrechn_dateiname = abFix.dateiname;
+        changed = true;
+      }
+    }
   });
   if(changed) try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
 })();
@@ -1869,7 +1884,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '711';
+  if(el) el.textContent = '712';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
