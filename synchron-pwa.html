@@ -1900,6 +1900,39 @@ var db=load();
   if(changed) try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
 })();
 
+// Build 718: Dedup-Startup — wenn mehrere Non-Marker-Records pro Termin existieren,
+// Master (brutto > 0 + hat SV) behalten, andere löschen
+(function(){
+  if(!db.abrechnungen || !db.termine) return;
+  var changed = false;
+  var byTermin = {};
+  (db.abrechnungen||[]).forEach(function(a){
+    if(!a.terminId || a._nurMarker) return;
+    if(!byTermin[a.terminId]) byTermin[a.terminId] = [];
+    byTermin[a.terminId].push(a);
+  });
+  Object.keys(byTermin).forEach(function(tid){
+    var recs = byTermin[tid];
+    if(recs.length < 2) return;
+    // Master bevorzugen: _isMultiMaster oder höchster brutto oder neustes erstelltAm
+    recs.sort(function(a,b){
+      if(a._isMultiMaster && !b._isMultiMaster) return -1;
+      if(!a._isMultiMaster && b._isMultiMaster) return 1;
+      var ba = parseFloat(a.brutto)||0, bb = parseFloat(b.brutto)||0;
+      if(ba !== bb) return bb - ba;
+      return (b.erstelltAm||'') < (a.erstelltAm||'') ? -1 : 1;
+    });
+    var keep = recs[0];
+    var drop = recs.slice(1).map(function(r){return r.id;});
+    db.abrechnungen = db.abrechnungen.filter(function(a){ return drop.indexOf(a.id) < 0; });
+    // Termin auf keep setzen
+    var _t = (db.termine||[]).find(function(x){return x.id===tid;});
+    if(_t) _t.abId = keep.id;
+    changed = true;
+  });
+  if(changed) try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
+})();
+
 // ── API-KEY SYNC: db.profil.apiKey ↔ localStorage ────────────────
 (function(){
   var fromStorage = localStorage.getItem('anthropic_api_key')||'';
@@ -1921,7 +1954,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '716';
+  if(el) el.textContent = '718';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7329,6 +7362,8 @@ function rJahresabschluss(){
       +'<th style="'+colNumH+'">RV</th>'
       +'<th style="'+colNumH+'">PV</th>'
       +'<th style="'+colNumH+'">SV</th>'
+      +'<th style="'+colNumH+'">MwSt</th>'
+      +'<th style="'+colNumH+'">Satz</th>'
       +'</tr></thead><tbody>';
 
     // Gruppen sortieren nach aktiver Spalte
@@ -7354,8 +7389,31 @@ function rJahresabschluss(){
     });
 
     // Hilfsfunktion: eine Zeile rendern
+    // Build 717: MwSt + Satz-Erkennung für Kontroll-Spalten
+    // Satz wird aus mwst / (brutto − mwst) berechnet und gegen 7%/19% geprüft
+    // Farbe: grün = plausibel, gelb = leicht abweichend, rot = kein MwSt oder völlig falsch
+    function _mwstInfo(brutto, mwst){
+      var b = parseFloat(brutto)||0;
+      var m = parseFloat(mwst)||0;
+      if(!b) return {txt:'—', satz:'—', color:'#9ca3af'};
+      if(!m) return {txt:'—', satz:'fehlt', color:'#dc2626'};
+      var netto = b - m;
+      if(netto <= 0) return {txt:fmtEur(m), satz:'?', color:'#dc2626'};
+      var rate = m / netto;
+      var satzStr, color;
+      if(Math.abs(rate-0.07) < 0.003){ satzStr='7%'; color='#15803d'; }
+      else if(Math.abs(rate-0.19) < 0.003){ satzStr='19%'; color='#15803d'; }
+      else if(Math.abs(rate-0.07) < 0.01 || Math.abs(rate-0.19) < 0.01){
+        satzStr=(rate*100).toFixed(1).replace('.',',')+'%'; color='#ca8a04'; // gelb: fast richtig
+      } else {
+        satzStr=(rate*100).toFixed(1).replace('.',',')+'%'; color='#dc2626'; // rot: falsch
+      }
+      return {txt:fmtEur(m), satz:satzStr, color:color};
+    }
+
     function renderAbRow(a){
       var sv=(parseFloat(a.kv)||0)+(parseFloat(a.rv)||0)+(parseFloat(a.pv)||0);
+      var mwI = _mwstInfo(a.brutto, a.mwst);
       return '<tr style="border-bottom:1px solid #f0f0f0">'
         +'<td style="'+colStyle+'color:#888">'+esc(a.gutschrift_nr||'—')+'</td>'
         +'<td style="'+colStyle+'">'+esc(a.studio||'')+'</td>'
@@ -7365,6 +7423,8 @@ function rJahresabschluss(){
         +'<td style="'+colNum+'">'+(a.rv?fmtEur(a.rv):'—')+'</td>'
         +'<td style="'+colNum+'">'+(a.pv?fmtEur(a.pv):'—')+'</td>'
         +'<td style="'+colNum+';font-weight:700;color:#1d6fa8">'+(sv?fmtEur(sv):'—')+'</td>'
+        +'<td style="'+colNum+';color:'+mwI.color+'">'+mwI.txt+'</td>'
+        +'<td style="'+colNum+';font-weight:700;color:'+mwI.color+'">'+mwI.satz+'</td>'
         +'</tr>';
     }
 
@@ -7400,6 +7460,7 @@ function rJahresabschluss(){
         var dateiname = erstesAb.dateiname||'';
 
         if(sessions.length > 1){
+          var gMwstInfo = _mwstInfo(gBrutto, parseFloat(erstesAb.gesamt_mwst)||parseFloat(erstesAb.mwst)||0);
           // Monats-GS: Kopfzeile mit GS-Nr.
           html += '<tr style="background:#f8f8f8">'
             +'<td style="'+colStyle+'font-weight:700;color:#374151" rowspan="'+(sessions.length+1)+'">'+esc(gnr)
@@ -7407,7 +7468,7 @@ function rJahresabschluss(){
             +'</td>'
             +'<td style="'+colStyle+'font-weight:600">'+esc(studio)+'</td>'
             +'<td style="'+colStyle+'color:#888;font-style:italic">'+fd(erstesAb.datum)+'</td>'
-            +'<td colspan="5"></td></tr>';
+            +'<td colspan="7"></td></tr>';
           // Einzelne Sessions
           sessions.forEach(function(t){
             var tBrutto = parseFloat(t.brutto_termin)||0;
@@ -7415,7 +7476,7 @@ function rJahresabschluss(){
               +'<td style="'+colStyle+'color:#666">'+esc(t.studio||studio)+'</td>'
               +'<td style="'+colStyle+';cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\')},150)">'+esc(t.titel||'?')+'</td>'
               +'<td style="'+colNum+'">'+(tBrutto?fmtEur(tBrutto):'—')+'</td>'
-              +'<td colspan="4"></td></tr>';
+              +'<td colspan="6"></td></tr>';
           });
           // Gesamt-Zeile
           html += '<tr style="border-top:2px solid #e5e7eb;background:#f0f4ff">'
@@ -7425,10 +7486,13 @@ function rJahresabschluss(){
             +'<td style="'+colNum+'">'+(gRV?fmtEur(gRV):'—')+'</td>'
             +'<td style="'+colNum+'">'+(gPV?fmtEur(gPV):'—')+'</td>'
             +'<td style="'+colNum+'font-weight:800;color:#1d6fa8">'+(gSV?fmtEur(gSV):'—')+'</td>'
+            +'<td style="'+colNum+';color:'+gMwstInfo.color+';font-weight:700">'+gMwstInfo.txt+'</td>'
+            +'<td style="'+colNum+';color:'+gMwstInfo.color+';font-weight:700">'+gMwstInfo.satz+'</td>'
             +'</tr>';
         } else {
           // Einzel-Abrechnung: eine Zeile
           var t = sessions[0]||null;
+          var eMwstInfo = _mwstInfo(gBrutto, parseFloat(erstesAb.mwst)||0);
           html += '<tr style="border-bottom:1px solid #f0f0f0">'
             +'<td style="'+colStyle+'color:#555">'+esc(gnr)
             +(dateiname?'<div style="font-size:9px;color:#aaa">📄 '+esc(dateiname)+'</div>':'')
@@ -7440,6 +7504,8 @@ function rJahresabschluss(){
             +'<td style="'+colNum+'">'+(gRV?fmtEur(gRV):'—')+'</td>'
             +'<td style="'+colNum+'">'+(gPV?fmtEur(gPV):'—')+'</td>'
             +'<td style="'+colNum+'font-weight:700;color:#1d6fa8">'+(gSV?fmtEur(gSV):'—')+'</td>'
+            +'<td style="'+colNum+';color:'+eMwstInfo.color+';font-weight:700">'+eMwstInfo.txt+'</td>'
+            +'<td style="'+colNum+';color:'+eMwstInfo.color+';font-weight:700">'+eMwstInfo.satz+'</td>'
             +'</tr>';
         }
       });
@@ -7460,7 +7526,7 @@ function rJahresabschluss(){
 
     // ── GESAMTZEILE — nur aus Tabellenwerten summieren ──────
     // Brutto: aus gnrGruppen + abListe (was die Tabelle zeigt)
-    var _tabBrutto=0, _tabKV=0, _tabRV=0, _tabPV=0;
+    var _tabBrutto=0, _tabKV=0, _tabRV=0, _tabPV=0, _tabMwst=0;
     gruppenSorted.forEach(function(key){
       var g=gnrGruppen[key];
       var e=g.abs[0];
@@ -7468,13 +7534,15 @@ function rJahresabschluss(){
       var _kv=parseFloat(e.gesamt_kv)||Math.abs(parseFloat(e.kv)||0);
       var _rv=parseFloat(e.gesamt_rv)||Math.abs(parseFloat(e.rv)||0);
       var _pv=parseFloat(e.gesamt_pv)||Math.abs(parseFloat(e.pv)||0);
-      _tabBrutto+=_b; _tabKV+=_kv; _tabRV+=_rv; _tabPV+=_pv;
+      var _m=parseFloat(e.gesamt_mwst)||parseFloat(e.mwst)||0;
+      _tabBrutto+=_b; _tabKV+=_kv; _tabRV+=_rv; _tabPV+=_pv; _tabMwst+=_m;
     });
     abListe.filter(function(a){return !a.gutschrift_nr||!gnrGruppen['gnr_'+a.gutschrift_nr];}).forEach(function(a){
       _tabBrutto+=parseFloat(a.brutto)||0;
       _tabKV+=parseFloat(a.kv)||0;
       _tabRV+=parseFloat(a.rv)||0;
       _tabPV+=parseFloat(a.pv)||0;
+      _tabMwst+=parseFloat(a.mwst)||0;
     });
     var _tabSV=_tabKV+_tabRV+_tabPV;
     html += '<tr style="border-top:3px solid #374151;background:#1d6fa8">'
@@ -7484,6 +7552,8 @@ function rJahresabschluss(){
       +'<td style="'+colNum+'color:#fff">'+(_tabRV?fmtEur(_tabRV):'—')+'</td>'
       +'<td style="'+colNum+'color:#fff">'+(_tabPV?fmtEur(_tabPV):'—')+'</td>'
       +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+(_tabSV?fmtEur(_tabSV):'—')+'</td>'
+      +'<td style="'+colNum+'font-weight:900;color:#fff;font-size:12px">'+(_tabMwst?fmtEur(_tabMwst):'—')+'</td>'
+      +'<td style="'+colNum+'color:#fff;font-size:10px">—</td>'
       +'</tr>';
 
     html += '</tbody></table></div></div>';
@@ -11862,12 +11932,14 @@ function dokBestaetigenMonat(dokId){
     var _nowMs716 = Date.now();
 
     // Alte teilAbs der beteiligten Termine aufräumen
-    var _alteAbIds = _sessionsMitTermin_716.map(function(s){
-      var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
-      return _t ? _t.abId : null;
-    }).filter(Boolean);
-    if(_alteAbIds.length){
-      db.abrechnungen = db.abrechnungen.filter(function(a){ return _alteAbIds.indexOf(a.id)<0; });
+    // Build 718: Cleanup nach terminId (robuster als nach t.abId, falls schon null gesetzt)
+    var _terminIds716 = _sessionsMitTermin_716.map(function(s){return s.terminId;}).filter(Boolean);
+    if(_terminIds716.length){
+      db.abrechnungen = db.abrechnungen.filter(function(a){
+        // Records ohne terminId behalten, sonst prüfen ob Termin in Liste
+        if(!a.terminId) return true;
+        return _terminIds716.indexOf(a.terminId) < 0;
+      });
       _sessionsMitTermin_716.forEach(function(s){
         var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
         if(_t){ _t.abId = null; _t.kv_abzug = null; _t.rv_abzug = null; _t.pv_abzug = null; }
