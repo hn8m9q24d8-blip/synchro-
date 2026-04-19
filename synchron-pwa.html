@@ -1954,7 +1954,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '718';
+  if(el) el.textContent = '719';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7390,23 +7390,31 @@ function rJahresabschluss(){
 
     // Hilfsfunktion: eine Zeile rendern
     // Build 717: MwSt + Satz-Erkennung für Kontroll-Spalten
-    // Satz wird aus mwst / (brutto − mwst) berechnet und gegen 7%/19% geprüft
-    // Farbe: grün = plausibel, gelb = leicht abweichend, rot = kein MwSt oder völlig falsch
+    // Build 719: Bemessungsgrundlage im Synchron-Bereich ist der Brutto-Gage-Wert,
+    // NICHT (Brutto - MwSt). Also: rate = mwst / brutto (nicht /(brutto-mwst))
+    // Beispiel: Brutto 127€ + 7% MwSt = 8,89€ → 8,89/127 = 7,00% ✓
+    // Bei Rechnungen (mobyDOK) ist Netto unten und Brutto oben — dann gilt mwst/(brutto-mwst)
+    // Strategie: beide Interpretationen probieren, die nähere an 7%/19% gewinnt
     function _mwstInfo(brutto, mwst){
       var b = parseFloat(brutto)||0;
       var m = parseFloat(mwst)||0;
       if(!b) return {txt:'—', satz:'—', color:'#9ca3af'};
       if(!m) return {txt:'—', satz:'fehlt', color:'#dc2626'};
-      var netto = b - m;
-      if(netto <= 0) return {txt:fmtEur(m), satz:'?', color:'#dc2626'};
-      var rate = m / netto;
+      // Zwei mögliche Sätze berechnen
+      var rate1 = m / b;                // "brutto = Bemessungsgrundlage" (Synchron-Gutschrift)
+      var rate2 = (b - m) > 0 ? m / (b - m) : 0;  // "brutto = netto + mwst" (klassische Rechnung)
+      // Welcher Satz ist näher an 7% oder 19%?
+      function distNorm(r){
+        return Math.min(Math.abs(r-0.07), Math.abs(r-0.19));
+      }
+      var rate = distNorm(rate1) <= distNorm(rate2) ? rate1 : rate2;
       var satzStr, color;
       if(Math.abs(rate-0.07) < 0.003){ satzStr='7%'; color='#15803d'; }
       else if(Math.abs(rate-0.19) < 0.003){ satzStr='19%'; color='#15803d'; }
       else if(Math.abs(rate-0.07) < 0.01 || Math.abs(rate-0.19) < 0.01){
-        satzStr=(rate*100).toFixed(1).replace('.',',')+'%'; color='#ca8a04'; // gelb: fast richtig
+        satzStr=(rate*100).toFixed(1).replace('.',',')+'%'; color='#ca8a04';
       } else {
-        satzStr=(rate*100).toFixed(1).replace('.',',')+'%'; color='#dc2626'; // rot: falsch
+        satzStr=(rate*100).toFixed(1).replace('.',',')+'%'; color='#dc2626';
       }
       return {txt:fmtEur(m), satz:satzStr, color:color};
     }
