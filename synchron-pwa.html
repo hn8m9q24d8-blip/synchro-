@@ -1954,7 +1954,7 @@ var db=load();
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '719';
+  if(el) el.textContent = '720';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10432,6 +10432,24 @@ function _gnrExtract(nachricht){
   var singleRex = /(\d{3,6}\/\d{6,12})/g, sm;
   while((sm = singleRex.exec(_clean)) !== null){
     if(gnrs.indexOf(sm[1]) < 0) gnrs.push(sm[1]);
+  }
+  // Build 720: Bare-Date-Range (z.B. "Gage 20260301 bis 20260304" ohne Präfix)
+  // Erzeugt einzelne Bare-Date-Einträge pro Tag im Range
+  var bareRangeRex = /(?:gage|gutschrift|rg\.?)\s+((\d{4})(\d{2})(\d{2}))\s*(?:bis|-|–|—)\s*((\d{4})(\d{2})(\d{2}))/gi, brm;
+  while((brm = bareRangeRex.exec(_clean)) !== null){
+    var bvY = parseInt(brm[2]), bvM = parseInt(brm[3]), bvD = parseInt(brm[4]);
+    var bbY = parseInt(brm[6]), bbM = parseInt(brm[7]), bbD = parseInt(brm[8]);
+    if(bvY<2020||bvY>2035||bvM<1||bvM>12||bvD<1||bvD>31) continue;
+    if(bbY<2020||bbY>2035||bbM<1||bbM>12||bbD<1||bbD>31) continue;
+    var bvon = new Date(bvY, bvM-1, bvD);
+    var bbis = new Date(bbY, bbM-1, bbD);
+    var bcur = new Date(bvon), blim = 0;
+    while(bcur <= bbis && blim++ < 60){
+      var bg = bcur.getFullYear()+String(bcur.getMonth()+1).padStart(2,'0')+String(bcur.getDate()).padStart(2,'0');
+      if(gnrs.indexOf(bg) < 0) gnrs.push(bg);
+      bcur.setDate(bcur.getDate()+1);
+    }
+    _clean = _clean.replace(brm[0], ' ');
   }
   // Build 707: Bare-Date-GNRs (z.B. "GAGE 20260301" ohne Präfix/Slash)
   // Nur nach GAGE/Gutschrift/Rg-Keyword, mit Datums-Validierung YYYY/MM/DD
