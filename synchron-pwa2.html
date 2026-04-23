@@ -776,7 +776,8 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
     <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:#1a6ea8;color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;touch-action:manipulation">&#x2601;&#xFE0F; Ordner</button>
     <div onclick="document.getElementById('dok-upload-input').click()" style="background:var(--card);border:1.5px solid var(--border);color:var(--ink);font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="PDFs und Einzeldateien">+ Dateien / PDF</div>
-    <div onclick="importedFilesReset()" style="margin-left:auto;background:#fefce8;border:1.5px solid #fde68a;color:#92400e;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">&#x1F504; Reset</div>
+    <div id="v2-konsolidier-btn" onclick="v2KonsolidiereBatch()" style="margin-left:auto;background:#eef2ff;border:1.5px solid #c7d2fe;color:#4338ca;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation;display:none" title="Abrechnungen ins neue v2-Schema übertragen">📦 → v2</div>
+    <div onclick="importedFilesReset()" style="background:#fefce8;border:1.5px solid #fde68a;color:#92400e;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">&#x1F504; Reset</div>
   </div>
   <!-- Search bar -->
   <div style="padding:8px 12px;background:#fff;flex-shrink:0;border-bottom:1px solid #fce7f3">
@@ -1881,6 +1882,283 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
 
 console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(function(k){return k.charAt(0) !== '_';}));
 
+// ═══════════════════════════════════════════════════════════════
+// PHASE 1B — KONSOLIDIERUNG db.abrechnungen → dbv2
+// ═══════════════════════════════════════════════════════════════
+// Prinzip: Der bestehende KI-Extraktor + Termin-Matching bleibt
+// unangetastet. NACH dem Schreiben in db.abrechnungen (mit Master/
+// Tochter-Struktur und gesamt_*-Feldern) läuft diese Konsolidierung
+// und erzeugt EINE saubere Zeile in dbv2.abrechnungen pro Abrechnung
+// plus N Junction-Einträge für die zugeordneten Termine.
+//
+// db.abrechnungen bleibt vorerst bestehen (für die UI) — wird aber
+// ab Phase 1d nicht mehr als Quelle für Steuer-Auswertungen genutzt.
+// ═══════════════════════════════════════════════════════════════
+
+function _v2uuid(prefix){
+  return (prefix||'id') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+}
+
+// Stammdaten-Upserts — Abrechner & Produktion aus Text ableiten
+function _upsertV2Abrechner(name, klasse){
+  if(!name) return null;
+  if(!dbv2.abrechner) dbv2.abrechner = [];
+  var n = String(name).trim();
+  if(!n) return null;
+  var existing = dbv2.abrechner.find(function(a){
+    return (a.name||'').toLowerCase() === n.toLowerCase();
+  });
+  if(existing){
+    if(klasse && !existing.klasse) existing.klasse = klasse;
+    return existing.id;
+  }
+  var neu = { id: _v2uuid('abr'), name: n, klasse: klasse||null, erkennungs_hints: [] };
+  dbv2.abrechner.push(neu);
+  return neu.id;
+}
+
+function _upsertV2Produktion(titel){
+  if(!titel) return null;
+  if(!dbv2.produktionen) dbv2.produktionen = [];
+  var t = String(titel).trim();
+  if(!t) return null;
+  var existing = dbv2.produktionen.find(function(p){
+    return (p.titel||'').toLowerCase() === t.toLowerCase();
+  });
+  if(existing) return existing.id;
+  var neu = { id: _v2uuid('prod'), titel: t, typ: null, lizenznehmer_name: null };
+  dbv2.produktionen.push(neu);
+  return neu.id;
+}
+
+// Klassifikator: leitet 1a/1b/2/3/4 aus vorhandenen Feldern ab.
+// Quelle: Schema-Abschluss Kapitel 3.1 + 3.2
+function _klassifiziereAbrechnung(ab, dok){
+  var studio = String((ab && ab.studio)||(dok && dok.studio)||'').toLowerCase();
+  var gnr    = String((ab && ab.gutschrift_nr)||(ab && ab.gesamt_gutschrift_nr)||'').trim();
+  var dateiname = String((dok && dok.dateiname)||(ab && ab.dateiname)||'').toLowerCase();
+
+  // Klasse 4: Studio Hamburg Synchron GmbH (Personalnummer 01444)
+  if(studio.indexOf('studio hamburg') >= 0 || /01444/.test(gnr)) return '4';
+
+  // Klasse 2: toneworx — Beleg-Nr TW-NNNN-YYYY
+  if(/\btw[-_\s]?\d{3,4}[-_\s]?\d{4}\b/i.test(gnr) || studio.indexOf('toneworx') >= 0) return '2';
+
+  // Klasse 3: Eigenrechnung (Tim Knauer als Rechnungssteller)
+  // Heuristik: Rechnungs-Nr NN/YYYY oder Dateiname enthält "rechnung"/"eigen"
+  if(/^r?\d{1,3}[\/\-]\d{4}$/i.test(gnr)
+     || studio.indexOf('eigen') >= 0
+     || /eigenrechnung|tim[\s_\-]?knauer/i.test(dateiname)) return '3';
+
+  // Klasse 1: SESAM-GNRs — Ziffern-Suffix-Muster
+  var digits = gnr.replace(/\D/g, '');
+  if(digits.length >= 6){
+    // Klasse 1a: Suffix YYYYMMNN (8 Ziffern, Jahr beginnt mit 20)
+    if(digits.length >= 8 && /^20\d{6}$/.test(digits.slice(-8))) return '1a';
+    // Klasse 1b: Suffix YYYYMM (6 Ziffern, Jahr beginnt mit 20)
+    if(/^20\d{4}$/.test(digits.slice(-6))) return '1b';
+  }
+
+  return null; // unbekannt
+}
+
+function _belegNrTyp(klasse){
+  return klasse==='1a' ? 'sesam_gnr_termin'
+       : klasse==='1b' ? 'sesam_gnr_monats'
+       : klasse==='2'  ? 'toneworx_tw'
+       : klasse==='3'  ? 'eigen_rech'
+       : klasse==='4'  ? 'studio_hh'
+       : null;
+}
+
+// Kern: ein einzelnes Dokument nach v2 konsolidieren
+// Gruppiert alle db.abrechnungen-Zeilen des Dokuments nach gutschrift_nr,
+// erzeugt pro Gruppe eine dbv2.abrechnungen-Zeile + N Junctions.
+function _konsolidiereDokumentNachV2(dokId){
+  if(!dokId) return { ok:false, grund:'keine dokId' };
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return { ok:false, grund:'Dokument nicht gefunden' };
+  if(d.typ!=='abrechn' && d.typ!=='monats_abrechn')
+    return { ok:false, grund:'kein Abrechnungs-PDF (typ='+d.typ+')' };
+
+  var alleAbs = (db.abrechnungen||[]).filter(function(a){return a.dokId===dokId;});
+  if(!alleAbs.length) return { ok:false, grund:'keine db.abrechnungen zu diesem Dokument' };
+
+  // Gruppieren nach gutschrift_nr (bei Klasse 1a: mehrere GNRs im selben PDF möglich)
+  var gruppen = {};
+  alleAbs.forEach(function(a){
+    var key = String(a.gutschrift_nr || a.gesamt_gutschrift_nr || '__ohne_gnr__').trim();
+    if(!gruppen[key]) gruppen[key] = [];
+    gruppen[key].push(a);
+  });
+
+  var erstellt = 0, geupdated = 0, verknuepft = 0;
+
+  Object.keys(gruppen).forEach(function(gnrKey){
+    var gruppe = gruppen[gnrKey];
+    // Master = nicht-_nurMarker-Eintrag (bei Build-716-Pfad), sonst erster
+    var master = gruppe.find(function(a){return !a._nurMarker;}) || gruppe[0];
+    if(!master) return;
+
+    var klasse = _klassifiziereAbrechnung(master, d);
+
+    // Stammdaten
+    var abrId  = _upsertV2Abrechner(master.studio || d.studio, klasse);
+    var prodId = _upsertV2Produktion(master.produktion || d.titel);
+
+    // Leistungs-Zeitraum aus allen Termin-Daten der Gruppe
+    var daten = gruppe.map(function(a){return a.datum;}).filter(Boolean).sort();
+    var vonDat = daten[0] || master.datum || '';
+    var bisDat = daten[daten.length-1] || master.datum || '';
+    var leistMonat = vonDat ? vonDat.slice(0,7) : null;
+
+    // Finanz-Werte: bevorzugt gesamt_*-Felder (bei Multi-Termin die echten Gesamtwerte),
+    // sonst die Einzelfelder des Masters
+    var brutto     = parseFloat(master.gesamt_brutto     || master.brutto)     || 0;
+    var auszahlung = parseFloat(master.gesamt_auszahlung || master.auszahlung) || null;
+    var mwst       = parseFloat(master.gesamt_mwst       || master.mwst)       || null;
+    var kv         = parseFloat(master.gesamt_kv         || master.kv)         || null;
+    var rv         = parseFloat(master.gesamt_rv         || master.rv)         || null;
+    var pv         = parseFloat(master.gesamt_pv         || master.pv)         || null;
+
+    var belegNr = (gnrKey === '__ohne_gnr__') ? '' : gnrKey;
+
+    // Upsert-Key für v2-Abrechnung: (pdf_datei_id, beleg_nr)
+    if(!dbv2.abrechnungen) dbv2.abrechnungen = [];
+    var existing = dbv2.abrechnungen.find(function(a){
+      return a.pdf_datei_id === dokId && (a.beleg_nr||'') === belegNr;
+    });
+
+    var v2Ab;
+    if(existing){
+      v2Ab = existing;
+      geupdated++;
+    } else {
+      v2Ab = { id: _v2uuid('v2ab'), erstellt_am: new Date().toISOString() };
+      dbv2.abrechnungen.push(v2Ab);
+      erstellt++;
+    }
+
+    v2Ab.klasse              = klasse;
+    v2Ab.abrechner_id        = abrId;
+    v2Ab.produktion_id       = prodId;
+    v2Ab.beleg_nr            = belegNr;
+    v2Ab.beleg_nr_typ        = _belegNrTyp(klasse);
+    v2Ab.ausstellungs_datum  = master.datum || '';
+    v2Ab.leistungs_datum_von = vonDat;
+    v2Ab.leistungs_datum_bis = bisDat;
+    v2Ab.leistungs_monat     = leistMonat;
+    v2Ab.brutto              = brutto;
+    v2Ab.ust_betrag          = mwst;
+    v2Ab.ust_basis           = (brutto && mwst!=null) ? Math.round((brutto - mwst)*100)/100 : null;
+    v2Ab.ust_satz            = null; // aus Prompt nicht zuverlässig — später nachrüsten
+    v2Ab.sv_kv_an            = kv;
+    v2Ab.sv_rv_an            = rv;
+    v2Ab.sv_pv_an            = pv;
+    v2Ab.auszahlung          = auszahlung;
+    v2Ab.auszahlungs_ziel    = null; // aus IBAN ableitbar, später
+    v2Ab.pdf_datei_id        = dokId;
+    v2Ab.aktualisiert_am     = new Date().toISOString();
+
+    // Junction-Einträge für alle zugeordneten Termine (dedupliziert)
+    if(!dbv2.abrechnung_termin_links) dbv2.abrechnung_termin_links = [];
+    var terminIds = gruppe.map(function(a){return a.terminId;}).filter(Boolean);
+    terminIds = terminIds.filter(function(v,i,a){return a.indexOf(v)===i;});
+
+    terminIds.forEach(function(tid){
+      var existingLink = dbv2.abrechnung_termin_links.find(function(l){
+        return l.abrechnung_id === v2Ab.id && l.termin_id === tid;
+      });
+      if(!existingLink){
+        // brutto_anteil_display: bei Klasse 1b aus der jeweiligen Tochter-/Session-Zeile
+        var anteilQuelle = gruppe.find(function(a){return a.terminId===tid;});
+        var anteil = anteilQuelle ? (parseFloat(anteilQuelle.brutto)||null) : null;
+        dbv2.abrechnung_termin_links.push({
+          id: _v2uuid('lnk'),
+          abrechnung_id: v2Ab.id,
+          termin_id: tid,
+          brutto_anteil_display: anteil,
+          datum_ambiguitaet: false,
+          buchungskonto: null,
+          notiz: null
+        });
+        verknuepft++;
+      }
+    });
+  });
+
+  saveV2(dbv2);
+  return { ok:true, erstellt:erstellt, geupdated:geupdated, verknuepft:verknuepft, gruppen:Object.keys(gruppen).length };
+}
+
+// Zählt wie viele Abrechnungs-Dokumente noch NICHT in v2 konsolidiert sind.
+// Grundlage: bestätigte Dokumente mit typ abrechn/monats_abrechn, die zugeordnete
+// db.abrechnungen haben, aber keinen entsprechenden dbv2.abrechnungen-Eintrag.
+function v2ZaehleUngesynct(){
+  var offene = 0;
+  (db.dokumente||[]).forEach(function(d){
+    if(d.typ!=='abrechn' && d.typ!=='monats_abrechn') return;
+    var abs = (db.abrechnungen||[]).filter(function(a){return a.dokId===d.id;});
+    if(!abs.length) return;
+    // Gruppen dieses Dokuments
+    var gnrSet = {};
+    abs.forEach(function(a){
+      var key = String(a.gutschrift_nr || a.gesamt_gutschrift_nr || '__ohne_gnr__').trim();
+      gnrSet[key] = true;
+    });
+    var v2Count = (dbv2.abrechnungen||[]).filter(function(v){return v.pdf_datei_id===d.id;}).length;
+    if(Object.keys(gnrSet).length > v2Count) offene++;
+  });
+  return offene;
+}
+
+// Batch: alle bestätigten Abrechnungs-Dokumente durchlaufen
+function v2KonsolidiereBatch(){
+  var offene = v2ZaehleUngesynct();
+  var vorhanden = (dbv2.abrechnungen||[]).length;
+
+  var msg = 'V2-Konsolidierung starten?\n\n'
+    + 'Bestehend im v2-Schema: ' + vorhanden + ' Abrechnungen\n'
+    + 'Noch nicht konsolidiert: ' + offene + ' Dokumente\n\n'
+    + 'db.abrechnungen bleibt unverändert — es wird nur eine saubere\n'
+    + 'Kopie im neuen Schema erzeugt bzw. aktualisiert.';
+  if(!confirm(msg)) return;
+
+  var docIds = [];
+  (db.dokumente||[]).forEach(function(d){
+    if((d.typ==='abrechn' || d.typ==='monats_abrechn') && docIds.indexOf(d.id)<0){
+      docIds.push(d.id);
+    }
+  });
+
+  var sumErstellt=0, sumGeupdated=0, sumVerknuepft=0, sumGruppen=0, uebersprungen=0;
+  docIds.forEach(function(dId){
+    var res = _konsolidiereDokumentNachV2(dId);
+    if(res.ok){
+      sumErstellt    += res.erstellt||0;
+      sumGeupdated   += res.geupdated||0;
+      sumVerknuepft  += res.verknuepft||0;
+      sumGruppen     += res.gruppen||0;
+    } else {
+      uebersprungen++;
+    }
+  });
+
+  alert('V2-Konsolidierung fertig:\n\n'
+    + '• ' + sumGruppen + ' Abrechnungs-Gruppen verarbeitet\n'
+    + '• ' + sumErstellt + ' neu ins v2-Schema geschrieben\n'
+    + '• ' + sumGeupdated + ' bestehende aktualisiert\n'
+    + '• ' + sumVerknuepft + ' neue Termin-Verknüpfungen\n'
+    + (uebersprungen?('• '+uebersprungen+' Dokumente übersprungen (keine Abrechnung)\n'):'')
+    + '\nSumme im v2-Schema:\n'
+    + '  ' + (dbv2.abrechnungen||[]).length + ' Abrechnungen\n'
+    + '  ' + (dbv2.abrechnung_termin_links||[]).length + ' Termin-Verknüpfungen\n'
+    + '  ' + (dbv2.abrechner||[]).length + ' Abrechner\n'
+    + '  ' + (dbv2.produktionen||[]).length + ' Produktionen');
+
+  rDokumente();
+}
+
 // ── MIGRATION: bestätigte Dokumente + _archivLog → importedFiles ────────
 (function(){
   if(!db.importedFiles) db.importedFiles = [];
@@ -2041,7 +2319,7 @@ console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(func
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '720';
+  if(el) el.textContent = '721';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8630,6 +8908,31 @@ function rDokumente(){
   var unanalysed = db.dokumente.filter(function(d){return !d.typ||d.typ==='offen';}).length;
   var badge = document.getElementById('dok-badge');
   if(badge) badge.textContent = unanalysed > 0 ? unanalysed+' neu' : db.dokumente.length+' Dok.';
+
+  // V2-Konsolidier-Button: Sichtbarkeit + Label je nach ungesyncten Abrechnungen
+  try {
+    var v2btn = document.getElementById('v2-konsolidier-btn');
+    if(v2btn){
+      var offen = v2ZaehleUngesynct();
+      var v2Anz = (dbv2.abrechnungen||[]).length;
+      if(offen > 0){
+        v2btn.style.display = '';
+        v2btn.textContent = '📦 → v2 ('+offen+')';
+        v2btn.style.background = '#fef3c7';
+        v2btn.style.borderColor = '#fbbf24';
+        v2btn.style.color = '#92400e';
+      } else if(v2Anz > 0){
+        // Alles synct — Button dezent anzeigen als Info/Re-Sync-Option
+        v2btn.style.display = '';
+        v2btn.textContent = '📦 v2 ('+v2Anz+')';
+        v2btn.style.background = '#f0fdf4';
+        v2btn.style.borderColor = '#bbf7d0';
+        v2btn.style.color = '#15803d';
+      } else {
+        v2btn.style.display = 'none';
+      }
+    }
+  } catch(e){ console.warn('[v2] Button-Update Fehler:', e); }
 
   var docs = db.dokumente.filter(function(d){
     if(_dokTab==='alle') return true;
