@@ -2050,8 +2050,15 @@ function _konsolidiereDokumentNachV2(dokId){
     v2Ab.leistungs_monat     = leistMonat;
     v2Ab.brutto              = brutto;
     v2Ab.ust_betrag          = mwst;
-    v2Ab.ust_basis           = (brutto && mwst!=null) ? Math.round((brutto - mwst)*100)/100 : null;
-    v2Ab.ust_satz            = null; // aus Prompt nicht zuverlässig — später nachrüsten
+    // Bei Synchron-Gutschriften wird die USt AUF das Brutto aufgeschlagen
+    // (Auszahlung = Brutto - SV + USt). Also ist Brutto selbst die Bemessungsgrundlage.
+    // Klasse 2 toneworx: Schema sagt ust_basis = brutto (USt auf Gesamt inkl. Nutzungsrechte).
+    // Klasse 4 Studio Hamburg: ust_basis = Gage-Summe (entspricht hier ebenfalls brutto).
+    v2Ab.ust_basis           = brutto || null;
+    // ust_satz aus brutto+mwst ableiten — reine Verifikation, keine Erfindung
+    v2Ab.ust_satz            = (brutto && mwst!=null && mwst!==0)
+                               ? Math.round((mwst/brutto)*10000)/10000
+                               : null;
     v2Ab.sv_kv_an            = kv;
     v2Ab.sv_rv_an            = rv;
     v2Ab.sv_pv_an            = pv;
@@ -2319,7 +2326,7 @@ function v2KonsolidiereBatch(){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '721';
+  if(el) el.textContent = '722';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
