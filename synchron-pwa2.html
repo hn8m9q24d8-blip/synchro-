@@ -1806,23 +1806,23 @@ var db=load();
 // ═══════════════════════════════════════════════════════════════
 const DBK_V2 = 'synchron_schema_v2';
 
+// Phase-1b-Plan: dbv2 ist AUSSCHLIESSLICH für das Abrechnungs-Schema zuständig.
+// Dispos (Termine + Dokumente) bleiben in der alten db — die funktioniert, fertig.
+// Junction-Einträge verlinken per termin_id auf db.termine[].id (NICHT auf eine
+// v2-Termin-Kopie). Jahresauswertung liest: Termine aus db + Abrechnungen aus dbv2.
 function ddb_v2(){
   return {
-    _schemaVersion: 2,
+    _schemaVersion: 3,
     _createdAt: new Date().toISOString(),
 
-    // Stammdaten
+    // Stammdaten — aus KI-Extraktion nebenher gepflegt
     abrechner: [],              // Firmen die Abrechnungen erstellen
     produktionen: [],           // Filme/Serien/Games
 
-    // Transaktionen
-    termine: [],                // Studio-Termine (OHNE Finanzwerte!)
+    // Transaktionen — Kern des neuen Schemas
     abrechnungen: [],           // Atomare Finanz-Einheit (Klasse 1-4)
-    abrechnung_termin_links: [],// N:M Junction Termin↔Abrechnung
+    abrechnung_termin_links: [],// N:M Junction — termin_id zeigt auf db.termine[].id
     zahlungsgruppen: [],        // Holvi-Sammelüberweisungen
-
-    // Dokumente
-    dokumente: [],              // PDFs und Metadaten
 
     // Holvi
     holvi_eingaenge: [],        // CSV-Import
@@ -1865,256 +1865,21 @@ function saveV2(d){
 var dbv2 = loadV2();
 // Initial-Save damit der localStorage-Key existiert und in DevTools sichtbar ist
 if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
-console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(function(k){return k.charAt(0) !== '_';}));
 
-// ═══════════════════════════════════════════════════════════════
-// PHASE 1A-BIS — DISPO-MIGRATION v1 → v2
-// ═══════════════════════════════════════════════════════════════
-// Überträgt aus der alten db in dbv2:
-//   • db.termine[]    → dbv2.termine[]      (OHNE Finanzfelder, status='dispo_only')
-//   • unique Titel    → dbv2.produktionen[] (typ='sonstiges', wird später gesetzt)
-//   • bestätigte Dispo-PDFs → dbv2.dokumente[] (mit dataURL)
-//
-// Migriert NICHT:
-//   • db.abrechnungen, t.abId, SV-Werte an Terminen (kv_abzug etc.)
-//   • Master/Tochter-Flags, _nurMarker, gesamt_*-Felder
-//
-// Grund: Dispos sind das unverfälschte Fundament. Abrechnungen pflegt Tim
-// in Phase 3 komplett neu ein.
-//
-// Aufruf:
-//   migrateDisposV1toV2()   — Migration ausführen (auch manuell)
-//   resetDbv2()             — dbv2 zurücksetzen (für Wiederholung/Test)
-// ═══════════════════════════════════════════════════════════════
-
-function migrateDisposV1toV2(){
-  // Guard: dbv2 muss leer sein, sonst Abbruch
-  if((dbv2.termine && dbv2.termine.length > 0) ||
-     (dbv2.produktionen && dbv2.produktionen.length > 0)){
-    console.warn('[v2] Migration abgebrochen — dbv2 nicht leer. Erst resetDbv2() aufrufen.');
-    return { error:'dbv2_not_empty',
-             termine_in_v2: (dbv2.termine||[]).length,
-             produktionen_in_v2: (dbv2.produktionen||[]).length };
+// Phase-1b-Cleanup: termine/dokumente aus dbv2 entfernen, falls eine frühere
+// Version (Phase-1a-bis-Experiment) sie reingeschrieben hat. Einmalig, idempotent.
+// Dispos leben in db.termine / db.dokumente — dbv2 ist nur Abrechnungs-Schema.
+(function(){
+  var changed = false;
+  if(dbv2.termine !== undefined){ delete dbv2.termine; changed = true; }
+  if(dbv2.dokumente !== undefined){ delete dbv2.dokumente; changed = true; }
+  if(changed){
+    saveV2(dbv2);
+    console.log('[v2] Cleanup: termine/dokumente aus dbv2 entfernt (Phase 1b)');
   }
-
-  var stats = {
-    produktionen_created: 0,
-    termine_migrated: 0,
-    dokumente_migrated: 0,
-    dispos_linked: 0,
-    skipped_termine: 0,
-    errors: []
-  };
-
-  try {
-    // ─ 1. Produktionen aus Termin-Titeln extrahieren (dedupliziert via norm) ─
-    var produktionsMap = {};   // normalized titel → produktion-object
-    (db.termine||[]).forEach(function(t){
-      var titel = (t.titel||'').trim();
-      if(!titel) return;
-      var key = normalize(titel);
-      if(!produktionsMap[key]){
-        var p = {
-          id: uid(),
-          titel: titel,
-          typ: 'sonstiges',              // unbekannt bei Migration; später pro Fall
-          lizenznehmer_name: null,
-          default_ust_satz: null,
-          _migriert_aus: 'v1_termine',
-          _migriert_am: new Date().toISOString()
-        };
-        produktionsMap[key] = p;
-        dbv2.produktionen.push(p);
-        stats.produktionen_created++;
-      }
-    });
-
-    // ─ 2. Termine migrieren — alte ID BEHALTEN für Doku-Verlinkung ─
-    (db.termine||[]).forEach(function(t){
-      var titel = (t.titel||'').trim();
-      if(!titel){
-        stats.skipped_termine++;
-        return;
-      }
-      var key = normalize(titel);
-      var prod = produktionsMap[key];
-      if(!prod){
-        stats.skipped_termine++;
-        return;
-      }
-
-      // takes als Int parsen
-      var takesVal = null;
-      if(t.takes !== undefined && t.takes !== null && t.takes !== ''){
-        var tv = parseInt(t.takes);
-        if(!isNaN(tv)) takesVal = tv;
-      }
-
-      var newT = {
-        // ─── Schema v2 Kernfelder ───
-        id: t.id,                        // OLD id behalten (für Doku-Link)
-        datum: t.datum || '',
-        produktion_id: prod.id,
-        studio_display: t.studio || '',
-        rolle: t.rolle || '',
-        regie: t.regie || '',
-        takes: takesVal,
-        status: 'dispo_only',            // reset (egal was vorher da war)
-        dispo_dokument_id: null,         // wird in Schritt 3 gesetzt
-        notiz: t.notizen || '',
-
-        // ─── Dispo-Metadaten (physische Termin-Daten, nicht-finanziell) ───
-        uhrzeit: t.uhrzeit || '',
-        uhrzeit_von: t.uhrzeit_von || '',
-        uhrzeit_bis: t.uhrzeit_bis || '',
-        staffel: t.staffel || '',
-        folge: t.folge || '',
-        dispo_planned_rate: (t.rate !== undefined && t.rate !== '' ? parseFloat(t.rate)||null : null),
-        dispo_planned_kommgage: (t.kommgage !== undefined && t.kommgage !== '' ? parseFloat(t.kommgage)||null : null),
-        dispoImg: t.dispoImg || null,
-
-        // ─── GVL-Detail (Staffel/Folgen-Aufschlüsselung für Auswertungen) ───
-        gvl_staffel: t.gvl_staffel || '',
-        gvl_folge: t.gvl_folge || '',
-        gvl_takes: t.gvl_takes || null,
-        gvl_takes_detail: t.gvl_takes_detail || null,
-
-        // ─── Herkunfts-Tracking ───
-        _migriert_aus: 'v1_termine',
-        _migriert_am: new Date().toISOString(),
-        _v1_id: t.id                     // redundant, aber explizit zur Kontrolle
-      };
-      dbv2.termine.push(newT);
-      stats.termine_migrated++;
-    });
-
-    // ─ 3. Dispo-Dokumente migrieren (nur bestätigte) + Link zum Termin ─
-    var terminIdMap = {};
-    dbv2.termine.forEach(function(t){ terminIdMap[t.id] = t; });
-
-    (db.dokumente||[]).forEach(function(d){
-      if(d.typ !== 'dispo') return;      // nur Dispos
-      if(!d.bestaetigt) return;          // nur bestätigte (unbest. sind Müll)
-      if(!d.id && !d.dateiname) return;
-
-      var newDok = {
-        id: d.id || uid(),
-        dateiname: d.dateiname || '',
-        pfad: d.pfad || '',
-        typ: 'dispo',
-        seite_von: (d.seite_von != null ? d.seite_von : null),
-        seite_bis: (d.seite_bis != null ? d.seite_bis : null),
-        importiert_am: d.importiert_am || d.erstellt_am || d.createdAt || new Date().toISOString(),
-        geloescht: false,
-        dataURL: d.dataURL || null,      // kann null sein wenn save() gestrippt hat
-        thumb: d.thumb || null,
-        _migriert_aus: 'v1_dokumente',
-        _migriert_am: new Date().toISOString()
-      };
-      dbv2.dokumente.push(newDok);
-      stats.dokumente_migrated++;
-
-      // Termin↔Dispo-Link setzen (erster Treffer gewinnt)
-      if(d.terminId && terminIdMap[d.terminId]){
-        var linkT = terminIdMap[d.terminId];
-        if(!linkT.dispo_dokument_id){
-          linkT.dispo_dokument_id = newDok.id;
-          stats.dispos_linked++;
-        }
-      }
-    });
-
-    // ─ 4. actionLog + Markierung ─
-    dbv2.actionLog.push({
-      ts: new Date().toISOString(),
-      action: 'migrateDisposV1toV2',
-      stats: {
-        produktionen_created: stats.produktionen_created,
-        termine_migrated: stats.termine_migrated,
-        dokumente_migrated: stats.dokumente_migrated,
-        dispos_linked: stats.dispos_linked,
-        skipped_termine: stats.skipped_termine
-      }
-    });
-    dbv2._phase1abis_migrated_at = new Date().toISOString();
-
-    // ─ 5. Speichern (einmal am Ende, atomar) ─
-    var saved = saveV2(dbv2);
-    if(!saved){
-      stats.errors.push('saveV2 fehlgeschlagen (vermutlich localStorage-Quota). ' +
-                        'dbv2 in Memory ist migriert, auf Platte nicht. Bei Reload verloren.');
-    }
-
-  } catch(err){
-    console.error('[v2] Migration-Fehler:', err);
-    stats.errors.push('Exception: ' + (err && err.message ? err.message : String(err)));
-  }
-
-  console.log('[v2] Phase 1a-bis abgeschlossen:', stats);
-  return stats;
-}
-
-function resetDbv2(){
-  if(!confirm('V2-DB komplett zurücksetzen?\n\nDie alte db (Kalender/Dispos/Abrechnungen) bleibt unverändert.')) return;
-  dbv2 = ddb_v2();
-  saveV2(dbv2);
-  console.log('[v2] dbv2 zurückgesetzt.');
-  try { alert('V2-DB zurückgesetzt. Du kannst migrateDisposV1toV2() erneut ausführen.'); } catch(e){}
-}
-
-// Global zugänglich (für manuelle Aufrufe aus Safari-Konsole / URL-Bar)
-window.migrateDisposV1toV2 = migrateDisposV1toV2;
-window.resetDbv2 = resetDbv2;
-
-// ─ Auto-Prompt beim App-Start (einmalig pro Installation) ─
-(function phase1abisAutoPrompt(){
-  if(dbv2._phase1abis_migrated_at) return;             // schon migriert
-  if(dbv2._phase1abis_offered) return;                 // schon gefragt (ja/später egal)
-  if(!db.termine || db.termine.length === 0) return;   // nichts zu migrieren
-
-  var termineCount = db.termine.length;
-  var dispoCount = (db.dokumente||[]).filter(function(d){
-    return d.typ==='dispo' && d.bestaetigt;
-  }).length;
-
-  setTimeout(function(){
-    try {
-      var msg = 'Phase 1a-bis: Dispo-Migration\n\n' +
-                termineCount + ' Termine\n' +
-                dispoCount + ' Dispo-PDFs (bestätigt)\n\n' +
-                'werden ins neue V2-Schema kopiert.\n' +
-                'Die alte Datenbank bleibt unverändert.\n\n' +
-                'Jetzt migrieren?\n\n' +
-                '• OK = jetzt migrieren\n' +
-                '• Abbrechen = später (Prompt erscheint nicht mehr)';
-      var ok = confirm(msg);
-      dbv2._phase1abis_offered = true;
-      saveV2(dbv2);
-      if(ok){
-        var r = migrateDisposV1toV2();
-        if(r.error){
-          alert('Migration nicht möglich.\n\n' +
-                'Grund: ' + r.error + '\n' +
-                'dbv2 hat schon Daten (' + (r.termine_in_v2||0) + ' Termine).\n\n' +
-                'Lösung: resetDbv2() in Safari-Konsole aufrufen, dann\n' +
-                'migrateDisposV1toV2() — oder App neu laden.');
-        } else {
-          alert('✓ Migration fertig\n\n' +
-                'Produktionen: ' + r.produktionen_created + '\n' +
-                'Termine: ' + r.termine_migrated + '\n' +
-                'Dokumente: ' + r.dokumente_migrated + '\n' +
-                'Dispos verlinkt: ' + r.dispos_linked + '\n' +
-                (r.skipped_termine ? 'Übersprungen (kein Titel): ' + r.skipped_termine + '\n' : '') +
-                (r.errors.length ? '\n⚠ ' + r.errors.join('\n') : ''));
-        }
-      } else {
-        console.log('[v2] Phase 1a-bis übersprungen. Manuell: migrateDisposV1toV2()');
-      }
-    } catch(e){
-      console.error('[v2] Auto-Prompt-Fehler:', e);
-    }
-  }, 1200);
 })();
+
+console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(function(k){return k.charAt(0) !== '_';}));
 
 // ── MIGRATION: bestätigte Dokumente + _archivLog → importedFiles ────────
 (function(){
@@ -2276,7 +2041,7 @@ window.resetDbv2 = resetDbv2;
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '719';
+  if(el) el.textContent = '720';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
