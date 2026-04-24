@@ -2262,6 +2262,110 @@ function _autoKonsolidiereNachBestaetigen(dokId){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// PHASE 1B — LESE-HELPER FÜR v2-SCHEMA
+// ═══════════════════════════════════════════════════════════════
+// Werden ab jetzt von allen UI-Funktionen benutzt, die Abrechnungs-
+// Informationen zu einem Termin anzeigen. Fallback auf alte db
+// wenn v2 noch keine Junction hat.
+
+// Findet alle v2-Junctions für einen Termin (kann mehrere sein, wenn
+// ein Termin über mehrere Abrechnungen abgedeckt ist — selten).
+function v2JunctionsForTermin(terminId){
+  if(!terminId || !dbv2 || !dbv2.abrechnung_termin_links) return [];
+  return dbv2.abrechnung_termin_links.filter(function(l){
+    return l.termin_id === terminId;
+  });
+}
+
+// Zu einer Junction die zugehörige v2-Abrechnung holen
+function v2AbrechnungById(abId){
+  if(!abId || !dbv2 || !dbv2.abrechnungen) return null;
+  return dbv2.abrechnungen.find(function(a){return a.id === abId;}) || null;
+}
+
+// Primärer Lese-Zugriff: Gibt pro Termin die "Sicht" zurück, die UIs brauchen.
+// Struktur: {
+//   istAbgerechnet: bool,
+//   istTeilVonSammel: bool,         // Abrechnung hat noch andere Termine
+//   anzahlTermineInSammel: int,
+//   brutto_anteil: Einzel-Brutto dieses Termins
+//   grundgage, takegage, takes: aus der Session
+//   tarif_erkannt: "TV"/"Streaming"/"Kino"/"individuell"/null
+//   berechnung_check: "ok"/"abweichung"/null
+//   ab: die v2-Abrechnung selbst (oder null)
+// }
+// Fallback: wenn keine v2-Daten, liest aus db.abrechnungen.
+function v2TerminView(terminId){
+  var junctions = v2JunctionsForTermin(terminId);
+  if(junctions.length === 0){
+    // Fallback auf alte Struktur — liefert minimales View
+    var altAb = (db.abrechnungen||[]).find(function(a){
+      return a.terminId === terminId && !a._nurMarker;
+    });
+    if(!altAb){
+      // noch nicht abgerechnet
+      return { istAbgerechnet:false, quelle:'none' };
+    }
+    return {
+      istAbgerechnet: true,
+      istTeilVonSammel: false,
+      anzahlTermineInSammel: 1,
+      brutto_anteil: parseFloat(altAb.brutto) || 0,
+      grundgage: parseFloat(altAb.grundgage) || null,
+      takegage: parseFloat(altAb.takegage) || null,
+      takes: parseInt(altAb.takes) || null,
+      tarif_erkannt: null,
+      berechnung_check: null,
+      ab: null,
+      altAb: altAb,
+      quelle: 'db_alt'
+    };
+  }
+
+  // v2-Pfad: primäre Junction nehmen (bei seltenen Doppelverknüpfungen die erste)
+  var junction = junctions[0];
+  var ab = v2AbrechnungById(junction.abrechnung_id);
+
+  // Wie viele Termine teilen sich diese Abrechnung?
+  var alleJunctionsDerAb = ab
+    ? (dbv2.abrechnung_termin_links||[]).filter(function(l){
+        return l.abrechnung_id === ab.id;
+      })
+    : [junction];
+
+  return {
+    istAbgerechnet:       true,
+    istTeilVonSammel:     alleJunctionsDerAb.length > 1,
+    anzahlTermineInSammel: alleJunctionsDerAb.length,
+    brutto_anteil:        parseFloat(junction.brutto_anteil_display) || 0,
+    grundgage:            parseFloat(junction.grundgage_anteil) || null,
+    takegage:             parseFloat(junction.takegage_anteil) || null,
+    takes:                parseInt(junction.takes_anteil) || null,
+    tarif_erkannt:        junction.tarif_erkannt || null,
+    berechnung_check:     junction.berechnung_check || null,
+    ab:                   ab,
+    junction:             junction,
+    quelle:               'v2'
+  };
+}
+
+// Zählt wie viele Termine im Jahr mindestens eine v2-Junction haben
+function v2ZaehleAbgerechneteTermine(jahr){
+  if(!dbv2 || !dbv2.abrechnung_termin_links) return 0;
+  var idsInJahr = {};
+  (db.termine||[]).forEach(function(t){
+    if(t.datum && t.datum.slice(0,4) === String(jahr)) idsInJahr[t.id] = true;
+  });
+  var abgerechnet = {};
+  dbv2.abrechnung_termin_links.forEach(function(l){
+    if(idsInJahr[l.termin_id]) abgerechnet[l.termin_id] = true;
+  });
+  return Object.keys(abgerechnet).length;
+}
+
+// ═══════════════════════════════════════════════════════════════
+
 // ── MIGRATION: bestätigte Dokumente + _archivLog → importedFiles ────────
 (function(){
   if(!db.importedFiles) db.importedFiles = [];
@@ -2422,7 +2526,7 @@ function _autoKonsolidiereNachBestaetigen(dokId){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '724';
+  if(el) el.textContent = '725';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2694,6 +2798,48 @@ function tCard(t){
     })));
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
 
+  // ── v2 OVERRIDE ────────────────────────────────────────────
+  // Wenn für diesen Termin eine v2-Junction existiert, überschreiben wir
+  // das ab-Objekt mit den Junction-Einzelwerten. Damit zeigt die UI den
+  // Anteil DIESES Termins (nicht den Gesamt-Brutto der Sammelrechnung).
+  // Steuerrelevante Werte (SV, MwSt) bleiben am Gesamt, aber der Brutto/Anzeige
+  // wird zum Einzel-Anteil. Die Master/Tochter-Unterscheidung entfällt.
+  try {
+    var v2view = v2TerminView(t.id);
+    if(v2view.quelle === 'v2' && v2view.ab){
+      // Baue ein "fake ab"-Objekt, das die UI wie gewohnt versteht,
+      // aber mit Junction-Werten statt Master-Werten
+      ab = {
+        id:             v2view.ab.id,
+        gutschrift_nr:  v2view.ab.beleg_nr,
+        dokId:          v2view.ab.pdf_datei_id,
+        bezahlt:        false, // Zahlungsstatus kommt aus separater Logik
+        datum:          v2view.ab.ausstellungs_datum,
+        // Einzel-Werte aus der Junction (das ist der entscheidende Unterschied)
+        brutto:         v2view.brutto_anteil,
+        grundgage:      v2view.grundgage,
+        take_gage:      v2view.takegage,
+        takes:          v2view.takes,
+        // Gesamt-Werte: bei Sammel als "anteilig" markiert, sonst voll
+        mwst:           v2view.istTeilVonSammel ? null : v2view.ab.ust_betrag,
+        gesamt_mwst:    v2view.istTeilVonSammel ? v2view.ab.ust_betrag : null,
+        kv:             v2view.istTeilVonSammel ? null : v2view.ab.sv_kv_an,
+        rv:             v2view.istTeilVonSammel ? null : v2view.ab.sv_rv_an,
+        pv:             v2view.istTeilVonSammel ? null : v2view.ab.sv_pv_an,
+        auszahlung:     v2view.istTeilVonSammel ? null : v2view.ab.auszahlung,
+        _v2IstTeilVonSammel:      v2view.istTeilVonSammel,
+        _v2AnzahlTermineInSammel: v2view.anzahlTermineInSammel,
+        _v2TarifErkannt:          v2view.tarif_erkannt,
+        _v2BerechnungCheck:       v2view.berechnung_check,
+        _v2GesamtBrutto:          v2view.ab.brutto,
+        _v2Source:                true,
+        _nurMarker:               false,
+        _isMultiMaster:           false
+      };
+    }
+  } catch(e){ console.warn('[v2] openDetail override fehlgeschlagen:', e); }
+  // ── /v2 OVERRIDE ───────────────────────────────────────────
+
   // Multi-Select Modus — Haken anzeigen wenn gewählt
   var isMultiSelected = _pendingDokLink && (window._dokLinkMulti||[]).indexOf(t.id)>=0;
   var multiStyle = isMultiSelected ? 'border:2px solid #c2410c;background:#fff5f5;' : '';
@@ -2733,12 +2879,16 @@ function tCard(t){
     var rawT=parseInt(t.takes)||0;
     var billT=rawT>0&&rawT<10?10:rawT;
     var cardNet=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
-    var diffOk=Math.abs(cardNet-(parseFloat(ab.brutto)||0))<0.02||ab._aufgeteiltN>0;
+    var diffOk=Math.abs(cardNet-(parseFloat(ab.brutto)||0))<0.02||ab._aufgeteiltN>0||ab._v2IstTeilVonSammel;
     var anteilLabel='';
-    if(ab._aufgeteiltN && ab._aufgeteiltN>1){
+    if(ab._v2IstTeilVonSammel){
+      anteilLabel=' <span style="font-size:9px;opacity:.7">Anteil · '+ab._v2AnzahlTermineInSammel+'er-GS</span>';
+    } else if(ab._aufgeteiltN && ab._aufgeteiltN>1){
       anteilLabel=' <span style="font-size:9px;opacity:.7">'+(ab._aufgeteiltIdx+1)+'/'+ab._aufgeteiltN+' · '+fmtEur(ab._aufgeteiltVon)+'</span>';
     }
-    extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(ab.auszahlung)+anteilLabel+(diffOk?' ✓':' ⚠')+'</div>';
+    // Bei Sammel zeigen wir den Brutto-Anteil, bei Einzel die Auszahlung (wie gehabt)
+    var anzeigeWert = ab._v2IstTeilVonSammel ? ab.brutto : (ab.auszahlung || ab.brutto);
+    extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(anzeigeWert)+anteilLabel+(diffOk?' ✓':' ⚠')+'</div>';
   }
 
   var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
@@ -2993,6 +3143,41 @@ function openDetail(id){
     abDateinamen=['Abrechnung '+fd(t.datum)];
   }
   var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
+
+  // ── v2 OVERRIDE ────────────────────────────────────────────
+  // (siehe tCard-Override weiter oben — gleiche Logik)
+  try {
+    var v2viewD = v2TerminView(id);
+    if(v2viewD.quelle === 'v2' && v2viewD.ab){
+      ab = {
+        id:             v2viewD.ab.id,
+        gutschrift_nr:  v2viewD.ab.beleg_nr,
+        dokId:          v2viewD.ab.pdf_datei_id,
+        bezahlt:        false,
+        datum:          v2viewD.ab.ausstellungs_datum,
+        brutto:         v2viewD.brutto_anteil,
+        grundgage:      v2viewD.grundgage,
+        take_gage:      v2viewD.takegage,
+        takes:          v2viewD.takes,
+        mwst:           v2viewD.istTeilVonSammel ? null : v2viewD.ab.ust_betrag,
+        gesamt_mwst:    v2viewD.istTeilVonSammel ? v2viewD.ab.ust_betrag : null,
+        kv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_kv_an,
+        rv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_rv_an,
+        pv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_pv_an,
+        auszahlung:     v2viewD.istTeilVonSammel ? null : v2viewD.ab.auszahlung,
+        _v2IstTeilVonSammel:      v2viewD.istTeilVonSammel,
+        _v2AnzahlTermineInSammel: v2viewD.anzahlTermineInSammel,
+        _v2TarifErkannt:          v2viewD.tarif_erkannt,
+        _v2BerechnungCheck:       v2viewD.berechnung_check,
+        _v2GesamtBrutto:          v2viewD.ab.brutto,
+        _v2Source:                true,
+        _nurMarker:               false,
+        _isMultiMaster:           false
+      };
+    }
+  } catch(eVD){ console.warn('[v2] openDetail override fehlgeschlagen:', eVD); }
+  // ── /v2 OVERRIDE ───────────────────────────────────────────
+
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
   // hasDispo: Dispo-Dokument vorhanden ODER Archiv-Spuren (Dateiname, _archivLog)
   // gvl_staffel allein reicht NICHT — kann auch vom Kalender-Import kommen
@@ -3258,6 +3443,7 @@ function openDetail(id){
   var abHtml='';
   if(ab){
     // Build 702: Tochter-teilAb → kompakte "Teil von Master"-Card statt volle Abrechnung
+    // (nur noch aktiv wenn KEINE v2-Daten vorliegen — Fallback für Altbestand)
     if(ab._nurMarker && ab._masterAbId){
       var masterAb=(db.abrechnungen||[]).find(function(a){return a.id===ab._masterAbId;});
       var masterTermin=masterAb?(db.termine||[]).find(function(x){return x.id===masterAb.terminId;}):null;
@@ -3303,10 +3489,12 @@ function openDetail(id){
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'#22c55e':'#f97316')+'">'
       +'<div class="info-card-header"><span>💶 Abrechnung'
-      +(ab._isMultiMaster&&ab._multiAnzahl>1?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700">🔗 Master · '+ab._multiAnzahl+' Termine</span>':'')
-      +((ab&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
+      +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#eef2ff;color:#4338ca;padding:2px 6px;border-radius:6px;font-weight:700">🔗 '+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
+      +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700">🔗 Master · '+ab._multiAnzahl+' Termine</span>':'')
+      +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
       +'<div style="padding:0 16px 14px">'
+      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4338ca;margin-bottom:8px;padding:6px 8px;background:#eef2ff;border-radius:6px">🔗 Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+fmtEur(ab.brutto||0)+'</strong></div>':'')
       +(!hasDispo2?'<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;padding:6px 8px;background:#f9fafb;border-radius:6px">📋 Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
       +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
       +(ab.takes?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
@@ -7653,6 +7841,166 @@ function _jahresSort(col){
   rJahresabschluss();
 }
 
+// v2-Jahresabschluss-Renderer. Aufgerufen aus rJahresabschluss wenn v2-Daten vorhanden.
+// Reine Lese-Funktion — verändert nichts.
+function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
+  // SV + MwSt direkt aus dbv2.abrechnungen summieren (dort liegen die PDF-Gesamtwerte)
+  var bruttoGes = 0, kvGes = 0, rvGes = 0, pvGes = 0, mwstGes = 0;
+  v2AbsImJahr.forEach(function(a){
+    bruttoGes += parseFloat(a.brutto)||0;
+    kvGes     += parseFloat(a.sv_kv_an)||0;
+    rvGes     += parseFloat(a.sv_rv_an)||0;
+    pvGes     += parseFloat(a.sv_pv_an)||0;
+    mwstGes   += parseFloat(a.ust_betrag)||0;
+  });
+  var svGes = kvGes + rvGes + pvGes;
+
+  var termineAnz = termine.length;
+  var abgerechnetAnz = v2ZaehleAbgerechneteTermine(yr);
+  var bezahltAnz = 0; // Zahlungs-Tracking kommt in späterer Phase
+  var offenAnz = termineAnz - abgerechnetAnz;
+
+  // Sortierbare Abrechnungs-Liste aufbauen
+  var alleJunctions = (dbv2.abrechnung_termin_links||[]);
+  function sortKey(a){
+    if(_jahresSortCol === 'studio'){
+      var abrId = a.abrechner_id;
+      var abr = (dbv2.abrechner||[]).find(function(x){return x.id===abrId;});
+      return (abr && abr.name) || '';
+    }
+    if(_jahresSortCol === 'produktion'){
+      var prId = a.produktion_id;
+      var pr = (dbv2.produktionen||[]).find(function(x){return x.id===prId;});
+      return (pr && pr.titel) || '';
+    }
+    return a.leistungs_datum_von || a.ausstellungs_datum || '';
+  }
+  var sortedAbs = v2AbsImJahr.slice().sort(function(a,b){
+    var ka = sortKey(a), kb = sortKey(b);
+    return (ka<kb?-1:ka>kb?1:0) * _jahresSortDir;
+  });
+
+  // Übersichts-Kachel
+  var head = '<div class="info-card" style="background:#7c2d12;color:#fff;margin-bottom:16px;padding:20px 16px">'
+    + '<div style="font-size:13px;opacity:.85;margin-bottom:4px">Gesamtverdienst '+yr+'</div>'
+    + '<div style="font-size:28px;font-weight:900;margin-bottom:8px">'+fmtEur(bruttoGes)+'</div>'
+    + '<div style="font-size:11px;opacity:.7;margin-bottom:12px">Quelle: '+v2AbsImJahr.length+' Abrechnung'+(v2AbsImJahr.length!==1?'en':'')+' aus v2-Schema</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:11px">'
+    + '<div><div style="opacity:.7">Termine</div><div style="font-size:16px;font-weight:800">'+termineAnz+'</div></div>'
+    + '<div><div style="opacity:.7">Abgerechnet</div><div style="font-size:16px;font-weight:800">'+abgerechnetAnz+'</div></div>'
+    + '<div><div style="opacity:.7">Bezahlt</div><div style="font-size:16px;font-weight:800">'+bezahltAnz+'</div></div>'
+    + '<div><div style="opacity:.7">Offen</div><div style="font-size:16px;font-weight:800;color:#fca5a5">'+offenAnz+'</div></div>'
+    + '</div></div>';
+
+  // Sozialabgaben-Kachel
+  var svBlock = '<div class="info-card" style="margin-bottom:16px">'
+    + '<div class="info-card-header" style="gap:6px"><span>🛡️</span><span>SOZIALABGABEN '+yr+'</span></div>'
+    + '<div style="padding:0 16px 14px">'
+    + '<div class="info-row"><div class="ir-key">Krankenversicherung (KV)</div><div class="ir-val">'+fmtEur(kvGes)+'</div></div>'
+    + '<div class="info-row"><div class="ir-key">Rentenversicherung (RV)</div><div class="ir-val">'+fmtEur(rvGes)+'</div></div>'
+    + '<div class="info-row"><div class="ir-key">Pflegeversicherung (PV)</div><div class="ir-val">'+fmtEur(pvGes)+'</div></div>'
+    + '<div class="info-row" style="border-top:1.5px solid #e5e7eb;padding-top:8px;margin-top:4px">'
+    + '<div class="ir-key" style="color:#1e40af;font-weight:800">SV gesamt</div>'
+    + '<div class="ir-val" style="color:#1e40af;font-weight:900">'+fmtEur(svGes)+'</div></div>'
+    + '<div style="font-size:11px;color:#9ca3af;margin-top:10px">Nur aus bestätigten Abrechnungen — keine Schätzung</div>'
+    + '</div></div>';
+
+  // Abrechnungs-Tabelle (mit Sammel-Termin-Auflösung)
+  var table = '<div class="info-card" style="margin-bottom:16px">'
+    + '<div class="info-card-header" style="gap:6px"><span>📄</span><span>ABRECHNUNGEN '+yr+'</span></div>'
+    + '<div style="overflow-x:auto;padding:0 16px 14px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px">'
+    + '<thead><tr style="color:#9ca3af;text-align:left">'
+    + '<th style="padding:6px 4px;cursor:pointer" onclick="_jahresSortCol=\'datum\';_jahresSortDir*=-1;rJahresabschluss()">Gutschrift-Nr.</th>'
+    + '<th style="padding:6px 4px;cursor:pointer" onclick="_jahresSortCol=\'studio\';_jahresSortDir*=-1;rJahresabschluss()">Studio</th>'
+    + '<th style="padding:6px 4px;cursor:pointer" onclick="_jahresSortCol=\'produktion\';_jahresSortDir*=-1;rJahresabschluss()">Produktion</th>'
+    + '<th style="padding:6px 4px;text-align:right">Brutto</th>'
+    + '<th style="padding:6px 4px;text-align:right">KV</th>'
+    + '<th style="padding:6px 4px;text-align:right">RV</th>'
+    + '<th style="padding:6px 4px;text-align:right">PV</th>'
+    + '<th style="padding:6px 4px;text-align:right">SV</th>'
+    + '<th style="padding:6px 4px;text-align:right">MwSt</th>'
+    + '<th style="padding:6px 4px;text-align:right">Satz</th>'
+    + '</tr></thead><tbody>';
+
+  sortedAbs.forEach(function(ab){
+    var junctions = alleJunctions.filter(function(l){return l.abrechnung_id === ab.id;});
+    var abr = (dbv2.abrechner||[]).find(function(x){return x.id===ab.abrechner_id;});
+    var pr  = (dbv2.produktionen||[]).find(function(x){return x.id===ab.produktion_id;});
+    var abrName = abr ? abr.name : '—';
+    var prName  = pr ? pr.titel : '—';
+    var isSammel = junctions.length > 1;
+    var satz = ab.ust_satz ? Math.round(ab.ust_satz*100)+'%' : '—';
+
+    if(!isSammel){
+      // Einzel-Abrechnung = 1 Zeile mit allen Werten
+      var tName = prName;
+      if(junctions.length === 1){
+        var t = (db.termine||[]).find(function(x){return x.id === junctions[0].termin_id;});
+        if(t) tName = t.titel || prName;
+      }
+      table += '<tr style="border-top:1px solid #f3f4f6">'
+        + '<td style="padding:6px 4px;font-weight:700">'+esc(ab.beleg_nr||'—')+'<div style="font-size:10px;color:#9ca3af;font-weight:400;margin-top:2px">📄 '+esc((db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;})?((db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;}).dateiname||''):'')+'</div></td>'
+        + '<td style="padding:6px 4px">'+esc(abrName)+'</td>'
+        + '<td style="padding:6px 4px"><a href="#" onclick="event.preventDefault();openDetail(\''+(junctions[0]?junctions[0].termin_id:'')+'\')" style="color:#1e40af;text-decoration:underline">'+esc(tName)+'</a></td>'
+        + '<td style="padding:6px 4px;text-align:right;font-weight:700">'+fmtEur(ab.brutto||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#6b7280">'+fmtEur(ab.sv_kv_an||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#6b7280">'+fmtEur(ab.sv_rv_an||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#6b7280">'+fmtEur(ab.sv_pv_an||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#1e40af;font-weight:700">'+fmtEur((ab.sv_kv_an||0)+(ab.sv_rv_an||0)+(ab.sv_pv_an||0))+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#15803d;font-weight:700">'+fmtEur(ab.ust_betrag||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#15803d">'+satz+'</td>'
+        + '</tr>';
+    } else {
+      // Sammel-Abrechnung = Kopfzeile + N Termin-Zeilen mit Anteilen
+      var dok = (db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;});
+      var dokName = dok ? (dok.dateiname||'') : '';
+      table += '<tr style="border-top:1px solid #f3f4f6;background:#fafafa">'
+        + '<td style="padding:6px 4px;font-weight:700;vertical-align:top" rowspan="'+(junctions.length+1)+'">'+esc(ab.beleg_nr||'—')+'<div style="font-size:10px;color:#9ca3af;font-weight:400;margin-top:2px">📄 '+esc(dokName)+'</div></td>'
+        + '<td style="padding:6px 4px">'+esc(abrName)+'</td>'
+        + '<td style="padding:6px 4px;color:#9ca3af;font-style:italic">'+fd(ab.leistungs_datum_von||'')+'</td>'
+        + '<td colspan="7" style="padding:6px 4px"></td>'
+        + '</tr>';
+      junctions.forEach(function(lnk){
+        var t = (db.termine||[]).find(function(x){return x.id===lnk.termin_id;});
+        var tName = t ? (t.titel||prName) : prName;
+        table += '<tr style="border-top:1px dashed #f3f4f6">'
+          + '<td style="padding:4px 4px;padding-left:12px">'+esc(abrName)+'</td>'
+          + '<td style="padding:4px 4px;padding-left:12px"><a href="#" onclick="event.preventDefault();openDetail(\''+lnk.termin_id+'\')" style="color:#1e40af;text-decoration:underline">'+esc(tName)+'</a></td>'
+          + '<td style="padding:4px 4px;text-align:right">'+fmtEur(lnk.brutto_anteil_display||0)+'</td>'
+          + '<td colspan="6" style="padding:4px 4px"></td>'
+          + '</tr>';
+      });
+      // Zusammenfassungs-Zeile für Sammel
+      table += '<tr style="border-top:1px solid #e5e7eb;background:#eff6ff">'
+        + '<td style="padding:6px 4px;text-align:right;font-weight:700" colspan="3">Gesamt</td>'
+        + '<td style="padding:6px 4px;text-align:right;font-weight:800">'+fmtEur(ab.brutto||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#6b7280">'+fmtEur(ab.sv_kv_an||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#6b7280">'+fmtEur(ab.sv_rv_an||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#6b7280">'+fmtEur(ab.sv_pv_an||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#1e40af;font-weight:700">'+fmtEur((ab.sv_kv_an||0)+(ab.sv_rv_an||0)+(ab.sv_pv_an||0))+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#15803d;font-weight:700">'+fmtEur(ab.ust_betrag||0)+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#15803d">'+satz+'</td>'
+        + '</tr>';
+    }
+  });
+
+  // GESAMT-Zeile
+  table += '<tr style="background:#1e3a8a;color:#fff">'
+    + '<td style="padding:10px 4px;font-weight:900" colspan="3">GESAMT '+yr+'</td>'
+    + '<td style="padding:10px 4px;text-align:right;font-weight:900">'+fmtEur(bruttoGes)+'</td>'
+    + '<td style="padding:10px 4px;text-align:right">'+fmtEur(kvGes)+'</td>'
+    + '<td style="padding:10px 4px;text-align:right">'+fmtEur(rvGes)+'</td>'
+    + '<td style="padding:10px 4px;text-align:right">'+fmtEur(pvGes)+'</td>'
+    + '<td style="padding:10px 4px;text-align:right;font-weight:700">'+fmtEur(svGes)+'</td>'
+    + '<td style="padding:10px 4px;text-align:right;font-weight:700">'+fmtEur(mwstGes)+'</td>'
+    + '<td style="padding:10px 4px;text-align:right">—</td>'
+    + '</tr>';
+
+  table += '</tbody></table></div></div>';
+
+  el.innerHTML = head + svBlock + table;
+}
+
 function rJahresabschluss(){
   var el = document.getElementById('jahres-content');
   var sub = document.getElementById('jahres-sub');
@@ -7663,6 +8011,23 @@ function rJahresabschluss(){
   var termine = (db.termine||[]).filter(function(t){
     return (t.datum||'').startsWith(String(yr));
   }).sort(function(a,b){ return a.datum<b.datum?-1:1; });
+
+  // ── v2-PFAD: wenn dbv2 für dieses Jahr Abrechnungen enthält, die nutzen ──
+  // Alle anderen Lese-Pfade in diesem Jahr gehen über v2. Alt-DB bleibt
+  // unangetastet als Sicherheitsnetz, aber wir lesen NICHT mehr aus ihr.
+  var v2AbsImJahr = (dbv2 && dbv2.abrechnungen) ? dbv2.abrechnungen.filter(function(a){
+    return (a.leistungs_datum_von||a.ausstellungs_datum||'').startsWith(String(yr));
+  }) : [];
+  var _nutzeV2 = v2AbsImJahr.length > 0;
+
+  if(_nutzeV2){
+    try {
+      return _rJahresabschlussV2(el, yr, termine, v2AbsImJahr);
+    } catch(e){
+      console.error('[v2] Jahresabschluss-Render fehlgeschlagen, Fallback auf alte Logik:', e);
+      // Fall through zur alten Logik
+    }
+  }
 
   // ── EINZIGE QUELLE: db.abrechnungen — nie Dispo-Werte mischen ──
   // Deduplizierung über gutschrift_nr (gleiche GS nie doppelt zählen)
