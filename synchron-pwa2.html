@@ -2526,7 +2526,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '725';
+  if(el) el.textContent = '726';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2787,58 +2787,38 @@ function tCard(t){
     (db._archivLog&&db._archivLog.find(function(e){
       return e.terminId===t.id&&(e.typ==='dispo'||/dispo/i.test(e.dateiname||''));
     })));
-  // Abrechnung: alle möglichen Quellen — auch nach dokDeleteAll stabil
-  var hasAbrechnung=!!(t.abId||t.abgerechnet||t.abrechn_dateiname||
+  // ── v2 LESE-PFAD (ersetzt den alten db.abrechnungen-Zugriff) ────────
+  // Primärquelle: dbv2 über v2TerminView(). Bei leerem v2-Store fällt
+  // v2TerminView() automatisch auf die alte db zurück (Sicherheitsnetz).
+  var ab = null;
+  var v2view = null;
+  try {
+    v2view = v2TerminView(t.id);
+    if(v2view.istAbgerechnet){
+      if(v2view.quelle === 'v2'){
+        // Saubere v2-Daten: nur die für tCard nötigen Anzeige-Werte
+        ab = {
+          brutto:                   v2view.brutto_anteil,
+          auszahlung:               v2view.istTeilVonSammel ? null : (v2view.ab && v2view.ab.auszahlung),
+          _v2IstTeilVonSammel:      v2view.istTeilVonSammel,
+          _v2AnzahlTermineInSammel: v2view.anzahlTermineInSammel,
+          _v2GesamtBrutto:          v2view.ab && v2view.ab.brutto
+        };
+      } else if(v2view.altAb){
+        // Fallback aus altem db.abrechnungen (nur für Bestands-Daten vor v2-Umstieg)
+        ab = v2view.altAb;
+      }
+    }
+  } catch(e){ console.warn('[v2] tCard Lese-Pfad Fehler:', e); }
+
+  var hasAbrechnung = !!ab || !!(t.abrechn_dateiname ||
     (t.dokIds && t.dokIds.some(function(did){
       var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
       return dok && (dok.typ==='abrechn'||dok.typ==='monats_abrechn') && dok.bestaetigt;
-    }))||
+    })) ||
     (db._archivLog&&db._archivLog.find(function(e){
       return e.terminId===t.id&&(e.typ==='abrechn'||e.typ==='monats_abrechn');
     })));
-  var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
-
-  // ── v2 OVERRIDE ────────────────────────────────────────────
-  // Wenn für diesen Termin eine v2-Junction existiert, überschreiben wir
-  // das ab-Objekt mit den Junction-Einzelwerten. Damit zeigt die UI den
-  // Anteil DIESES Termins (nicht den Gesamt-Brutto der Sammelrechnung).
-  // Steuerrelevante Werte (SV, MwSt) bleiben am Gesamt, aber der Brutto/Anzeige
-  // wird zum Einzel-Anteil. Die Master/Tochter-Unterscheidung entfällt.
-  try {
-    var v2view = v2TerminView(t.id);
-    if(v2view.quelle === 'v2' && v2view.ab){
-      // Baue ein "fake ab"-Objekt, das die UI wie gewohnt versteht,
-      // aber mit Junction-Werten statt Master-Werten
-      ab = {
-        id:             v2view.ab.id,
-        gutschrift_nr:  v2view.ab.beleg_nr,
-        dokId:          v2view.ab.pdf_datei_id,
-        bezahlt:        false, // Zahlungsstatus kommt aus separater Logik
-        datum:          v2view.ab.ausstellungs_datum,
-        // Einzel-Werte aus der Junction (das ist der entscheidende Unterschied)
-        brutto:         v2view.brutto_anteil,
-        grundgage:      v2view.grundgage,
-        take_gage:      v2view.takegage,
-        takes:          v2view.takes,
-        // Gesamt-Werte: bei Sammel als "anteilig" markiert, sonst voll
-        mwst:           v2view.istTeilVonSammel ? null : v2view.ab.ust_betrag,
-        gesamt_mwst:    v2view.istTeilVonSammel ? v2view.ab.ust_betrag : null,
-        kv:             v2view.istTeilVonSammel ? null : v2view.ab.sv_kv_an,
-        rv:             v2view.istTeilVonSammel ? null : v2view.ab.sv_rv_an,
-        pv:             v2view.istTeilVonSammel ? null : v2view.ab.sv_pv_an,
-        auszahlung:     v2view.istTeilVonSammel ? null : v2view.ab.auszahlung,
-        _v2IstTeilVonSammel:      v2view.istTeilVonSammel,
-        _v2AnzahlTermineInSammel: v2view.anzahlTermineInSammel,
-        _v2TarifErkannt:          v2view.tarif_erkannt,
-        _v2BerechnungCheck:       v2view.berechnung_check,
-        _v2GesamtBrutto:          v2view.ab.brutto,
-        _v2Source:                true,
-        _nurMarker:               false,
-        _isMultiMaster:           false
-      };
-    }
-  } catch(e){ console.warn('[v2] openDetail override fehlgeschlagen:', e); }
-  // ── /v2 OVERRIDE ───────────────────────────────────────────
 
   // Multi-Select Modus — Haken anzeigen wenn gewählt
   var isMultiSelected = _pendingDokLink && (window._dokLinkMulti||[]).indexOf(t.id)>=0;
@@ -3142,41 +3122,49 @@ function openDetail(id){
   if(!abDateinamen.length && (t.abId||abDoks.length||t.abgerechnet)){
     abDateinamen=['Abrechnung '+fd(t.datum)];
   }
-  var ab=t.abId?(db.abrechnungen||[]).find(function(x){return x.id===t.abId;}):null;
-
-  // ── v2 OVERRIDE ────────────────────────────────────────────
-  // (siehe tCard-Override weiter oben — gleiche Logik)
+  // ── v2 PRIMÄRQUELLE für ab-Objekt ──────────────────────────
+  // Die alte direkte Suche in db.abrechnungen via t.abId ist weg.
+  // Primär: v2-Junction für diesen Termin. Fallback: alte db (nur
+  // für Übergangs-Daten, kein Neuschreiben mehr in db.abrechnungen).
+  var ab = null;
   try {
     var v2viewD = v2TerminView(id);
-    if(v2viewD.quelle === 'v2' && v2viewD.ab){
-      ab = {
-        id:             v2viewD.ab.id,
-        gutschrift_nr:  v2viewD.ab.beleg_nr,
-        dokId:          v2viewD.ab.pdf_datei_id,
-        bezahlt:        false,
-        datum:          v2viewD.ab.ausstellungs_datum,
-        brutto:         v2viewD.brutto_anteil,
-        grundgage:      v2viewD.grundgage,
-        take_gage:      v2viewD.takegage,
-        takes:          v2viewD.takes,
-        mwst:           v2viewD.istTeilVonSammel ? null : v2viewD.ab.ust_betrag,
-        gesamt_mwst:    v2viewD.istTeilVonSammel ? v2viewD.ab.ust_betrag : null,
-        kv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_kv_an,
-        rv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_rv_an,
-        pv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_pv_an,
-        auszahlung:     v2viewD.istTeilVonSammel ? null : v2viewD.ab.auszahlung,
-        _v2IstTeilVonSammel:      v2viewD.istTeilVonSammel,
-        _v2AnzahlTermineInSammel: v2viewD.anzahlTermineInSammel,
-        _v2TarifErkannt:          v2viewD.tarif_erkannt,
-        _v2BerechnungCheck:       v2viewD.berechnung_check,
-        _v2GesamtBrutto:          v2viewD.ab.brutto,
-        _v2Source:                true,
-        _nurMarker:               false,
-        _isMultiMaster:           false
-      };
+    if(v2viewD.istAbgerechnet){
+      if(v2viewD.quelle === 'v2' && v2viewD.ab){
+        // Saubere v2-Daten: Junction-Einzelwerte + Gesamt-Meta
+        ab = {
+          id:             v2viewD.ab.id,
+          gutschrift_nr:  v2viewD.ab.beleg_nr,
+          dokId:          v2viewD.ab.pdf_datei_id,
+          bezahlt:        false, // Zahlungsstatus → separate Holvi-Logik (später)
+          datum:          v2viewD.ab.ausstellungs_datum,
+          // Einzel-Werte dieses Termins
+          brutto:         v2viewD.brutto_anteil,
+          grundgage:      v2viewD.grundgage,
+          take_gage:      v2viewD.takegage,
+          takes:          v2viewD.takes,
+          // MwSt/SV: bei Sammel als "anteilig"-Info gespeichert (Gesamt), sonst voll
+          mwst:           v2viewD.istTeilVonSammel ? null : v2viewD.ab.ust_betrag,
+          gesamt_mwst:    v2viewD.istTeilVonSammel ? v2viewD.ab.ust_betrag : null,
+          kv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_kv_an,
+          rv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_rv_an,
+          pv:             v2viewD.istTeilVonSammel ? null : v2viewD.ab.sv_pv_an,
+          auszahlung:     v2viewD.istTeilVonSammel ? null : v2viewD.ab.auszahlung,
+          _v2IstTeilVonSammel:      v2viewD.istTeilVonSammel,
+          _v2AnzahlTermineInSammel: v2viewD.anzahlTermineInSammel,
+          _v2TarifErkannt:          v2viewD.tarif_erkannt,
+          _v2BerechnungCheck:       v2viewD.berechnung_check,
+          _v2GesamtBrutto:          v2viewD.ab.brutto,
+          _v2Source:                true,
+          _nurMarker:               false,
+          _isMultiMaster:           false
+        };
+      } else if(v2viewD.altAb){
+        // Fallback auf alte db.abrechnungen (nur wenn noch keine v2-Junction existiert)
+        ab = v2viewD.altAb;
+      }
     }
-  } catch(eVD){ console.warn('[v2] openDetail override fehlgeschlagen:', eVD); }
-  // ── /v2 OVERRIDE ───────────────────────────────────────────
+  } catch(eVD){ console.warn('[v2] openDetail Lese-Pfad Fehler:', eVD); }
 
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
   // hasDispo: Dispo-Dokument vorhanden ODER Archiv-Spuren (Dateiname, _archivLog)
@@ -3442,23 +3430,9 @@ function openDetail(id){
   // Nur Takes-Zahl und Grundgage sind relevante Differenzquellen.
   var abHtml='';
   if(ab){
-    // Build 702: Tochter-teilAb → kompakte "Teil von Master"-Card statt volle Abrechnung
-    // (nur noch aktiv wenn KEINE v2-Daten vorliegen — Fallback für Altbestand)
-    if(ab._nurMarker && ab._masterAbId){
-      var masterAb=(db.abrechnungen||[]).find(function(a){return a.id===ab._masterAbId;});
-      var masterTermin=masterAb?(db.termine||[]).find(function(x){return x.id===masterAb.terminId;}):null;
-      var _mLabel=masterTermin?(masterTermin.titel||masterTermin.studio||'Master-Termin'):'Master-Termin';
-      var _mDatum=masterTermin?fd(masterTermin.datum):'';
-      var _masterBezahlt=masterAb&&masterAb.bezahlt;
-      abHtml='<div class="info-card" style="border-left:4px solid '+(_masterBezahlt?'#22c55e':'#8b5cf6')+'">'
-        +'<div class="info-card-header"><span>🔗 Teil einer Sammel-Abrechnung</span>'
-        +'<span style="font-size:11px;color:'+(_masterBezahlt?'#15803d':'#7c3aed')+';font-weight:700">'+(_masterBezahlt?'✓ bezahlt':'Tochter-Termin')+'</span></div>'
-        +'<div style="padding:0 16px 14px">'
-        +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
-        +(masterTermin?'<div class="info-row" style="cursor:pointer" onclick="openDetail(\''+masterTermin.id+'\')"><div class="ir-key">Master-Termin</div><div class="ir-val" style="color:#7c3aed;font-weight:700;text-decoration:underline">'+esc(_mLabel)+(_mDatum?' · '+_mDatum:'')+' ›</div></div>':'')
-        +'<div style="font-size:11px;color:#6b7280;margin-top:8px;padding:6px 8px;background:#faf5ff;border-radius:6px">Dieser Termin teilt sich eine Abrechnung mit anderen Terminen. Finanz- und SV-Werte stehen am Master-Termin.</div>'
-        +'</div></div>';
-    } else {
+    // v2-Pfad: keine Master/Tochter-Unterscheidung mehr.
+    // Einzel-Anteile kommen direkt aus der Junction.
+    {
     var abBrutto=parseFloat(ab.brutto)||0;
     var netBruttoOk=Math.abs(net-abBrutto)<0.02;
     var matchCol=netBruttoOk?'#15803d':'#c2410c';
@@ -3526,7 +3500,7 @@ function openDetail(id){
         +'</div></div>'
       +(!netBruttoOk?'<div style="font-size:12px;color:#c2410c;padding-top:6px;font-weight:700;border-top:1px solid #fecaca;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+'</div>':'')
       +'</div></div>';
-    } // end else (non-Marker branch)
+    } // end Abrechnungs-Block
   }
 
   // ── AUTO-FIX: ab.bezahlt=true aber t.status noch nicht bezahlt ──
