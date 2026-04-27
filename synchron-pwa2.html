@@ -1997,6 +1997,70 @@ function _erkenneTarif(grundgage, takegage){
   return 'individuell';
 }
 
+// ── TARIF-REKONSTRUKTION (Build 728) ─────────────────────────
+// Erkennt aus den Posten-Werten der Abrechnung den Standard-Tarif
+// und gibt die App-konformen Werte zurück (Komm.Gage, Rate, echte Takes
+// inkl. der "1-10"-Regel-Versteckten 10).
+// Behandelt 4 Formate:
+//   (A) Paket-Format ohne Takes:  gg=120        → TV mit 10 Takes
+//   (B) Paket-Format + Takes:     gg=120,tk=N   → TV mit N+10 Takes
+//   (C) Voll-Format direkt:       gg=80         → TV mit tk Takes (1:1)
+//   (D) Brutto-Match:             br = std-GG + N×std-Rate → erkannt
+// Liefert null wenn nichts greift (echter Sonderfall).
+function _rekonstruiereTarif(gg, tg, tk, br){
+  var TARIFE = [
+    {name:'TV',        kg:80,  rate:4.00, paket:120},
+    {name:'Streaming', kg:85,  rate:4.20, paket:127},
+    {name:'Kino',      kg:100, rate:5.00, paket:150}
+  ];
+  gg = parseFloat(gg)||0;
+  tg = parseFloat(tg)||0;
+  tk = parseInt(tk)||0;
+  br = parseFloat(br)||0;
+  var i, T;
+
+  // (A) Paket ohne Takes
+  if(gg > 0 && tk === 0){
+    for(i=0;i<TARIFE.length;i++){
+      T = TARIFE[i];
+      if(Math.abs(gg - T.paket) <= 1){
+        return {tarif:T.name, kommgage:T.kg, rate:T.rate, takes:10, konfidenz:'hoch'};
+      }
+    }
+  }
+  // (B) Paket + Takes
+  if(gg > 0 && tk > 0){
+    for(i=0;i<TARIFE.length;i++){
+      T = TARIFE[i];
+      var rateOK_B = !tg || Math.abs(tg - T.rate) <= 0.10;
+      if(Math.abs(gg - T.paket) <= 1 && rateOK_B){
+        return {tarif:T.name, kommgage:T.kg, rate:T.rate, takes:tk + 10, konfidenz:'hoch'};
+      }
+    }
+  }
+  // (C) Voll-Format direkt (gg matcht Standard-KG)
+  if(gg > 0){
+    for(i=0;i<TARIFE.length;i++){
+      T = TARIFE[i];
+      var rateOK_C = !tg || Math.abs(tg - T.rate) <= 0.10;
+      if(Math.abs(gg - T.kg) <= 1 && rateOK_C){
+        return {tarif:T.name, kommgage:T.kg, rate:T.rate, takes:tk||10, konfidenz:'hoch'};
+      }
+    }
+  }
+  // (D) Brutto-Match (alles in einer Zeile, gg evtl. fehlend)
+  if(br > 0 && tk > 0){
+    for(i=0;i<TARIFE.length;i++){
+      T = TARIFE[i];
+      var berechnet = T.kg + tk * T.rate;
+      if(Math.abs(berechnet - br) <= 1.5){
+        return {tarif:T.name, kommgage:T.kg, rate:T.rate, takes:tk, konfidenz:'mittel'};
+      }
+    }
+  }
+  return null;
+}
+
 function _konsolidiereDokumentNachV2(dokId){
   if(!dokId) return { ok:false, grund:'keine dokId' };
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
@@ -2121,7 +2185,9 @@ function _konsolidiereDokumentNachV2(dokId){
       var sGrundgage = parseFloat(s.grundgage)  || null;
       var sTakeGage  = parseFloat(s.take_gage)  || null;
       var sTakes     = parseInt(s.takes)        || null;
-      var sTarif     = _erkenneTarif(sGrundgage, sTakeGage);
+      // Build 728: Tarif via _rekonstruiereTarif (erkennt 1-10-Paket-Format)
+      var _rec       = _rekonstruiereTarif(sGrundgage, sTakeGage, sTakes, sBrutto);
+      var sTarif     = _rec ? _rec.tarif : _erkenneTarif(sGrundgage, sTakeGage);
 
       // Einzel-Brutto-Prüfung: grundgage + takes*takegage sollte ≈ brutto sein
       // (1-10-Regel: manche Abrechner rechnen takes+10 bei Grundgage-Paket)
@@ -2526,7 +2592,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '726';
+  if(el) el.textContent = '728';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3321,6 +3387,35 @@ function openDetail(id){
     +'<div id="gage-recherche-result" style="margin-top:8px;display:none"></div>'
     +'<div id="gage-mapping-hint"></div>'
     +'</div>'
+    // Build 728: Tarif-Vorschlag aus Abrechnung — wenn erkannt UND aktuelle Werte abweichen
+    +(function(){
+      var dokGG    = (ab && parseFloat(ab.grundgage))||parseFloat(t.kommgage_abgerechnet)||0;
+      var dokRate  = (ab && parseFloat(ab.take_gage))||parseFloat(t.rate_abgerechnet)||0;
+      var dokTakes = (ab && parseInt(ab.takes))     ||parseInt(t.takes_abgerechnet)    ||0;
+      var dokBr    = (ab && parseFloat(ab.brutto))  ||parseFloat(t.brutto_termin)      ||0;
+      if(!dokGG && !dokTakes && !dokBr) return '';
+      var rec = _rekonstruiereTarif(dokGG, dokRate, dokTakes, dokBr);
+      if(!rec) return '';
+      var curKomm  = parseFloat(t.kommgage)||0;
+      var curRate  = parseFloat(t.rate)||0;
+      var curTakes = parseInt(t.takes)||0;
+      var passt = Math.abs(curKomm - rec.kommgage) < 0.5
+               && Math.abs(curRate - rec.rate) < 0.05
+               && curTakes === rec.takes;
+      if(passt) return '';
+      var farbe = rec.tarif==='TV'?'#1a6ea8':rec.tarif==='Streaming'?'#15803d':rec.tarif==='Kino'?'#7c3aed':'#92400e';
+      var bg    = rec.tarif==='TV'?'#e8f4fd':rec.tarif==='Streaming'?'#f0fdf4':rec.tarif==='Kino'?'#fdf4ff':'#fef9ec';
+      var konf  = rec.konfidenz==='mittel' ? ' <span style="font-size:10px;opacity:0.7">(brutto-erkannt)</span>' : '';
+      return '<div style="margin:0 16px 12px;padding:10px 12px;background:'+bg+';border:1.5px solid '+farbe+';border-radius:10px">'
+        +'<div style="font-size:11px;font-weight:800;color:'+farbe+';margin-bottom:6px;letter-spacing:0.5px">📄 LAUT ABRECHNUNG'+konf+'</div>'
+        +'<div style="font-size:13px;color:#333;margin-bottom:9px">'
+        +'<b>'+rec.tarif+'</b> · GG '+rec.kommgage+'€ · Rate '+rec.rate.toFixed(2).replace('.',',')+'€ · <b>'+rec.takes+' Takes</b>'
+        +'</div>'
+        +'<button type="button" onclick="applyTarifFromAbrechnung(\''+id+'\','+rec.kommgage+','+rec.rate+','+rec.takes+')" '
+        +'style="width:100%;background:'+farbe+';color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation">'
+        +'→ Tarif übernehmen</button>'
+        +'</div>';
+    })()
     +(function(){
       // Vergleich mit Abrechnung
       var abBrutto = ab ? (parseFloat(ab.brutto)||0) : 0;
@@ -6614,11 +6709,30 @@ function doExportCSV(){
   showToast('✓ Jahresübersicht '+jahr+' exportiert');
 }
 function confirmReset(){
-  if(!confirm('Alle Daten unwiderruflich löschen?'))return;
-  localStorage.removeItem(DBK);
-  db=ddb();
+  if(!confirm('Alle Daten unwiderruflich löschen?\n\n(API-Key und iCal-URL bleiben erhalten.)'))return;
+  // Konfig retten
+  var savedApiKey  = null;
+  var savedIcalUrl = null;
+  try{ savedApiKey  = localStorage.getItem('anthropic_api_key'); }catch(e){}
+  try{ savedIcalUrl = localStorage.getItem('ical_worker_url');   }catch(e){}
+  // Alles platt — robust gegen zukünftige Keys
+  try{ localStorage.clear(); }catch(e){
+    // Fallback: bekannte Keys einzeln
+    try{ localStorage.removeItem(DBK); }catch(e){}
+    try{ localStorage.removeItem(DBK_V2); }catch(e){}
+    try{ localStorage.removeItem('synchron_db'); }catch(e){}
+  }
+  // Konfig zurückschreiben
+  if(savedApiKey)  try{ localStorage.setItem('anthropic_api_key', savedApiKey);  }catch(e){}
+  if(savedIcalUrl) try{ localStorage.setItem('ical_worker_url',   savedIcalUrl); }catch(e){}
+  // In-Memory neu
+  db   = ddb();
+  dbv2 = loadV2();
   save(db);
+  saveV2(dbv2);
+  // Re-Render
   rTermine();updateBadge();rProfil();rDispos();rGVL();
+  if(typeof rDokumente==='function') rDokumente();
   closeProfilSheet();
   showToast('✓ Alle Daten gelöscht');
 }
@@ -17497,6 +17611,32 @@ function setGagePreset(id, komm, take){
   }
   save(db);
   showToast('✓ '+komm+'€ Komm · '+parseFloat(take).toFixed(2).replace('.',',')+'€ Take');
+  openDetail(id);
+}
+
+// Build 728: Tarif aus Abrechnung übernehmen (Komm + Rate + Takes auf einmal)
+function applyTarifFromAbrechnung(id, komm, rate, takes){
+  var t=db.termine.find(function(x){return x.id===id;});
+  if(!t) return;
+  t.kommgage = parseFloat(komm)||0;
+  t.rate     = parseFloat(rate)||0;
+  t.takes    = parseInt(takes)||0;
+  // Gage-Mapping für diesen Titel speichern (analog setGagePreset)
+  var titelKey = (t.titel||t.studio||'').trim().toLowerCase();
+  if(titelKey){
+    if(!db.gageMappings) db.gageMappings={};
+    db.gageMappings[titelKey]={kommgage:t.kommgage, rate:t.rate};
+  }
+  // abStatus neu berechnen falls verlinkt
+  if(t.abId){
+    var ab=(db.abrechnungen||[]).find(function(x){return x.id===t.abId;});
+    if(ab){
+      var erw=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+      t.abStatus=Math.abs((parseFloat(ab.auszahlung)||0)-erw)<1?'ok':'differenz';
+    }
+  }
+  save(db);
+  showToast('✓ '+t.kommgage+'€ · '+t.rate.toFixed(2).replace('.',',')+'€ · '+t.takes+' Takes');
   openDetail(id);
 }
 
