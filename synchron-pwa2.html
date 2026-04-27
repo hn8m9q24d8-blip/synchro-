@@ -1770,29 +1770,70 @@ function save(d){
       showToast('\u274c Speicher voll! Bitte Dokumente löschen.');
     }
   }
-  // ── Build 733: V2-SYNC-WÄCHTER ────────────────────────────────
-  // Strukturelle Garantie: jedes bestätigte Abrechn-Dok ist in dbv2.
-  // Läuft bei jedem save(d). Macht nichts, wenn alles schon im Sync ist.
-  // Verhindert das Hook-Lücken-Problem (Bestätigungs-Pfade ohne Auto-Hook).
+  // ── Build 735: V2-SYNC-WÄCHTER (symmetrisch) ────────────────────
+  // Garantie: dbv2 spiegelt EXAKT die bestätigten Abrechn-Dokumente.
+  // Läuft bei jedem save(d). Drei Operationen:
+  //   (1) Bestätigte Abrechn-Docs OHNE v2-Eintrag → neu konsolidieren
+  //   (2) v2-Einträge zu nicht-mehr-existenten / nicht-bestätigten / nicht-Abrechn-
+  //       Docs → entfernen (Geister-Cleanup nach Löschen, Storno, Ablehnen)
+  //   (3) Junctions zu nicht-mehr-existierenden Terminen oder Abrechnungen → entfernen
   try {
-    if(typeof _konsolidiereDokumentNachV2 === 'function' && d && d.dokumente){
+    if(d && d.dokumente && dbv2){
+      // (1) Erstellen
       var v2Existiert = {};
-      ((dbv2 && dbv2.abrechnungen) || []).forEach(function(v){
+      (dbv2.abrechnungen || []).forEach(function(v){
         if(v.pdf_datei_id) v2Existiert[v.pdf_datei_id] = true;
       });
       d.dokumente.forEach(function(dok){
         if(!dok || !dok.bestaetigt) return;
         if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn') return;
-        if(v2Existiert[dok.id]) return; // schon im Sync
-        try {
-          _konsolidiereDokumentNachV2(dok.id);
-        } catch(syncE){
-          console.warn('[v2-sync-waechter] Doc '+dok.id+':', syncE);
-        }
+        if(v2Existiert[dok.id]) return;
+        if(typeof _konsolidiereDokumentNachV2 !== 'function') return;
+        try { _konsolidiereDokumentNachV2(dok.id); }
+        catch(syncE){ console.warn('[v2-waechter create] '+dok.id, syncE); }
       });
+
+      // (2) Geister entfernen — v2-Einträge ohne gültiges, bestätigtes Abrechn-Doc
+      var docById = {};
+      d.dokumente.forEach(function(dok){ docById[dok.id] = dok; });
+      var v2VorherLen = (dbv2.abrechnungen||[]).length;
+      var weggefallenAbIds = [];
+      dbv2.abrechnungen = (dbv2.abrechnungen||[]).filter(function(v){
+        if(!v.pdf_datei_id) return true; // manuell angelegte v2-Einträge nicht anfassen
+        var dok = docById[v.pdf_datei_id];
+        if(!dok){ weggefallenAbIds.push(v.id); return false; } // Doc gelöscht → Geist
+        if(!dok.bestaetigt){ weggefallenAbIds.push(v.id); return false; } // entbestätigt
+        if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn'){
+          weggefallenAbIds.push(v.id); return false; // Typ geändert (Storno, Re-Analyse)
+        }
+        return true;
+      });
+      if(weggefallenAbIds.length){
+        // Junctions zu entfallenen Abrechnungen mitlöschen
+        dbv2.abrechnung_termin_links = (dbv2.abrechnung_termin_links||[]).filter(function(l){
+          return weggefallenAbIds.indexOf(l.abrechnung_id) < 0;
+        });
+        console.log('[v2-waechter cleanup] '+weggefallenAbIds.length+' Geister-v2 entfernt');
+      }
+
+      // (3) Verwaiste Junctions: zu nicht-mehr-existenten Terminen oder Abrechnungen
+      var v2AbIds = {};
+      (dbv2.abrechnungen||[]).forEach(function(v){ v2AbIds[v.id] = true; });
+      var terminIds = {};
+      (d.termine||[]).forEach(function(t){ terminIds[t.id] = true; });
+      var lnkVorherLen = (dbv2.abrechnung_termin_links||[]).length;
+      dbv2.abrechnung_termin_links = (dbv2.abrechnung_termin_links||[]).filter(function(l){
+        return v2AbIds[l.abrechnung_id] && terminIds[l.termin_id];
+      });
+      // saveV2 nur wenn was geändert
+      if(weggefallenAbIds.length
+         || lnkVorherLen !== (dbv2.abrechnung_termin_links||[]).length
+         || v2VorherLen !== (dbv2.abrechnungen||[]).length){
+        try { saveV2(dbv2); } catch(svE){ console.warn('[v2-waechter saveV2]', svE); }
+      }
     }
   } catch(syncErr){
-    console.warn('[v2-sync-waechter] aussen:', syncErr);
+    console.warn('[v2-waechter aussen]', syncErr);
   }
 }
 
@@ -2118,6 +2159,26 @@ function _konsolidiereDokumentNachV2(dokId){
   });
 
   var erstellt = 0, geupdated = 0, linksErstellt = 0, linksGeupdated = 0;
+
+  // Build 735: Vor dem Upsert alte v2-Einträge dieses Docs entfernen, deren Beleg-Nr
+  // nicht mehr in den aktuellen GNRs vorkommt (Re-Analyse mit geänderten GNRs).
+  var aktuelleGNRs = Object.keys(gnrGruppen).map(function(k){
+    return k === '__ohne_gnr__' ? '' : k;
+  });
+  if(dbv2.abrechnungen && dbv2.abrechnungen.length){
+    var weggefallenIds735 = [];
+    dbv2.abrechnungen = dbv2.abrechnungen.filter(function(v){
+      if(v.pdf_datei_id !== dokId) return true;
+      if(aktuelleGNRs.indexOf(v.beleg_nr||'') >= 0) return true;
+      weggefallenIds735.push(v.id);
+      return false;
+    });
+    if(weggefallenIds735.length && dbv2.abrechnung_termin_links){
+      dbv2.abrechnung_termin_links = dbv2.abrechnung_termin_links.filter(function(l){
+        return weggefallenIds735.indexOf(l.abrechnung_id) < 0;
+      });
+    }
+  }
 
   Object.keys(gnrGruppen).forEach(function(gnrKey){
     var gruppenSessions = gnrGruppen[gnrKey];
@@ -2618,7 +2679,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '733';
+  if(el) el.textContent = '735';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -2951,7 +3012,9 @@ function tCard(t){
     var rawT=parseInt(t.takes)||0;
     var billT=rawT>0&&rawT<10?10:rawT;
     var cardNet=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
-    var diffOk=Math.abs(cardNet-(parseFloat(ab.brutto)||0))<0.02||ab._aufgeteiltN>0||ab._v2IstTeilVonSammel;
+    var abBrutto = parseFloat(ab.brutto)||0;
+    var diffBetrag = cardNet - abBrutto;
+    var diffOk=Math.abs(diffBetrag)<0.02||ab._aufgeteiltN>0||ab._v2IstTeilVonSammel;
     var anteilLabel='';
     if(ab._v2IstTeilVonSammel){
       anteilLabel=' <span style="font-size:9px;opacity:.7">Anteil · '+ab._v2AnzahlTermineInSammel+'er-GS</span>';
@@ -2961,6 +3024,11 @@ function tCard(t){
     // Bei Sammel zeigen wir den Brutto-Anteil, bei Einzel die Auszahlung (wie gehabt)
     var anzeigeWert = ab._v2IstTeilVonSammel ? ab.brutto : (ab.auszahlung || ab.brutto);
     extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(anzeigeWert)+anteilLabel+(diffOk?' ✓':' ⚠')+'</div>';
+    // Build 734: Differenz-Hinweis fürs Mahnwesen — nur bei Einzelzeile, nicht bei Sammel-GS
+    if(!diffOk && !ab._v2IstTeilVonSammel && !(ab._aufgeteiltN>0) && !t.differenz_geklaert){
+      var diffSign = diffBetrag>0 ? '+' : '';
+      extraLines+='<div style="font-size:11px;color:#b91c1c;margin-top:2px;font-weight:800;background:#fee2e2;padding:2px 6px;border-radius:6px;display:inline-block">⚠ Differenz '+diffSign+fmtEur(diffBetrag)+' · prüfen / mahnen</div>';
+    }
   }
 
   var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
@@ -3413,35 +3481,8 @@ function openDetail(id){
     +'<div id="gage-recherche-result" style="margin-top:8px;display:none"></div>'
     +'<div id="gage-mapping-hint"></div>'
     +'</div>'
-    // Build 728: Tarif-Vorschlag aus Abrechnung — wenn erkannt UND aktuelle Werte abweichen
-    +(function(){
-      var dokGG    = (ab && parseFloat(ab.grundgage))||parseFloat(t.kommgage_abgerechnet)||0;
-      var dokRate  = (ab && parseFloat(ab.take_gage))||parseFloat(t.rate_abgerechnet)||0;
-      var dokTakes = (ab && parseInt(ab.takes))     ||parseInt(t.takes_abgerechnet)    ||0;
-      var dokBr    = (ab && parseFloat(ab.brutto))  ||parseFloat(t.brutto_termin)      ||0;
-      if(!dokGG && !dokTakes && !dokBr) return '';
-      var rec = _rekonstruiereTarif(dokGG, dokRate, dokTakes, dokBr);
-      if(!rec) return '';
-      var curKomm  = parseFloat(t.kommgage)||0;
-      var curRate  = parseFloat(t.rate)||0;
-      var curTakes = parseInt(t.takes)||0;
-      var passt = Math.abs(curKomm - rec.kommgage) < 0.5
-               && Math.abs(curRate - rec.rate) < 0.05
-               && curTakes === rec.takes;
-      if(passt) return '';
-      var farbe = rec.tarif==='TV'?'#1a6ea8':rec.tarif==='Streaming'?'#15803d':rec.tarif==='Kino'?'#7c3aed':'#92400e';
-      var bg    = rec.tarif==='TV'?'#e8f4fd':rec.tarif==='Streaming'?'#f0fdf4':rec.tarif==='Kino'?'#fdf4ff':'#fef9ec';
-      var konf  = rec.konfidenz==='mittel' ? ' <span style="font-size:10px;opacity:0.7">(brutto-erkannt)</span>' : '';
-      return '<div style="margin:0 16px 12px;padding:10px 12px;background:'+bg+';border:1.5px solid '+farbe+';border-radius:10px">'
-        +'<div style="font-size:11px;font-weight:800;color:'+farbe+';margin-bottom:6px;letter-spacing:0.5px">📄 LAUT ABRECHNUNG'+konf+'</div>'
-        +'<div style="font-size:13px;color:#333;margin-bottom:9px">'
-        +'<b>'+rec.tarif+'</b> · GG '+rec.kommgage+'€ · Rate '+rec.rate.toFixed(2).replace('.',',')+'€ · <b>'+rec.takes+' Takes</b>'
-        +'</div>'
-        +'<button type="button" onclick="applyTarifFromAbrechnung(\''+id+'\','+rec.kommgage+','+rec.rate+','+rec.takes+')" '
-        +'style="width:100%;background:'+farbe+';color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation">'
-        +'→ Tarif übernehmen</button>'
-        +'</div>';
-    })()
+    // Build 734: Tarif-Vorschlags-Box entfernt — Jahresabschluss zählt eh aus dbv2,
+    // Differenzen sollen bewusst stehen bleiben (Mahnwesen).
     +(function(){
       // Vergleich mit Abrechnung
       var abBrutto = ab ? (parseFloat(ab.brutto)||0) : 0;
@@ -5202,6 +5243,13 @@ function deleteCurrentTermin(){
     if(z.terminIds) z.terminIds=z.terminIds.filter(function(id){return id!==ctid;});
   });
   (db.dokumente||[]).forEach(function(dok){ if(dok.terminId===ctid) dok.terminId=null; });
+  // Build 735: dbv2-Junctions zum gelöschten Termin entfernen
+  if(dbv2 && dbv2.abrechnung_termin_links){
+    dbv2.abrechnung_termin_links = dbv2.abrechnung_termin_links.filter(function(l){
+      return l.termin_id !== ctid;
+    });
+    try { saveV2(dbv2); } catch(e){}
+  }
   save(db);
   closeDetail();
   rTermine();updateBadge();
