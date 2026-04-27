@@ -450,6 +450,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div class="sr-icon" style="background:#fef9c3">📋</div><div class="sr-label">Jahresabschluss</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
       <div class="settings-row" onclick="diagnoseGutschriften()"><div class="sr-left"><div class="sr-icon" style="background:#eef2ff">🔍</div><div class="sr-label">Diagnose: Gutschriften-Status</div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="v2KonsolidiereBatch()"><div class="sr-left"><div class="sr-icon" style="background:#ecfdf5">🔧</div><div class="sr-label">Reparieren: fehlende dbv2-Einträge</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🗑</div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
     <div style="background:var(--card);border-radius:14px;border:1px solid var(--border);padding:16px;margin-bottom:12px;font-size:12px;color:var(--ink3);line-height:1.6">
@@ -2593,7 +2594,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '731';
+  if(el) el.textContent = '732';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4114,6 +4115,10 @@ function saveMergeChanges(){
       if(!_abT.dokIds) _abT.dokIds=[];
       if(_abT.dokIds.indexOf(dok.id)<0) _abT.dokIds.push(dok.id);
       save(db);
+      // Build 731: V2-Auto-Hook nachgerüstet (vorher fehlend in saveMergeChanges)
+      if(dok.typ==='abrechn' || dok.typ==='monats_abrechn'){
+        try { _autoKonsolidiereNachBestaetigen(dok.id); } catch(e){ console.error('[v2] hook saveMergeChanges:', e); }
+      }
     }
     // ── Split-Navigation: nächste Gutschrift automatisch öffnen ──────────
     var _navDok = _lastSplitDok || dok;
@@ -14157,6 +14162,10 @@ function dokLinkMultiConfirm(){
           _masterAbId: masterAbId
         }
       );
+      // Build 731: V2-Auto-Hook nachgerüstet (vorher fehlend in dokLinkMultiConfirm)
+      if(d.typ==='abrechn' || d.typ==='monats_abrechn'){
+        try { _autoKonsolidiereNachBestaetigen(d.id); } catch(e){ console.error('[v2] hook dokLinkMultiConfirm:', e); }
+      }
       showToast(n===1 ? '✓ Termin verknüpft' : '✓ Master + '+(n-1)+' Tochter-Termin'+(n>2?'e':'')+' angelegt');
     }
   }
