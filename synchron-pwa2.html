@@ -2592,7 +2592,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '728';
+  if(el) el.textContent = '729';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3866,10 +3866,30 @@ function closeDetail(){
 // ── ABRECHNUNG UPSERT — create oder update, nie blockieren ────
 function _upsertAbrechnung(abId, felder){
   if(!db.abrechnungen) db.abrechnungen = [];
-  // Suche erst nach abId, dann nach terminId als Fallback
-  var idx = abId ? db.abrechnungen.findIndex(function(a){return a.id===abId;}) : -1;
+  // Build 729: Match-Logik gehärtet — verhindert Überschreiben verschiedener
+  // Gutschriften am gleichen Termin (Bug-Report Build ≤728).
+  // Reihenfolge: (1) id-Match · (2) terminId+gutschrift_nr · (3) terminId mit leerer GNR
+  var idx = -1;
+  if(abId) idx = db.abrechnungen.findIndex(function(a){return a.id===abId;});
+  // (1a) id-Match aber GNR-Konflikt → trotzdem neu anlegen (zweite GNR am selben abId-Slot
+  //      darf die erste nicht überschreiben — sehr seltener Edge-Case)
+  if(idx >= 0 && felder.gutschrift_nr){
+    var existGnrA = db.abrechnungen[idx].gutschrift_nr || '';
+    if(existGnrA && existGnrA !== felder.gutschrift_nr){
+      idx = -1; // → fällt in den Insert-Branch
+    }
+  }
+  // (2)/(3) Fallback per terminId — defensiv: nur bei GNR-Übereinstimmung oder mind. einer leeren GNR
   if(idx < 0 && felder.terminId){
-    idx = db.abrechnungen.findIndex(function(a){return a.terminId===felder.terminId;});
+    idx = db.abrechnungen.findIndex(function(a){
+      if(a.terminId !== felder.terminId) return false;
+      var gA = a.gutschrift_nr || '';
+      var gN = felder.gutschrift_nr || '';
+      // Beide haben GNRs: müssen gleich sein
+      if(gA && gN) return gA === gN;
+      // Mindestens eine Seite leer: matcht (Legacy-Verhalten)
+      return true;
+    });
   }
   if(idx >= 0){
     var ab = db.abrechnungen[idx];
@@ -6730,9 +6750,14 @@ function confirmReset(){
   dbv2 = loadV2();
   save(db);
   saveV2(dbv2);
-  // Re-Render
+  // Re-Render — alle Views inkl. Aggregate (Build 729)
   rTermine();updateBadge();rProfil();rDispos();rGVL();
-  if(typeof rDokumente==='function') rDokumente();
+  if(typeof rDokumente==='function')      rDokumente();
+  if(typeof rJahresabschluss==='function')try{rJahresabschluss();}catch(e){}
+  if(typeof rUstStat==='function')        try{rUstStat();}catch(e){}
+  if(typeof rSozialStat==='function')     try{rSozialStat();}catch(e){}
+  if(typeof rVerdienst==='function')      try{rVerdienst();}catch(e){}
+  if(typeof rStat==='function')           try{rStat();}catch(e){}
   closeProfilSheet();
   showToast('✓ Alle Daten gelöscht');
 }
