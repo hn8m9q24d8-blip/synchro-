@@ -1770,6 +1770,30 @@ function save(d){
       showToast('\u274c Speicher voll! Bitte Dokumente löschen.');
     }
   }
+  // ── Build 733: V2-SYNC-WÄCHTER ────────────────────────────────
+  // Strukturelle Garantie: jedes bestätigte Abrechn-Dok ist in dbv2.
+  // Läuft bei jedem save(d). Macht nichts, wenn alles schon im Sync ist.
+  // Verhindert das Hook-Lücken-Problem (Bestätigungs-Pfade ohne Auto-Hook).
+  try {
+    if(typeof _konsolidiereDokumentNachV2 === 'function' && d && d.dokumente){
+      var v2Existiert = {};
+      ((dbv2 && dbv2.abrechnungen) || []).forEach(function(v){
+        if(v.pdf_datei_id) v2Existiert[v.pdf_datei_id] = true;
+      });
+      d.dokumente.forEach(function(dok){
+        if(!dok || !dok.bestaetigt) return;
+        if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn') return;
+        if(v2Existiert[dok.id]) return; // schon im Sync
+        try {
+          _konsolidiereDokumentNachV2(dok.id);
+        } catch(syncE){
+          console.warn('[v2-sync-waechter] Doc '+dok.id+':', syncE);
+        }
+      });
+    }
+  } catch(syncErr){
+    console.warn('[v2-sync-waechter] aussen:', syncErr);
+  }
 }
 
 // ── DATURL-SCHUTZ: immer diese Funktion verwenden, niemals direkt dok.dataURL=null setzen ──
@@ -2594,7 +2618,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '732';
+  if(el) el.textContent = '733';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -17989,6 +18013,31 @@ function suchHL(text,q){
   updateBadge();
   updateMahnBadgeOnLoad();
   _updateHolviAbgleichBadge();
+  // Build 733: V2-Sync beim App-Start — räumt Altlasten auf
+  // (bestätigte Abrechn-Docs, die wegen Hook-Lücke nicht in dbv2 gelandet sind)
+  setTimeout(function(){
+    try {
+      var v2Existiert = {};
+      ((dbv2 && dbv2.abrechnungen) || []).forEach(function(v){
+        if(v.pdf_datei_id) v2Existiert[v.pdf_datei_id] = true;
+      });
+      var nachgezogen = 0;
+      (db.dokumente||[]).forEach(function(dok){
+        if(!dok || !dok.bestaetigt) return;
+        if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn') return;
+        if(v2Existiert[dok.id]) return;
+        try {
+          var res = _konsolidiereDokumentNachV2(dok.id);
+          if(res && res.ok) nachgezogen++;
+        } catch(e){ console.warn('[v2 startup-sync]', dok.id, e); }
+      });
+      if(nachgezogen > 0){
+        console.log('[v2 startup-sync] '+nachgezogen+' Doc(s) nachgezogen');
+        if(typeof rTermine==='function') rTermine();
+        if(typeof rDokumente==='function') rDokumente();
+      }
+    } catch(e){ console.warn('[v2 startup-sync] aussen:', e); }
+  }, 800);
   // Integritäts-Check beim Start (still, nur bei Problemen Toast)
   setTimeout(function(){
     var warnings = runIntegrityCheck(true);
