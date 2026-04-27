@@ -449,6 +449,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">🛡</div><div class="sr-label">Sozialabgaben (KV/RV/PV)</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div class="sr-icon" style="background:#fef9c3">📋</div><div class="sr-label">Jahresabschluss</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
+      <div class="settings-row" onclick="diagnoseGutschriften()"><div class="sr-left"><div class="sr-icon" style="background:#eef2ff">🔍</div><div class="sr-label">Diagnose: Gutschriften-Status</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🗑</div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
     <div style="background:var(--card);border-radius:14px;border:1px solid var(--border);padding:16px;margin-bottom:12px;font-size:12px;color:var(--ink3);line-height:1.6">
@@ -2592,7 +2593,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '729';
+  if(el) el.textContent = '731';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6728,6 +6729,96 @@ function doExportCSV(){
   document.querySelector('[style*="z-index:2000"]')&&document.querySelector('[style*="z-index:2000"]').remove();
   showToast('✓ Jahresübersicht '+jahr+' exportiert');
 }
+
+// Build 730: Diagnose-Tool — zeigt was tatsächlich in db.dokumente / db.abrechnungen / dbv2 liegt
+// Hilft bei Bug-Analyse: "Wo sind meine Gutschriften wirklich?"
+function diagnoseGutschriften(){
+  var docs = db.dokumente||[];
+  var dbAbs = db.abrechnungen||[];
+  var v2Abs = (dbv2 && dbv2.abrechnungen)||[];
+  var v2Lnks = (dbv2 && dbv2.abrechnung_termin_links)||[];
+
+  var docByName = {};
+  docs.forEach(function(d){
+    if(d.typ !== 'abrechn' && d.typ !== 'monats_abrechn') return;
+    var name = d.dateiname || '(ohne Name)';
+    if(!docByName[name]) docByName[name] = [];
+    docByName[name].push(d);
+  });
+
+  var lines = [];
+  lines.push('═══ DIAGNOSE GUTSCHRIFTEN ═══');
+  lines.push('');
+  lines.push('Abrechn-Dokumente: ' + docs.filter(function(d){return d.typ==='abrechn'||d.typ==='monats_abrechn';}).length);
+  lines.push('db.abrechnungen: ' + dbAbs.length);
+  lines.push('dbv2.abrechnungen: ' + v2Abs.length);
+  lines.push('dbv2 Junctions: ' + v2Lnks.length);
+  lines.push('');
+  lines.push('── PRO DATEINAME ──');
+  Object.keys(docByName).forEach(function(name){
+    var grp = docByName[name];
+    lines.push('');
+    lines.push('FILE: '+name+'  ('+grp.length+'x)');
+    grp.forEach(function(d){
+      var v2Match = v2Abs.filter(function(v){return v.pdf_datei_id === d.id;});
+      var dbMatch = dbAbs.filter(function(a){return a.dokId === d.id;});
+      lines.push('   dokId='+d.id.slice(0,12)+' bestaetigt='+(d.bestaetigt?'ja':'nein')
+        +' GS='+(d.gutschrift_nr||'-')+' datum='+(d.datum||'-'));
+      lines.push('     -> db.abrechn: '+dbMatch.length+'  dbv2: '+v2Match.length);
+      v2Match.forEach(function(v){
+        lines.push('       v2 beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0)
+          +' leist='+(v.leistungs_datum_von||'-')+' ausst='+(v.ausstellungs_datum||'-'));
+      });
+    });
+  });
+  lines.push('');
+  lines.push('── DBV2 GEISTER (kein PDF-Doc dazu) ──');
+  var orphanV2 = v2Abs.filter(function(v){
+    return !docs.some(function(d){return d.id === v.pdf_datei_id;});
+  });
+  lines.push('Anzahl: ' + orphanV2.length);
+  orphanV2.forEach(function(v){
+    lines.push('  beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0)
+      +' leist='+(v.leistungs_datum_von||'-')+' ausst='+(v.ausstellungs_datum||'-'));
+  });
+  lines.push('');
+  lines.push('── DBV2 OHNE LEISTUNGSDATUM (Jahresabschluss filtert sie raus!) ──');
+  var datumLos = v2Abs.filter(function(v){
+    return !((v.leistungs_datum_von||v.ausstellungs_datum||'').length >= 4);
+  });
+  lines.push('Anzahl: ' + datumLos.length);
+  datumLos.forEach(function(v){
+    lines.push('  beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0));
+  });
+
+  var text = lines.join('\n');
+  var sh = document.createElement('div');
+  sh.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:#fff;border-radius:14px;max-width:600px;width:100%;max-height:85vh;overflow:auto;padding:18px';
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;gap:8px;margin-bottom:12px';
+  var btnCopy = document.createElement('button');
+  btnCopy.textContent = '📋 Kopieren';
+  btnCopy.style.cssText = 'flex:1;background:#1e40af;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer';
+  btnCopy.onclick = function(){
+    navigator.clipboard.writeText(text).then(function(){ showToast('✓ In Zwischenablage'); });
+  };
+  var btnClose = document.createElement('button');
+  btnClose.textContent = 'Schließen';
+  btnClose.style.cssText = 'flex:0 0 auto;background:#e5e7eb;border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer';
+  btnClose.onclick = function(){ sh.remove(); };
+  hdr.appendChild(btnCopy);
+  hdr.appendChild(btnClose);
+  var pre = document.createElement('pre');
+  pre.style.cssText = 'white-space:pre-wrap;margin:0;font-size:11px;line-height:1.5;font-family:monospace';
+  pre.textContent = text;
+  inner.appendChild(hdr);
+  inner.appendChild(pre);
+  sh.appendChild(inner);
+  document.body.appendChild(sh);
+}
+
 function confirmReset(){
   if(!confirm('Alle Daten unwiderruflich löschen?\n\n(API-Key und iCal-URL bleiben erhalten.)'))return;
   // Konfig retten
@@ -8111,7 +8202,66 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
 
   table += '</tbody></table></div></div>';
 
-  el.innerHTML = head + svBlock + table;
+  // ── Build 730: TERMINLISTE (Ampel) — auch im V2-Pfad rendern ──
+  // Quelle: db.termine + dbv2.abrechnung_termin_links (was tatsächlich abgerechnet wurde)
+  var v2LinksByTid = {};
+  (dbv2.abrechnung_termin_links||[]).forEach(function(l){
+    v2LinksByTid[l.termin_id] = true;
+  });
+  var jahrPrefix = String(yr);
+  var jahrTermine = (db.termine||[]).filter(function(t){
+    return (t.datum||'').startsWith(jahrPrefix);
+  }).sort(function(a,b){ return (a.datum||'')<(b.datum||'') ? -1 : 1; });
+
+  var termineHtml = '<div class="info-card" style="margin-bottom:12px">'
+    +'<div class="info-card-header"><span>📅 Termine '+yr+'</span>'
+    +'<span style="font-size:11px;color:#888">'+abgerechnetAnz+'/'+jahrTermine.length+' abger.</span></div>'
+    +'<div style="padding:0 16px 14px">';
+  if(!jahrTermine.length){
+    termineHtml += '<div style="color:#999;font-size:12px;padding:8px 0">Keine Termine</div>';
+  } else {
+    jahrTermine.forEach(function(t){
+      var hatV2Link = !!v2LinksByTid[t.id];
+      var hatLegacy = !!(t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin);
+      var hatAb     = hatV2Link || hatLegacy;
+      var bezahltT  = t.status==='bezahlt';
+      var ampel     = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
+      // Betrag: bevorzugt v2-Junction-Brutto-Anteil, sonst Legacy
+      var v2Lnks = (dbv2.abrechnung_termin_links||[]).filter(function(l){return l.termin_id===t.id;});
+      var v2Betrag = 0;
+      v2Lnks.forEach(function(l){ v2Betrag += parseFloat(l.brutto_anteil_display)||0; });
+      var legacyAb = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
+      var betrag = v2Betrag || (legacyAb ? parseFloat(legacyAb.brutto)||0 : 0) || parseFloat(t.brutto_termin)||0;
+      // Datei + GS-Nr aus v2 (erstes Link) oder Legacy
+      var v2AbForLnk = v2Lnks.length ? (dbv2.abrechnungen||[]).find(function(a){return a.id===v2Lnks[0].abrechnung_id;}) : null;
+      var gutNr = (v2AbForLnk && v2AbForLnk.beleg_nr) || (legacyAb ? legacyAb.gutschrift_nr : (t.gutschrift_nr||'')) || '';
+      var abDateiname = (legacyAb ? legacyAb.dateiname : (t.abrechn_dateiname||'')) || '';
+      // Studio
+      var stName = '';
+      if(v2AbForLnk){
+        var abr = (dbv2.abrechner||[]).find(function(x){return x.id===v2AbForLnk.abrechner_id;});
+        stName = abr ? abr.name : '';
+      }
+      stName = stName || t.studio || '';
+
+      termineHtml += '<div onclick="openDetail(\''+t.id+'\')" style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5;cursor:pointer;gap:8px">'
+        +'<div style="font-size:16px">'+ampel+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||stName||'?')+'</div>'
+        +'<div style="font-size:11px;color:#888">'+fd(t.datum)+(stName?' · '+esc(stName):'')+'</div>'
+        +(gutNr?'<div style="font-size:10px;color:#aaa">GS: '+esc(gutNr)+'</div>':'')
+        +(abDateiname?'<div style="font-size:10px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(abDateiname)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+        +(betrag?'<div style="font-size:13px;font-weight:800">'+fmtEur(betrag)+'</div>':'<div style="font-size:11px;color:#ccc">kein Betrag</div>')
+        +(bezahltT?'<div style="font-size:10px;color:#15803d">bezahlt</div>':hatAb?'<div style="font-size:10px;color:#92400e">abgr.</div>':'<div style="font-size:10px;color:#c2410c">offen</div>')
+        +'</div>'
+        +'</div>';
+    });
+  }
+  termineHtml += '</div></div>';
+
+  el.innerHTML = head + svBlock + table + termineHtml;
 }
 
 function rJahresabschluss(){
