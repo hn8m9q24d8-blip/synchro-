@@ -2264,6 +2264,101 @@ function _konsolidiereDokumentNachV2(dokId){
     // Junctions für alle Sessions mit terminId
     if(!dbv2.abrechnung_termin_links) dbv2.abrechnung_termin_links = [];
 
+    // ── Build 737: PAIRING pro terminId ──────────────────────────
+    // Schema-Vorgabe (synchron-schema-abschluss.md, 2.6/5.1):
+    // brutto_anteil_display ist Display-Wert, darf aus PDF-Werten gelesen + summiert werden.
+    // Aber NIE mit Tarif-Tabellen-Standards rekonstruieren (das wäre Erfinden).
+    //
+    // Realität bei iyuno/Klasse 1b: Pro Termin liefert die KI 2 Sessions
+    // (Grundgage-Zeile + Takegage-Zeile derselben terminId).
+    // Hier vorab zusammenfassen, damit pro Termin EINE Junction entsteht.
+    var sessionsPerTermin = {};
+    gruppenSessions.forEach(function(s){
+      if(!s.terminId) return;
+      var tid = s.terminId;
+      if(!sessionsPerTermin[tid]) sessionsPerTermin[tid] = [];
+      sessionsPerTermin[tid].push(s);
+    });
+
+    Object.keys(sessionsPerTermin).forEach(function(tid){
+      var sList = sessionsPerTermin[tid];
+
+      // Felder aus den Sessions zusammenführen — alles nur, was aus dem PDF kommt
+      var anyBrutto = 0, hatBrutto = false;       // Summe explizit gelesener Brutto-Werte
+      var summeGG = 0, hatGG = false;             // Summe Grundgage-Anteile
+      var summeTakegage = 0, hatTakegage = false; // Summe Takegage-Posten (z.B. 32 × 4,20 = 134,40)
+      var anyTakes = 0;                            // Takes wenn vorhanden (für Anzeige)
+      var maxRate = 0;                             // Höchste Rate (für Anzeige)
+      var maxGG_einzel = 0;                        // Höchste einzelne GG (für _rec)
+
+      sList.forEach(function(s){
+        var sB  = parseFloat(s.brutto)    || 0;
+        var sGG = parseFloat(s.grundgage) || 0;
+        var sR  = parseFloat(s.take_gage) || 0;
+        var sT  = parseInt(s.takes)       || 0;
+        if(sB > 0){ anyBrutto += sB; hatBrutto = true; }
+        if(sGG > 0){
+          summeGG += sGG; hatGG = true;
+          if(sGG > maxGG_einzel) maxGG_einzel = sGG;
+        }
+        if(sT > 0 && sR > 0){ summeTakegage += sT * sR; hatTakegage = true; }
+        if(sT > anyTakes) anyTakes = sT;
+        if(sR > maxRate)  maxRate  = sR;
+      });
+
+      // bruttoAnteilFinal: bevorzugt explizit gelesene Brutto-Summe (PDF-Wert).
+      // Sonst: Summe der einzelnen Posten (GG + Takegage). Beides aus dem PDF gelesen.
+      // Wenn nichts → null. KEIN Tarif-Tabellen-Fallback.
+      var bruttoAnteilFinal = null;
+      if(hatBrutto)                 bruttoAnteilFinal = anyBrutto;
+      else if(hatGG || hatTakegage) bruttoAnteilFinal = summeGG + summeTakegage;
+
+      // Tarif-Klassifikation aus den höchsten Einzel-Werten (für _erkenneTarif/_rekonstruiereTarif)
+      var sTarif = _erkenneTarif(maxGG_einzel || null, maxRate || null);
+
+      // berechnung_check: stimmt explizit gelesener Brutto mit summe der Posten überein?
+      var bruttoCheck = 'ok';
+      if(hatBrutto && (hatGG || hatTakegage)){
+        if(Math.abs(anyBrutto - (summeGG + summeTakegage)) > 1.5){
+          bruttoCheck = 'abweichung';
+        }
+      }
+
+      // Upsert der Junction (eine pro Termin)
+      var existingLink = dbv2.abrechnung_termin_links.find(function(l){
+        return l.abrechnung_id === v2Ab.id && l.termin_id === tid;
+      });
+
+      if(existingLink){
+        existingLink.brutto_anteil_display = bruttoAnteilFinal;
+        existingLink.grundgage_anteil      = maxGG_einzel || null;
+        existingLink.takegage_anteil       = maxRate || null;
+        existingLink.takes_anteil          = anyTakes || null;
+        existingLink.tarif_erkannt         = sTarif;
+        existingLink.berechnung_check      = bruttoCheck;
+        existingLink.aktualisiert_am       = new Date().toISOString();
+        linksGeupdated++;
+      } else {
+        dbv2.abrechnung_termin_links.push({
+          id: _v2uuid('lnk'),
+          abrechnung_id:         v2Ab.id,
+          termin_id:             tid,
+          brutto_anteil_display: bruttoAnteilFinal,
+          grundgage_anteil:      maxGG_einzel || null,
+          takegage_anteil:       maxRate || null,
+          takes_anteil:          anyTakes || null,
+          tarif_erkannt:         sTarif,
+          berechnung_check:      bruttoCheck,
+          datum_ambiguitaet:     false,
+          buchungskonto:         null,
+          notiz:                 null,
+          erstellt_am:           new Date().toISOString()
+        });
+        linksErstellt++;
+      }
+    });
+
+    /* alter Loop (Build 728/736) — durch Pairing ersetzt
     gruppenSessions.forEach(function(s){
       if(!s.terminId) return;
 
@@ -2282,13 +2377,27 @@ function _konsolidiereDokumentNachV2(dokId){
       var bruttoCheck = sBrutto && Math.abs(berechnet - sBrutto) > 1.5
                         ? 'abweichung' : 'ok';
 
+      // Build 736: brutto_anteil_display NICHT 0 wenn Session-Brutto fehlt —
+      // bei Sammel-GS liefert KI oft nur GG + Takes + Rate pro Termin, aber kein Brutto.
+      // Dann ableiten aus berechnet (mit 1-10-Regel falls _rec.takes vorhanden).
+      var bruttoAnteilFinal = sBrutto;
+      if(!bruttoAnteilFinal || bruttoAnteilFinal === 0){
+        if(_rec && _rec.kommgage && _rec.takes){
+          bruttoAnteilFinal = _rec.kommgage + _rec.takes * _rec.rate;
+        } else if(berechnet > 0){
+          bruttoAnteilFinal = berechnet;
+        } else {
+          bruttoAnteilFinal = null; // wirklich nichts ableitbar
+        }
+      }
+
       // Upsert der Junction
       var existingLink = dbv2.abrechnung_termin_links.find(function(l){
         return l.abrechnung_id === v2Ab.id && l.termin_id === s.terminId;
       });
 
       if(existingLink){
-        existingLink.brutto_anteil_display = sBrutto;
+        existingLink.brutto_anteil_display = bruttoAnteilFinal;
         existingLink.grundgage_anteil      = sGrundgage;
         existingLink.takegage_anteil       = sTakeGage;
         existingLink.takes_anteil          = sTakes;
@@ -2301,7 +2410,7 @@ function _konsolidiereDokumentNachV2(dokId){
           id: _v2uuid('lnk'),
           abrechnung_id:         v2Ab.id,
           termin_id:             s.terminId,
-          brutto_anteil_display: sBrutto,
+          brutto_anteil_display: bruttoAnteilFinal,
           grundgage_anteil:      sGrundgage,
           takegage_anteil:       sTakeGage,
           takes_anteil:          sTakes,
@@ -2315,6 +2424,115 @@ function _konsolidiereDokumentNachV2(dokId){
         linksErstellt++;
       }
     });
+    */ // Ende auskommentierter alter Loop (Build 728/736)
+
+    // ── Build 738: KONSISTENZ-CHECKS pro Abrechnung ─────────────────
+    // Verifizieren, dass die KI-Extraktion in sich stimmig ist.
+    // Toleranz: 1,50 € (locker — fängt nur grobe Fehler, keine Rundungs-Pingeligkeit)
+    var TOL = 1.5;
+    var checks = {};
+
+    // (1) Σ Junction-Brutto-Anteile dieser Abrechnung ≈ ab.brutto
+    var junctions_dieser_ab = (dbv2.abrechnung_termin_links||[]).filter(function(l){
+      return l.abrechnung_id === v2Ab.id;
+    });
+    var summeAnteile = 0, anyAnteilFehlt = false;
+    junctions_dieser_ab.forEach(function(l){
+      if(l.brutto_anteil_display == null) anyAnteilFehlt = true;
+      else summeAnteile += parseFloat(l.brutto_anteil_display) || 0;
+    });
+    if(junctions_dieser_ab.length === 0){
+      checks.bruttoSumme = { status:'nicht_pruefbar', grund:'keine Termine verknüpft' };
+    } else if(anyAnteilFehlt){
+      checks.bruttoSumme = { status:'nicht_pruefbar', grund:'mindestens 1 Anteil fehlt im PDF' };
+    } else {
+      var diff_b = summeAnteile - (v2Ab.brutto || 0);
+      checks.bruttoSumme = {
+        status: Math.abs(diff_b) <= TOL ? 'ok' : 'abweichung',
+        soll: v2Ab.brutto || 0,
+        ist: Math.round(summeAnteile*100)/100,
+        diff: Math.round(diff_b*100)/100
+      };
+    }
+
+    // (2) USt-Konsistenz: ust_betrag ≈ brutto × ust_satz
+    if(v2Ab.brutto && v2Ab.ust_satz != null && v2Ab.ust_betrag != null){
+      var ustErw = (v2Ab.brutto || 0) * (v2Ab.ust_satz || 0);
+      var diff_u = (v2Ab.ust_betrag || 0) - ustErw;
+      checks.ust = {
+        status: Math.abs(diff_u) <= TOL ? 'ok' : 'abweichung',
+        soll: Math.round(ustErw*100)/100,
+        ist: v2Ab.ust_betrag,
+        diff: Math.round(diff_u*100)/100
+      };
+    } else {
+      checks.ust = { status:'nicht_pruefbar', grund:'USt-Werte unvollständig' };
+    }
+
+    // (3) SV-Summe (KV+RV+PV) — nur als Sanity, kein Soll-Wert im PDF einzeln
+    var svSumme = (v2Ab.sv_kv_an||0) + (v2Ab.sv_rv_an||0) + (v2Ab.sv_pv_an||0);
+    if(svSumme > 0){
+      checks.sv = { status:'ok', summe: Math.round(svSumme*100)/100 };
+    } else {
+      checks.sv = { status:'nicht_pruefbar', grund:'keine SV-Werte' };
+    }
+
+    // (4) Auszahlung ≈ Brutto − SV + USt (Klasse 1a/1b/2)
+    if(v2Ab.auszahlung != null && v2Ab.brutto){
+      var auszErw = (v2Ab.brutto || 0) - svSumme + (v2Ab.ust_betrag || 0);
+      var diff_a = (v2Ab.auszahlung || 0) - auszErw;
+      checks.auszahlung = {
+        status: Math.abs(diff_a) <= TOL ? 'ok' : 'abweichung',
+        soll: Math.round(auszErw*100)/100,
+        ist: v2Ab.auszahlung,
+        diff: Math.round(diff_a*100)/100
+      };
+    } else {
+      checks.auszahlung = { status:'nicht_pruefbar', grund:'Auszahlung fehlt' };
+    }
+
+    // (5) Posten-Summe pro GNR (Σ alle Sessions: grundgage + takes×rate) ≈ ab.brutto
+    var postenSumme = 0;
+    gruppenSessions.forEach(function(s){
+      var sB  = parseFloat(s.brutto)    || 0;
+      var sGG = parseFloat(s.grundgage) || 0;
+      var sR  = parseFloat(s.take_gage) || 0;
+      var sT  = parseInt(s.takes)       || 0;
+      // Bevorzugt expliziter Brutto-Wert pro Session, sonst Posten-Berechnung
+      if(sB > 0) postenSumme += sB;
+      else postenSumme += sGG + (sT * sR);
+    });
+    if(postenSumme > 0 && v2Ab.brutto){
+      var diff_p = postenSumme - (v2Ab.brutto || 0);
+      // Posten-Summe kann Brutto enthalten haben (Doppelzählung) → 2× Brutto = grobe Verwechslung
+      var verdacht_doppelzaehlung = Math.abs(postenSumme - 2*(v2Ab.brutto||0)) <= TOL;
+      checks.posten = {
+        status: Math.abs(diff_p) <= TOL ? 'ok'
+              : verdacht_doppelzaehlung ? 'doppelzaehlung_verdacht'
+              : 'abweichung',
+        soll: v2Ab.brutto,
+        ist: Math.round(postenSumme*100)/100,
+        diff: Math.round(diff_p*100)/100
+      };
+    } else {
+      checks.posten = { status:'nicht_pruefbar', grund:'keine Posten-Werte' };
+    }
+
+    // Gesamt-Status: ok / warnung / fehler
+    var hatAbweichung = false, hatDoppelzaehlung = false;
+    Object.keys(checks).forEach(function(k){
+      if(checks[k].status === 'abweichung') hatAbweichung = true;
+      if(checks[k].status === 'doppelzaehlung_verdacht') hatDoppelzaehlung = true;
+    });
+    var gesamtStatus = hatDoppelzaehlung ? 'fehler'
+                     : hatAbweichung ? 'warnung' : 'ok';
+
+    v2Ab._konsistenz = {
+      status: gesamtStatus,
+      checks: checks,
+      geprueft_am: new Date().toISOString(),
+      toleranz: TOL
+    };
   });
 
   saveV2(dbv2);
@@ -2406,6 +2624,33 @@ function _autoKonsolidiereNachBestaetigen(dokId){
     if(res && res.ok){
       console.log('[v2] Auto-Hook: Dok '+dokId+' konsolidiert.',
         res.erstellt+'+', res.geupdated+'upd,', res.linksErstellt+'lnk,', res.gruppen+'grp');
+      // Build 738: Konsistenz-Toast bei Abweichungen
+      try {
+        var meineAbs = (dbv2.abrechnungen||[]).filter(function(a){return a.pdf_datei_id === dokId;});
+        var probleme = [];
+        meineAbs.forEach(function(a){
+          if(!a._konsistenz || a._konsistenz.status === 'ok') return;
+          var c = a._konsistenz.checks || {};
+          if(c.bruttoSumme && c.bruttoSumme.status==='abweichung'){
+            probleme.push('Brutto-Anteile '+(c.bruttoSumme.diff>0?'+':'')+(c.bruttoSumme.diff).toFixed(2).replace('.',',')+'€');
+          }
+          if(c.posten && c.posten.status==='doppelzaehlung_verdacht'){
+            probleme.push('Posten-Doppelzählung möglich!');
+          } else if(c.posten && c.posten.status==='abweichung'){
+            probleme.push('Posten-Summe '+(c.posten.diff>0?'+':'')+(c.posten.diff).toFixed(2).replace('.',',')+'€');
+          }
+          if(c.ust && c.ust.status==='abweichung'){
+            probleme.push('USt '+(c.ust.diff>0?'+':'')+(c.ust.diff).toFixed(2).replace('.',',')+'€');
+          }
+          if(c.auszahlung && c.auszahlung.status==='abweichung'){
+            probleme.push('Auszahlung '+(c.auszahlung.diff>0?'+':'')+(c.auszahlung.diff).toFixed(2).replace('.',',')+'€');
+          }
+        });
+        if(probleme.length && typeof showToast === 'function'){
+          // Etwas länger als normal anzeigen, damit man das lesen kann
+          showToast('⚠ Achtung: '+probleme.slice(0,2).join(' · ')+(probleme.length>2?' · …':''));
+        }
+      } catch(toastE){ console.warn('[v2] Konsistenz-Toast fehlgeschlagen', toastE); }
     } else if(res){
       console.warn('[v2] Auto-Hook übersprungen:', res.grund);
     }
@@ -2491,7 +2736,10 @@ function v2TerminView(terminId){
     istAbgerechnet:       true,
     istTeilVonSammel:     alleJunctionsDerAb.length > 1,
     anzahlTermineInSammel: alleJunctionsDerAb.length,
-    brutto_anteil:        parseFloat(junction.brutto_anteil_display) || 0,
+    // Build 737: null bewusst durchreichen — kein 0-Fallback, sonst falsche
+    // "Differenz"-Anzeige im Termin-Detail (wenn PDF keinen Anteil ausweist)
+    brutto_anteil:        (junction.brutto_anteil_display!=null && junction.brutto_anteil_display!=='')
+                            ? parseFloat(junction.brutto_anteil_display) : null,
     grundgage:            parseFloat(junction.grundgage_anteil) || null,
     takegage:             parseFloat(junction.takegage_anteil) || null,
     takes:                parseInt(junction.takes_anteil) || null,
@@ -2679,7 +2927,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '735';
+  if(el) el.textContent = '738';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3596,8 +3844,10 @@ function openDetail(id){
     // Einzel-Anteile kommen direkt aus der Junction.
     {
     var abBrutto=parseFloat(ab.brutto)||0;
-    var netBruttoOk=Math.abs(net-abBrutto)<0.02;
-    var matchCol=netBruttoOk?'#15803d':'#c2410c';
+    // Build 737: Wenn Sammel-GS und kein Brutto-Anteil im PDF erkennbar → neutral statt rot
+    var bruttoAnteilFehlt = ab._v2IstTeilVonSammel && (ab.brutto==null);
+    var netBruttoOk = bruttoAnteilFehlt ? true : Math.abs(net-abBrutto)<0.02;
+    var matchCol = bruttoAnteilFehlt ? '#6b7280' : (netBruttoOk?'#15803d':'#c2410c');
     // 1-10 Regel: Grundgage = dispKomm + 10×dispRate → kein Fehler
     var _tRate = parseFloat(t.rate)||0;
     var _tKomm = parseFloat(t.kommgage)||0;
@@ -3628,9 +3878,9 @@ function openDetail(id){
       +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#eef2ff;color:#4338ca;padding:2px 6px;border-radius:6px;font-weight:700">🔗 '+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
       +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700">🔗 Master · '+ab._multiAnzahl+' Termine</span>':'')
       +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:#7c3aed;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
-      +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(netBruttoOk?'✓ Stimmt':'⚠ Differenz')+'</span></div>'
+      +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(bruttoAnteilFehlt?'· Anteil nicht im PDF ausgewiesen':(netBruttoOk?'✓ Stimmt':'⚠ Differenz'))+'</span></div>'
       +'<div style="padding:0 16px 14px">'
-      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4338ca;margin-bottom:8px;padding:6px 8px;background:#eef2ff;border-radius:6px">🔗 Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+fmtEur(ab.brutto||0)+'</strong></div>':'')
+      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4338ca;margin-bottom:8px;padding:6px 8px;background:#eef2ff;border-radius:6px">🔗 Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:#9ca3af;font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
       +(!hasDispo2?'<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;padding:6px 8px;background:#f9fafb;border-radius:6px">📋 Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
       +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
       +(ab.takes?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
@@ -3643,8 +3893,8 @@ function openDetail(id){
         fmtEur(ab.grundgage)+(gageDiff?' <span style="font-size:10px;font-weight:700;color:#c2410c">≠ Dispo: '+fmtEur(t.kommgage)+'</span>':'')+'</div></div>':'')
       +(ab.take_gage?'<div class="info-row"><div class="ir-key" style="color:#888">Take-Gage</div><div class="ir-val" style="color:#888">'+fmtEur(ab.take_gage)+' / Take</div></div>':'')
       +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
-        '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto = App-Netto</div>'+
-        '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+fmtEur(ab.brutto)+'</div></div>'
+        '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto'+(bruttoAnteilFehlt?'-Anteil':' = App-Netto')+'</div>'+
+        '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+(ab.brutto==null?'<span style="font-style:italic">—</span>':fmtEur(ab.brutto))+'</div></div>'
       +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
         (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
@@ -6868,6 +7118,32 @@ function diagnoseGutschriften(){
     lines.push('  beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0));
   });
 
+  // Build 738: Konsistenz-Status pro Abrechnung
+  lines.push('');
+  lines.push('── KONSISTENZ-CHECKS (Build 738) ──');
+  var problemAbs = v2Abs.filter(function(v){
+    return v._konsistenz && v._konsistenz.status !== 'ok';
+  });
+  var ungeprueft = v2Abs.filter(function(v){ return !v._konsistenz; });
+  lines.push('OK: ' + (v2Abs.length - problemAbs.length - ungeprueft.length)
+           + ' · Warnung: ' + problemAbs.filter(function(v){return v._konsistenz.status==='warnung';}).length
+           + ' · Fehler: ' + problemAbs.filter(function(v){return v._konsistenz.status==='fehler';}).length
+           + ' · ungeprueft: ' + ungeprueft.length);
+  problemAbs.forEach(function(v){
+    lines.push('');
+    lines.push('  ['+v._konsistenz.status.toUpperCase()+'] beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0));
+    var c = v._konsistenz.checks||{};
+    Object.keys(c).forEach(function(k){
+      var ck = c[k];
+      if(ck.status === 'ok' || ck.status === 'nicht_pruefbar') return;
+      var line = '    '+k+': '+ck.status;
+      if(ck.soll!=null) line += ' soll='+ck.soll;
+      if(ck.ist!=null)  line += ' ist=' +ck.ist;
+      if(ck.diff!=null) line += ' diff='+ck.diff;
+      lines.push(line);
+    });
+  });
+
   var text = lines.join('\n');
   var sh = document.createElement('div');
   sh.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -8126,13 +8402,14 @@ function _jahresSort(col){
 // Reine Lese-Funktion — verändert nichts.
 function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
   // SV + MwSt direkt aus dbv2.abrechnungen summieren (dort liegen die PDF-Gesamtwerte)
-  var bruttoGes = 0, kvGes = 0, rvGes = 0, pvGes = 0, mwstGes = 0;
+  var bruttoGes = 0, kvGes = 0, rvGes = 0, pvGes = 0, mwstGes = 0, auszahlungGes = 0;
   v2AbsImJahr.forEach(function(a){
-    bruttoGes += parseFloat(a.brutto)||0;
-    kvGes     += parseFloat(a.sv_kv_an)||0;
-    rvGes     += parseFloat(a.sv_rv_an)||0;
-    pvGes     += parseFloat(a.sv_pv_an)||0;
-    mwstGes   += parseFloat(a.ust_betrag)||0;
+    bruttoGes     += parseFloat(a.brutto)||0;
+    kvGes         += parseFloat(a.sv_kv_an)||0;
+    rvGes         += parseFloat(a.sv_rv_an)||0;
+    pvGes         += parseFloat(a.sv_pv_an)||0;
+    mwstGes       += parseFloat(a.ust_betrag)||0;
+    auszahlungGes += parseFloat(a.auszahlung)||0;
   });
   var svGes = kvGes + rvGes + pvGes;
 
@@ -8189,7 +8466,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
   // Abrechnungs-Tabelle (mit Sammel-Termin-Auflösung)
   var table = '<div class="info-card" style="margin-bottom:16px">'
     + '<div class="info-card-header" style="gap:6px"><span>📄</span><span>ABRECHNUNGEN '+yr+'</span></div>'
-    + '<div style="overflow-x:auto;padding:0 16px 14px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px">'
+    + '<div style="overflow-x:auto;padding:0 16px 14px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:820px">'
     + '<thead><tr style="color:#9ca3af;text-align:left">'
     + '<th style="padding:6px 4px;cursor:pointer" onclick="_jahresSortCol=\'datum\';_jahresSortDir*=-1;rJahresabschluss()">Gutschrift-Nr.</th>'
     + '<th style="padding:6px 4px;cursor:pointer" onclick="_jahresSortCol=\'studio\';_jahresSortDir*=-1;rJahresabschluss()">Studio</th>'
@@ -8201,6 +8478,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
     + '<th style="padding:6px 4px;text-align:right">SV</th>'
     + '<th style="padding:6px 4px;text-align:right">MwSt</th>'
     + '<th style="padding:6px 4px;text-align:right">Satz</th>'
+    + '<th style="padding:6px 4px;text-align:right">Auszahlung</th>'
     + '</tr></thead><tbody>';
 
   sortedAbs.forEach(function(ab){
@@ -8212,6 +8490,29 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
     var isSammel = junctions.length > 1;
     var satz = ab.ust_satz ? Math.round(ab.ust_satz*100)+'%' : '—';
 
+    // Build 738: Konsistenz-Indikator (⚠ neben Beleg-Nr)
+    var kons = ab._konsistenz;
+    var konsIcon = '';
+    if(kons){
+      if(kons.status === 'fehler'){
+        konsIcon = ' <span title="Konsistenz-Fehler — bitte prüfen" style="color:#b91c1c;cursor:help">⛔</span>';
+      } else if(kons.status === 'warnung'){
+        var probs = [];
+        if(kons.checks){
+          if(kons.checks.bruttoSumme && kons.checks.bruttoSumme.status==='abweichung')
+            probs.push('Brutto-Anteile: '+(kons.checks.bruttoSumme.diff>0?'+':'')+kons.checks.bruttoSumme.diff.toFixed(2)+'€');
+          if(kons.checks.posten && kons.checks.posten.status==='abweichung')
+            probs.push('Posten-Summe: '+(kons.checks.posten.diff>0?'+':'')+kons.checks.posten.diff.toFixed(2)+'€');
+          if(kons.checks.ust && kons.checks.ust.status==='abweichung')
+            probs.push('USt: '+(kons.checks.ust.diff>0?'+':'')+kons.checks.ust.diff.toFixed(2)+'€');
+          if(kons.checks.auszahlung && kons.checks.auszahlung.status==='abweichung')
+            probs.push('Auszahlung: '+(kons.checks.auszahlung.diff>0?'+':'')+kons.checks.auszahlung.diff.toFixed(2)+'€');
+        }
+        var tip = probs.join(' · ').replace(/"/g, '&quot;');
+        konsIcon = ' <span title="'+tip+'" style="color:#c2410c;cursor:help">⚠</span>';
+      }
+    }
+
     if(!isSammel){
       // Einzel-Abrechnung = 1 Zeile mit allen Werten
       var tName = prName;
@@ -8219,8 +8520,13 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
         var t = (db.termine||[]).find(function(x){return x.id === junctions[0].termin_id;});
         if(t) tName = t.titel || prName;
       }
+      var dokE = (db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;});
+      var dokNameE = dokE ? (dokE.dateiname||'') : '';
+      var datumE = ab.leistungs_datum_von || ab.ausstellungs_datum || '';
       table += '<tr style="border-top:1px solid #f3f4f6">'
-        + '<td style="padding:6px 4px;font-weight:700">'+esc(ab.beleg_nr||'—')+'<div style="font-size:10px;color:#9ca3af;font-weight:400;margin-top:2px">📄 '+esc((db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;})?((db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;}).dateiname||''):'')+'</div></td>'
+        + '<td style="padding:6px 4px;font-weight:700">'+esc(ab.beleg_nr||'—')+konsIcon
+        +   (datumE?'<div style="font-size:10px;color:#6b7280;font-weight:500;margin-top:1px">'+fd(datumE)+'</div>':'')
+        +   '<div style="font-size:10px;color:#9ca3af;font-weight:400;margin-top:1px">📄 '+esc(dokNameE)+'</div></td>'
         + '<td style="padding:6px 4px">'+esc(abrName)+'</td>'
         + '<td style="padding:6px 4px"><a href="#" onclick="event.preventDefault();openDetail(\''+(junctions[0]?junctions[0].termin_id:'')+'\')" style="color:#1e40af;text-decoration:underline">'+esc(tName)+'</a></td>'
         + '<td style="padding:6px 4px;text-align:right;font-weight:700">'+fmtEur(ab.brutto||0)+'</td>'
@@ -8230,25 +8536,29 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
         + '<td style="padding:6px 4px;text-align:right;color:#1e40af;font-weight:700">'+fmtEur((ab.sv_kv_an||0)+(ab.sv_rv_an||0)+(ab.sv_pv_an||0))+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:#15803d;font-weight:700">'+fmtEur(ab.ust_betrag||0)+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:#15803d">'+satz+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#7c2d12;font-weight:700">'+fmtEur(ab.auszahlung||0)+'</td>'
         + '</tr>';
     } else {
       // Sammel-Abrechnung = Kopfzeile + N Termin-Zeilen mit Anteilen
       var dok = (db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;});
       var dokName = dok ? (dok.dateiname||'') : '';
+      var datumS = ab.leistungs_datum_von || ab.ausstellungs_datum || '';
       table += '<tr style="border-top:1px solid #f3f4f6;background:#fafafa">'
-        + '<td style="padding:6px 4px;font-weight:700;vertical-align:top" rowspan="'+(junctions.length+1)+'">'+esc(ab.beleg_nr||'—')+'<div style="font-size:10px;color:#9ca3af;font-weight:400;margin-top:2px">📄 '+esc(dokName)+'</div></td>'
+        + '<td style="padding:6px 4px;font-weight:700;vertical-align:top" rowspan="'+(junctions.length+1)+'">'+esc(ab.beleg_nr||'—')+konsIcon
+        +   (datumS?'<div style="font-size:10px;color:#6b7280;font-weight:500;margin-top:1px">'+fd(datumS)+'</div>':'')
+        +   '<div style="font-size:10px;color:#9ca3af;font-weight:400;margin-top:1px">📄 '+esc(dokName)+'</div></td>'
         + '<td style="padding:6px 4px">'+esc(abrName)+'</td>'
-        + '<td style="padding:6px 4px;color:#9ca3af;font-style:italic">'+fd(ab.leistungs_datum_von||'')+'</td>'
-        + '<td colspan="7" style="padding:6px 4px"></td>'
+        + '<td colspan="9" style="padding:6px 4px;color:#9ca3af;font-style:italic;font-size:11px">'+junctions.length+' Termine</td>'
         + '</tr>';
       junctions.forEach(function(lnk){
         var t = (db.termine||[]).find(function(x){return x.id===lnk.termin_id;});
         var tName = t ? (t.titel||prName) : prName;
+        var tDatum = t ? t.datum : '';
         table += '<tr style="border-top:1px dashed #f3f4f6">'
-          + '<td style="padding:4px 4px;padding-left:12px">'+esc(abrName)+'</td>'
+          + '<td style="padding:4px 4px;padding-left:12px;color:#6b7280;font-size:11px">'+(tDatum?fd(tDatum):'')+'</td>'
           + '<td style="padding:4px 4px;padding-left:12px"><a href="#" onclick="event.preventDefault();openDetail(\''+lnk.termin_id+'\')" style="color:#1e40af;text-decoration:underline">'+esc(tName)+'</a></td>'
           + '<td style="padding:4px 4px;text-align:right">'+fmtEur(lnk.brutto_anteil_display||0)+'</td>'
-          + '<td colspan="6" style="padding:4px 4px"></td>'
+          + '<td colspan="7" style="padding:4px 4px"></td>'
           + '</tr>';
       });
       // Zusammenfassungs-Zeile für Sammel
@@ -8261,6 +8571,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
         + '<td style="padding:6px 4px;text-align:right;color:#1e40af;font-weight:700">'+fmtEur((ab.sv_kv_an||0)+(ab.sv_rv_an||0)+(ab.sv_pv_an||0))+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:#15803d;font-weight:700">'+fmtEur(ab.ust_betrag||0)+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:#15803d">'+satz+'</td>'
+        + '<td style="padding:6px 4px;text-align:right;color:#7c2d12;font-weight:700">'+fmtEur(ab.auszahlung||0)+'</td>'
         + '</tr>';
     }
   });
@@ -8275,6 +8586,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
     + '<td style="padding:10px 4px;text-align:right;font-weight:700">'+fmtEur(svGes)+'</td>'
     + '<td style="padding:10px 4px;text-align:right;font-weight:700">'+fmtEur(mwstGes)+'</td>'
     + '<td style="padding:10px 4px;text-align:right">—</td>'
+    + '<td style="padding:10px 4px;text-align:right;font-weight:900">'+fmtEur(auszahlungGes)+'</td>'
     + '</tr>';
 
   table += '</tbody></table></div></div>';
