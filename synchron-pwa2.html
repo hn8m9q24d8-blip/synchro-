@@ -2966,7 +2966,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '743';
+  if(el) el.textContent = '744';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12575,8 +12575,12 @@ function dokOpenDetail(id){
       if(parseFloat(d.brutto||0) < 0){
         body += '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 14px;margin-bottom:10px">'
           +'<div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:4px">⚠ Storno-Gutschrift erkannt</div>'
-          +'<div style="font-size:11px;color:#7f1d1d;margin-bottom:8px">Negativer Betrag ('+fmtEur(parseFloat(d.brutto||0))+'). Diese Gutschrift sollte nicht als Einnahme gebucht werden — stattdessen als Ausgabe, um die Buchhaltung auszugleichen.</div>'
-          +'<button type="button" onclick="dokStornoAlsAusgabe(\''+d.id+'\')" style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📁 Storno archivieren</button>'
+          +'<div style="font-size:11px;color:#7f1d1d;margin-bottom:10px">Negativer Betrag ('+fmtEur(parseFloat(d.brutto||0))+'). Storno wird mit Termin verknüpft und in Buchhaltung verbucht (negative Werte). Folgt eine Neuberechnung, springt die App zum nächsten Beleg.</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          +'<button type="button" onclick="dokStornoVerbuchen(\''+d.id+'\')" style="flex:1;min-width:140px;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation">📒 Storno verbuchen → weiter</button>'
+          +'<button type="button" onclick="dokStornoAlsAusgabe(\''+d.id+'\')" style="background:#fef2f2;color:#7f1d1d;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:11px;font-weight:600;cursor:pointer;touch-action:manipulation">📁 Nur archivieren</button>'
+          +'</div>'
+          +'<div style="font-size:10px;color:#7f1d1d;margin-top:8px;line-height:1.4">📒 = Standard (steuerlich sauber). 📁 = nur, wenn Storno außerhalb deiner Buchhaltung wirkt.</div>'
           +'</div>';
       }
       body += _buildMergePreview(d, termin);
@@ -14034,6 +14038,76 @@ function _applyEditedFields(d){
 }
 
 
+// Build 744: Storno als regulären Buchungsbeleg in dbv2 verbuchen.
+// Im Gegensatz zu dokStornoAlsAusgabe wird der Beleg NICHT archiviert,
+// sondern als negativer Einnahme-Beleg gebucht (Schema-konform mit ist_storno=true).
+// Steuerlich korrekt: USt-Korrektur landet in der USt-VA, Bank-Bewegung matcht.
+function dokStornoVerbuchen(dokId){
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+
+  // Doc bestätigen + Typ behalten (KEIN sonstig, KEIN _pendingDelete)
+  d.bestaetigt = true;
+  d.awaitConfirm = false;
+  d.storno = true; // UI-Marker
+  // Wenn Termin verknüpft: Termin-Notiz mit Storno-Hinweis (für Übersicht)
+  if(d.terminId){
+    var termin = (db.termine||[]).find(function(x){return x.id===d.terminId;});
+    if(termin){
+      var stornoLabel = 'Storno '+(d.gutschrift_nr||d.beleg_nr||'?')+' · '+fmtEur(parseFloat(d.brutto||0));
+      // Nur ergänzen wenn nicht schon drin
+      if(!termin.notiz || termin.notiz.indexOf(stornoLabel) === -1){
+        termin.notiz = (termin.notiz ? termin.notiz+'\n' : '') + stornoLabel;
+      }
+    }
+  }
+
+  // Audit
+  logAction('dok_storno_verbucht',
+    'Storno verbucht · '+(d.beschr||d.gutschrift_nr||d.dateiname||''),
+    {dokId:d.id, brutto:d.brutto, terminId:d.terminId||null}
+  );
+
+  save(db);
+
+  // V2-Konsolidierung — _konsolidiereDokumentNachV2 schreibt brutto/ust/auszahlung 1:1
+  // ins dbv2-Schema. Werte sind negativ → ist_storno=true setzen wir nachträglich.
+  try {
+    _autoKonsolidiereNachBestaetigen(d.id);
+    // ist_storno-Flag nachträglich setzen (Konsolidierung hat ihn jetzt erstellt)
+    var v2Eintraege = (dbv2.abrechnungen||[]).filter(function(a){return a.pdf_datei_id === d.id;});
+    v2Eintraege.forEach(function(a){
+      a.ist_storno = true;
+      // Wenn das Original-Beleg-Nr im Storno auffindbar wäre, hier setzen.
+      // Heuristik: bei GS-Nr "839/20260302" könnte Original "839/20260301" sein.
+      // Das überlassen wir dem User, kein Auto-Mapping.
+    });
+    saveV2(dbv2);
+  } catch(e){ console.error('[storno-verbuchen] v2 Hook fehlgeschlagen', e); }
+
+  showToast('📒 Storno verbucht'+(d.terminId?' · Termin verknüpft':''));
+
+  // Sprung zum nächsten Split-Doc, falls Multi-PDF
+  if(d._splitGroup && d._splitTotal > 1){
+    var naechstesIdx = (d._splitIdx||0) + 1;
+    var naechstesDok = (db.dokumente||[]).find(function(x){
+      return x._splitGroup===d._splitGroup && x._splitIdx===naechstesIdx && !x.bestaetigt;
+    });
+    if(naechstesDok){
+      // _dokCurrentId für die nächste Detail-Ansicht setzen
+      _dokCurrentId = naechstesDok.id;
+      try { dokDetailOpen(naechstesDok.id); } catch(e){
+        // Fallback: einfach Dokumente-Liste rendern
+        dokDetailClose(); rDokumente();
+      }
+      return;
+    }
+  }
+
+  dokDetailClose();
+  rDokumente();
+}
+
 function dokStornoAlsAusgabe(dokId){
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
@@ -14047,13 +14121,28 @@ function dokStornoAlsAusgabe(dokId){
   // Notiz am Kalendertermin hinterlassen wenn vorhanden
   var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
   if(termin){
-    var stornoNotiz = 'Storno '+(d.gutschrift_nr||d.dateiname||'')+(d.brutto?' · '+fmtEur(Math.abs(parseFloat(d.brutto))):'');
+    var stornoNotiz = 'Storno (archiviert) '+(d.gutschrift_nr||d.dateiname||'')+(d.brutto?' · '+fmtEur(Math.abs(parseFloat(d.brutto))):'');
     termin.notiz = (termin.notiz ? termin.notiz+'\n' : '') + stornoNotiz;
   }
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, 'sonstig');
   save(db);
+  showToast('📁 Storno archiviert'+(termin?' · Notiz am Termin':''));
+
+  // Build 744: Sprung zum nächsten Split-Doc, falls Multi-PDF
+  if(d._splitGroup && d._splitTotal > 1){
+    var naechstesIdx = (d._splitIdx||0) + 1;
+    var naechstesDok = (db.dokumente||[]).find(function(x){
+      return x._splitGroup===d._splitGroup && x._splitIdx===naechstesIdx && !x.bestaetigt;
+    });
+    if(naechstesDok){
+      _dokCurrentId = naechstesDok.id;
+      try { dokDetailOpen(naechstesDok.id); }
+      catch(e){ dokDetailClose(); rDokumente(); }
+      return;
+    }
+  }
+
   rDokumente();
-  showToast('✓ Storno archiviert'+(termin?' · Notiz am Termin':''));
   dokDetailClose();
 }
 function dokBestaetigenMitTermin(dokId, terminId){
