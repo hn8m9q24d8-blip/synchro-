@@ -2934,7 +2934,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '740';
+  if(el) el.textContent = '742';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10062,12 +10062,18 @@ function rDokumente(){
   if(!el) return;
   if(!db.dokumente) db.dokumente = [];
 
-  // Badge: unanalysed count
-  var unanalysed = db.dokumente.filter(function(d){return !d.typ||d.typ==='offen';}).length;
-  var badge = document.getElementById('dok-badge');
-  if(badge) badge.textContent = unanalysed > 0 ? unanalysed+' neu' : db.dokumente.length+' Dok.';
+  // Build 742: Stubs (aufgeräumte Abrechn-Docs ohne Vorschau) ausblenden.
+  // Sie leben weiter im Datenmodell, damit dbv2-Verknüpfung erhalten bleibt,
+  // aber visuell sind sie aus dem Arbeitsbereich raus.
+  var sichtbar = db.dokumente.filter(function(d){ return !d._stubAfterDeleteAll; });
+  var nStubs = db.dokumente.length - sichtbar.length;
 
-  var docs = db.dokumente.filter(function(d){
+  // Badge: unanalysed count (Stubs zählen nicht mit)
+  var unanalysed = sichtbar.filter(function(d){return !d.typ||d.typ==='offen';}).length;
+  var badge = document.getElementById('dok-badge');
+  if(badge) badge.textContent = unanalysed > 0 ? unanalysed+' neu' : sichtbar.length+' Dok.'+(nStubs>0?' · '+nStubs+' archiv.':'');
+
+  var docs = sichtbar.filter(function(d){
     if(_dokTab==='alle') return true;
     if(_dokTab==='offen') return !d.typ||d.typ==='offen';
     return d.typ===_dokTab;
@@ -16299,18 +16305,67 @@ function runIntegrityCheck(silent){
 
   // ── ABRECHNUNG vs. KALENDERTERMIN ABGLEICH ──────────────────
 
-  // 1. t.brutto_termin vs. ab.brutto: sollten identisch sein
+  // 1. Brutto-Plausibilität Termin vs. Abrechnung
+  // Build 741: v2-aware. Bei Sammel-GS muss gegen den Junction-Anteil verglichen werden,
+  // nicht gegen das Master-Brutto. Sonst zeigt der Check bei jedem Sammel-Termin
+  // eine falsche Differenz.
   (db.termine||[]).forEach(function(t){
-    if(!t.abId || !t.brutto_termin) return;
+    if(!t.brutto_termin) return;
+
+    // v2-Pfad: Junction prüfen
+    var v2view = null;
+    try { v2view = (typeof v2TerminView==='function') ? v2TerminView(t.id) : null; } catch(e){}
+
+    if(v2view && v2view.istAbgerechnet && v2view.quelle==='v2'){
+      // v2-Daten authoritative
+      var anteil = v2view.brutto_anteil;
+      if(anteil == null) return; // PDF weist keinen Anteil aus → kein Vergleich möglich (kein Fehler)
+      var diff = Math.abs((parseFloat(t.brutto_termin)||0) - parseFloat(anteil));
+      if(diff > 1.5){ // Toleranz wie bei Konsistenz-Check
+        warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Anteil aus Abrechnung '+fmtEur(anteil));
+      }
+      return;
+    }
+
+    // Legacy-Pfad: alte db.abrechnungen
+    if(!t.abId) return;
     var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
     if(!ab) return;
+    if(ab._nurMarker) return; // Marker-Einträge haben kein eigenes Brutto
+    if(ab._isMultiMaster) return; // Master-Total ist Sammel-Summe, nicht Termin-Wert
     var diff = Math.abs((parseFloat(t.brutto_termin)||0) - (parseFloat(ab.brutto)||0));
-    if(diff > 0.05){
+    if(diff > 1.5){
       warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Abrechnung '+fmtEur(ab.brutto));
     }
   });
 
-  // 2. Monats-GS: Summe aller brutto_termin der Sessions = gesamt_brutto
+  // 2. Monats-GS: Summe aller Junction-Anteile = ab.brutto (Gesamt-Brutto der GS)
+  // Build 741: v2-aware. Wir prüfen über dbv2-Junctions, nicht über t.brutto_termin
+  // (das ist ein berechneter Termin-Wert, kein PDF-Wert).
+  if(typeof dbv2 !== 'undefined' && dbv2 && dbv2.abrechnungen){
+    dbv2.abrechnungen.forEach(function(v2Ab){
+      if(!v2Ab.brutto) return;
+      var junctions = (dbv2.abrechnung_termin_links||[]).filter(function(l){
+        return l.abrechnung_id === v2Ab.id;
+      });
+      if(junctions.length < 2) return; // nur Sammel-GS prüfen
+      var hatLeere = false, summeAnteile = 0;
+      junctions.forEach(function(l){
+        if(l.brutto_anteil_display == null) hatLeere = true;
+        else summeAnteile += parseFloat(l.brutto_anteil_display)||0;
+      });
+      if(hatLeere) return; // unvollständig → kein Vergleich (kein Fehler)
+      var diff = Math.abs(summeAnteile - (parseFloat(v2Ab.brutto)||0));
+      if(diff > 1.5){
+        var prod = (dbv2.produktionen||[]).find(function(p){return p.id===v2Ab.produktion_id;});
+        var prodName = prod ? prod.titel : '?';
+        warnings.push('⚠ Monats-GS Summe: '+esc(v2Ab.beleg_nr||'?')+' ('+esc(prodName)+'): Anteile '+fmtEur(summeAnteile)+' ≠ Gesamt-Brutto '+fmtEur(v2Ab.brutto));
+      }
+    });
+  }
+
+  // (Alte Monats-GS-Prüfung über db.termine deaktiviert — v2-Pfad oben ist authoritative.)
+  /* alter Block (Build <741):
   var gnrMap = {};
   (db.termine||[]).forEach(function(t){
     if(!t.gutschrift_nr || !t.brutto_termin) return;
@@ -16326,6 +16381,7 @@ function runIntegrityCheck(silent){
       warnings.push('⚠ Monats-GS Summe: '+esc(gnr)+' ('+esc(e.titel)+'): Session-Summe '+fmtEur(e.sum)+' ≠ Gesamt-Brutto '+fmtEur(e.gesamt));
     }
   });
+  */
 
   // 3. Monats-GS: Summe aller KV-Anteile = gesamt_kv
   var gnrKvMap = {};
