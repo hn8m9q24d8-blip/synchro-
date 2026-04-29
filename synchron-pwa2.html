@@ -2927,7 +2927,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '738';
+  if(el) el.textContent = '739';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7065,6 +7065,16 @@ function diagnoseGutschriften(){
   var v2Abs = (dbv2 && dbv2.abrechnungen)||[];
   var v2Lnks = (dbv2 && dbv2.abrechnung_termin_links)||[];
 
+  // Build 739: erweiterte Diagnose — alle Doc-Typen, nicht nur abrechn
+  // Hilft beim Aufspüren wo Docs hin verschwinden.
+  var typBreakdown = {};
+  docs.forEach(function(d){
+    var key = (d.typ||'(null)') + (d.bestaetigt?' bestaetigt':' unbestaetigt')
+      + (d.aufgeteilt?' aufgeteilt':'')
+      + (d._splitGroup?' split':'');
+    typBreakdown[key] = (typBreakdown[key]||0) + 1;
+  });
+
   var docByName = {};
   docs.forEach(function(d){
     if(d.typ !== 'abrechn' && d.typ !== 'monats_abrechn') return;
@@ -7077,9 +7087,30 @@ function diagnoseGutschriften(){
   lines.push('═══ DIAGNOSE GUTSCHRIFTEN ═══');
   lines.push('');
   lines.push('Abrechn-Dokumente: ' + docs.filter(function(d){return d.typ==='abrechn'||d.typ==='monats_abrechn';}).length);
+  lines.push('Dokumente GESAMT: ' + docs.length);
   lines.push('db.abrechnungen: ' + dbAbs.length);
+  lines.push('  davon _nurMarker: ' + dbAbs.filter(function(a){return a._nurMarker;}).length);
+  lines.push('  davon _isMultiMaster: ' + dbAbs.filter(function(a){return a._isMultiMaster;}).length);
   lines.push('dbv2.abrechnungen: ' + v2Abs.length);
   lines.push('dbv2 Junctions: ' + v2Lnks.length);
+  lines.push('');
+  lines.push('── DOC-TYPEN-BREAKDOWN ──');
+  Object.keys(typBreakdown).sort().forEach(function(k){
+    lines.push('  '+k+': '+typBreakdown[k]);
+  });
+  lines.push('');
+  lines.push('── DB.ABRECHNUNGEN (Legacy) ──');
+  dbAbs.forEach(function(a){
+    var dok = (db.dokumente||[]).find(function(x){return x.id===a.dokId;});
+    var dokInfo = dok ? ('typ='+(dok.typ||'?')+' best='+(dok.bestaetigt?'j':'n')) : 'KEIN DOK';
+    lines.push('  GS='+(a.gutschrift_nr||'?')
+      +' brutto='+(a.brutto||0)
+      +(a._nurMarker?' [marker]':'')
+      +(a._isMultiMaster?' [master/'+(a._multiAnzahl||'?')+']':'')
+      +' dokId='+(a.dokId||'-').slice(0,12)
+      +' → '+dokInfo);
+  });
+
   lines.push('');
   lines.push('── PRO DATEINAME ──');
   Object.keys(docByName).forEach(function(name){
