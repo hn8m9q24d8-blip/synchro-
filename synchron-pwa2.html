@@ -1793,7 +1793,11 @@ function save(d){
         catch(syncE){ console.warn('[v2-waechter create] '+dok.id, syncE); }
       });
 
-      // (2) Geister entfernen — v2-Einträge ohne gültiges, bestätigtes Abrechn-Doc
+      // (2) Geister entfernen — v2-Einträge ohne gültiges Abrechn-Doc
+      // Build 740: PDF-Löschung ist KEIN Grund mehr für v2-Cleanup.
+      // Steuerrelevante Daten leben in dbv2 — PDF-Datei ist nur Quelle, nicht
+      // Voraussetzung für die Datenintegrität. Nur echte Inkonsistenzen (Doc
+      // explizit entbestätigt oder Typ auf was anderes geändert) räumen v2.
       var docById = {};
       d.dokumente.forEach(function(dok){ docById[dok.id] = dok; });
       var v2VorherLen = (dbv2.abrechnungen||[]).length;
@@ -1801,7 +1805,10 @@ function save(d){
       dbv2.abrechnungen = (dbv2.abrechnungen||[]).filter(function(v){
         if(!v.pdf_datei_id) return true; // manuell angelegte v2-Einträge nicht anfassen
         var dok = docById[v.pdf_datei_id];
-        if(!dok){ weggefallenAbIds.push(v.id); return false; } // Doc gelöscht → Geist
+        if(!dok){
+          // Doc gelöscht → v2-Eintrag bleibt! Daten sind eingepflegt, PDF ist nur Quelle.
+          return true;
+        }
         if(!dok.bestaetigt){ weggefallenAbIds.push(v.id); return false; } // entbestätigt
         if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn'){
           weggefallenAbIds.push(v.id); return false; // Typ geändert (Storno, Re-Analyse)
@@ -2927,7 +2934,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '739';
+  if(el) el.textContent = '740';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10679,13 +10686,39 @@ function importedFilesReset(){
 }
 
 function dokDeleteAll(){
-  var count=(db.dokumente||[]).length;
-  if(!count){showToast('Keine Dokumente vorhanden');return;}
-  if(!confirm(count+' Dokumente löschen? Termine bleiben erhalten.'))return;
-  db.dokumente=[];
+  var docs = db.dokumente||[];
+  if(!docs.length){showToast('Keine Dokumente vorhanden');return;}
+  // Build 740: Bestätigte Abrechn-Docs (typ='abrechn'/'monats_abrechn') sind eingepflegt.
+  // Sie zu löschen würde dbv2-Daten verwaisen lassen → wir machen das anders:
+  // (a) Bestätigte Abrechn-Docs werden zu "Stubs": dataURL+thumb weg, Doc-Objekt + ID bleibt.
+  //     Termin-Detail kann weiter darauf zeigen, nur das Vorschau-Bild ist weg.
+  // (b) Alle anderen Docs (unbestätigt, dispo, sonstig, …) werden komplett gelöscht.
+  var bestaetigtAbrechn = docs.filter(function(d){
+    return d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn');
+  });
+  var rest = docs.filter(function(d){
+    return !(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn'));
+  });
+  var nStub = bestaetigtAbrechn.length;
+  var nDel  = rest.length;
+  var msg = '';
+  if(nStub && nDel) msg = nDel+' Dokumente löschen?\n\n'+nStub+' bestätigte Abrechnungen bleiben erhalten (PDFs werden zu Datei-Verweisen ohne Vorschau).';
+  else if(nStub)    msg = nStub+' bestätigte Abrechnung'+(nStub>1?'en':'')+' aufräumen?\n\nDaten bleiben vollständig erhalten — nur die PDF-Vorschau wird entfernt (spart Speicher).';
+  else              msg = nDel+' Dokumente löschen? Termine bleiben erhalten.';
+  if(!confirm(msg)) return;
+  // Stub-Modus für bestätigte Abrechnungen
+  bestaetigtAbrechn.forEach(function(d){
+    d.dataURL = null;
+    d.thumb   = null;
+    d._stubAfterDeleteAll = true; // Marker für UI ("PDF entfernt")
+  });
+  // Alle anderen raus
+  db.dokumente = bestaetigtAbrechn;
   save(db);
   rDokumente();
-  showToast('🗑 '+count+' Dokumente gelöscht');
+  if(nStub && nDel) showToast('🗑 '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
+  else if(nStub)    showToast('✓ '+nStub+' Abr.-PDFs aufgeräumt');
+  else              showToast('🗑 '+nDel+' Dokumente gelöscht');
 }
 
 
@@ -14640,6 +14673,16 @@ function dokDeleteCurrent(){
   if(!_dokCurrentId) return;
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
+  // Build 740: bestätigte Abrechnung → Stub-Modus (Daten bleiben)
+  if(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn')){
+    if(!confirm('PDF-Vorschau aus "'+(d.beschr||d.dateiname||'Dokument')+'" entfernen?\n\nDie eingepflegten Abrechnungsdaten bleiben vollständig erhalten.')) return;
+    d.dataURL = null;
+    d.thumb   = null;
+    d._stubAfterDeleteAll = true;
+    save(db); dokDetailClose(); rDokumente();
+    showToast('✓ PDF-Vorschau entfernt · Daten erhalten');
+    return;
+  }
   if(!confirm((d.beschr||'Dokument')+' löschen?')) return;
   db.dokumente=(db.dokumente||[]).filter(function(x){return x.id!==_dokCurrentId;});
   save(db); dokDetailClose(); rDokumente();
@@ -14710,6 +14753,16 @@ function dokReuploadFile(inp, dokId){
 function dokDeleteOne(){
   var d = (db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
+  // Build 740: bestätigte Abrechnung → Stub-Modus (Daten bleiben)
+  if(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn')){
+    if(!confirm('PDF-Vorschau aus "'+(d.beschr||d.dateiname||'Dokument')+'" entfernen?\n\nDie eingepflegten Abrechnungsdaten bleiben vollständig erhalten.')) return;
+    d.dataURL = null;
+    d.thumb   = null;
+    d._stubAfterDeleteAll = true;
+    save(db); dokDetailClose(); rDokumente();
+    showToast('✓ PDF-Vorschau entfernt · Daten erhalten');
+    return;
+  }
   if(!confirm((d.beschr||'Dokument')+' löschen?')) return;
   // Wenn noch NICHT bestätigt: Dateiname aus importedFiles entfernen
   // → kann beim nächsten Ordner-Scan neu eingelesen werden
