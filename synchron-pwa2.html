@@ -1789,8 +1789,22 @@ function save(d){
         if(dok.typ !== 'abrechn' && dok.typ !== 'monats_abrechn') return;
         if(v2Existiert[dok.id]) return;
         if(typeof _konsolidiereDokumentNachV2 !== 'function') return;
-        try { _konsolidiereDokumentNachV2(dok.id); }
-        catch(syncE){ console.warn('[v2-waechter create] '+dok.id, syncE); }
+        // Build 743: Sync-Wächter Stufe 1 mit verbessertem Logging.
+        // Wenn _konsolidiereDokumentNachV2 hier still scheitert, bleibt das Doc
+        // ohne v2-Eintrag — User merkt es nur im Jahresabschluss. Daher: jeden
+        // Erfolg + Fehler explizit loggen, damit künftige Probleme im Browser-
+        // Console sichtbar werden.
+        try {
+          var syncRes = _konsolidiereDokumentNachV2(dok.id);
+          if(syncRes && syncRes.ok){
+            console.log('[v2-waechter create] OK '+dok.id+' beleg='+(dok.gutschrift_nr||'?')
+              +' erstellt='+(syncRes.erstellt||0)+' lnks='+(syncRes.linksErstellt||0));
+          } else if(syncRes){
+            console.warn('[v2-waechter create] FEHL '+dok.id+' grund='+(syncRes.grund||'?'));
+          }
+        } catch(syncE){
+          console.error('[v2-waechter create] EXCEPTION '+dok.id, syncE);
+        }
       });
 
       // (2) Geister entfernen — v2-Einträge ohne gültiges Abrechn-Doc
@@ -2631,6 +2645,24 @@ function _autoKonsolidiereNachBestaetigen(dokId){
     if(res && res.ok){
       console.log('[v2] Auto-Hook: Dok '+dokId+' konsolidiert.',
         res.erstellt+'+', res.geupdated+'upd,', res.linksErstellt+'lnk,', res.gruppen+'grp');
+
+      // Build 743: Verifikation. Konsolidierung sagt "ok", aber kommt der Eintrag
+      // wirklich in dbv2 an? In seltenen Fällen (Race-Condition mit Auto-Navigation)
+      // verlor sich das Schreiben. Hier prüfen + retry-once.
+      try {
+        var verify = (dbv2.abrechnungen||[]).filter(function(a){return a.pdf_datei_id === dokId;});
+        if(verify.length === 0){
+          console.warn('[v2] Auto-Hook Verify: keine v2-Einträge nach Konsolidierung. Retry…');
+          var retry = _konsolidiereDokumentNachV2(dokId);
+          if(retry && retry.ok){
+            try { saveV2(dbv2); } catch(svE){}
+            console.log('[v2] Auto-Hook Retry: erfolgreich');
+          } else {
+            console.error('[v2] Auto-Hook Retry FEHLGESCHLAGEN', dokId, retry);
+          }
+        }
+      } catch(verifyE){ console.warn('[v2] Auto-Hook Verify-Fehler', verifyE); }
+
       // Build 738: Konsistenz-Toast bei Abweichungen
       try {
         var meineAbs = (dbv2.abrechnungen||[]).filter(function(a){return a.pdf_datei_id === dokId;});
@@ -2934,7 +2966,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '742';
+  if(el) el.textContent = '743';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
