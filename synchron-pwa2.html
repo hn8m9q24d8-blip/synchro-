@@ -2499,8 +2499,18 @@ function _konsolidiereDokumentNachV2(dokId){
     }
 
     // (4) Auszahlung ≈ Brutto − SV + USt (Klasse 1a/1b/2)
+    // Build 745: Storno-aware. Bei Storno (brutto < 0) sind SV-Werte im PDF
+    // weiter als positive Beträge gespeichert (KV/RV/PV-Felder), aber sie wirken
+    // als Erstattung — also Auszahlung = Brutto + SV + USt (alle drei negativ).
+    // Test: Storno -396 mit SV-Erstattung 78,91 (=positiv im Feld) und USt -27,72:
+    //   normaler Termin: -396 - 78,91 + (-27,72) = -502,63  ← falsch
+    //   Storno:          -396 + 78,91 + (-27,72) = -344,81  ← matcht PDF
     if(v2Ab.auszahlung != null && v2Ab.brutto){
-      var auszErw = (v2Ab.brutto || 0) - svSumme + (v2Ab.ust_betrag || 0);
+      var bruttoBetrag = v2Ab.brutto || 0;
+      var istStorno = bruttoBetrag < 0;
+      var auszErw = istStorno
+        ? bruttoBetrag + svSumme + (v2Ab.ust_betrag || 0)
+        : bruttoBetrag - svSumme + (v2Ab.ust_betrag || 0);
       var diff_a = (v2Ab.auszahlung || 0) - auszErw;
       checks.auszahlung = {
         status: Math.abs(diff_a) <= TOL ? 'ok' : 'abweichung',
@@ -2966,7 +2976,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '744';
+  if(el) el.textContent = '746';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8501,7 +8511,9 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       var pr = (dbv2.produktionen||[]).find(function(x){return x.id===prId;});
       return (pr && pr.titel) || '';
     }
-    return a.leistungs_datum_von || a.ausstellungs_datum || '';
+    // Build 746: Steuerjahr-Anker = Ausstellungsdatum (für alle Abrechnungen,
+    // siehe Begründung am Filter oben). Sortierung folgt derselben Logik.
+    return a.ausstellungs_datum || a.leistungs_datum_von || '';
   }
   var sortedAbs = v2AbsImJahr.slice().sort(function(a,b){
     var ka = sortKey(a), kb = sortKey(b);
@@ -8592,7 +8604,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       }
       var dokE = (db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;});
       var dokNameE = dokE ? (dokE.dateiname||'') : '';
-      var datumE = ab.leistungs_datum_von || ab.ausstellungs_datum || '';
+      var datumE = ab.ausstellungs_datum || ab.leistungs_datum_von || '';
       table += '<tr style="border-top:1px solid #f3f4f6">'
         + '<td style="padding:6px 4px;font-weight:700">'+esc(ab.beleg_nr||'—')+konsIcon
         +   (datumE?'<div style="font-size:10px;color:#6b7280;font-weight:500;margin-top:1px">'+fd(datumE)+'</div>':'')
@@ -8612,7 +8624,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       // Sammel-Abrechnung = Kopfzeile + N Termin-Zeilen mit Anteilen
       var dok = (db.dokumente||[]).find(function(d){return d.id===ab.pdf_datei_id;});
       var dokName = dok ? (dok.dateiname||'') : '';
-      var datumS = ab.leistungs_datum_von || ab.ausstellungs_datum || '';
+      var datumS = ab.ausstellungs_datum || ab.leistungs_datum_von || '';
       table += '<tr style="border-top:1px solid #f3f4f6;background:#fafafa">'
         + '<td style="padding:6px 4px;font-weight:700;vertical-align:top" rowspan="'+(junctions.length+1)+'">'+esc(ab.beleg_nr||'—')+konsIcon
         +   (datumS?'<div style="font-size:10px;color:#6b7280;font-weight:500;margin-top:1px">'+fd(datumS)+'</div>':'')
@@ -8737,8 +8749,17 @@ function rJahresabschluss(){
   // ── v2-PFAD: wenn dbv2 für dieses Jahr Abrechnungen enthält, die nutzen ──
   // Alle anderen Lese-Pfade in diesem Jahr gehen über v2. Alt-DB bleibt
   // unangetastet als Sicherheitsnetz, aber wir lesen NICHT mehr aus ihr.
+  // Build 746: Steuerjahr-Anker = AUSSTELLUNGSDATUM (für alle Abrechnungen).
+  // Begründung: User nutzt Ist-Versteuerung (§ 20 UStG). Steuerwirkung tritt
+  // mit Geldfluss ein, das Ausstellungsdatum ist die nahe Praxis-Näherung
+  // (Auszahlung folgt meist 1-14 Tage später). Bei Storno und Neuberechnung
+  // ist diese Logik zwingend, sonst klaffen Storno+Neuberechnung in zwei
+  // verschiedene Steuerjahre. Leistungs-Datum nur Fallback bei fehlendem
+  // Ausstellungsdatum (rare Edge-Case bei sehr alten Belegen).
+  // USt-VA nutzt eine andere Logik (Holvi-Eingangsdatum), nicht diesen Filter.
   var v2AbsImJahr = (dbv2 && dbv2.abrechnungen) ? dbv2.abrechnungen.filter(function(a){
-    return (a.leistungs_datum_von||a.ausstellungs_datum||'').startsWith(String(yr));
+    var datum = a.ausstellungs_datum || a.leistungs_datum_von || '';
+    return String(datum).startsWith(String(yr));
   }) : [];
   var _nutzeV2 = v2AbsImJahr.length > 0;
 
