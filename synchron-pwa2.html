@@ -2264,7 +2264,10 @@ function _konsolidiereDokumentNachV2(dokId){
     v2Ab.produktion_id       = prodId;
     v2Ab.beleg_nr            = belegNr;
     v2Ab.beleg_nr_typ        = _belegNrTyp(klasse);
-    v2Ab.ausstellungs_datum  = d.datum || '';
+    // Build 747: Ausstellungsdatum jetzt eigenes Feld (war vorher fälschlich
+    // dasselbe wie Aufnahmedatum). Fallback auf d.datum für Alt-Belege ohne
+    // separates Ausstellungsdatum (= Verhalten wie vor Build 747).
+    v2Ab.ausstellungs_datum  = d.ausstellungsdatum || d.datum || '';
     v2Ab.leistungs_datum_von = vonDat;
     v2Ab.leistungs_datum_bis = bisDat;
     v2Ab.leistungs_monat     = leistMonat;
@@ -2976,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '746';
+  if(el) el.textContent = '747';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10980,6 +10983,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    - Beispiel: "Grundgage TV ... Overhaul My Hero Final Season" → rolle="Overhaul", titel="My Hero"\n'
     +'    - Beispiel: "Grundgage TV ... Kevin Dark S2" → rolle="Kevin", titel="Dark"\n'
     +'  datum = AUFNAHMEDATUM aus der Positions-Zeile (NICHT Druckdatum oben rechts!)\n'
+    +'  ausstellungsdatum = das DRUCKDATUM/RECHNUNGSDATUM oben rechts auf dem Beleg (oft mit Uhrzeit, z.B. "31.03.2026 14:21" → ausstellungsdatum="2026-03-31"). Bei Storno/Korrektur weicht dieses Datum vom Aufnahmedatum ab. Wenn nicht eindeutig: null.\n'
     +'  studio = der KURZNAME des Synchronstudios/der Produktionsfirma — z.B. "FFS", "VSI", "Arena", "TNT", "Interopa", "RC", "Taunus"\n'
     +'    NICHT der Atelierraum/Studioraum (z.B. NICHT "BLN Studio E (-65)", NICHT "Atelier 4", NICHT "Studio Hamburg")\n'
     +'    Der Studioname steht oft als Logo/Firmenname ganz oben auf dem Dokument (Briefkopf), z.B. "Film & Fernseh Synchron GmbH" → "FFS"\n'
@@ -11244,7 +11248,8 @@ function dokAnalyseDoc(d, key, cb){
     +'    takes = NUR die explizit genannten Takes der Takes-Zeile (NICHT +10 addieren!)\\n'
     +'    AUCH wenn Grundgage-Zeile anderes Datum hat — wenn Filmcode gleich → zusammenfassen\\n'
     +'    NICHT zusammenfassen wenn: anderer Film am gleichen Tag → separate sessions\\n'
-    +'    Format pro session: {"datum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0,"kuerzel":"WARN"}\\n'
+    +'    Format pro session: {"datum":"YYYY-MM-DD","ausstellungsdatum":"YYYY-MM-DD","titel":"Filmtitel","rolle":null,"takes":0,"take_gage":0.0,"grundgage":0.0,"brutto_termin":0.0,"kuerzel":"WARN"}\\n'
+    +'    ausstellungsdatum pro session: das Druckdatum/Rechnungsdatum dieser Session (oft pro Beleg-Seite oben rechts). Bei Storno/Korrektur weicht es vom Aufnahmedatum ab. Bei normalen Sessions oft = Aufnahmedatum oder null.\\n'
     +'    kuerzel = Senderkürzel aus der Tabelle (z.B. "WARN", "AMAZ", "PRO", "ZDF") — IMMER aus der Zeile übernehmen!\\n'
     +'  datum = erstes Datum in der Tabelle (YYYY-MM-DD)\n'
     +'\n'
@@ -11267,7 +11272,7 @@ function dokAnalyseDoc(d, key, cb){
     +'  GEMISCHTE STEUERSÄTZE: ust_details=[{"satz":0.19,"netto":x,"ust":x},{"satz":0.07,"netto":x,"ust":x}], mwst=Summe USt\n'
     +'\n'
     +'Antworte NUR mit reinem JSON, kein Markdown, keine Erklärung:\n'
-    +'{"typ":"dispo","beschr":null,"datum":null,"studio":null,"titel":null,"regie":null,'
+    +'{"typ":"dispo","beschr":null,"datum":null,"ausstellungsdatum":null,"studio":null,"titel":null,"regie":null,'
     +'"rolle":null,"uhrzeit":null,"bis_uhrzeit":null,"takes":null,"episode":null,'
     +'"gvl_staffel_header":null,"gvl_episode_header":null,"gvl_takes_detail":null,'
     +'"gutschrift_nr":null,"take_gage":null,"grundgage":null,'
@@ -11444,6 +11449,10 @@ function dokAnalyseDoc(d, key, cb){
       d.typ     = j.typ || 'sonstig';
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
+      // Build 747: Ausstellungsdatum eigenes Feld (war bisher in d.datum mit Aufnahme
+      // vermischt). Für Steuerjahr-Zuordnung relevant. Bei Storno/Korrektur weicht
+      // dieses Datum oft vom Aufnahmedatum ab. Fallback null wenn KI nichts findet.
+      d.ausstellungsdatum = j.ausstellungsdatum || null;
       // Diagnose: KI hat gültige Antwort aber keine Felder erkannt
       if((d.typ==='dispo'||d.typ==='abrechn') && !j.datum && !j.studio && !j.titel && !j.rolle){
         showToast('⚠ Bild nicht lesbar — nochmal analysieren');
@@ -11548,6 +11557,11 @@ function dokAnalyseDoc(d, key, cb){
             };
             zielDok.typ = 'abrechn';
             zielDok.datum = s.datum||d.datum||null;
+            // Build 747: Ausstellungsdatum (Druckdatum/Rechnungsdatum) — oben rechts
+            // im PDF, oft mit Uhrzeit. Wichtig für Steuerjahr-Zuordnung
+            // (Ausstellungsdatum != Aufnahmedatum bei Storno/Korrektur).
+            // Pro Session erfasst (s.ausstellungsdatum) oder vom Sammel-Doc (d.ausstellungsdatum).
+            zielDok.ausstellungsdatum = s.ausstellungsdatum || d.ausstellungsdatum || null;
             zielDok.studio = d.studio||'';
             zielDok.titel = s.titel||d.titel||'';
             zielDok.rolle = s.rolle||'';
@@ -11757,6 +11771,7 @@ function dokAnalyseDoc(d, key, cb){
             var _j = JSON.parse(_txt);
             // Felder direkt übernehmen (gleiche Logik wie _sendToAPI)
             d.typ = _j.typ||'sonstig'; d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
+            d.ausstellungsdatum = _j.ausstellungsdatum||null; // Build 747
             d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
             d.regie=_j.regie||null; d.rolle=_j.rolle||null; d.uhrzeit=_j.uhrzeit||null;
             d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
@@ -17929,7 +17944,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE ZWEI WICHTIGSTEN FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","ausstellungsdatum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE WICHTIGEN DATUMS-FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"ausstellungsdatum" = das DRUCKDATUM/RECHNUNGSDATUM der Gutschrift - meist oben rechts auf dem Beleg, oft mit Uhrzeit (z.B. "31.03.2026 14:21" -> ausstellungsdatum="2026-03-31"). Bei einem Storno- oder Korrektur-Beleg unterscheidet sich dieses Datum oft vom Aufnahmedatum. Wenn nicht eindeutig auffindbar: null.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
@@ -18114,6 +18129,9 @@ function abSpeichern(){
     id:'ab'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+','
     .slice(0,-1),
     datum:_abData.datum||today(),
+    // Build 747: Ausstellungsdatum getrennt vom Aufnahmedatum (datum=Aufnahme).
+    // Wichtig für Steuerjahr-Zuordnung bei Storno/Korrektur.
+    ausstellungsdatum:_abData.ausstellungsdatum||null,
     studio:_abData.studio||'',
     produktion:_abData.produktion||'',
     gutschrift_nr:_abData.gutschrift_nr||'',
