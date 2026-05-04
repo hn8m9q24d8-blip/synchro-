@@ -8764,14 +8764,23 @@ function rJahresabschluss(){
     var datum = a.ausstellungs_datum || a.leistungs_datum_von || '';
     return String(datum).startsWith(String(yr));
   }) : [];
-  var _nutzeV2 = v2AbsImJahr.length > 0;
+  // Build 747: v2 ist global aktiv, sobald irgendwelche dbv2.abrechnungen existieren —
+  // unabhängig vom aktuell angezeigten Jahr. Ohne diese Bedingung würde der
+  // alte Pfad bei leerem v2AbsImJahr aktiv werden und db.abrechnungen lesen,
+  // wo a.datum = Aufnahmetag steht. Folge: Storno-Belege wären sowohl im
+  // Aufnahmejahr (alter Pfad, falsch) als auch im Ausstellungsjahr (v2, richtig)
+  // sichtbar → Doppelzählung beim User. Daher: Sobald v2 irgendwo aktiv ist,
+  // bleibt v2 auch für leere Jahre die alleinige Quelle.
+  var _v2GlobalAktiv = (dbv2 && dbv2.abrechnungen && dbv2.abrechnungen.length > 0);
+  var _nutzeV2 = v2AbsImJahr.length > 0 || _v2GlobalAktiv;
 
   if(_nutzeV2){
     try {
       return _rJahresabschlussV2(el, yr, termine, v2AbsImJahr);
     } catch(e){
       console.error('[v2] Jahresabschluss-Render fehlgeschlagen, Fallback auf alte Logik:', e);
-      // Fall through zur alten Logik
+      try { showToast('⚠ Jahresabschluss v2-Fehler: '+(e&&e.message||'unbekannt').slice(0,80)); } catch(_){}
+      // Fall through zur alten Logik nur als absoluter Notfall
     }
   }
 
