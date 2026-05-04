@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '747';
+  if(el) el.textContent = '748';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5928,13 +5928,21 @@ function exportData(){
   // API-Key aus Export entfernen — Sicherheitsregel
   var exportDb = JSON.parse(JSON.stringify(db));
   if(exportDb.profil) { exportDb.profil.apiKey = ''; }
-  // Auch aus localStorage-Kopie entfernen (wird nicht exportiert, nur zur Sicherheit)
-  var blob=new Blob([JSON.stringify(exportDb,null,2)],{type:'application/json'});
+  // Build 747: dbv2 mit exportieren — sonst gehen alle Abrechnungen-v2 beim Restore verloren.
+  // Das v2-Schema ist seit dem Umbau die Hauptquelle für Jahresabschluss/USt-VA.
+  var exportDbv2 = (typeof dbv2 !== 'undefined') ? JSON.parse(JSON.stringify(dbv2)) : null;
+  var bundle = {
+    _format: 'synchron-bundle-v2',
+    _exportiert_am: new Date().toISOString(),
+    db: exportDb,
+    dbv2: exportDbv2
+  };
+  var blob=new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='synchron-backup.json';
+  a.download='synchron-backup-'+(new Date().toISOString().slice(0,10))+'.json';
   a.click();
-  showToast('📦 Export erstellt · API-Key wurde nicht exportiert');
+  showToast('📦 Export erstellt · db + dbv2 · API-Key nicht exportiert');
 }
 function importData(inp){
   var file=inp.files[0];
@@ -5943,9 +5951,39 @@ function importData(inp){
   r.onload=function(e){
     try{
       var parsed=JSON.parse(e.target.result);
-      if(!parsed.termine&&!parsed.profil){showToast('⚠ Ungültige Backup-Datei');return;}
-      if(!confirm('Backup importieren? Aktuelle Daten werden überschrieben.'))return;
-      db=parsed;
+
+      // Build 747: Zwei Backup-Formate erkennen.
+      // a) Neues Bundle: {_format:'synchron-bundle-v2', db:{...}, dbv2:{...}}
+      // b) Altes Format: db direkt im Root (Termine, Profil, Abrechnungen)
+      var importDb = null, importDbv2 = null;
+      if(parsed && parsed._format === 'synchron-bundle-v2' && parsed.db){
+        importDb = parsed.db;
+        importDbv2 = parsed.dbv2 || null;
+      } else if(parsed && (parsed.termine || parsed.profil)){
+        importDb = parsed;
+        importDbv2 = null; // alte Backups haben kein dbv2
+      } else {
+        showToast('⚠ Ungültige Backup-Datei');return;
+      }
+
+      var infoMsg = 'Backup importieren? Aktuelle Daten werden überschrieben.';
+      if(importDbv2){
+        var n = (importDbv2.abrechnungen||[]).length;
+        infoMsg += '\\n\\nEnthält dbv2 mit '+n+' Abrechnung'+(n!==1?'en':'')+'.';
+      } else {
+        infoMsg += '\\n\\n⚠ Backup ohne dbv2 — neue Schema-Daten gehen verloren.';
+      }
+      if(!confirm(infoMsg))return;
+
+      db=importDb;
+      // dbv2 importieren wenn vorhanden, sonst leer initialisieren
+      if(importDbv2 && typeof dbv2 !== 'undefined'){
+        // Alle Top-Level-Keys von dbv2 ersetzen (kein Merge — frischer Stand)
+        Object.keys(dbv2).forEach(function(k){ delete dbv2[k]; });
+        Object.keys(importDbv2).forEach(function(k){ dbv2[k] = importDbv2[k]; });
+        try { saveV2(dbv2); } catch(svE){ console.warn('saveV2 nach Import:', svE); }
+      }
+
       // Migration: importedFiles aus Termin-Feldern immer ergänzen (merge)
       if(!db.importedFiles) db.importedFiles = [];
       (db.termine||[]).forEach(function(t){
@@ -5978,7 +6016,8 @@ function importData(inp){
       });
       save(db);
       rTermine();updateBadge();rProfil();rDispos();rGVL();rDokumente();
-      showToast('✓ Backup importiert: '+((parsed.termine||[]).length)+' Termine'+(_migCount?' · '+_migCount+' Abrechnungen nachgetragen':''));
+      var n2 = importDbv2 ? (importDbv2.abrechnungen||[]).length : 0;
+      showToast('✓ Backup importiert: '+((db.termine||[]).length)+' Termine'+(n2?' · '+n2+' v2-Abrechn.':'')+(_migCount?' · '+_migCount+' Abrechnungen nachgetragen':''));
     }catch(ex){showToast('⚠ Fehler beim Lesen: '+ex.message);}
     inp.value='';
   };
