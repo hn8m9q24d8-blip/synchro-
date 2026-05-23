@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '749';
+  if(el) el.textContent = '750';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11651,7 +11651,13 @@ function dokAnalyseDoc(d, key, cb){
               var gutNr = zielDok.gutschrift_nr || '';
               var gesamtBrutto = parseFloat(zielDok.brutto)||0;
               zielDok.sessions = subTermine.map(function(st){
-                var stm = dokFindTermin(st.datum||s.datum, zielDok.studio, zielDok.titel, null, null, splitBelegteIds, true);
+                // Build 749 (Issue #22 — echter Fix):
+                // Sub-Termin-Titel (st.titel) statt Beleg-Haupttitel (zielDok.titel) für Match verwenden.
+                // Sonst werden beide Sessions mit gleichem Titel gegen Kalender gematched
+                // und der erste verfügbare gewinnt → führt zu Vertauschung bei zwei
+                // verschiedenen Produktionen am selben Tag/Studio.
+                var subTitel = st.titel || zielDok.titel;
+                var stm = dokFindTermin(st.datum||s.datum, zielDok.studio, subTitel, null, null, splitBelegteIds, true);
                 if(stm) splitBelegteIds.push(stm.id);
                 return {
                   datum:       st.datum || s.datum || null,
