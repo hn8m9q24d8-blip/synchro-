@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '748';
+  if(el) el.textContent = '749';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5080,6 +5080,14 @@ function dokSessionPeek(elOrId, sessionIdx){
         studioOk = dSt.length>=3 && tSt.length>=3 &&
           (dSt.indexOf(tSt.slice(0,4))>=0 || tSt.indexOf(dSt.slice(0,4))>=0);
       }
+      // Build 749 (Issue #22): Titel-Check — wenn Beleg-Posten und Kalender-Termin
+      // beide einen Titel haben und sich klar unterscheiden, ist die Zuordnung falsch.
+      // Schützt vor KI-Vertauschung bei mehreren Terminen am gleichen Tag/Studio.
+      var titelOk = true;
+      if(s.titel && tCheck.titel && !s._manuallyAssigned){
+        var tScore = _studioScore(s.titel, tCheck.titel);
+        titelOk = tScore >= 0.2;
+      }
       // Konflikt: andere Session ODER Geschwister-Doc hat dieselbe terminId
       var konflikt = (d.sessions||[]).some(function(x,xi){ return xi!==si && x.terminId===s.terminId; });
       if(!konflikt && d._splitGroup){
@@ -5089,7 +5097,7 @@ function dokSessionPeek(elOrId, sessionIdx){
           return (x.sessions||[]).some(function(ss){ return ss.terminId===s.terminId; });
         });
       }
-      if(!datumOk || !studioOk || konflikt){
+      if(!datumOk || !studioOk || !titelOk || konflikt){
         s.terminId = null;
         // Neu suchen: nur andere Sessions dieser Abrechnung sperren
         // Auch Termine von Geschwister-Docs (selbe Split-Gruppe) ausschliessen
@@ -12220,11 +12228,15 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     var ss=studio?bestStudioScore(t):0;
     if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
     else sc+=Math.round(ss*15);
-    // Titel/Produktion-Überlapp — Bonus wenn ähnlich, Abzug wenn klar verschieden
+    // Titel/Produktion-Überlapp — Build 749 (Issue #22):
+    // Gewichtung erhöht, damit bei Multi-Termin-Belegen (zwei Termine am
+    // gleichen Tag + Studio) der Titel klar den Ausschlag gibt.
     if(titel && t.titel){
       var ov=_studioScore(titel,t.titel);
-      if(ov > 0.3) sc+=Math.round(ov*12); // Bonus wenn ähnlich
-      else if(ov < 0.1) sc-=6; // Abzug wenn Titel klar nicht passt
+      if(ov >= 0.85) sc+=22;        // Praktisch exakter Match → starker Bonus
+      else if(ov >= 0.5) sc+=Math.round(ov*20); // Klarer Match
+      else if(ov >= 0.2) sc+=Math.round(ov*8);  // Schwacher Match
+      else sc-=10;                  // Klarer Mismatch → harter Abzug
     }
     // Uhrzeit im Von-Bis-Fenster
     if(uhrzeit && _uhrzeitTrifft(t.uhrzeit,uhrzeit,bis_uhrzeit)) sc+=6;
