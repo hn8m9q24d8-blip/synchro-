@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '750';
+  if(el) el.textContent = '751';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11663,6 +11663,7 @@ function dokAnalyseDoc(d, key, cb){
                   datum:       st.datum || s.datum || null,
                   titel:       st.titel || zielDok.titel || '',
                   rolle:       st.rolle || zielDok.rolle || '',
+                  filmcode:    st.filmcode || '',
                   takes:       st.takes || 0,
                   take_gage:   st.take_gage || zielDok.take_gage || 0,
                   grundgage:   st.grundgage || 0,
@@ -11684,6 +11685,44 @@ function dokAnalyseDoc(d, key, cb){
                   terminId: stm ? stm.id : null
                 };
               });
+              // Build 751 (Issue Sondergage-Auto-Merge):
+              // Wenn zwei Sub-Sessions am gleichen Tag mit gleicher Rolle und gleichem
+              // Filmcode-Stamm (erste 4 Stellen) erkannt wurden (typisch: Sondergagen wie
+              // 9072 + 9072-3 Teaser), zu einer Session zusammenführen. Konservativ:
+              // alle drei Kriterien müssen passen, damit echte Multi-Termine
+              // (z.B. Halstead/Chicago Med + Dusty/The Dink) NICHT betroffen sind.
+              if(zielDok.sessions.length > 1){
+                var mergedSubs = [];
+                zielDok.sessions.forEach(function(ss){
+                  var ssRolle = (ss.rolle||'').toLowerCase().trim();
+                  var ssDatum = (ss.datum||'').trim();
+                  var ssFcStamm = (ss.filmcode||'').toString().trim().slice(0,4);
+                  var existing = mergedSubs.find(function(m){
+                    var mRolle = (m.rolle||'').toLowerCase().trim();
+                    var mDatum = (m.datum||'').trim();
+                    var mFcStamm = (m.filmcode||'').toString().trim().slice(0,4);
+                    return ssDatum && mDatum && ssDatum===mDatum
+                        && ssRolle && mRolle && ssRolle===mRolle
+                        && ssFcStamm && mFcStamm && ssFcStamm===mFcStamm;
+                  });
+                  if(existing){
+                    existing.takes = (parseInt(existing.takes)||0) + (parseInt(ss.takes)||0);
+                    existing.brutto_termin = Math.round(((parseFloat(existing.brutto_termin)||0) + (parseFloat(ss.brutto_termin)||0))*100)/100;
+                    if(ss.grundgage && (!existing.grundgage || ss.grundgage > existing.grundgage)) existing.grundgage = ss.grundgage;
+                    if(ss.take_gage && !existing.take_gage) existing.take_gage = ss.take_gage;
+                    if(ss.terminId && !existing.terminId) existing.terminId = ss.terminId;
+                    // Titel ohne "Teaser"/"Sonder"-Suffix bevorzugen (Hauptproduktion)
+                    var ssTLow = (ss.titel||'').toLowerCase();
+                    var exTLow = (existing.titel||'').toLowerCase();
+                    var ssIsSpecial = ssTLow.indexOf('teaser')>=0 || ssTLow.indexOf('sonder')>=0;
+                    var exIsSpecial = exTLow.indexOf('teaser')>=0 || exTLow.indexOf('sonder')>=0;
+                    if(exIsSpecial && !ssIsSpecial) existing.titel = ss.titel;
+                  } else {
+                    mergedSubs.push(ss);
+                  }
+                });
+                zielDok.sessions = mergedSubs;
+              }
               // KV/RV/PV/MwSt/Auszahlung gehören zur Gutschrift gesamt (bleiben auf zielDok)
               // Primärer terminId für Rückwärtskompatibilität = erster gefundener
               var firstSession = zielDok.sessions.find(function(ss){ return ss.terminId; });
