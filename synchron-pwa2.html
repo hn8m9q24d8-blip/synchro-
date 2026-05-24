@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '754';
+  if(el) el.textContent = '755';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11562,9 +11562,12 @@ function dokAnalyseDoc(d, key, cb){
         if(j.titel && !d.titel) d.titel = j.titel;
         if(j.rolle && !d.rolle) d.rolle = j.rolle;
         if(j.produktionstyp_kino) d.produktion_typ='kino';
-        // Build 753: Fallback — wenn Beleg-Header-Titel leer, aber Sessions Titel haben,
-        // ersten Session-Titel nehmen. Hilft besonders bei Studio Hamburg, wo der Titel
-        // nur in der 603-Zeile (= Session) steht, nicht im Beleg-Header.
+      }
+      // Build 755: Titel/Rolle-Fallback aus Sessions — gilt für abrechn UND monats_abrechn.
+      // Studio Hamburg wird als monats_abrechn klassifiziert, der Titel ("Memory of a Killer")
+      // steht aber NUR in der 603-Zeile (= Session.titel), nicht im Beleg-Header.
+      // Ohne diesen Fallback bleibt d.titel leer → GVL-Eintrag ohne Produktion!
+      if(d.typ==='abrechn' || d.typ==='monats_abrechn'){
         if(!d.titel && j.sessions && Array.isArray(j.sessions)){
           for(var _si=0; _si<j.sessions.length; _si++){
             var _st = j.sessions[_si];
@@ -12619,6 +12622,11 @@ function dokOpenDetail(id){
       body+='<div style="margin-top:10px"><button type="button" onclick="dokReklassifizieren(\''+d.id+'\')" style="width:100%;background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">⚠ Falsch klassifiziert? Typ ändern</button></div>';
     }
     if(d.typ==='monats_abrechn'){
+      // Build 755: Titel + Rolle auch für monats_abrechn anzeigen.
+      // Wichtig für Studio Hamburg: Titel kommt aus der 603-Zeile (= Session.titel),
+      // muss aber im Beleg-Header sichtbar/editierbar sein für GVL und Jahresabschluss.
+      body+=_editRow('titel','Titel/Produktion',d.titel||'');
+      body+=_editRow('rolle','Rolle',d.rolle||'');
       body+=_editRow('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
       body+=_editRow('brutto','Brutto gesamt €',d.brutto||'');
       // Pro-Session Aufschlüsselung wenn mehrere Sessions
