@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '751';
+  if(el) el.textContent = '752';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11820,9 +11820,21 @@ function dokAnalyseDoc(d, key, cb){
 
   // PDF: zuerst bekanntes Passwort versuchen — Studio aus Dateinamen als Fallback
   if(mime==='application/pdf'){
-    var pwStudio = d.studio || d.dateiname || '';
-    var autoPw = _findPdfPassword(pwStudio);
-    if(autoPw){
+    var pwStudio = d.studio || '';
+    // Build 752 (Multi-PW): _findPdfPassword gibt jetzt Array zurück.
+    // Dateiname als zusätzlicher Match-Kanal (falls Studio noch nicht erkannt).
+    var autoPwList = _findPdfPassword(pwStudio, d.dateiname || '');
+    if(autoPwList && autoPwList.length > 0){
+      // Cascade: probiere PWs der Reihe nach. Beim ersten erfolgreichen Render
+      // mit dem existierenden Code weiter (KI-Aufruf etc.).
+      var _tryIdx = 0;
+      var _tryNext = function(){
+        if(_tryIdx >= autoPwList.length){
+          // Alle PWs fehlgeschlagen → User-Prompt wie früher
+          _askPdfPassword(d, key, cb);
+          return;
+        }
+        var autoPw = autoPwList[_tryIdx++];
       // Passwortgeschütztes PDF → Seiten einzeln rendern und als separate image-Blöcke senden
       // (zusammengeklebtes Riesenbild war zu groß für API bei 20+ Seiten)
       _renderPdfPagesMulti(d.dataURL, autoPw, function(pageDataURLs, numPages){
@@ -11889,8 +11901,11 @@ function dokAnalyseDoc(d, key, cb){
         };
         try { xhr2.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
       }, function(){
-        _askPdfPassword(d, key, cb);
+        // Build 752 (Multi-PW): dieses PW fehlgeschlagen → nächstes probieren
+        _tryNext();
       });
+      }; // end _tryNext function
+      _tryNext(); // start cascade
     } else {
       // Ungeschütztes PDF → numPages per _renderPdfPageAsImage ermitteln, dann als PDF an KI
       _renderPdfPageAsImage(d.dataURL, null, function(imgDataURL, numPages){
@@ -12841,7 +12856,9 @@ function dokOpenDetail(id){
   // PDF-Canvas rendern falls vorhanden
   if(d && d.mime==='application/pdf' && document.getElementById('pdf-canvas-'+d.id)){
     setTimeout(function(){
-      var autoPw = _findPdfPassword(d.studio||'');
+      // Build 752 (Multi-PW): _findPdfPassword gibt Array zurück → erstes PW nehmen
+      var _pwList = _findPdfPassword(d.studio||'', d.dateiname||'');
+      var autoPw = _pwList && _pwList.length ? _pwList[0] : null;
       if(d._splitPageNr){
         // Split-Dokument: immer nur die zugehörige Seite (auch wenn d.dataURL vorhanden)
         var origDokR = (db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
@@ -12896,13 +12913,18 @@ function removeStudioPwOverlay(){
 
 function openStudioPwSheet(){
   var pws = _getStudioPasswords();
-  var entries = Object.keys(pws).map(function(k){ return k+'::'+pws[k]; }).join('\n');
+  // Build 752 (Multi-PW): Bei Array eines Studios → eine Zeile pro PW
+  var entries = Object.keys(pws).map(function(k){
+    var v = pws[k];
+    if(Array.isArray(v)) return v.map(function(p){ return k+'::'+p; }).join('\n');
+    return k+'::'+v;
+  }).join('\n');
   var ov = document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
   var box = document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
   box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">🔒 PDF-Passwörter</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::Passwort</b> — je Zeile ein Studio<br>Beispiel: Studio Hamburg::0911810834</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::Passwort</b> — je Zeile ein Studio<br>Mehrere Zeilen mit gleichem Namen → alle werden durchprobiert<br>Beispiel: Studio Hamburg::0911810834</div>'
     +'<textarea id="studio-pw-input" rows="5" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:13px;font-family:monospace;resize:vertical">'+entries+'</textarea>'
     +'<button type="button" onclick="saveStudioPws()" style="margin-top:10px;width:100%;background:#15803d;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
     +'<button type="button" onclick="removeStudioPwOverlay()" style="margin-top:8px;width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
@@ -12921,6 +12943,8 @@ function openStudioPwSheet(){
 function saveStudioPws(){
   var inp = document.getElementById('studio-pw-input');
   if(!inp) return;
+  // Build 752 (Multi-PW): Mehrere Zeilen mit gleichem Studio-Namen sammeln sich
+  // zu Array. Einzelne PWs bleiben als String (kompatibel mit altem Format).
   var pws = {};
   inp.value.split('\n').forEach(function(line){
     line = line.trim();
@@ -12929,7 +12953,17 @@ function saveStudioPws(){
     if(sep>0){
       var studio = line.slice(0,sep).trim();
       var pw     = line.slice(sep+2).trim();
-      if(studio && pw) pws[studio] = pw;
+      if(studio && pw){
+        if(pws[studio] === undefined){
+          pws[studio] = pw; // erstes PW = String
+        } else if(typeof pws[studio] === 'string'){
+          // zweites PW → zu Array machen
+          pws[studio] = [pws[studio], pw];
+        } else if(Array.isArray(pws[studio])){
+          // weiteres PW → in Array pushen, Duplikate vermeiden
+          if(pws[studio].indexOf(pw) < 0) pws[studio].push(pw);
+        }
+      }
     }
   });
   if(!db.profil) db.profil={};
@@ -13036,17 +13070,35 @@ function _getStudioPasswords(){
   return (db.profil && db.profil.studioPasswords) || {};
 }
 
-function _findPdfPassword(studio){
-  // Passwort für Studio suchen (fuzzy: Studio Hamburg → hamburg)
+function _findPdfPassword(studio, dateiname){
+  // Build 752 (Multi-PW): Gibt Array aller passenden PWs zurück.
+  // Studio-Match via Substring (fuzzy). Wenn studio leer/kein Match,
+  // wird zusätzlich der Dateiname geprüft (z.B. Datei "Studio Hamburg.pdf"
+  // bevor KI das Studio-Feld gesetzt hat).
   var pws = _getStudioPasswords();
-  var studioLow = (studio||'').toLowerCase();
   var keys = Object.keys(pws);
+  var result = [];
+  var checkStrings = [];
+  if(studio) checkStrings.push(String(studio).toLowerCase());
+  if(dateiname) checkStrings.push(String(dateiname).toLowerCase());
   for(var i=0; i<keys.length; i++){
-    if(studioLow.indexOf(keys[i].toLowerCase())>=0 || keys[i].toLowerCase().indexOf(studioLow)>=0){
-      return pws[keys[i]];
+    var keyLow = keys[i].toLowerCase();
+    var match = false;
+    for(var c=0; c<checkStrings.length; c++){
+      var s = checkStrings[c];
+      if(!s) continue;
+      if(s.indexOf(keyLow)>=0 || keyLow.indexOf(s)>=0){ match = true; break; }
+    }
+    if(match){
+      var v = pws[keys[i]];
+      if(Array.isArray(v)){
+        v.forEach(function(p){ if(p && result.indexOf(p)<0) result.push(p); });
+      } else if(v) {
+        if(result.indexOf(v)<0) result.push(v);
+      }
     }
   }
-  return null;
+  return result; // immer Array (leer wenn kein Match)
 }
 
 function renderPDFCanvas(canvasId, dataURL, password){
