@@ -2979,7 +2979,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '752';
+  if(el) el.textContent = '754';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11562,6 +11562,22 @@ function dokAnalyseDoc(d, key, cb){
         if(j.titel && !d.titel) d.titel = j.titel;
         if(j.rolle && !d.rolle) d.rolle = j.rolle;
         if(j.produktionstyp_kino) d.produktion_typ='kino';
+        // Build 753: Fallback — wenn Beleg-Header-Titel leer, aber Sessions Titel haben,
+        // ersten Session-Titel nehmen. Hilft besonders bei Studio Hamburg, wo der Titel
+        // nur in der 603-Zeile (= Session) steht, nicht im Beleg-Header.
+        if(!d.titel && j.sessions && Array.isArray(j.sessions)){
+          for(var _si=0; _si<j.sessions.length; _si++){
+            var _st = j.sessions[_si];
+            var _t = _st && (_st.titel || _st.produktion);
+            if(_t){ d.titel = _t; break; }
+          }
+        }
+        if(!d.rolle && j.sessions && Array.isArray(j.sessions)){
+          for(var _ri=0; _ri<j.sessions.length; _ri++){
+            var _sr = j.sessions[_ri];
+            if(_sr && _sr.rolle){ d.rolle = _sr.rolle; break; }
+          }
+        }
       }
       d.gvl_staffel_header  = j.gvl_staffel_header || null;
       d.gvl_episode_header  = j.gvl_episode_header || null;
@@ -11893,6 +11909,20 @@ function dokAnalyseDoc(d, key, cb){
             // USt-Satz sanitieren
             if(_j.ust_satz!=null){ var _ru=parseFloat(_j.ust_satz)||0; d.ustSatz=Math.abs(_ru-0.19)<0.02?0.19:Math.abs(_ru-0.07)<0.02?0.07:_ru===0?0:0.07; }
             d.sessions=_j.sessions||null;
+            // Build 753: Fallback wenn Beleg-Header-Titel/Rolle leer → aus erster Session ableiten
+            if(!d.titel && d.sessions && Array.isArray(d.sessions)){
+              for(var _xi=0; _xi<d.sessions.length; _xi++){
+                var _xst = d.sessions[_xi];
+                var _xt = _xst && (_xst.titel || _xst.produktion);
+                if(_xt){ d.titel = _xt; break; }
+              }
+            }
+            if(!d.rolle && d.sessions && Array.isArray(d.sessions)){
+              for(var _xri=0; _xri<d.sessions.length; _xri++){
+                var _xsr = d.sessions[_xri];
+                if(_xsr && _xsr.rolle){ d.rolle = _xsr.rolle; break; }
+              }
+            }
             showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
             save(db); rDokumente(); if(cb) cb();
           } catch(e){
@@ -12856,9 +12886,10 @@ function dokOpenDetail(id){
   // PDF-Canvas rendern falls vorhanden
   if(d && d.mime==='application/pdf' && document.getElementById('pdf-canvas-'+d.id)){
     setTimeout(function(){
-      // Build 752 (Multi-PW): _findPdfPassword gibt Array zurück → erstes PW nehmen
+      // Build 754 (PW-Cascade Vorschau): _findPdfPassword gibt Array zurück → komplette Liste an Renderer
+      // Renderer probiert alle PWs automatisch nacheinander, erst bei allen Fehlversuchen kommt Inline-Prompt
       var _pwList = _findPdfPassword(d.studio||'', d.dateiname||'');
-      var autoPw = _pwList && _pwList.length ? _pwList[0] : null;
+      var autoPw = _pwList && _pwList.length ? _pwList : null;
       if(d._splitPageNr){
         // Split-Dokument: immer nur die zugehörige Seite (auch wenn d.dataURL vorhanden)
         var origDokR = (db.dokumente||[]).find(function(x){return x.id===d._splitFromPdf;});
@@ -13105,83 +13136,99 @@ function renderPDFCanvas(canvasId, dataURL, password){
   if(typeof pdfjsLib==="undefined") return;
   var canvas=document.getElementById(canvasId);
   if(!canvas) return;
-  // iOS Safari hängt bei {url: dataURL} für data:-URIs → immer {data: Uint8Array} nutzen
-  var params;
-  try {
-    var b64 = dataURL.split(',')[1];
-    var bin = atob(b64);
-    var arr = new Uint8Array(bin.length);
-    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-    params = {data: arr};
-  } catch(e) {
-    params = {url: dataURL}; // Fallback
-  }
-  if(password) params.password = password;
-  pdfjsLib.getDocument(params).promise.then(function(pdf){
-    var numPages = pdf.numPages;
-    var pageNums = [];
-    for(var p=1; p<=numPages; p++) pageNums.push(p);
-    return Promise.all(pageNums.map(function(p){ return pdf.getPage(p); }));
-  }).then(function(pages){
-    var scale = pages.length > 1 ? 1.2 : 1.5;
-    var rendered = [];
-    return pages.reduce(function(chain, page){
-      return chain.then(function(){
-        var vp = page.getViewport({scale:scale});
-        var cv = document.createElement('canvas');
-        cv.width=vp.width; cv.height=vp.height;
-        return page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise.then(function(){
-          rendered.push({canvas:cv, width:vp.width, height:vp.height});
+  // Build 754 (PW-Cascade Vorschau): password kann String, Array oder null sein.
+  // Bei Array wird intern jeder PW nacheinander probiert. Erst wenn alle versagen,
+  // erscheint der manuelle Eingabe-Prompt.
+  var _pwQueue;
+  if(Array.isArray(password)) _pwQueue = password.slice();
+  else if(password) _pwQueue = [password];
+  else _pwQueue = [];
+  var _tryRender = function(pwToTry){
+    // iOS Safari hängt bei {url: dataURL} für data:-URIs → immer {data: Uint8Array} nutzen
+    var params;
+    try {
+      var b64 = dataURL.split(',')[1];
+      var bin = atob(b64);
+      var arr = new Uint8Array(bin.length);
+      for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+      params = {data: arr};
+    } catch(e) {
+      params = {url: dataURL}; // Fallback
+    }
+    if(pwToTry) params.password = pwToTry;
+    pdfjsLib.getDocument(params).promise.then(function(pdf){
+      var numPages = pdf.numPages;
+      var pageNums = [];
+      for(var p=1; p<=numPages; p++) pageNums.push(p);
+      return Promise.all(pageNums.map(function(p){ return pdf.getPage(p); }));
+    }).then(function(pages){
+      var scale = pages.length > 1 ? 1.2 : 1.5;
+      var rendered = [];
+      return pages.reduce(function(chain, page){
+        return chain.then(function(){
+          var vp = page.getViewport({scale:scale});
+          var cv = document.createElement('canvas');
+          cv.width=vp.width; cv.height=vp.height;
+          return page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise.then(function(){
+            rendered.push({canvas:cv, width:vp.width, height:vp.height});
+          });
         });
+      }, Promise.resolve()).then(function(){
+        if(rendered.length===1){
+          canvas.width=rendered[0].width;
+          canvas.height=rendered[0].height;
+          var ctx0=canvas.getContext('2d');
+          ctx0.setTransform(1,0,0,1,0,0); // Transform-Reset vor drawImage
+          ctx0.drawImage(rendered[0].canvas,0,0);
+        } else {
+          var gap=6;
+          var totalH=rendered.reduce(function(s,r){return s+r.height+gap;},0)-gap;
+          var maxW=Math.max.apply(null,rendered.map(function(r){return r.width;}));
+          canvas.width=maxW; canvas.height=totalH;
+          var ctx=canvas.getContext('2d');
+          ctx.fillStyle='#e5e7eb'; ctx.fillRect(0,0,maxW,totalH);
+          var y=0;
+          rendered.forEach(function(r,i){
+            ctx.fillStyle='#fff'; ctx.fillRect(0,y,maxW,r.height);
+            ctx.drawImage(r.canvas,0,y);
+            y+=r.height+gap;
+          });
+        }
       });
-    }, Promise.resolve()).then(function(){
-      if(rendered.length===1){
-        canvas.width=rendered[0].width;
-        canvas.height=rendered[0].height;
-        var ctx0=canvas.getContext('2d');
-        ctx0.setTransform(1,0,0,1,0,0); // Transform-Reset vor drawImage
-        ctx0.drawImage(rendered[0].canvas,0,0);
-      } else {
-        var gap=6;
-        var totalH=rendered.reduce(function(s,r){return s+r.height+gap;},0)-gap;
-        var maxW=Math.max.apply(null,rendered.map(function(r){return r.width;}));
-        canvas.width=maxW; canvas.height=totalH;
-        var ctx=canvas.getContext('2d');
-        ctx.fillStyle='#e5e7eb'; ctx.fillRect(0,0,maxW,totalH);
-        var y=0;
-        rendered.forEach(function(r,i){
-          ctx.fillStyle='#fff'; ctx.fillRect(0,y,maxW,r.height);
-          ctx.drawImage(r.canvas,0,y);
-          y+=r.height+gap;
-        });
-      }
+    }).catch(function(e){
+      if(e && e.name==='PasswordException'){
+        // Build 754: Cascade — wenn noch PWs in der Queue, nächsten probieren
+        if(_pwQueue.length > 0){
+          _tryRender(_pwQueue.shift());
+          return;
+        }
+        // Alle PWs versagt — Eingabefeld anzeigen
+        canvas.style.display='none';
+        var wrap = canvas.parentNode;
+        if(wrap && !wrap.querySelector('.pdf-pw-prompt')){
+          var prompt = document.createElement('div');
+          prompt.className = 'pdf-pw-prompt';
+          prompt.style.cssText='padding:16px;text-align:center';
+          prompt.innerHTML='<div style="font-size:13px;color:#555;margin-bottom:8px">🔒 PDF ist passwortgeschützt</div>'
+            +'<input type="password" placeholder="Passwort eingeben" style="width:100%;padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px">'
+            +'<button type="button" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Entsperren</button>';
+          var btn = prompt.querySelector('button');
+          var inp = prompt.querySelector('input');
+          btn.onclick = function(){
+            var pw = inp.value.trim();
+            if(!pw) return;
+            prompt.remove();
+            canvas.style.display='';
+            renderPDFCanvas(canvasId, dataURL, pw);
+          };
+          inp.onkeydown = function(e){ if(e.key==='Enter') btn.click(); };
+          wrap.appendChild(prompt);
+        }
+      } else { console.warn('PDF render:', e); }
     });
-  }).catch(function(e){
-    if(e && e.name==='PasswordException'){
-      // Passwortgeschützt — Eingabefeld anzeigen
-      canvas.style.display='none';
-      var wrap = canvas.parentNode;
-      if(wrap && !wrap.querySelector('.pdf-pw-prompt')){
-        var prompt = document.createElement('div');
-        prompt.className = 'pdf-pw-prompt';
-        prompt.style.cssText='padding:16px;text-align:center';
-        prompt.innerHTML='<div style="font-size:13px;color:#555;margin-bottom:8px">🔒 PDF ist passwortgeschützt</div>'
-          +'<input type="password" placeholder="Passwort eingeben" style="width:100%;padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px">'
-          +'<button type="button" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Entsperren</button>';
-        var btn = prompt.querySelector('button');
-        var inp = prompt.querySelector('input');
-        btn.onclick = function(){
-          var pw = inp.value.trim();
-          if(!pw) return;
-          prompt.remove();
-          canvas.style.display='';
-          renderPDFCanvas(canvasId, dataURL, pw);
-        };
-        inp.onkeydown = function(e){ if(e.key==='Enter') btn.click(); };
-        wrap.appendChild(prompt);
-      }
-    } else { console.warn('PDF render:', e); }
-  });
+  };
+  // Start: erstes PW aus Queue (oder null wenn keine PWs)
+  _tryRender(_pwQueue.length > 0 ? _pwQueue.shift() : null);
 }
 
 // Rendert eine einzelne Seite eines PDFs — für Split-Dokumente
@@ -13191,31 +13238,45 @@ function renderPDFCanvasPage(canvasId, dataURL, pageNr, password){
   if(typeof pdfjsLib==='undefined') return;
   var canvas=document.getElementById(canvasId);
   if(!canvas) return;
-  var b64=dataURL.split(',')[1];
-  var bin=atob(b64);
-  var arr=new Uint8Array(bin.length);
-  for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-  var params={data:arr};
-  if(password) params.password=password;
-  pdfjsLib.getDocument(params).promise.then(function(pdf){
-    var pg=Math.min(pageNr, pdf.numPages);
-    return pdf.getPage(pg);
-  }).then(function(page){
-    var vp=page.getViewport({scale:1.5});
-    // Offscreen-Canvas: PDF.js rendert hier sauber ohne Transform-Pollution
-    var offscreen=document.createElement('canvas');
-    offscreen.width=vp.width; offscreen.height=vp.height;
-    var offCtx=offscreen.getContext('2d');
-    // Sicherheitshalber Transform zurücksetzen
-    offCtx.setTransform(1,0,0,1,0,0);
-    return page.render({canvasContext:offCtx, viewport:vp}).promise.then(function(){
-      // Ziel-Canvas sauber beschreiben
-      canvas.width=vp.width; canvas.height=vp.height;
-      var ctx=canvas.getContext('2d');
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.drawImage(offscreen,0,0);
+  // Build 754 (PW-Cascade Split-Vorschau): password kann String, Array oder null sein.
+  var _pwQueue;
+  if(Array.isArray(password)) _pwQueue = password.slice();
+  else if(password) _pwQueue = [password];
+  else _pwQueue = [];
+  var _tryRender = function(pwToTry){
+    var b64=dataURL.split(',')[1];
+    var bin=atob(b64);
+    var arr=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var params={data:arr};
+    if(pwToTry) params.password=pwToTry;
+    pdfjsLib.getDocument(params).promise.then(function(pdf){
+      var pg=Math.min(pageNr, pdf.numPages);
+      return pdf.getPage(pg);
+    }).then(function(page){
+      var vp=page.getViewport({scale:1.5});
+      // Offscreen-Canvas: PDF.js rendert hier sauber ohne Transform-Pollution
+      var offscreen=document.createElement('canvas');
+      offscreen.width=vp.width; offscreen.height=vp.height;
+      var offCtx=offscreen.getContext('2d');
+      // Sicherheitshalber Transform zurücksetzen
+      offCtx.setTransform(1,0,0,1,0,0);
+      return page.render({canvasContext:offCtx, viewport:vp}).promise.then(function(){
+        // Ziel-Canvas sauber beschreiben
+        canvas.width=vp.width; canvas.height=vp.height;
+        var ctx=canvas.getContext('2d');
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.drawImage(offscreen,0,0);
+      });
+    }).catch(function(e){
+      if(e && e.name==='PasswordException' && _pwQueue.length > 0){
+        _tryRender(_pwQueue.shift());
+        return;
+      }
+      console.warn('PDF page render:', e);
     });
-  }).catch(function(e){ console.warn('PDF page render:', e); });
+  };
+  _tryRender(_pwQueue.length > 0 ? _pwQueue.shift() : null);
 }
 
 function dokOpenPDF(id){
