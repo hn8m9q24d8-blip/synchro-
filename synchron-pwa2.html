@@ -1967,6 +1967,58 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
   }
 })();
 
+// ═══════════════════════════════════════════════════════════════
+// Build 756: Einmal-Migration für SH-Korrektur-Ketten
+// ═══════════════════════════════════════════════════════════════
+// Läuft beim App-Start einmalig (idempotent über _b756Migrated-Flag).
+// Geht alle K4-Belege durch, gruppiert nach leistungs_monat, markiert
+// in jeder Kette mit >1 Belegen den jüngsten als aktiv und ältere als
+// _ueberholt_durch. Bereits manuell gemarkierte Belege (override) bleiben.
+(function(){
+  if(!dbv2 || !dbv2.abrechnungen || dbv2._b756Migrated) return;
+  var k4 = dbv2.abrechnungen.filter(function(a){return a.klasse === '4';});
+  if(k4.length === 0){
+    dbv2._b756Migrated = true;
+    saveV2(dbv2);
+    return;
+  }
+  // Nach leistungs_monat gruppieren
+  var byMonat = {};
+  k4.forEach(function(a){
+    var m = a.leistungs_monat || '___ohne_monat___';
+    if(!byMonat[m]) byMonat[m] = [];
+    byMonat[m].push(a);
+  });
+  var migrierteKetten = 0;
+  Object.keys(byMonat).forEach(function(monat){
+    var kette = byMonat[monat];
+    if(kette.length <= 1) return;
+    // Manuelle Overrides nicht antasten
+    var freie = kette.filter(function(a){return !a._korrektur_manual_override;});
+    if(freie.length === 0) return;
+    freie.sort(function(a,b){
+      var da = a.ausstellungs_datum || '';
+      var db_ = b.ausstellungs_datum || '';
+      return da<db_?-1:da>db_?1:0;
+    });
+    var juengster = freie[freie.length - 1];
+    freie.forEach(function(a){
+      if(a.id === juengster.id){
+        delete a._ueberholt_durch;
+      } else {
+        a._ueberholt_durch = juengster.id;
+      }
+    });
+    migrierteKetten++;
+  });
+  dbv2._b756Migrated = true;
+  saveV2(dbv2);
+  if(migrierteKetten > 0){
+    console.log('[Build 756] '+migrierteKetten+' SH-Korrektur-Kette(n) markiert');
+  }
+})();
+// ═══════════════════════════════════════════════════════════════
+
 console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(function(k){return k.charAt(0) !== '_';}));
 
 // ═══════════════════════════════════════════════════════════════
@@ -2284,6 +2336,49 @@ function _konsolidiereDokumentNachV2(dokId){
     v2Ab.auszahlungs_ziel    = null;
     v2Ab.pdf_datei_id        = dokId;
     v2Ab.aktualisiert_am     = new Date().toISOString();
+
+    // ═══════════════════════════════════════════════════════════════
+    // BUILD 756: Studio-Hamburg-Korrektur-Erkennung
+    // ═══════════════════════════════════════════════════════════════
+    // Studio HH gibt mehrere kumulierte Korrektur-PDFs für denselben Monat raus.
+    // Beispiel: Korrektur 2/2026 (für 3/2026) wird zuerst mit 1 Drehtag (484€) und
+    // später mit 2 Drehtagen (856€) ausgestellt. Beide PDFs existieren als echte
+    // Geldzahlungen im Bank (Teilzahlungen), aber finanziell zählt nur die
+    // jüngste Korrektur. Schema sagt: "Beide Belege bleiben erhalten
+    // (Gegenbuchungs-Logik, nicht Ersetzen)" — wir markieren den älteren als
+    // _ueberholt_durch, Renderer (Jahresabschluss/USt-VA) filtern ihn raus.
+    //
+    // Identifikator für Korrektur-Kette: klasse=4 + gleicher leistungs_monat.
+    // Match-Engine kann Bank-Eingänge weiterhin zu überholten Belegen matchen,
+    // weil dort die echten Teilzahlungen lagen.
+    if(klasse === '4' && v2Ab.leistungs_monat){
+      var k4Geschwister = (dbv2.abrechnungen||[]).filter(function(other){
+        return other.id !== v2Ab.id
+            && other.klasse === '4'
+            && other.leistungs_monat === v2Ab.leistungs_monat;
+      });
+      if(k4Geschwister.length > 0){
+        // Jüngsten Beleg in der Kette finden (höchstes ausstellungs_datum)
+        var alle = k4Geschwister.concat([v2Ab]);
+        alle.sort(function(a,b){
+          var da = a.ausstellungs_datum || '';
+          var db = b.ausstellungs_datum || '';
+          return da<db?-1:da>db?1:0;
+        });
+        var juengster = alle[alle.length - 1];
+        // Alle anderen werden überholt durch den jüngsten — außer sie sind
+        // schon manuell als "nicht_ueberholen" markiert (User-Override).
+        alle.forEach(function(ab){
+          if(ab.id === juengster.id){
+            // Jüngster: kein _ueberholt_durch
+            delete ab._ueberholt_durch;
+          } else if(!ab._korrektur_manual_override){
+            ab._ueberholt_durch = juengster.id;
+          }
+        });
+      }
+    }
+    // ═══════════════════════════════════════════════════════════════
 
     // Junctions für alle Sessions mit terminId
     if(!dbv2.abrechnung_termin_links) dbv2.abrechnung_termin_links = [];
@@ -2979,7 +3074,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '755';
+  if(el) el.textContent = '756';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4859,6 +4954,103 @@ function gvlDokSave(btn){
   if(ov)ov.remove();
   dokOpenDetail(did);
   showToast('✓ GVL gespeichert');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Build 756: Manueller Toggle für SH-Korrektur-Ketten
+// ═══════════════════════════════════════════════════════════════
+// Wenn die Auto-Erkennung (gleicher leistungs_monat + klasse 4 → ältester
+// = überholt) falsch liegt, kann der User hier manuell überschreiben.
+// Klick auf den überholten Beleg: macht ihn wieder aktiv (manuell).
+// Klick auf einen aktiven: markiert ihn als überholt (manuell).
+// "Auto-Erkennung wieder aktivieren" entfernt das Override-Flag und
+// stellt die Saldenfortschreibungs-Logik wieder her.
+function dokToggleKorrekturKette(v2AbId){
+  if(!dbv2 || !dbv2.abrechnungen) return;
+  var v2Ab = dbv2.abrechnungen.find(function(a){return a.id===v2AbId;});
+  if(!v2Ab) return;
+
+  // Drei Zustände:
+  // A) Manueller Override aktiv → Override entfernen, Auto-Erkennung neu rechnen
+  // B) Beleg ist aktuell überholt → manuell aktiv setzen
+  // C) Beleg ist aktuell aktiv → manuell überholt setzen
+  if(v2Ab._korrektur_manual_override){
+    // A: Override aufheben
+    delete v2Ab._korrektur_manual_override;
+    delete v2Ab._ueberholt_durch;
+    // Auto-Erkennung neu durchlaufen für diese Kette
+    _autoErkenneKorrekturKette(v2Ab.leistungs_monat);
+    showToast('✓ Auto-Erkennung wieder aktiv');
+  } else if(v2Ab._ueberholt_durch){
+    // B: war überholt → manuell aktiv setzen
+    delete v2Ab._ueberholt_durch;
+    v2Ab._korrektur_manual_override = true;
+    // Die anderen in der Kette müssen jetzt einen anderen Jüngsten wählen —
+    // aber da User-Override aktiv ist, lassen wir die Auto-Logik nicht eingreifen.
+    // Statt dessen markieren wir die anderen explizit als überholt durch DIESEN.
+    var andere = (dbv2.abrechnungen||[]).filter(function(o){
+      return o.id !== v2Ab.id
+          && o.klasse === '4'
+          && o.leistungs_monat === v2Ab.leistungs_monat
+          && !o._korrektur_manual_override;
+    });
+    andere.forEach(function(o){ o._ueberholt_durch = v2Ab.id; });
+    showToast('✓ Beleg als AKTIV markiert (manuell)');
+  } else {
+    // C: war aktiv → manuell überholt setzen
+    // Suche einen anderen aktiven Beleg in der Kette als Ziel
+    var andereAktive = (dbv2.abrechnungen||[]).filter(function(o){
+      return o.id !== v2Ab.id
+          && o.klasse === '4'
+          && o.leistungs_monat === v2Ab.leistungs_monat
+          && !o._ueberholt_durch;
+    });
+    if(andereAktive.length === 0){
+      showToast('⚠ Es muss mindestens ein Beleg in der Kette aktiv bleiben');
+      return;
+    }
+    // Jüngsten der anderen Aktiven als Ziel nehmen
+    andereAktive.sort(function(a,b){
+      var da = a.ausstellungs_datum || '';
+      var db_ = b.ausstellungs_datum || '';
+      return da<db_?1:da>db_?-1:0; // desc
+    });
+    v2Ab._ueberholt_durch = andereAktive[0].id;
+    v2Ab._korrektur_manual_override = true;
+    showToast('✓ Beleg als ÜBERHOLT markiert (manuell)');
+  }
+  save(db);
+  // Detail-View neu rendern
+  try {
+    var d=(db.dokumente||[]).find(function(x){return x.id===v2Ab.pdf_datei_id;});
+    if(d) openDetail(d.id);
+  } catch(e){ console.warn('Re-render nach Toggle:', e); }
+}
+
+// Hilfsfunktion: Auto-Erkennung für eine Korrektur-Kette neu durchlaufen
+function _autoErkenneKorrekturKette(leistungsMonat){
+  if(!leistungsMonat || !dbv2 || !dbv2.abrechnungen) return;
+  var kette = dbv2.abrechnungen.filter(function(a){
+    return a.klasse === '4' && a.leistungs_monat === leistungsMonat;
+  });
+  if(kette.length <= 1) return;
+  // Manuelle Overrides nicht antasten
+  var freie = kette.filter(function(a){return !a._korrektur_manual_override;});
+  if(freie.length === 0) return;
+  // Jüngster der freien wird aktiv (kein _ueberholt_durch), andere überholt
+  freie.sort(function(a,b){
+    var da = a.ausstellungs_datum || '';
+    var db_ = b.ausstellungs_datum || '';
+    return da<db_?-1:da>db_?1:0;
+  });
+  var juengster = freie[freie.length - 1];
+  freie.forEach(function(a){
+    if(a.id === juengster.id){
+      delete a._ueberholt_durch;
+    } else {
+      a._ueberholt_durch = juengster.id;
+    }
+  });
 }
 
 function dokReklassifizieren(dokId){
@@ -8531,6 +8723,11 @@ function _jahresSort(col){
 // v2-Jahresabschluss-Renderer. Aufgerufen aus rJahresabschluss wenn v2-Daten vorhanden.
 // Reine Lese-Funktion — verändert nichts.
 function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
+  // Build 756: Überholte Korrektur-Belege (SH) ausfiltern — nur jüngster zählt.
+  // Bank-Match-Engine kann später trotzdem zu überholten Belegen zuordnen,
+  // weil dort die tatsächlichen Teilzahlungen flossen. Aber finanziell zählt
+  // nur die aktuelle Korrektur-Version.
+  v2AbsImJahr = v2AbsImJahr.filter(function(a){ return !a._ueberholt_durch; });
   // SV + MwSt direkt aus dbv2.abrechnungen summieren (dort liegen die PDF-Gesamtwerte)
   var bruttoGes = 0, kvGes = 0, rvGes = 0, pvGes = 0, mwstGes = 0, auszahlungGes = 0;
   v2AbsImJahr.forEach(function(a){
@@ -10220,15 +10417,26 @@ function rDokumente(){
     var t = DOK_TYPES[d.typ||'sonstig'] || DOK_TYPES.sonstig;
     var linked = d.terminId ? '✓ Termin' : (d.ausgabeId ? '✓ Ausgabe' : '');
     var linkedColor = (d.terminId||d.ausgabeId) ? '#15803d' : '';
-    html += '<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #fce7f3;cursor:pointer;background:#fff">'
+    // Build 756: SH-Korrektur-Überholt-Badge
+    var ueberholtBadge = '';
+    var _isUeberholt = false;
+    try {
+      var _v2match = (dbv2 && dbv2.abrechnungen||[]).find(function(a){ return a.pdf_datei_id === d.id; });
+      if(_v2match && _v2match._ueberholt_durch){
+        _isUeberholt = true;
+        ueberholtBadge = '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;padding:2px 6px;border-radius:6px">⚠ überholt</span>';
+      }
+    } catch(e){ /* silent */ }
+    html += '<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #fce7f3;cursor:pointer;background:#fff'+(_isUeberholt ? ';opacity:.7' : '')+'">'
       // Thumbnail
       +(d.dataURL && d.mime!=='application/pdf'
         ? '<div style="width:50px;height:50px;border-radius:8px;overflow:hidden;flex-shrink:0;margin-right:12px;border:1px solid #eee"><img src="'+d.dataURL+'" style="width:100%;height:100%;object-fit:cover"></div>'
         : '<div style="width:50px;height:50px;border-radius:8px;flex-shrink:0;margin-right:12px;background:'+t.bg+';border:1.5px solid '+t.border+';display:flex;align-items:center;justify-content:center;font-size:22px">'+t.icon+'</div>'
       )
       +'<div style="flex:1;min-width:0">'
-      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap">'
       +'<span style="font-size:10px;font-weight:700;color:'+t.color+';background:'+t.bg+';border:1px solid '+t.border+';padding:2px 6px;border-radius:6px">'+t.label+'</span>'
+      +ueberholtBadge
       +(linked?'<span style="font-size:10px;font-weight:700;color:'+linkedColor+'">'+linked+'</span>':'<span style="font-size:10px;color:#f97316;font-weight:600">nicht zugeordnet</span>')
       +'</div>'
       +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(d.beschr||d.dateiname||'Dokument')+'</div>'
@@ -12501,6 +12709,58 @@ function dokOpenDetail(id){
     body+='</div>';
 
     // ── ERKANNTE DATEN (editierbar — Korrekturen möglich) ──
+    // ═══ Build 756: SH-Korrektur-Banner ═══
+    // Bei Studio-Hamburg-Belegen mit gleichem leistungs_monat anzeigen:
+    // - "Überholt durch neueren Beleg" (kleiner Badge in rot/orange)
+    // - "Ersetzt älteren Beleg" (kleiner Badge in blau)
+    // - Toggle-Button um manuell zu überschreiben
+    try {
+      var _v2 = (dbv2 && dbv2.abrechnungen||[]).find(function(a){ return a.pdf_datei_id === d.id; });
+      if(_v2 && _v2.klasse === '4' && _v2.leistungs_monat){
+        var _kette = (dbv2.abrechnungen||[]).filter(function(other){
+          return other.klasse === '4'
+              && other.leistungs_monat === _v2.leistungs_monat;
+        }).sort(function(a,b){
+          var da = a.ausstellungs_datum || '';
+          var db_ = b.ausstellungs_datum || '';
+          return da<db_?-1:da>db_?1:0;
+        });
+        if(_kette.length > 1){
+          var _idx = _kette.findIndex(function(k){return k.id===_v2.id;});
+          var _isJuengster = (_idx === _kette.length - 1);
+          var _isManualOverride = !!_v2._korrektur_manual_override;
+          var _isUeberholt = !!_v2._ueberholt_durch;
+          var _bannerBg = _isUeberholt ? '#fef3c7' : '#dbeafe';
+          var _bannerBorder = _isUeberholt ? '#f59e0b' : '#60a5fa';
+          var _bannerColor = _isUeberholt ? '#92400e' : '#1e40af';
+          var _bannerIcon = _isUeberholt ? '⚠️' : 'ℹ️';
+          var _bannerTitle = _isUeberholt
+            ? 'Diese Korrektur wurde durch einen neueren Beleg ersetzt'
+            : (_isJuengster ? 'Dies ist die aktuelle Korrektur-Version' : 'Korrektur-Kette für '+_v2.leistungs_monat);
+          var _bannerBody = 'Studio Hamburg gibt mehrere Korrektur-Belege für denselben Monat heraus (' + _v2.leistungs_monat + '). '
+            + _kette.length + ' Belege in dieser Kette. '
+            + 'Finanziell zählt nur der jüngste, ältere werden im Jahresabschluss übersprungen — Bank-Eingänge bleiben sichtbar.';
+          body += '<div style="background:'+_bannerBg+';border:2px solid '+_bannerBorder+';border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:'+_bannerColor+'">'
+            + '<div style="font-weight:800;margin-bottom:4px">'+_bannerIcon+' '+_bannerTitle+'</div>'
+            + '<div style="opacity:.85;margin-bottom:8px;line-height:1.4">'+_bannerBody+'</div>';
+          // Liste aller Belege in der Kette
+          body += '<div style="background:rgba(255,255,255,.5);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10px">';
+          _kette.forEach(function(k,i){
+            var marker = k.id===_v2.id ? '👉 ' : '';
+            var status = !k._ueberholt_durch ? ' · <b>AKTIV</b>' : ' · überholt';
+            body += '<div style="padding:2px 0">'+marker+(k.ausstellungs_datum||'?')+' · Brutto '+fmtEur(k.brutto||0)+status+'</div>';
+          });
+          body += '</div>';
+          // Toggle-Button: manueller Override
+          var _toggleLabel = _isManualOverride
+            ? 'Auto-Erkennung wieder aktivieren'
+            : (_isUeberholt ? 'Manuell als AKTIV markieren' : 'Manuell als ÜBERHOLT markieren');
+          body += '<button type="button" onclick="dokToggleKorrekturKette(\''+_v2.id+'\')" style="width:100%;background:rgba(255,255,255,.7);color:'+_bannerColor+';border:1.5px solid '+_bannerBorder+';border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer">'+_toggleLabel+'</button>';
+          body += '</div>';
+        }
+      }
+    } catch(e){ console.warn('SH-Korrektur-Banner Fehler:', e); }
+    // ═══ Ende Build 756 ═══
     body+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
       +'<div style="font-size:11px;font-weight:800;color:#15803d;letter-spacing:.5px;margin-bottom:8px">ERKANNTE DATEN</div>';
     body+=_editRow('beschr','Beschreibung',d.beschr||'');
