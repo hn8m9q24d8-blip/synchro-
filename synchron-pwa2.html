@@ -1968,37 +1968,41 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
 })();
 
 // ═══════════════════════════════════════════════════════════════
-// Build 756: Einmal-Migration für SH-Korrektur-Ketten
+// Build 756/757: Einmal-Migration für SH-Korrektur-Ketten
 // ═══════════════════════════════════════════════════════════════
-// Läuft beim App-Start einmalig (idempotent über _b756Migrated-Flag).
-// Geht alle K4-Belege durch, gruppiert nach leistungs_monat, markiert
-// in jeder Kette mit >1 Belegen den jüngsten als aktiv und ältere als
-// _ueberholt_durch. Bereits manuell gemarkierte Belege (override) bleiben.
+// Läuft beim App-Start einmalig (idempotent über _b757Migrated-Flag).
+// Build 757 erweitert das Build 756 Verhalten:
+//   - Identifikator: _verbindlichkeit_monat (wenn vorhanden) ODER leistungs_monat
+//   - Sortierung: _print_datum (wenn vorhanden) ODER ausstellungs_datum
+// Build 757-Flag triggert Re-Run auch bei bereits b756-migrierten DBs,
+// damit neue Belege mit _print_datum/_verbindlichkeit_monat korrekt eingeordnet werden.
 (function(){
-  if(!dbv2 || !dbv2.abrechnungen || dbv2._b756Migrated) return;
+  if(!dbv2 || !dbv2.abrechnungen || dbv2._b757Migrated) return;
   var k4 = dbv2.abrechnungen.filter(function(a){return a.klasse === '4';});
   if(k4.length === 0){
     dbv2._b756Migrated = true;
+    dbv2._b757Migrated = true;
     saveV2(dbv2);
     return;
   }
-  // Nach leistungs_monat gruppieren
-  var byMonat = {};
+  // Nach Kette-Identifikator gruppieren: _verbindlichkeit_monat ODER leistungs_monat
+  var byKetteId = {};
   k4.forEach(function(a){
-    var m = a.leistungs_monat || '___ohne_monat___';
-    if(!byMonat[m]) byMonat[m] = [];
-    byMonat[m].push(a);
+    var k = a._verbindlichkeit_monat || a.leistungs_monat || '___ohne_kette___';
+    if(!byKetteId[k]) byKetteId[k] = [];
+    byKetteId[k].push(a);
   });
   var migrierteKetten = 0;
-  Object.keys(byMonat).forEach(function(monat){
-    var kette = byMonat[monat];
+  Object.keys(byKetteId).forEach(function(ketteId){
+    var kette = byKetteId[ketteId];
     if(kette.length <= 1) return;
     // Manuelle Overrides nicht antasten
     var freie = kette.filter(function(a){return !a._korrektur_manual_override;});
     if(freie.length === 0) return;
+    // Sortierung: _print_datum primär (Build 757), Fallback ausstellungs_datum, dann erstellt_am
     freie.sort(function(a,b){
-      var da = a.ausstellungs_datum || '';
-      var db_ = b.ausstellungs_datum || '';
+      var da = a._print_datum || a.ausstellungs_datum || a.erstellt_am || '';
+      var db_ = b._print_datum || b.ausstellungs_datum || b.erstellt_am || '';
       return da<db_?-1:da>db_?1:0;
     });
     var juengster = freie[freie.length - 1];
@@ -2012,9 +2016,10 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
     migrierteKetten++;
   });
   dbv2._b756Migrated = true;
+  dbv2._b757Migrated = true;
   saveV2(dbv2);
   if(migrierteKetten > 0){
-    console.log('[Build 756] '+migrierteKetten+' SH-Korrektur-Kette(n) markiert');
+    console.log('[Build 757] '+migrierteKetten+' SH-Korrektur-Kette(n) markiert (mit _print_datum/_verbindlichkeit_monat)');
   }
 })();
 // ═══════════════════════════════════════════════════════════════
@@ -2338,6 +2343,28 @@ function _konsolidiereDokumentNachV2(dokId){
     v2Ab.aktualisiert_am     = new Date().toISOString();
 
     // ═══════════════════════════════════════════════════════════════
+    // BUILD 757: Erweiterte K4-Felder für Bank-Match-Engine-Bereitschaft
+    // ═══════════════════════════════════════════════════════════════
+    // Bei Studio-Hamburg-Belegen extrahiert die KI zusätzlich:
+    //   - print_datum: PDF-Druckdatum (robust für Korrektur-Sortierung)
+    //   - restzahlung: tatsächlich überwiesener Restbetrag (z.B. 326.63)
+    //   - vorzahlung_anrechnung: bereits geflossene Vorzahlung (negativ, z.B. -424.98)
+    //   - verbindlichkeit_monat: Korrektur-Monat ("2026-02") — eindeutiger Kette-Identifikator
+    //
+    // Diese Werte sind Match-Engine-relevant: Bank-Eingang 326,63 € am 18.03. matcht
+    // dann zur restzahlung dieses 856€-Belegs. Bank-Eingang 424,98 € am 12.03. matcht
+    // zur vorzahlung_anrechnung (= alte Teilzahlung des überholten 484€-Belegs).
+    //
+    // Nur für K4 relevant — andere Klassen haben keine Saldenlogik.
+    if(klasse === '4'){
+      if(d.print_datum)            v2Ab._print_datum            = d.print_datum;
+      if(d.restzahlung != null)    v2Ab._restzahlung            = parseFloat(d.restzahlung) || null;
+      if(d.vorzahlung_anrechnung != null) v2Ab._vorzahlung_anrechnung = parseFloat(d.vorzahlung_anrechnung) || null;
+      if(d.verbindlichkeit_monat)  v2Ab._verbindlichkeit_monat  = d.verbindlichkeit_monat;
+    }
+    // ═══════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════
     // BUILD 756: Studio-Hamburg-Korrektur-Erkennung
     // ═══════════════════════════════════════════════════════════════
     // Studio HH gibt mehrere kumulierte Korrektur-PDFs für denselben Monat raus.
@@ -2348,21 +2375,32 @@ function _konsolidiereDokumentNachV2(dokId){
     // (Gegenbuchungs-Logik, nicht Ersetzen)" — wir markieren den älteren als
     // _ueberholt_durch, Renderer (Jahresabschluss/USt-VA) filtern ihn raus.
     //
-    // Identifikator für Korrektur-Kette: klasse=4 + gleicher leistungs_monat.
+    // Identifikator für Korrektur-Kette (Build 757): klasse=4 + gleicher
+    // _verbindlichkeit_monat (wenn vorhanden) ODER gleicher leistungs_monat (Fallback).
+    // _verbindlichkeit_monat ist zuverlässiger weil bei Korrekturen explizit gleich,
+    // während leistungs_monat aus Drehtagen abgeleitet wird (auch oft gleich, aber
+    // bei mehrteiligen Belegen z.B. 17.02. + 27.02. theoretisch unterschiedlich).
+    //
+    // Sortierung in der Kette (Build 757): nach _print_datum (PDF-Druckdatum) wenn
+    // vorhanden, sonst ausstellungs_datum. Druckdatum ist immer unterschiedlich
+    // zwischen zwei Korrektur-Versionen — die spätere ist die aktuelle.
+    //
     // Match-Engine kann Bank-Eingänge weiterhin zu überholten Belegen matchen,
     // weil dort die echten Teilzahlungen lagen.
-    if(klasse === '4' && v2Ab.leistungs_monat){
+    var ketteId = v2Ab._verbindlichkeit_monat || v2Ab.leistungs_monat;
+    if(klasse === '4' && ketteId){
       var k4Geschwister = (dbv2.abrechnungen||[]).filter(function(other){
-        return other.id !== v2Ab.id
-            && other.klasse === '4'
-            && other.leistungs_monat === v2Ab.leistungs_monat;
+        if(other.id === v2Ab.id) return false;
+        if(other.klasse !== '4') return false;
+        var otherKetteId = other._verbindlichkeit_monat || other.leistungs_monat;
+        return otherKetteId === ketteId;
       });
       if(k4Geschwister.length > 0){
-        // Jüngsten Beleg in der Kette finden (höchstes ausstellungs_datum)
         var alle = k4Geschwister.concat([v2Ab]);
+        // Sortierung: _print_datum primär, ausstellungs_datum sekundär, erstellt_am tertiär
         alle.sort(function(a,b){
-          var da = a.ausstellungs_datum || '';
-          var db = b.ausstellungs_datum || '';
+          var da = a._print_datum || a.ausstellungs_datum || a.erstellt_am || '';
+          var db = b._print_datum || b.ausstellungs_datum || b.erstellt_am || '';
           return da<db?-1:da>db?1:0;
         });
         var juengster = alle[alle.length - 1];
@@ -2370,7 +2408,6 @@ function _konsolidiereDokumentNachV2(dokId){
         // schon manuell als "nicht_ueberholen" markiert (User-Override).
         alle.forEach(function(ab){
           if(ab.id === juengster.id){
-            // Jüngster: kein _ueberholt_durch
             delete ab._ueberholt_durch;
           } else if(!ab._korrektur_manual_override){
             ab._ueberholt_durch = juengster.id;
@@ -2552,6 +2589,9 @@ function _konsolidiereDokumentNachV2(dokId){
     var checks = {};
 
     // (1) Σ Junction-Brutto-Anteile dieser Abrechnung ≈ ab.brutto
+    // Build 758 (#4): Storno-Behandlung — bei brutto < 0 sind Junction-Anteile
+    // typischerweise positiv (= Original-Werte) gespeichert. Vergleich erfolgt
+    // auf Absolutwerte, weil Storno = Vorzeichen-Umkehr der Brutto-Summe.
     var junctions_dieser_ab = (dbv2.abrechnung_termin_links||[]).filter(function(l){
       return l.abrechnung_id === v2Ab.id;
     });
@@ -2565,12 +2605,19 @@ function _konsolidiereDokumentNachV2(dokId){
     } else if(anyAnteilFehlt){
       checks.bruttoSumme = { status:'nicht_pruefbar', grund:'mindestens 1 Anteil fehlt im PDF' };
     } else {
-      var diff_b = summeAnteile - (v2Ab.brutto || 0);
+      var bruttoAbs = Math.abs(v2Ab.brutto || 0);
+      var summeAnteileAbs = Math.abs(summeAnteile);
+      var istStornoB = (v2Ab.brutto || 0) < 0;
+      // Bei Storno: Absolutwert-Vergleich. Bei normalen: signed wie bisher.
+      var diff_b = istStornoB
+        ? (summeAnteileAbs - bruttoAbs)
+        : (summeAnteile - (v2Ab.brutto || 0));
       checks.bruttoSumme = {
         status: Math.abs(diff_b) <= TOL ? 'ok' : 'abweichung',
         soll: v2Ab.brutto || 0,
         ist: Math.round(summeAnteile*100)/100,
-        diff: Math.round(diff_b*100)/100
+        diff: Math.round(diff_b*100)/100,
+        storno: istStornoB || undefined
       };
     }
 
@@ -2632,16 +2679,20 @@ function _konsolidiereDokumentNachV2(dokId){
       else postenSumme += sGG + (sT * sR);
     });
     if(postenSumme > 0 && v2Ab.brutto){
-      var diff_p = postenSumme - (v2Ab.brutto || 0);
-      // Posten-Summe kann Brutto enthalten haben (Doppelzählung) → 2× Brutto = grobe Verwechslung
-      var verdacht_doppelzaehlung = Math.abs(postenSumme - 2*(v2Ab.brutto||0)) <= TOL;
+      // Build 758 (#4): Storno-aware — Posten sind positiv gespeichert auch bei Storno
+      var bruttoAbsP = Math.abs(v2Ab.brutto || 0);
+      var istStornoP = (v2Ab.brutto || 0) < 0;
+      var diff_p = istStornoP ? (postenSumme - bruttoAbsP) : (postenSumme - (v2Ab.brutto || 0));
+      // Doppelzählungs-Verdacht (auch storno-aware)
+      var verdacht_doppelzaehlung = Math.abs(postenSumme - 2*bruttoAbsP) <= TOL;
       checks.posten = {
         status: Math.abs(diff_p) <= TOL ? 'ok'
               : verdacht_doppelzaehlung ? 'doppelzaehlung_verdacht'
               : 'abweichung',
         soll: v2Ab.brutto,
         ist: Math.round(postenSumme*100)/100,
-        diff: Math.round(diff_p*100)/100
+        diff: Math.round(diff_p*100)/100,
+        storno: istStornoP || undefined
       };
     } else {
       checks.posten = { status:'nicht_pruefbar', grund:'keine Posten-Werte' };
@@ -3074,7 +3125,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '756';
+  if(el) el.textContent = '758';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4965,6 +5016,34 @@ function gvlDokSave(btn){
 // Klick auf einen aktiven: markiert ihn als überholt (manuell).
 // "Auto-Erkennung wieder aktivieren" entfernt das Override-Flag und
 // stellt die Saldenfortschreibungs-Logik wieder her.
+// ═══════════════════════════════════════════════════════════════
+// Build 758 (#2): Differenz akzeptieren Toggle
+// ═══════════════════════════════════════════════════════════════
+// Manche Konsistenz-Warnungen sind bekannt und ok (z.B. Rundungsdiff bei
+// 2144/20251201 Auszahlung ±1,65€, oder bei 2229/202603 weil PDF-Werte
+// inhärent abweichen). User kann diese als akzeptiert markieren — sie
+// erscheinen dann in Diagnose-Zähler als ok-aber-akzeptiert.
+function dokToggleKonsistenzAkzeptanz(v2AbId){
+  if(!dbv2 || !dbv2.abrechnungen) return;
+  var v2Ab = dbv2.abrechnungen.find(function(a){return a.id===v2AbId;});
+  if(!v2Ab) return;
+  if(v2Ab._konsistenz_akzeptiert){
+    delete v2Ab._konsistenz_akzeptiert;
+    showToast('⚠ Warnung wieder aktiv');
+  } else {
+    v2Ab._konsistenz_akzeptiert = true;
+    v2Ab._konsistenz_akzeptiert_am = new Date().toISOString();
+    showToast('✓ Differenz akzeptiert');
+  }
+  saveV2(dbv2);
+  // Detail-View neu rendern
+  try {
+    var d=(db.dokumente||[]).find(function(x){return x.id===v2Ab.pdf_datei_id;});
+    if(d) openDetail(d.id);
+  } catch(e){ console.warn('Re-render nach Akzeptanz-Toggle:', e); }
+}
+// ═══════════════════════════════════════════════════════════════
+
 function dokToggleKorrekturKette(v2AbId){
   if(!dbv2 || !dbv2.abrechnungen) return;
   var v2Ab = dbv2.abrechnungen.find(function(a){return a.id===v2AbId;});
@@ -5027,11 +5106,15 @@ function dokToggleKorrekturKette(v2AbId){
   } catch(e){ console.warn('Re-render nach Toggle:', e); }
 }
 
-// Hilfsfunktion: Auto-Erkennung für eine Korrektur-Kette neu durchlaufen
-function _autoErkenneKorrekturKette(leistungsMonat){
-  if(!leistungsMonat || !dbv2 || !dbv2.abrechnungen) return;
+// Hilfsfunktion: Auto-Erkennung für eine Korrektur-Kette neu durchlaufen.
+// Build 757: nutzt _verbindlichkeit_monat ODER leistungs_monat als Kette-ID,
+// und _print_datum ODER ausstellungs_datum als Sortier-Schlüssel.
+function _autoErkenneKorrekturKette(ketteIdOrLeistMonat){
+  if(!ketteIdOrLeistMonat || !dbv2 || !dbv2.abrechnungen) return;
   var kette = dbv2.abrechnungen.filter(function(a){
-    return a.klasse === '4' && a.leistungs_monat === leistungsMonat;
+    if(a.klasse !== '4') return false;
+    var aKette = a._verbindlichkeit_monat || a.leistungs_monat;
+    return aKette === ketteIdOrLeistMonat;
   });
   if(kette.length <= 1) return;
   // Manuelle Overrides nicht antasten
@@ -5039,8 +5122,8 @@ function _autoErkenneKorrekturKette(leistungsMonat){
   if(freie.length === 0) return;
   // Jüngster der freien wird aktiv (kein _ueberholt_durch), andere überholt
   freie.sort(function(a,b){
-    var da = a.ausstellungs_datum || '';
-    var db_ = b.ausstellungs_datum || '';
+    var da = a._print_datum || a.ausstellungs_datum || a.erstellt_am || '';
+    var db_ = b._print_datum || b.ausstellungs_datum || b.erstellt_am || '';
     return da<db_?-1:da>db_?1:0;
   });
   var juengster = freie[freie.length - 1];
@@ -7440,16 +7523,22 @@ function diagnoseGutschriften(){
     lines.push('  beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0));
   });
 
-  // Build 738: Konsistenz-Status pro Abrechnung
+  // Build 738/758: Konsistenz-Status pro Abrechnung
+  // Build 758: akzeptierte Warnungen werden als "akzeptiert" separat gezählt
   lines.push('');
   lines.push('── KONSISTENZ-CHECKS (Build 738) ──');
   var problemAbs = v2Abs.filter(function(v){
-    return v._konsistenz && v._konsistenz.status !== 'ok';
+    return v._konsistenz && v._konsistenz.status !== 'ok' && !v._konsistenz_akzeptiert;
+  });
+  var akzeptierte = v2Abs.filter(function(v){
+    return v._konsistenz && v._konsistenz.status !== 'ok' && v._konsistenz_akzeptiert;
   });
   var ungeprueft = v2Abs.filter(function(v){ return !v._konsistenz; });
-  lines.push('OK: ' + (v2Abs.length - problemAbs.length - ungeprueft.length)
+  var okCount = v2Abs.length - problemAbs.length - akzeptierte.length - ungeprueft.length;
+  lines.push('OK: ' + okCount
            + ' · Warnung: ' + problemAbs.filter(function(v){return v._konsistenz.status==='warnung';}).length
            + ' · Fehler: ' + problemAbs.filter(function(v){return v._konsistenz.status==='fehler';}).length
+           + ' · akzeptiert: ' + akzeptierte.length
            + ' · ungeprueft: ' + ungeprueft.length);
   problemAbs.forEach(function(v){
     lines.push('');
@@ -8819,13 +8908,14 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
     var isSammel = junctions.length > 1;
     var satz = ab.ust_satz ? Math.round(ab.ust_satz*100)+'%' : '—';
 
-    // Build 738: Konsistenz-Indikator (⚠ neben Beleg-Nr)
+    // Build 738/758: Konsistenz-Indikator (⚠ neben Beleg-Nr)
+    // Build 758: akzeptierte Warnungen werden als ✓ angezeigt (grün)
     var kons = ab._konsistenz;
     var konsIcon = '';
     if(kons){
-      if(kons.status === 'fehler'){
+      if(kons.status === 'fehler' && !ab._konsistenz_akzeptiert){
         konsIcon = ' <span title="Konsistenz-Fehler — bitte prüfen" style="color:#b91c1c;cursor:help">⛔</span>';
-      } else if(kons.status === 'warnung'){
+      } else if(kons.status === 'warnung' && !ab._konsistenz_akzeptiert){
         var probs = [];
         if(kons.checks){
           if(kons.checks.bruttoSumme && kons.checks.bruttoSumme.status==='abweichung')
@@ -8839,6 +8929,8 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
         }
         var tip = probs.join(' · ').replace(/"/g, '&quot;');
         konsIcon = ' <span title="'+tip+'" style="color:#c2410c;cursor:help">⚠</span>';
+      } else if(kons.status !== 'ok' && ab._konsistenz_akzeptiert){
+        konsIcon = ' <span title="Differenz akzeptiert" style="color:#15803d;cursor:help">✓</span>';
       }
     }
 
@@ -11420,6 +11512,36 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ Verdienstbescheinigungen am Seitenende (KVAN, KVAG, Auszahlung) — KOMPLETT IGNORIEREN!\n'
     +'    ⚠ "Differenz aus Vormonat" / "bereits erhalten" — NICHT als brutto oder auszahlung verwenden!\n'
     +'\n'
+    +'    SCHRITT 5: ZUSÄTZLICHE K4-FELDER (für Bank-Match-Engine-Bereitschaft):\n'
+    +'    Folgende Felder NUR bei Studio Hamburg AUSSERHALB der sessions-Liste auf TOP-LEVEL ergänzen,\n'
+    +'    wenn sie im PDF vorhanden sind (sonst weglassen — nicht erfinden!):\n'
+    +'\n'
+    +'    print_datum: Druckdatum aus PDF-Footer. Im PDF immer am Seitenende:\n'
+    +'      "8003: SP_Data PA YYYYgmmw RB:YYYYMMDD - DD.MM.YYYY HH:MM:SS"\n'
+    +'      Beispiel: "RB:20251219 - 12.03.2026 12:48:48" → print_datum = "2026-03-12" (ISO-Datum)\n'
+    +'      Bei mehrseitigen PDFs das gleiche Druckdatum erscheint mehrfach — einmal nehmen reicht.\n'
+    +'      Wichtig: Bei Korrektur-Versionen unterscheidet das Druckdatum, welche Version aktueller ist.\n'
+    +'\n'
+    +'    restzahlung: Tatsächlich überwiesener Betrag dieser Korrektur-Periode.\n'
+    +'      Steht auf einer FOLGE-Monatsseite "Gehaltsabrechnung X/YEAR" (OHNE "Korrektur") als:\n'
+    +'        "Holvi Payment Services Zw IBAN DE... EUR XXX,XX"\n'
+    +'      Beispiel: PDF mit "Korrektur 2/2026 (für 3/2026)" hat Folge-Seite "Gehaltsabrechnung 3/2026"\n'
+    +'        mit "Holvi Payment Services Zw IBAN DE491... EUR 326,63" → restzahlung = 326.63\n'
+    +'      Wenn KEINE Folgemonatsseite oder kein Holvi-Betrag → restzahlung weglassen.\n'
+    +'      ⚠ Die "Auszahlung" / "Differenz für Folgemonate" der Hauptseite ist NICHT restzahlung!\n'
+    +'      ⚠ restzahlung ist immer KLEINER oder gleich der Hauptseiten-Auszahlung.\n'
+    +'\n'
+    +'    vorzahlung_anrechnung: Bereits geflossene Vorzahlung die angerechnet wird.\n'
+    +'      Steht auf FOLGE-Monatsseite als "bereits erhalten -XXX,XX"\n'
+    +'      Beispiel: "bereits erhalten -424,98" → vorzahlung_anrechnung = -424.98 (negativ!)\n'
+    +'      Wenn nicht vorhanden → weglassen.\n'
+    +'\n'
+    +'    verbindlichkeit_monat: Monat der Verbindlichkeit im Format "YYYY-MM".\n'
+    +'      Steht im Titel "Korrektur Gehaltsabrechnung X/YYYY (für Y/YYYY)" — der erste Monat (X/YYYY).\n'
+    +'      Beispiel: "Korrektur Gehaltsabrechnung 2/2026 (für 3/2026)" → verbindlichkeit_monat = "2026-02"\n'
+    +'      Wichtig: Mehrere Korrektur-Versionen desselben Vorgangs haben DIE GLEICHE verbindlichkeit_monat.\n'
+    +'      Bei einfacher "Gehaltsabrechnung X/YEAR" ohne Korrektur → verbindlichkeit_monat = "YEAR-XX".\n'
+    +'\n'
     +'    FALL A — PDF hat MEHRERE SEITEN (erkennbar an mehreren "GAGE / Gutschrift" Überschriften oder mehreren "AUSZAHLUNG" Blöcken):\n'
     +'    → JEDE SEITE = GENAU EINE session. 2 Seiten = 2 sessions. 7 Seiten = 7 sessions.\n'
     +'    → NIEMALS zwei Seiten zusammenfassen, egal ob gleicher Filmtitel oder gleiche Rolle!\n'
@@ -12572,7 +12694,22 @@ function _dispRow(label, val, color){
 function dokOpenDetail(id){
   _dokCurrentId = id;
   var d = (db.dokumente||[]).find(function(x){return x.id===id;});
-  if(!d) return;
+  // Build 758 (#6): Stub-Doc / nicht gefunden — informativer Toast statt blank
+  if(!d){
+    var stubMsg = '⚠ Dokument nicht gefunden';
+    try {
+      var v2Found = (dbv2 && dbv2.abrechnungen||[]).find(function(a){
+        return a.pdf_datei_id === id;
+      });
+      if(v2Found){
+        stubMsg += ' — v2-Eintrag ' + (v2Found.beleg_nr||'ohne Nr.') + ' existiert noch';
+      } else {
+        stubMsg += ' — vermutlich gelöscht';
+      }
+    } catch(eStub){ /* silent */ }
+    showToast(stubMsg);
+    return;
+  }
 
   // Monats-Abrechnung: doppelte Sessions (gleicher Tag UND gleicher Film) zusammenführen
   // NICHT zusammenführen wenn verschiedene Daten (verschiedene Abrechnungsblätter!)
@@ -12716,13 +12853,16 @@ function dokOpenDetail(id){
     // - Toggle-Button um manuell zu überschreiben
     try {
       var _v2 = (dbv2 && dbv2.abrechnungen||[]).find(function(a){ return a.pdf_datei_id === d.id; });
-      if(_v2 && _v2.klasse === '4' && _v2.leistungs_monat){
+      // Build 757: Identifikator und Sortierung robuster
+      var _ketteId = _v2 ? (_v2._verbindlichkeit_monat || _v2.leistungs_monat) : null;
+      if(_v2 && _v2.klasse === '4' && _ketteId){
         var _kette = (dbv2.abrechnungen||[]).filter(function(other){
-          return other.klasse === '4'
-              && other.leistungs_monat === _v2.leistungs_monat;
+          if(other.klasse !== '4') return false;
+          var oKette = other._verbindlichkeit_monat || other.leistungs_monat;
+          return oKette === _ketteId;
         }).sort(function(a,b){
-          var da = a.ausstellungs_datum || '';
-          var db_ = b.ausstellungs_datum || '';
+          var da = a._print_datum || a.ausstellungs_datum || a.erstellt_am || '';
+          var db_ = b._print_datum || b.ausstellungs_datum || b.erstellt_am || '';
           return da<db_?-1:da>db_?1:0;
         });
         if(_kette.length > 1){
@@ -12736,8 +12876,8 @@ function dokOpenDetail(id){
           var _bannerIcon = _isUeberholt ? '⚠️' : 'ℹ️';
           var _bannerTitle = _isUeberholt
             ? 'Diese Korrektur wurde durch einen neueren Beleg ersetzt'
-            : (_isJuengster ? 'Dies ist die aktuelle Korrektur-Version' : 'Korrektur-Kette für '+_v2.leistungs_monat);
-          var _bannerBody = 'Studio Hamburg gibt mehrere Korrektur-Belege für denselben Monat heraus (' + _v2.leistungs_monat + '). '
+            : (_isJuengster ? 'Dies ist die aktuelle Korrektur-Version' : 'Korrektur-Kette für '+_ketteId);
+          var _bannerBody = 'Studio Hamburg gibt mehrere Korrektur-Belege für denselben Monat heraus (' + _ketteId + '). '
             + _kette.length + ' Belege in dieser Kette. '
             + 'Finanziell zählt nur der jüngste, ältere werden im Jahresabschluss übersprungen — Bank-Eingänge bleiben sichtbar.';
           body += '<div style="background:'+_bannerBg+';border:2px solid '+_bannerBorder+';border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:'+_bannerColor+'">'
@@ -12748,9 +12888,22 @@ function dokOpenDetail(id){
           _kette.forEach(function(k,i){
             var marker = k.id===_v2.id ? '👉 ' : '';
             var status = !k._ueberholt_durch ? ' · <b>AKTIV</b>' : ' · überholt';
-            body += '<div style="padding:2px 0">'+marker+(k.ausstellungs_datum||'?')+' · Brutto '+fmtEur(k.brutto||0)+status+'</div>';
+            var datumLabel = k._print_datum || k.ausstellungs_datum || '?';
+            body += '<div style="padding:2px 0">'+marker+datumLabel+' · Brutto '+fmtEur(k.brutto||0)+status+'</div>';
           });
           body += '</div>';
+          // Build 757: K4-Bank-Match-Daten (Restzahlung etc.)
+          if(_v2._restzahlung != null || _v2._vorzahlung_anrechnung != null || _v2._print_datum){
+            body += '<div style="background:rgba(255,255,255,.5);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10px">';
+            body += '<div style="font-weight:700;margin-bottom:3px;opacity:.7">Bank-Match-Daten</div>';
+            if(_v2._print_datum)
+              body += '<div style="padding:1px 0">📅 Druckdatum: '+_v2._print_datum+'</div>';
+            if(_v2._vorzahlung_anrechnung != null)
+              body += '<div style="padding:1px 0">⤴️ Vorzahlung angerechnet: '+fmtEur(_v2._vorzahlung_anrechnung)+'</div>';
+            if(_v2._restzahlung != null)
+              body += '<div style="padding:1px 0">💰 Restzahlung an Holvi: <b>'+fmtEur(_v2._restzahlung)+'</b></div>';
+            body += '</div>';
+          }
           // Toggle-Button: manueller Override
           var _toggleLabel = _isManualOverride
             ? 'Auto-Erkennung wieder aktivieren'
@@ -12760,7 +12913,48 @@ function dokOpenDetail(id){
         }
       }
     } catch(e){ console.warn('SH-Korrektur-Banner Fehler:', e); }
-    // ═══ Ende Build 756 ═══
+    // ═══ Ende Build 757 ═══
+
+    // ═══ Build 758 (#2): Konsistenz-Warnung-Banner mit Differenz-akzeptiert-Button
+    // Wenn der Beleg eine bekannte Konsistenz-Warnung hat (z.B. Brutto-Anteils-Diff,
+    // Auszahlungs-Diff durch Rundung, etc.), kann der User sie hier als akzeptiert
+    // markieren. _konsistenz_akzeptiert wird gesetzt; Renderer (Diagnose-Zähler,
+    // Jahresabschluss-Icon) zeigt's dann als "ok-aber-akzeptiert" statt "warnung".
+    try {
+      var _v2k = (dbv2 && dbv2.abrechnungen||[]).find(function(a){ return a.pdf_datei_id === d.id; });
+      if(_v2k && _v2k._konsistenz && _v2k._konsistenz.status === 'warnung'){
+        var _akzeptiert = !!_v2k._konsistenz_akzeptiert;
+        var _kc = _v2k._konsistenz.checks || {};
+        var _probs = [];
+        if(_kc.bruttoSumme && _kc.bruttoSumme.status==='abweichung')
+          _probs.push('Brutto-Anteile: '+(_kc.bruttoSumme.diff>0?'+':'')+_kc.bruttoSumme.diff.toFixed(2)+'€');
+        if(_kc.posten && _kc.posten.status==='abweichung')
+          _probs.push('Posten-Summe: '+(_kc.posten.diff>0?'+':'')+_kc.posten.diff.toFixed(2)+'€');
+        if(_kc.ust && _kc.ust.status==='abweichung')
+          _probs.push('USt: '+(_kc.ust.diff>0?'+':'')+_kc.ust.diff.toFixed(2)+'€');
+        if(_kc.auszahlung && _kc.auszahlung.status==='abweichung')
+          _probs.push('Auszahlung: '+(_kc.auszahlung.diff>0?'+':'')+_kc.auszahlung.diff.toFixed(2)+'€');
+        if(_probs.length > 0){
+          var _bgK = _akzeptiert ? '#dcfce7' : '#fef3c7';
+          var _borK = _akzeptiert ? '#16a34a' : '#f59e0b';
+          var _colK = _akzeptiert ? '#166534' : '#92400e';
+          var _icoK = _akzeptiert ? '✓' : '⚠';
+          var _ttlK = _akzeptiert ? 'Differenz akzeptiert' : 'Konsistenz-Warnung';
+          body += '<div style="background:'+_bgK+';border:2px solid '+_borK+';border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:'+_colK+'">'
+            + '<div style="font-weight:800;margin-bottom:6px">'+_icoK+' '+_ttlK+'</div>'
+            + '<div style="background:rgba(255,255,255,.5);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10px;line-height:1.5">';
+          _probs.forEach(function(p){ body += '<div>• '+esc(p)+'</div>'; });
+          body += '</div>';
+          var _btnLbl = _akzeptiert
+            ? 'Akzeptanz aufheben (wieder als Warnung markieren)'
+            : 'Differenz akzeptieren (bekannt und ok)';
+          body += '<button type="button" onclick="dokToggleKonsistenzAkzeptanz(\''+_v2k.id+'\')" style="width:100%;background:rgba(255,255,255,.7);color:'+_colK+';border:1.5px solid '+_borK+';border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer">'+_btnLbl+'</button>';
+          body += '</div>';
+        }
+      }
+    } catch(eK){ console.warn('Konsistenz-Banner Fehler:', eK); }
+    // ═══ Ende Build 758 (#2) ═══
+
     body+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
       +'<div style="font-size:11px;font-weight:800;color:#15803d;letter-spacing:.5px;margin-bottom:8px">ERKANNTE DATEN</div>';
     body+=_editRow('beschr','Beschreibung',d.beschr||'');
