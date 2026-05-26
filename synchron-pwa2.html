@@ -3125,7 +3125,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '758';
+  if(el) el.textContent = '759';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6258,7 +6258,30 @@ function importData(inp){
       }
       if(!confirm(infoMsg))return;
 
+      // Build 759: Studio-Passwörter + Studio-E-Mails der aktuellen Installation sichern,
+      // damit sie nach Import nicht verloren gehen, wenn das Backup älter ist oder von
+      // einer anderen Installation kommt. Strategie: aktuelle Werte haben Vorrang,
+      // außer das Backup hat selbst welche dann gewinnen die Backup-Werte (User-Intent: das Backup ist
+      // bewusst gewählt und enthält explizit diese Daten).
+      var currentStudioPasswords = null;
+      var currentStudioEmails    = null;
+      try {
+        if(db && db.profil){
+          if(db.profil.studioPasswords) currentStudioPasswords = JSON.parse(JSON.stringify(db.profil.studioPasswords));
+          if(db.profil.studioEmails)    currentStudioEmails    = JSON.parse(JSON.stringify(db.profil.studioEmails));
+        }
+      } catch(eSafe){ console.warn('Profil-Sicherung vor Import:', eSafe); }
+
       db=importDb;
+
+      // Build 759: Studio-Daten merge — aktuelle Werte als Fallback, wenn Backup leer.
+      if(!db.profil) db.profil = {};
+      if(!db.profil.studioPasswords && currentStudioPasswords){
+        db.profil.studioPasswords = currentStudioPasswords;
+      }
+      if(!db.profil.studioEmails && currentStudioEmails){
+        db.profil.studioEmails = currentStudioEmails;
+      }
       // dbv2 importieren wenn vorhanden, sonst leer initialisieren
       if(importDbv2 && typeof dbv2 !== 'undefined'){
         // Alle Top-Level-Keys von dbv2 ersetzen (kein Merge — frischer Stand)
@@ -7584,12 +7607,24 @@ function diagnoseGutschriften(){
 }
 
 function confirmReset(){
-  if(!confirm('Alle Daten unwiderruflich löschen?\n\n(API-Key und iCal-URL bleiben erhalten.)'))return;
-  // Konfig retten
+  if(!confirm('Alle Daten unwiderruflich löschen?\n\n(API-Key, iCal-URL, Studio-Passwörter und Studio-E-Mails bleiben erhalten.)'))return;
+  // Konfig retten (Build 759: jetzt auch Studio-PWs + Studio-Emails)
   var savedApiKey  = null;
   var savedIcalUrl = null;
+  var savedStudioPasswords = null;
+  var savedStudioEmails    = null;
+  var savedName            = null;
+  var savedUst             = null;
   try{ savedApiKey  = localStorage.getItem('anthropic_api_key'); }catch(e){}
   try{ savedIcalUrl = localStorage.getItem('ical_worker_url');   }catch(e){}
+  try{
+    if(db && db.profil){
+      if(db.profil.studioPasswords) savedStudioPasswords = JSON.parse(JSON.stringify(db.profil.studioPasswords));
+      if(db.profil.studioEmails)    savedStudioEmails    = JSON.parse(JSON.stringify(db.profil.studioEmails));
+      if(db.profil.name)            savedName            = db.profil.name;
+      if(db.profil.ust!=null)       savedUst             = db.profil.ust;
+    }
+  }catch(e){ console.warn('Profil-Sicherung vor Reset:', e); }
   // Alles platt — robust gegen zukünftige Keys
   try{ localStorage.clear(); }catch(e){
     // Fallback: bekannte Keys einzeln
@@ -7603,6 +7638,12 @@ function confirmReset(){
   // In-Memory neu
   db   = ddb();
   dbv2 = loadV2();
+  // Build 759: Profil wiederherstellen
+  if(!db.profil) db.profil = {};
+  if(savedStudioPasswords) db.profil.studioPasswords = savedStudioPasswords;
+  if(savedStudioEmails)    db.profil.studioEmails    = savedStudioEmails;
+  if(savedName)            db.profil.name            = savedName;
+  if(savedUst!=null)       db.profil.ust             = savedUst;
   save(db);
   saveV2(dbv2);
   // Re-Render — alle Views inkl. Aggregate (Build 729)
