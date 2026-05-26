@@ -3125,7 +3125,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '759';
+  if(el) el.textContent = '760';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7545,6 +7545,56 @@ function diagnoseGutschriften(){
   datumLos.forEach(function(v){
     lines.push('  beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0));
   });
+
+  // ─── Build 760: K4-BANK-MATCH-FELDER (Studio Hamburg) ─────────────
+  // Zeigt für alle Klasse-4-Belege ob die Match-Engine-relevanten
+  // Felder durch die KI extrahiert wurden:
+  //   _print_datum           (PDF-Druckdatum, robuster als ausstellungs_datum)
+  //   _verbindlichkeit_monat (eindeutige Kette-ID für Korrektur-Belege)
+  //   _restzahlung           (tatsächlicher Holvi/Bank-Eingang)
+  //   _vorzahlung_anrechnung (bereits geflossene Teilzahlung, negativ)
+  lines.push('');
+  lines.push('── K4-BANK-MATCH-FELDER (Build 757/760) ──');
+  var k4Abs = v2Abs.filter(function(v){ return v.klasse === '4'; });
+  if(k4Abs.length === 0){
+    lines.push('Keine Klasse-4-Belege.');
+  } else {
+    lines.push('Anzahl K4-Belege: ' + k4Abs.length);
+    // Statistik welche Felder vorhanden sind
+    var hasPrintDatum = 0, hasVerbMonat = 0, hasRestzahl = 0, hasVorzahl = 0, hasUeberholt = 0;
+    k4Abs.forEach(function(v){
+      if(v._print_datum) hasPrintDatum++;
+      if(v._verbindlichkeit_monat) hasVerbMonat++;
+      if(v._restzahlung != null) hasRestzahl++;
+      if(v._vorzahlung_anrechnung != null) hasVorzahl++;
+      if(v._ueberholt_durch) hasUeberholt++;
+    });
+    lines.push('  _print_datum: '+hasPrintDatum+'/'+k4Abs.length+
+               ' · _verbindlichkeit_monat: '+hasVerbMonat+'/'+k4Abs.length+
+               ' · _restzahlung: '+hasRestzahl+'/'+k4Abs.length+
+               ' · _vorzahlung_anrechnung: '+hasVorzahl+'/'+k4Abs.length+
+               ' · _ueberholt_durch: '+hasUeberholt+'/'+k4Abs.length);
+    // Detail pro Beleg
+    k4Abs.forEach(function(v){
+      lines.push('');
+      lines.push('  beleg='+(v.beleg_nr||'-')
+                +' brutto='+(v.brutto||0)
+                +' titel='+(v.titel||'').slice(0,40));
+      lines.push('    leistungs_monat       = '+(v.leistungs_monat || '⚠ FEHLT'));
+      lines.push('    ausstellungs_datum    = '+(v.ausstellungs_datum || '⚠ FEHLT'));
+      lines.push('    _print_datum          = '+(v._print_datum || '⚠ FEHLT'));
+      lines.push('    _verbindlichkeit_monat= '+(v._verbindlichkeit_monat || '⚠ FEHLT'));
+      lines.push('    _restzahlung          = '+(v._restzahlung != null ? v._restzahlung : '⚠ FEHLT'));
+      lines.push('    _vorzahlung_anrechnung= '+(v._vorzahlung_anrechnung != null ? v._vorzahlung_anrechnung : '— (nicht vorhanden im PDF, ok)'));
+      lines.push('    auszahlung            = '+(v.auszahlung || '?'));
+      if(v._ueberholt_durch){
+        lines.push('    _ueberholt_durch      = '+v._ueberholt_durch+' (Korrektur-Kette)');
+      }
+      if(v._korrektur_manual_override){
+        lines.push('    _korrektur_manual_override = true');
+      }
+    });
+  }
 
   // Build 738/758: Konsistenz-Status pro Abrechnung
   // Build 758: akzeptierte Warnungen werden als "akzeptiert" separat gezählt
