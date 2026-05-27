@@ -3194,7 +3194,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '763';
+  if(el) el.textContent = '765';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10135,17 +10135,37 @@ function undoAction(actionId){
         break;
 
       case 'dok_bestaetigt':
-        // Dokument zurück in Warteliste
+        // Build 765: Rückgängig = KOMPLETTES Löschen, nicht zurück in Pipeline.
+        // Das Dokument wird wie "nie hochgeladen" behandelt — User kann die Datei
+        // einfach nochmal aus dem Ordner hochladen wenn er nochmal probieren will.
         var d = (db.dokumente||[]).find(function(x){return x.id===action.undoData.dokId;});
-        if(d){
-          d.bestaetigt = false;
-          d.awaitConfirm = true;
-          d.dataURL = action.undoData.dataURL || null; // Foto ist weg — kann nicht wiederhergestellt werden
-          d.typ = action.undoData.typVorher || d.typ;
-        }
-        // Abrechnung entfernen falls neu angelegt
+        var _undoDatname = (d && d.dateiname) || null;
+        // Abrechnung entfernen falls neu angelegt (Legacy)
         if(action.undoData.abId){
           db.abrechnungen = (db.abrechnungen||[]).filter(function(a){return a.id!==action.undoData.abId;});
+        }
+        // ─── Build 764/765: dbv2-Einträge mitlöschen ───
+        // Beim Bestätigen schreibt _konsolidiereDokumentNachV2 Einträge in
+        // dbv2.abrechnungen (mit pdf_datei_id = dokId) und entsprechende
+        // Junctions in dbv2.abrechnung_termin_links. Diese müssen beim
+        // Rückgängig auch entfernt werden, sonst hängt die Abrechnung weiter
+        // im Jahresabschluss / in der USt-VA / in der Match-Engine.
+        if(action.undoData.dokId && dbv2 && dbv2.abrechnungen){
+          var entferntIds = [];
+          dbv2.abrechnungen = dbv2.abrechnungen.filter(function(v2a){
+            if(v2a.pdf_datei_id === action.undoData.dokId){
+              entferntIds.push(v2a.id);
+              return false;
+            }
+            return true;
+          });
+          // Junctions die auf entfernte Abrechnungen zeigen, auch raus
+          if(entferntIds.length && dbv2.abrechnung_termin_links){
+            dbv2.abrechnung_termin_links = dbv2.abrechnung_termin_links.filter(function(l){
+              return entferntIds.indexOf(l.abrechnung_id) < 0;
+            });
+          }
+          saveV2(dbv2);
         }
         // Termin-Verknüpfung lösen + Status/Felder zurücksetzen
         if(action.undoData.terminId){
@@ -10157,13 +10177,23 @@ function undoAction(actionId){
             t2.brutto_termin=null; t2.mwst_anteil=null; t2.gutschrift_nr='';
           }
         }
-        // importedFiles + _archivLog bereinigen
-        var _undoDatname = (d && d.dateiname) || null;
+        // Build 765: Dokument selbst KOMPLETT entfernen + Geschwister (Split-Kinder)
+        if(action.undoData.dokId){
+          // Split-Kinder mitlöschen (mehrere PDFs die ein Original geteilt hat)
+          var dokIdToDelete = action.undoData.dokId;
+          db.dokumente = (db.dokumente||[]).filter(function(x){
+            if(x.id === dokIdToDelete) return false;            // dieses Dok selbst
+            if(x._splitFromPdf === dokIdToDelete) return false; // Split-Kinder
+            if(x._splitGroup === dokIdToDelete) return false;   // Split-Gruppe
+            return true;
+          });
+        }
+        // importedFiles + _archivLog bereinigen → User kann Datei nochmal hochladen
         if(_undoDatname){
           if(db.importedFiles) db.importedFiles = db.importedFiles.filter(function(n){ return n !== _undoDatname; });
           if(db._archivLog) db._archivLog = db._archivLog.filter(function(e){ return e.dateiname !== _undoDatname; });
         }
-        showToast('↩ Dokument zurück in Warteliste (Foto unwiederbringlich gelöscht)');
+        showToast('↩ Dokument komplett gelöscht — kann neu hochgeladen werden');
         break;
 
       case 'termin_bezahlt':
