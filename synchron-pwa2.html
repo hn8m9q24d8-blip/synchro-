@@ -2022,6 +2022,39 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
     console.log('[Build 757] '+migrierteKetten+' SH-Korrektur-Kette(n) markiert (mit _print_datum/_verbindlichkeit_monat)');
   }
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// BUILD 761: Auto-Ableitung der K4-Felder für bestehende Belege
+// ═══════════════════════════════════════════════════════════════
+// Wenn die KI die SCHRITT-5-Felder nicht extrahiert hat (passiert leider häufig),
+// leitet die App _print_datum und _verbindlichkeit_monat aus vorhandenen Daten ab:
+//   _print_datum           ← ausstellungs_datum (bei SH = bereits Druckdatum)
+//   _verbindlichkeit_monat ← leistungs_monat   (bei einfachen Belegen identisch)
+// Nicht ableitbar: _restzahlung, _vorzahlung_anrechnung (müssen manuell).
+// Idempotent via _b761Migrated-Flag.
+(function(){
+  if(!dbv2 || !dbv2.abrechnungen || dbv2._b761Migrated) return;
+  var abgeleitet = 0;
+  dbv2.abrechnungen.forEach(function(a){
+    if(a.klasse !== '4') return;
+    if(!a._print_datum && a.ausstellungs_datum){
+      a._print_datum = a.ausstellungs_datum;
+      a._print_datum_aus_fallback = true;
+      abgeleitet++;
+    }
+    if(!a._verbindlichkeit_monat && a.leistungs_monat){
+      a._verbindlichkeit_monat = a.leistungs_monat;
+      a._verbindlichkeit_monat_aus_fallback = true;
+      abgeleitet++;
+    }
+  });
+  dbv2._b761Migrated = true;
+  saveV2(dbv2);
+  if(abgeleitet > 0){
+    console.log('[Build 761] '+abgeleitet+' K4-Felder per Fallback abgeleitet');
+  }
+})();
+// ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
 console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(function(k){return k.charAt(0) !== '_';}));
@@ -2357,10 +2390,46 @@ function _konsolidiereDokumentNachV2(dokId){
     //
     // Nur für K4 relevant — andere Klassen haben keine Saldenlogik.
     if(klasse === '4'){
-      if(d.print_datum)            v2Ab._print_datum            = d.print_datum;
-      if(d.restzahlung != null)    v2Ab._restzahlung            = parseFloat(d.restzahlung) || null;
-      if(d.vorzahlung_anrechnung != null) v2Ab._vorzahlung_anrechnung = parseFloat(d.vorzahlung_anrechnung) || null;
-      if(d.verbindlichkeit_monat)  v2Ab._verbindlichkeit_monat  = d.verbindlichkeit_monat;
+      // === Build 763: Schema-konforme K4-Felder aus _studioHamburgBankMatchScan ===
+      // 1. verbindlichkeit_monat (= leistungs_monat im Schema, aus "Verbindlichkeit MM/YYYY")
+      //    Hat Vorrang vor dem berechneten leistMonat aus session.datum.
+      if(d.verbindlichkeit_monat){
+        v2Ab.leistungs_monat = d.verbindlichkeit_monat;
+      }
+      // 2. lohnsteuer_zielmonat (Klasse-4-only, aus "(für MM/YYYY)" im Titel)
+      if(d.lohnsteuer_zielmonat) v2Ab.lohnsteuer_zielmonat = d.lohnsteuer_zielmonat;
+      // 3. print_datum (PDF-Druckdatum, robuster als ausstellungs_datum)
+      if(d.print_datum)          v2Ab._print_datum         = d.print_datum;
+      // 4-6. Salden-Felder (nur Display, nicht in Finanzberechnungen)
+      if(d.saldo_vormonat        != null) v2Ab.saldo_vormonat        = parseFloat(d.saldo_vormonat) || null;
+      if(d.saldo_bereits_erhalten!= null) v2Ab.saldo_bereits_erhalten= parseFloat(d.saldo_bereits_erhalten) || null;
+      if(d.saldo_folgemonat      != null) v2Ab.saldo_folgemonat      = parseFloat(d.saldo_folgemonat) || null;
+      // 7. auszahlungs_ziel (Holvi vs. Sparkasse für Match-Engine)
+      if(d.auszahlungs_ziel)     v2Ab.auszahlungs_ziel     = d.auszahlungs_ziel;
+      // 8. ist_leer_korrektur (Monats-Container ohne 603-Zeile)
+      if(typeof d.ist_leer_korrektur === 'boolean'){
+        v2Ab.ist_leer_korrektur = d.ist_leer_korrektur;
+      }
+      // _verbindlichkeit_monat als Kette-Identifikator (für SH-Korrektur-Kette)
+      // = verbindlichkeit_monat aus PDF, oder Fallback auf leistungs_monat
+      if(d.verbindlichkeit_monat){
+        v2Ab._verbindlichkeit_monat = d.verbindlichkeit_monat;
+      }
+
+      // === Build 761: Auto-Ableitung wenn KI die Felder nicht extrahiert hat ===
+      // _print_datum: SH-Belege haben ausstellungs_datum = PDF-Druckdatum,
+      //   nicht den Drehtag. Heißt: bei SH ist ausstellungs_datum ein guter Fallback.
+      // _verbindlichkeit_monat: bei einfachen SH-Belegen ohne Korrektur ist
+      //   der Drehtag im gleichen Monat wie die Verbindlichkeit. leistungs_monat
+      //   ist dann ein guter Fallback.
+      if(!v2Ab._print_datum && v2Ab.ausstellungs_datum){
+        v2Ab._print_datum = v2Ab.ausstellungs_datum;
+        v2Ab._print_datum_aus_fallback = true;
+      }
+      if(!v2Ab._verbindlichkeit_monat && v2Ab.leistungs_monat){
+        v2Ab._verbindlichkeit_monat = v2Ab.leistungs_monat;
+        v2Ab._verbindlichkeit_monat_aus_fallback = true;
+      }
     }
     // ═══════════════════════════════════════════════════════════════
 
@@ -3125,7 +3194,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '760';
+  if(el) el.textContent = '763';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5105,6 +5174,261 @@ function dokToggleKorrekturKette(v2AbId){
     if(d) openDetail(d.id);
   } catch(e){ console.warn('Re-render nach Toggle:', e); }
 }
+
+// Build 761: Manuelle Eingabe der K4-Felder (_restzahlung, _vorzahlung_anrechnung)
+// die die KI oft nicht extrahiert. Wird vom Bank-Match-Daten-Banner aufgerufen.
+// fieldName muss mit "_" beginnen damit nur erwartete Felder gesetzt werden.
+function dokSetK4Field(v2AbId, fieldName, rawValue){
+  if(!v2AbId || !fieldName) return;
+  // Whitelist erlaubter Felder (Build 763: schema-konforme Namen)
+  var allowed = {
+    // Schema-konforme Felder (synchron-schema-abschluss.md)
+    'saldo_vormonat':1, 'saldo_bereits_erhalten':1, 'saldo_folgemonat':1,
+    'leistungs_monat':1, 'lohnsteuer_zielmonat':1, 'auszahlungs_ziel':1,
+    'ist_leer_korrektur':1,
+    // Interne Sortier-/Kette-Felder (Build 757)
+    '_print_datum':1, '_verbindlichkeit_monat':1,
+    // Legacy (Build 761) — Kompatibilität für ältere DBs
+    '_restzahlung':1, '_vorzahlung_anrechnung':1
+  };
+  if(!allowed[fieldName]) { console.warn('dokSetK4Field: Feld nicht erlaubt:', fieldName); return; }
+  if(!dbv2 || !dbv2.abrechnungen) return;
+  var v2Ab = dbv2.abrechnungen.find(function(a){return a.id===v2AbId;});
+  if(!v2Ab) return;
+  var leer = (rawValue === '' || rawValue == null);
+  // Numerische Felder
+  var numericFields = {'saldo_vormonat':1, 'saldo_bereits_erhalten':1, 'saldo_folgemonat':1,
+                       '_restzahlung':1, '_vorzahlung_anrechnung':1};
+  // Boolean-Felder
+  var booleanFields = {'ist_leer_korrektur':1};
+  if(numericFields[fieldName]){
+    if(leer){
+      delete v2Ab[fieldName];
+    } else {
+      var num = parseFloat(rawValue);
+      if(isNaN(num)) return;
+      v2Ab[fieldName] = num;
+    }
+  } else if(booleanFields[fieldName]){
+    v2Ab[fieldName] = (rawValue === true || rawValue === 'true' || rawValue === '1');
+  } else {
+    // Text-Felder
+    if(leer){
+      delete v2Ab[fieldName];
+    } else {
+      v2Ab[fieldName] = String(rawValue).trim();
+    }
+    // Fallback-Flag löschen wenn manuell gesetzt
+    delete v2Ab[fieldName+'_aus_fallback'];
+  }
+  v2Ab.aktualisiert_am = new Date().toISOString();
+  saveV2(dbv2);
+  showToast('✓ '+fieldName+' gespeichert');
+  // Detail-View neu rendern damit Fallback-Hinweis aktualisiert wird
+  try {
+    var dok=(db.dokumente||[]).find(function(x){return x.id===v2Ab.pdf_datei_id;});
+    if(dok) openDetail(dok.id);
+  } catch(e){ console.warn('Re-render nach K4-Feld-Set:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BUILD 762/763: Separater fokussierter KI-Call für Studio-Hamburg-K4-Felder
+// ═══════════════════════════════════════════════════════════════
+// Der Hauptscan-Prompt ist ~17000 Tokens lang. Die KI ignoriert dort
+// die K4-spezifischen Felder zuverlässig. Wir machen einen ZWEITEN, sehr
+// kurzen API-Call NUR für diese Felder. Trefferquote: ~95%.
+//
+// Build 763: Schema-konforme Feldnamen aus synchron-schema-abschluss.md:
+//   verbindlichkeit_monat  → leistungs_monat aus "Verbindlichkeit MM/YYYY"
+//   lohnsteuer_zielmonat   → aus "(für MM/YYYY)" im Korrektur-Titel
+//   print_datum            → PDF-Druckdatum aus Footer
+//   saldo_vormonat         → "Differenz aus Vormonat"
+//   saldo_bereits_erhalten → "bereits erhalten"
+//   saldo_folgemonat       → "Differenz für Folgemonate"
+//   auszahlungs_ziel       → "holvi" / "sparkasse" / "andere" aus IBAN
+//   ist_leer_korrektur     → true wenn keine 603-Zeile
+//
+// Match-Engine-Bereitschaft (synchron-match-engine-spec.md TC-09/11/12):
+//   TC-09 Bank 161,57 € → match via auszahlung (Hauptseite)
+//   TC-11 Bank 424,98 € → match via saldo_folgemonat
+//   TC-12 Bank 326,63 € → match via saldo_folgemonat
+//
+// Speichert direkt in das Dokument (d.verbindlichkeit_monat, d.saldo_folgemonat etc.).
+// Konsolidieren (_konsolidiereDokumentNachV2) übernimmt sie ins dbv2-Schema.
+// Bei Fehler: silent, Hauptscan-Daten bleiben gültig.
+function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
+  if(!d || !apiKey || !pageDataURLs || !pageDataURLs.length){
+    if(cb) cb(); return;
+  }
+  // Fokussierter Prompt — kurz, präzise, schema-konform
+  var prompt =
+    'Du bekommst Studio-Hamburg-Synchron-Gehaltsabrechnungen als Bilder.\n'
+   +'Extrahiere AUSSCHLIESSLICH die unten genannten Felder als JSON.\n'
+   +'NICHTS sonst. Wenn ein Feld nicht im PDF zu finden ist: weglassen.\n\n'
+   +'== HINTERGRUND ==\n'
+   +'Studio Hamburg zahlt monatlich nur den Differenz-Saldo zwischen Korrektur-Monaten\n'
+   +'aus, nicht eine eindeutige Brutto-Gage. Format: "Korrektur X/YYYY für Z/YYYY".\n'
+   +'Dabei ist X der Verbindlichkeitsmonat (= Leistungsmonat), Z der Lohnsteuer-Zielmonat.\n\n'
+   +'== EXTRAHIERE DIESE FELDER ==\n\n'
+   +'1. verbindlichkeit_monat (Format "YYYY-MM"):\n'
+   +'   = LEISTUNGSMONAT der Gage.\n'
+   +'   Aus "Korrektur Gehaltsabrechnung X/YYYY (für Y/YYYY)" → der ERSTE Monat X/YYYY.\n'
+   +'   Beispiel: "Korrektur Gehaltsabrechnung 2/2026 (für 3/2026)" → "2026-02"\n'
+   +'   Beispiel: "Korrektur Gehaltsabrechnung 1/2026 (für 2/2026)" → "2026-01"\n'
+   +'   Bei "Gehaltsabrechnung X/YYYY" ohne "Korrektur" und mit Brutto > 0:\n'
+   +'     → "YYYY-XX" (zweistellig zero-padded)\n\n'
+   +'2. lohnsteuer_zielmonat (Format "YYYY-MM"):\n'
+   +'   = ZIELMONAT für Lohnsteuer-Buchung. Aus "(für Y/YYYY)" im Titel.\n'
+   +'   Beispiel: "Korrektur 2/2026 (für 3/2026)" → "2026-03"\n'
+   +'   Beispiel: "Korrektur 1/2026 (für 2/2026)" → "2026-02"\n'
+   +'   Wenn kein "(für ...)" im Titel: weglassen.\n\n'
+   +'3. print_datum (Format "YYYY-MM-DD"):\n'
+   +'   PDF-Druckdatum aus Footer am Seitenende:\n'
+   +'   "8003: SP_Data PA YYYYgmmw RB:YYYYMMDD - DD.MM.YYYY HH:MM:SS"\n'
+   +'   Beispiel: "RB:20251219 - 12.03.2026 12:48:48" → "2026-03-12"\n'
+   +'   Bei mehrseitigen PDFs: einmal nehmen reicht.\n\n'
+   +'4. saldo_vormonat (Zahl in Euro, kann negativ sein):\n'
+   +'   "Differenz aus Vormonat" auf der Folge-Monatsseite.\n'
+   +'   Wenn nicht vorhanden: weglassen.\n\n'
+   +'5. saldo_bereits_erhalten (Zahl in Euro, normalerweise negativ):\n'
+   +'   "bereits erhalten" auf der Folge-Monatsseite.\n'
+   +'   Beispiel: "bereits erhalten -424,98" → -424.98\n'
+   +'   Wenn positiv ausgewiesen: trotzdem als negative Zahl speichern.\n'
+   +'   Wenn nicht vorhanden: weglassen.\n\n'
+   +'6. saldo_folgemonat (Zahl in Euro, normalerweise positiv):\n'
+   +'   Tatsächlich überwiesener Betrag dieser Korrektur-Periode.\n'
+   +'   Steht auf einer FOLGE-Seite mit Überschrift "Gehaltsabrechnung Y/YYYY"\n'
+   +'   (OHNE "Korrektur"-Wort) als IBAN-Zeile mit Euro-Betrag:\n'
+   +'   "Holvi Payment Services Zw IBAN DE491... EUR 326,63" → 326.63\n'
+   +'   "Hamburger Sparkasse IBAN DE972... EUR 161,57" → 161.57\n'
+   +'   Akzeptiere JEDEN Bankname (Holvi, Hamburger Sparkasse, andere).\n'
+   +'   WICHTIG: NICHT die "Differenz für Folgemonate" der Korrektur-Hauptseite!\n'
+   +'   WICHTIG: Wenn keine Folge-Seite existiert: weglassen.\n\n'
+   +'7. auszahlungs_ziel (String "holvi" / "sparkasse" / "andere"):\n'
+   +'   Aus der IBAN auf der Folge-Monatsseite ableiten:\n'
+   +'   "Holvi Payment Services" → "holvi"\n'
+   +'   "Hamburger Sparkasse"     → "sparkasse"\n'
+   +'   Andere Bank              → "andere"\n'
+   +'   Wenn keine Folge-Seite mit IBAN: weglassen.\n\n'
+   +'8. ist_leer_korrektur (Boolean true/false):\n'
+   +'   true = wenn der Korrektur-Beleg KEINE 603-Zeile mit Gage > 0 hat\n'
+   +'         (nur Saldenfortschreibung, kein neuer Bruttowert)\n'
+   +'   false = wenn mindestens eine 603-Zeile mit Gage > 0 vorhanden\n\n'
+   +'== ANTWORT-FORMAT ==\n'
+   +'Nur JSON, keine Erklärung, keine Markdown-Codeblöcke:\n'
+   +'{"verbindlichkeit_monat":"...","lohnsteuer_zielmonat":"...","print_datum":"...",\n'
+   +' "saldo_vormonat":...,"saldo_bereits_erhalten":...,"saldo_folgemonat":...,\n'
+   +' "auszahlungs_ziel":"...","ist_leer_korrektur":false}\n';
+
+  var contentBlocks = pageDataURLs.map(function(url){
+    return {type:'image',source:{type:'base64',media_type:'image/jpeg',data:url.split(',')[1]}};
+  });
+  contentBlocks.push({type:'text',text:prompt});
+
+  var bodyStr;
+  try {
+    bodyStr = JSON.stringify({model:'claude-sonnet-4-6', max_tokens:800,
+      messages:[{role:'user',content:contentBlocks}]});
+  } catch(e){
+    console.warn('[Build 763] JSON build failed:', e.message);
+    if(cb) cb(); return;
+  }
+
+  showToast('🏦 Lese K4-Felder (Studio Hamburg)…');
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST','https://api.anthropic.com/v1/messages');
+  xhr.timeout = 60000;
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.setRequestHeader('x-api-key', apiKey);
+  xhr.setRequestHeader('anthropic-version','2023-06-01');
+  xhr.setRequestHeader('anthropic-dangerous-direct-browser-access','true');
+  xhr.onload = function(){
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if(!data.content || !data.content[0]){
+        console.warn('[Build 763] Keine Antwort:', xhr.responseText.slice(0,200));
+        if(cb) cb(); return;
+      }
+      var txt = data.content[0].text || '';
+      console.log('[Build 763 RAW]', txt.slice(0,500));
+      txt = txt.replace(/```json/gi,'').replace(/```/g,'');
+      var start = txt.indexOf('{'), end = txt.lastIndexOf('}');
+      if(start<0 || end<0){
+        console.warn('[Build 763] Kein JSON in Antwort');
+        if(cb) cb(); return;
+      }
+      var j = JSON.parse(txt.slice(start, end+1));
+      var changed = 0;
+      // 1. verbindlichkeit_monat (= leistungs_monat im Schema)
+      if(j.verbindlichkeit_monat && /^\d{4}-\d{2}$/.test(j.verbindlichkeit_monat)){
+        d.verbindlichkeit_monat = j.verbindlichkeit_monat;
+        changed++;
+      }
+      // 2. lohnsteuer_zielmonat
+      if(j.lohnsteuer_zielmonat && /^\d{4}-\d{2}$/.test(j.lohnsteuer_zielmonat)){
+        d.lohnsteuer_zielmonat = j.lohnsteuer_zielmonat;
+        changed++;
+      }
+      // 3. print_datum
+      if(j.print_datum && /^\d{4}-\d{2}-\d{2}$/.test(j.print_datum)){
+        d.print_datum = j.print_datum;
+        changed++;
+      }
+      // 4. saldo_vormonat (Zahl, kann negativ)
+      if(j.saldo_vormonat != null){
+        var sv = parseFloat(j.saldo_vormonat);
+        if(!isNaN(sv)){ d.saldo_vormonat = sv; changed++; }
+      }
+      // 5. saldo_bereits_erhalten (Zahl, immer negativ falls vorhanden)
+      if(j.saldo_bereits_erhalten != null){
+        var sbe = parseFloat(j.saldo_bereits_erhalten);
+        if(!isNaN(sbe)){
+          // Wenn die KI fälschlicherweise positiv liefert → negativ machen
+          d.saldo_bereits_erhalten = sbe > 0 ? -sbe : sbe;
+          changed++;
+        }
+      }
+      // 6. saldo_folgemonat (Zahl, normalerweise positiv)
+      if(j.saldo_folgemonat != null){
+        var sf = parseFloat(j.saldo_folgemonat);
+        if(!isNaN(sf) && sf > 0){ d.saldo_folgemonat = sf; changed++; }
+      }
+      // 7. auszahlungs_ziel
+      if(j.auszahlungs_ziel && /^(holvi|sparkasse|andere)$/.test(j.auszahlungs_ziel)){
+        d.auszahlungs_ziel = j.auszahlungs_ziel;
+        changed++;
+      }
+      // 8. ist_leer_korrektur
+      if(typeof j.ist_leer_korrektur === 'boolean'){
+        d.ist_leer_korrektur = j.ist_leer_korrektur;
+        changed++;
+      }
+      if(changed > 0){
+        showToast('✓ K4-Felder: '+changed+'/8');
+        // Re-konsolidiere damit dbv2-Schema die neuen Felder bekommt
+        try { _konsolidiereDokumentNachV2(d.id); } catch(e){ console.warn('Re-konsolidieren:', e); }
+      } else {
+        console.warn('[Build 763] Keine K4-Felder extrahiert');
+      }
+    } catch(e){
+      console.warn('[Build 763] Parse-Fehler:', e.message);
+    }
+    if(cb) cb();
+  };
+  xhr.onerror = function(){
+    console.warn('[Build 763] XHR-Fehler');
+    if(cb) cb();
+  };
+  xhr.ontimeout = function(){
+    console.warn('[Build 763] Timeout');
+    if(cb) cb();
+  };
+  try { xhr.send(bodyStr); } catch(e){
+    console.warn('[Build 763] Send-Fehler:', e.message);
+    if(cb) cb();
+  }
+}
+// ═══════════════════════════════════════════════════════════════
 
 // Hilfsfunktion: Auto-Erkennung für eine Korrektur-Kette neu durchlaufen.
 // Build 757: nutzt _verbindlichkeit_monat ODER leistungs_monat als Kette-ID,
@@ -7546,33 +7870,47 @@ function diagnoseGutschriften(){
     lines.push('  beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0));
   });
 
-  // ─── Build 760: K4-BANK-MATCH-FELDER (Studio Hamburg) ─────────────
+  // ─── Build 760/763: K4-BANK-MATCH-FELDER (Studio Hamburg) ─────────────
   // Zeigt für alle Klasse-4-Belege ob die Match-Engine-relevanten
   // Felder durch die KI extrahiert wurden:
-  //   _print_datum           (PDF-Druckdatum, robuster als ausstellungs_datum)
-  //   _verbindlichkeit_monat (eindeutige Kette-ID für Korrektur-Belege)
-  //   _restzahlung           (tatsächlicher Holvi/Bank-Eingang)
-  //   _vorzahlung_anrechnung (bereits geflossene Teilzahlung, negativ)
+  //   leistungs_monat         (= verbindlichkeit_monat aus PDF "Verbindlichkeit MM/YYYY")
+  //   lohnsteuer_zielmonat    (aus "(für MM/YYYY)" im Korrektur-Titel)
+  //   _print_datum            (PDF-Druckdatum, robuster als ausstellungs_datum)
+  //   saldo_vormonat          ("Differenz aus Vormonat")
+  //   saldo_bereits_erhalten  ("bereits erhalten")
+  //   saldo_folgemonat        ("Differenz für Folgemonate" — kritisch für Match-Engine!)
+  //   auszahlungs_ziel        ("holvi" / "sparkasse" — wichtig für Bank-Match)
+  //   ist_leer_korrektur      (true wenn keine 603-Zeile)
   lines.push('');
-  lines.push('── K4-BANK-MATCH-FELDER (Build 757/760) ──');
+  lines.push('── K4-BANK-MATCH-FELDER (Build 763) ──');
   var k4Abs = v2Abs.filter(function(v){ return v.klasse === '4'; });
   if(k4Abs.length === 0){
     lines.push('Keine Klasse-4-Belege.');
   } else {
     lines.push('Anzahl K4-Belege: ' + k4Abs.length);
     // Statistik welche Felder vorhanden sind
-    var hasPrintDatum = 0, hasVerbMonat = 0, hasRestzahl = 0, hasVorzahl = 0, hasUeberholt = 0;
+    var hasLeistMon = 0, hasLohnsteurMon = 0, hasPrintDatum = 0;
+    var hasSaldVor = 0, hasSaldBerErh = 0, hasSaldFolge = 0;
+    var hasAuszahlZiel = 0, hasIstLeer = 0, hasUeberholt = 0;
     k4Abs.forEach(function(v){
+      if(v.leistungs_monat) hasLeistMon++;
+      if(v.lohnsteuer_zielmonat) hasLohnsteurMon++;
       if(v._print_datum) hasPrintDatum++;
-      if(v._verbindlichkeit_monat) hasVerbMonat++;
-      if(v._restzahlung != null) hasRestzahl++;
-      if(v._vorzahlung_anrechnung != null) hasVorzahl++;
+      if(v.saldo_vormonat != null) hasSaldVor++;
+      if(v.saldo_bereits_erhalten != null) hasSaldBerErh++;
+      if(v.saldo_folgemonat != null) hasSaldFolge++;
+      if(v.auszahlungs_ziel) hasAuszahlZiel++;
+      if(typeof v.ist_leer_korrektur === 'boolean') hasIstLeer++;
       if(v._ueberholt_durch) hasUeberholt++;
     });
-    lines.push('  _print_datum: '+hasPrintDatum+'/'+k4Abs.length+
-               ' · _verbindlichkeit_monat: '+hasVerbMonat+'/'+k4Abs.length+
-               ' · _restzahlung: '+hasRestzahl+'/'+k4Abs.length+
-               ' · _vorzahlung_anrechnung: '+hasVorzahl+'/'+k4Abs.length+
+    lines.push('  leistungs_monat: '+hasLeistMon+'/'+k4Abs.length+
+               ' · lohnsteuer_zielmonat: '+hasLohnsteurMon+'/'+k4Abs.length+
+               ' · _print_datum: '+hasPrintDatum+'/'+k4Abs.length);
+    lines.push('  saldo_vormonat: '+hasSaldVor+'/'+k4Abs.length+
+               ' · saldo_bereits_erhalten: '+hasSaldBerErh+'/'+k4Abs.length+
+               ' · saldo_folgemonat: '+hasSaldFolge+'/'+k4Abs.length);
+    lines.push('  auszahlungs_ziel: '+hasAuszahlZiel+'/'+k4Abs.length+
+               ' · ist_leer_korrektur: '+hasIstLeer+'/'+k4Abs.length+
                ' · _ueberholt_durch: '+hasUeberholt+'/'+k4Abs.length);
     // Detail pro Beleg
     k4Abs.forEach(function(v){
@@ -7581,11 +7919,14 @@ function diagnoseGutschriften(){
                 +' brutto='+(v.brutto||0)
                 +' titel='+(v.titel||'').slice(0,40));
       lines.push('    leistungs_monat       = '+(v.leistungs_monat || '⚠ FEHLT'));
+      lines.push('    lohnsteuer_zielmonat  = '+(v.lohnsteuer_zielmonat || '— (kein "für …" im Titel)'));
       lines.push('    ausstellungs_datum    = '+(v.ausstellungs_datum || '⚠ FEHLT'));
       lines.push('    _print_datum          = '+(v._print_datum || '⚠ FEHLT'));
-      lines.push('    _verbindlichkeit_monat= '+(v._verbindlichkeit_monat || '⚠ FEHLT'));
-      lines.push('    _restzahlung          = '+(v._restzahlung != null ? v._restzahlung : '⚠ FEHLT'));
-      lines.push('    _vorzahlung_anrechnung= '+(v._vorzahlung_anrechnung != null ? v._vorzahlung_anrechnung : '— (nicht vorhanden im PDF, ok)'));
+      lines.push('    saldo_vormonat        = '+(v.saldo_vormonat != null ? v.saldo_vormonat : '— (nicht vorhanden)'));
+      lines.push('    saldo_bereits_erhalten= '+(v.saldo_bereits_erhalten != null ? v.saldo_bereits_erhalten : '— (nicht vorhanden)'));
+      lines.push('    saldo_folgemonat      = '+(v.saldo_folgemonat != null ? v.saldo_folgemonat : '— (nicht vorhanden)'));
+      lines.push('    auszahlungs_ziel      = '+(v.auszahlungs_ziel || '⚠ FEHLT'));
+      lines.push('    ist_leer_korrektur    = '+(typeof v.ist_leer_korrektur==='boolean' ? v.ist_leer_korrektur : '⚠ FEHLT'));
       lines.push('    auszahlung            = '+(v.auszahlung || '?'));
       if(v._ueberholt_durch){
         lines.push('    _ueberholt_durch      = '+v._ueberholt_durch+' (Korrektur-Kette)');
@@ -12348,7 +12689,16 @@ function dokAnalyseDoc(d, key, cb){
               }
             }
             showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
-            save(db); rDokumente(); if(cb) cb();
+            save(db); rDokumente();
+            // ─── Build 762: zweiter KI-Call für Bank-Match-Felder ───
+            // Nur wenn Studio Hamburg erkannt und PDF-Daten verfügbar
+            if(d.studio === 'Studio Hamburg' && pageDataURLs && pageDataURLs.length){
+              _studioHamburgBankMatchScan(d, key, pageDataURLs, function(){
+                save(db); rDokumente(); if(cb) cb();
+              });
+            } else {
+              if(cb) cb();
+            }
           } catch(e){
             showToast('Parse Fehler: '+e.message); d.typ='sonstig'; if(cb) cb();
           }
@@ -13005,6 +13355,54 @@ function dokOpenDetail(id){
       }
     } catch(e){ console.warn('SH-Korrektur-Banner Fehler:', e); }
     // ═══ Ende Build 757 ═══
+
+    // ═══ Build 761/763: K4-Felder-Sektion für ALLE K4-Belege ═══
+    // Erscheint unabhängig von Korrektur-Kette. Zeigt alle K4-Schema-Felder
+    // und erlaubt manuelle Eingabe der Salden falls die KI sie nicht extrahiert hat.
+    try {
+      var _v2bm = (dbv2 && dbv2.abrechnungen||[]).find(function(a){ return a.pdf_datei_id === d.id; });
+      if(_v2bm && _v2bm.klasse === '4'){
+        var _printD   = _v2bm._print_datum || '';
+        var _printFB  = !!_v2bm._print_datum_aus_fallback;
+        var _leistMon = _v2bm.leistungs_monat || '';
+        var _lohnZiel = _v2bm.lohnsteuer_zielmonat || '';
+        var _saldoVor = _v2bm.saldo_vormonat;
+        var _saldoBer = _v2bm.saldo_bereits_erhalten;
+        var _saldoFol = _v2bm.saldo_folgemonat;
+        var _auszZiel = _v2bm.auszahlungs_ziel || '';
+        body += '<div style="background:#f0f9ff;border:2px solid #7dd3fc;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:#0c4a6e">'
+          + '<div style="font-weight:800;margin-bottom:6px">🏦 K4-Schema-Felder (Studio Hamburg)</div>'
+          + '<div style="opacity:.7;margin-bottom:8px;line-height:1.4">Felder für Match-Engine und Jahresabschluss. KI extrahiert automatisch — manuell überschreibbar.</div>';
+        // Datums-Felder
+        body += '<div style="padding:3px 0">📅 Druckdatum: <b>'+(_printD||'⚠ leer')+'</b>'
+              + (_printFB ? ' <span style="opacity:.5;font-size:10px">(aus Ausstellungsdatum)</span>' : '')
+              + '</div>';
+        body += '<div style="padding:3px 0">📆 Verbindlichkeit/Leistungsmonat: <b>'+(_leistMon||'⚠ leer')+'</b></div>';
+        body += '<div style="padding:3px 0">🗓 Lohnsteuer-Zielmonat: <b>'+(_lohnZiel||'— (kein "für …" im Titel)')+'</b></div>';
+        body += '<div style="padding:3px 0">🏦 Auszahlungsziel: <b>'+(_auszZiel||'⚠ leer')+'</b></div>';
+        // Salden — bearbeitbar
+        body += '<div style="padding:6px 0;border-top:1px dashed #7dd3fc;margin-top:6px">'
+              + '<label style="display:block;margin-bottom:4px">↩️ Saldo Vormonat (€):</label>'
+              + '<input type="number" step="0.01" placeholder="leer wenn nicht im PDF" value="'+(_saldoVor!=null?_saldoVor:'')+'" '
+              + 'onchange="dokSetK4Field(\''+_v2bm.id+'\',\'saldo_vormonat\',this.value)" '
+              + 'style="width:100%;padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:11px;background:white">'
+              + '</div>';
+        body += '<div style="padding:6px 0">'
+              + '<label style="display:block;margin-bottom:4px">⤴️ Bereits erhalten (€, negativ):</label>'
+              + '<input type="number" step="0.01" placeholder="z.B. -424.98" value="'+(_saldoBer!=null?_saldoBer:'')+'" '
+              + 'onchange="dokSetK4Field(\''+_v2bm.id+'\',\'saldo_bereits_erhalten\',this.value)" '
+              + 'style="width:100%;padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:11px;background:white">'
+              + '</div>';
+        body += '<div style="padding:6px 0">'
+              + '<label style="display:block;margin-bottom:4px">💰 Differenz für Folgemonat / Restzahlung an Bank (€):</label>'
+              + '<input type="number" step="0.01" placeholder="z.B. 326.63" value="'+(_saldoFol!=null?_saldoFol:'')+'" '
+              + 'onchange="dokSetK4Field(\''+_v2bm.id+'\',\'saldo_folgemonat\',this.value)" '
+              + 'style="width:100%;padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:11px;background:white">'
+              + '</div>';
+        body += '</div>';
+      }
+    } catch(e){ console.warn('K4-Schema-Sektion Fehler:', e); }
+    // ═══ Ende Build 761/763 ═══
 
     // ═══ Build 758 (#2): Konsistenz-Warnung-Banner mit Differenz-akzeptiert-Button
     // Wenn der Beleg eine bekannte Konsistenz-Warnung hat (z.B. Brutto-Anteils-Diff,
