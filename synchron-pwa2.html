@@ -3233,7 +3233,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '783';
+  if(el) el.textContent = '784';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12676,12 +12676,16 @@ function dokAnalyseDoc(d, key, cb){
             relevantPages = results;
           }
           // Schritt 2: Nur relevante Seiten als Bild rendern
+          // Build 784: Auflösung erhöht (scale 1.5→2.5, q 0.82→0.92).
+          // Grund: IBAN/Saldo-Fussblock bei Studio Hamburg steht in
+          // Kleinstschrift am Seitenende und war bei 1.5 für die KI nicht
+          // lesbar. Höhere Pixeldichte = zuverlässige Ziffern-Erkennung.
           var renders = relevantPages.map(function(r){
-            var vp = r.page.getViewport({scale: 1.5});
+            var vp = r.page.getViewport({scale: 2.5});
             var cv = document.createElement('canvas');
             cv.width = vp.width; cv.height = vp.height;
             return r.page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise.then(function(){
-              return cv.toDataURL('image/jpeg', 0.82);
+              return cv.toDataURL('image/jpeg', 0.92);
             });
           });
           return Promise.all(renders).then(function(dataURLs){
