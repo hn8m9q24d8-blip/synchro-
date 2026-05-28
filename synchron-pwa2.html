@@ -3233,7 +3233,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '786';
+  if(el) el.textContent = '788';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5373,6 +5373,109 @@ function dokSetK4Field(v2AbId, fieldName, rawValue){
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Build 787: Studio-Hamburg-Titel bereinigen
+// ═══════════════════════════════════════════════════════════════
+// SthH stellt jeder 603-Gage-Zeile eine Leistungsbezeichnung voran, z.B.
+// "Gage Synchronsprecher Máxima II" — der echte Produktionstitel ist aber
+// nur "Máxima II". Dieses Präfix abschneiden, damit Termin-Titel sauber sind.
+// Greift NUR bei Studio Hamburg (von dort aufgerufen), andere Studios unberührt.
+function _bereinigeSthHTitel(titel){
+  if(!titel) return titel;
+  var t = String(titel).trim();
+  // Präfix-Varianten case-insensitive abschneiden:
+  //   "Gage Synchronsprecher X" / "Gage Synchron X" / "Gage X"
+  //   "Synchronsprecher X" / "Synchron X"
+  t = t.replace(/^\s*Gage\s+Synchronsprecher\s+/i, '')
+       .replace(/^\s*Gage\s+Synchron\s+/i, '')
+       .replace(/^\s*Synchronsprecher\s+/i, '')
+       .replace(/^\s*Gage\s+/i, '')
+       .trim();
+  // Falls durch Bereinigung leer geworden (z.B. Titel WAR nur "Gage"): Original behalten
+  return t || String(titel).trim();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// Build 788: Reihenfolge-UNABHÄNGIGE Termin-Zuordnung für Studio Hamburg
+// ═══════════════════════════════════════════════════════════════
+// Problem (vom Nutzer entdeckt): Der alte Auto-Match war "first come, first
+// served" — wer zuerst eingepflegt wurde, schnappte sich den Kalendertermin,
+// der zweite Beleg blieb orange. Bei Korrektur-Ketten referenzieren aber
+// mehrere Belege denselben Drehtag (z.B. 484er-Korrektur UND 856er-Korrektur
+// beide auf 17.02.), weil der jüngere den älteren fortschreibt. Welcher grün
+// wurde, hing damit von der Eingabe-Reihenfolge ab — fragil und unintuitiv.
+//
+// Lösung: Nach JEDEM SthH-Import diese Funktion laufen lassen. Sie entscheidet
+// reihenfolge-unabhängig: Pro Drehtag (Datum) gewinnt der JÜNGSTE Beleg
+// (nach _print_datum bzw. _verbindlichkeit_monat). Ältere Korrektur-Stufen
+// geben den Termin frei. So ist es egal, in welcher Reihenfolge eingepflegt
+// wird — das Ergebnis ist immer dasselbe (deterministisch).
+//
+// Folgt derselben Logik wie der _ueberholt_durch-Mechanismus (Build 756/757):
+// der aktuellste Korrektur-Beleg trägt den finalen Stand und damit den Termin.
+function _reassignSthHTermine(){
+  if(!db || !db.dokumente) return;
+  // Alle bestätigten Studio-Hamburg-Abrechnungsdokumente einsammeln
+  var shDocs = db.dokumente.filter(function(x){
+    return /studio hamburg/i.test(String(x.studio||''))
+      && (x.typ==='abrechn' || x.typ==='monats_abrechn');
+  });
+  if(!shDocs.length) return;
+
+  // Sortierschlüssel eines Dokuments für "jünger gewinnt".
+  // Primär _print_datum (genaues Druckdatum), sonst verbindlichkeit/leistungs_monat.
+  function rang(doc){
+    return String(doc.print_datum || doc._print_datum || '')
+         + '|' + String(doc.verbindlichkeit_monat || doc._verbindlichkeit_monat || doc.leistungs_monat || '');
+  }
+
+  // Schritt 1: Ansprüche sammeln — welcher Drehtag (Datum) wird von welchen
+  // Sessions welcher Dokumente beansprucht?
+  var ansprueche = {}; // datum -> [{doc, session}]
+  shDocs.forEach(function(doc){
+    if(!doc.sessions || !Array.isArray(doc.sessions)) return;
+    doc.sessions.forEach(function(s){
+      if(!s.datum) return;
+      if(!ansprueche[s.datum]) ansprueche[s.datum] = [];
+      ansprueche[s.datum].push({doc:doc, session:s});
+    });
+  });
+
+  // Schritt 2: Pro Drehtag den jüngsten Beleg ermitteln. Nur dessen Session
+  // behält/bekommt den terminId; alle anderen Sessions desselben Drehtags
+  // werden gelöst (terminId = null).
+  var geaendert = 0;
+  Object.keys(ansprueche).forEach(function(datum){
+    var liste = ansprueche[datum];
+    if(liste.length === 1) return; // kein Konflikt — nichts zu tun
+    // Jüngsten finden (höchster Rang)
+    var gewinner = liste[0];
+    liste.forEach(function(e){ if(rang(e.doc) > rang(gewinner.doc)) gewinner = e; });
+    // Den Termin, der irgendeiner Session dieses Drehtags zugeordnet ist, finden
+    var existierenderTerminId = null;
+    liste.forEach(function(e){ if(e.session.terminId) existierenderTerminId = e.session.terminId; });
+    // Verlierer lösen
+    liste.forEach(function(e){
+      if(e === gewinner) return;
+      if(e.session.terminId){ e.session.terminId = null; geaendert++; }
+    });
+    // Gewinner bekommt den Termin (falls vorhanden und noch nicht gesetzt)
+    if(existierenderTerminId && gewinner.session.terminId !== existierenderTerminId){
+      gewinner.session.terminId = existierenderTerminId;
+      geaendert++;
+    }
+  });
+
+  if(geaendert > 0){
+    save(db);
+    // dbv2 nachziehen, damit Junctions/Kalender konsistent sind
+    shDocs.forEach(function(doc){
+      try { _konsolidiereDokumentNachV2(doc.id); } catch(e){}
+    });
+  }
+  return geaendert;
+}
+
 // Build 773: IBAN → auszahlungs_ziel (deterministisch, kein KI-Raten)
 // ═══════════════════════════════════════════════════════════════
 // Studio Hamburg zahlt entweder über Holvi oder die Hamburger Sparkasse.
@@ -5632,6 +5735,18 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
             if(_ziel){ d.auszahlungs_ziel = _ziel; changed++; }
           }
         }
+      }
+      // Build 788: IBAN-Fallback. Bei mehrseitigen SthH-PDFs übersieht die KI
+      // gelegentlich die IBAN-Zeile (KI-Schwankung), liest aber den Banknamen
+      // → auszahlungs_ziel ist gesetzt, bank_iban fehlt. Da Studio Hamburg pro
+      // Bank IMMER dieselbe IBAN nutzt (auf allen Belegen identisch verifiziert),
+      // die bekannte IBAN aus dem Ziel ableiten. Kein Erfinden — dokumentierter,
+      // konstanter Wert derselben Firma. Nur als Fallback, KI-Direktwert hat Vorrang.
+      if(!d.bank_iban && d.auszahlungs_ziel){
+        var _knownIban = (d.auszahlungs_ziel === 'sparkasse') ? 'DE97200505501059750834'
+                       : (d.auszahlungs_ziel === 'holvi')     ? 'DE49100179977953941890'
+                       : null;
+        if(_knownIban){ d.bank_iban = _knownIban; changed++; }
       }
       // 8. ist_leer_korrektur
       if(typeof j.ist_leer_korrektur === 'boolean'){
@@ -13175,6 +13290,10 @@ function dokAnalyseDoc(d, key, cb){
             d.typ = _j.typ||'sonstig'; d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
             d.ausstellungsdatum = _j.ausstellungsdatum||null; // Build 747
             d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
+            // Build 787: SthH-Titel-Präfix ("Gage Synchronsprecher ...") abschneiden
+            if(d.titel && /studio hamburg/i.test(String(d.studio||''))){
+              d.titel = _bereinigeSthHTitel(d.titel);
+            }
             d.regie=_j.regie||null; d.rolle=_j.rolle||null; d.uhrzeit=_j.uhrzeit||null;
             d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
             d.auszahlung=_j.auszahlung||null; d.gutschrift_nr=_j.gutschrift_nr||null;
@@ -13188,6 +13307,10 @@ function dokAnalyseDoc(d, key, cb){
                 var _xst = d.sessions[_xi];
                 var _xt = _xst && (_xst.titel || _xst.produktion);
                 if(_xt){ d.titel = _xt; break; }
+              }
+              // Build 787: auch hier SthH-Präfix abschneiden
+              if(d.titel && /studio hamburg/i.test(String(d.studio||''))){
+                d.titel = _bereinigeSthHTitel(d.titel);
               }
             }
             if(!d.rolle && d.sessions && Array.isArray(d.sessions)){
@@ -13204,6 +13327,13 @@ function dokAnalyseDoc(d, key, cb){
             // Kalendertermin existierte. Hier gezielt nachgezogen — greift nur für
             // Studio Hamburg, lässt alle anderen Studios unberührt.
             if(d.sessions && Array.isArray(d.sessions) && d.sessions.length){
+              // Build 787: SthH-Session-Titel ebenfalls vom "Gage Synchronsprecher"-Präfix bereinigen
+              if(/studio hamburg/i.test(String(d.studio||''))){
+                d.sessions.forEach(function(s){
+                  if(s && s.titel) s.titel = _bereinigeSthHTitel(s.titel);
+                  if(s && s.produktion) s.produktion = _bereinigeSthHTitel(s.produktion);
+                });
+              }
               var _shBelegte = [];
               (db.dokumente||[]).forEach(function(x){
                 if(x.id === d.id) return;
@@ -13221,6 +13351,8 @@ function dokAnalyseDoc(d, key, cb){
             // Nur wenn Studio Hamburg erkannt und PDF-Daten verfügbar
             if(d.studio === 'Studio Hamburg' && pageDataURLs && pageDataURLs.length){
               _studioHamburgBankMatchScan(d, key, pageDataURLs, function(){
+                // Build 788: reihenfolge-unabhängige Termin-Zuordnung über alle SthH-Belege
+                try { _reassignSthHTermine(); } catch(e){ console.warn('[788] reassign:', e); }
                 save(db); rDokumente(); if(cb) cb();
               });
             } else {
