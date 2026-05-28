@@ -2756,9 +2756,14 @@ function _konsolidiereDokumentNachV2(dokId){
     if(v2Ab.auszahlung != null && v2Ab.brutto){
       var bruttoBetrag = v2Ab.brutto || 0;
       var istStorno = bruttoBetrag < 0;
+      // Build 782: Klasse 2 (toneworx) — USt ist BEREITS im Brutto enthalten
+      // (Honorar + Nutzungsrechte + MwSt = "Zwischensumme inkl. MwSt" = Brutto).
+      // Daher Auszahlung = Brutto − SV, OHNE USt nochmal draufzurechnen.
+      // Bei SESAM (1a/1b) ist Brutto netto-vor-USt → USt kommt obendrauf.
+      var ustImCheck = (v2Ab.klasse === '2') ? 0 : (v2Ab.ust_betrag || 0);
       var auszErw = istStorno
-        ? bruttoBetrag + svSumme + (v2Ab.ust_betrag || 0)
-        : bruttoBetrag - svSumme + (v2Ab.ust_betrag || 0);
+        ? bruttoBetrag + svSumme + ustImCheck
+        : bruttoBetrag - svSumme + ustImCheck;
       var diff_a = (v2Ab.auszahlung || 0) - auszErw;
       checks.auszahlung = {
         status: Math.abs(diff_a) <= TOL ? 'ok' : 'abweichung',
@@ -3228,7 +3233,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '781';
+  if(el) el.textContent = '783';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5446,23 +5451,35 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'   "8003: SP_Data PA YYYYgmmw RB:YYYYMMDD - DD.MM.YYYY HH:MM:SS"\n'
    +'   Beispiel: "RB:20251219 - 12.03.2026 12:48:48" → "2026-03-12"\n'
    +'   Bei mehrseitigen PDFs: einmal nehmen reicht.\n\n'
-   +'!!! WICHTIG FÜR FELDER 4-7: Diese stehen auf der LETZTEN Seite des PDFs !!!\n'
+   +'!!! WICHTIG FÜR FELDER 4-6: Der SALDEN-FUSSBLOCK !!!\n'
    +'Studio-Hamburg-PDFs haben oft 2 Seiten:\n'
    +'  Seite 1 = "Korrektur Gehaltsabrechnung X/YYYY (für Y/YYYY)" → Gage + USt\n'
-   +'  Seite 2 = "Gehaltsabrechnung Y/YYYY" (OHNE "Korrektur") → Auszahlung + IBAN\n'
-   +'Du MUSST die letzte Seite genau lesen. Dort stehen am unteren Ende\n'
-   +'untereinander: "Saldo lfd. Monat", "Differenz aus Vormonat" und eine\n'
-   +'Bank-Zeile mit IBAN und EUR-Betrag.\n\n'
+   +'  Seite 2 = "Gehaltsabrechnung Y/YYYY" (OHNE "Korrektur") → Salden + IBAN\n'
+   +'GANZ UNTEN auf der LETZTEN Seite, unter "Gesamtbrutto" und "Nettoverdienst",\n'
+   +'steht ein BLOCK aus mehreren Zeilen UNTEREINANDER. Jede Zeile hat links\n'
+   +'einen TEXT (Bezeichnung) und rechts in einer eigenen Spalte WEIT RECHTS\n'
+   +'einen EUR-BETRAG. Beispiel-Layout (Punkte = Leerraum der Betragsspalte):\n'
+   +'   "Saldo lfd. Monat" ......................... 0,00\n'
+   +'   "Differenz aus Vormonat" ................... 161,57\n'
+   +'   "Hamburger Sparkasse IBAN DE97...0834" ..... EUR 161,57\n'
+   +'⚠ Dieser Fussblock ist KEIN Briefkopf und KEIN Fliesstext — es sind echte\n'
+   +'Datenzeilen. Lies JEDE Zeile dieses Blocks von links (Text) nach rechts\n'
+   +'(Betrag). Lass dich vom Leerraum zwischen Text und Betrag NICHT täuschen:\n'
+   +'Text links und Betrag rechts gehören zur selben Zeile.\n'
+   +'Die Felder 4, 5 und 6 kommen ALLE aus genau diesem Fussblock.\n\n'
    +'4. saldo_vormonat (Zahl in Euro, kann negativ sein):\n'
-   +'   Zeile "Differenz aus Vormonat" auf der LETZTEN Seite.\n'
-   +'   Beispiel: "Differenz aus Vormonat   161,57" → 161.57\n'
-   +'   Diese Zeile steht direkt über der Bank-/IBAN-Zeile. Lies sie genau.\n'
-   +'   Nur weglassen wenn die Zeile WIRKLICH nicht existiert.\n\n'
+   +'   Die Zeile "Differenz aus Vormonat" im Fussblock — nimm den Betrag rechts.\n'
+   +'   Beispiel: "Differenz aus Vormonat ........ 161,57" → 161.57\n'
+   +'   ⚠ Diese Zeile steht IMMER direkt ÜBER der Bank-/IBAN-Zeile. Wenn du die\n'
+   +'   Bankzeile mit Betrag siehst, existiert die Zeile darüber ZWINGEND — lies sie.\n'
+   +'   Verwechsle sie NICHT mit "Differenz für Folgemonate" von Seite 1.\n'
+   +'   Nur weglassen wenn die Zeile im Fussblock WIRKLICH fehlt.\n\n'
    +'5. saldo_bereits_erhalten (Zahl in Euro, normalerweise negativ):\n'
-   +'   Zeile "bereits erhalten" auf der letzten Seite.\n'
-   +'   Beispiel: "bereits erhalten -424,98" → -424.98\n'
+   +'   Die Zeile "bereits erhalten" im Fussblock — nimm den Betrag rechts.\n'
+   +'   Beispiel: "bereits erhalten ........ -424,98" → -424.98\n'
    +'   Wenn positiv ausgewiesen: trotzdem als negative Zahl speichern.\n'
-   +'   Wenn nicht vorhanden: weglassen.\n\n'
+   +'   ⚠ Diese Zeile gibt es NUR bei Korrektur-Ketten. Bei einfachen Monaten\n'
+   +'   fehlt sie — dann weglassen (NICHT 0 erfinden, NICHT raten).\n\n'
    +'6. ⚠⚠ DIE BANK-ZEILE auf der LETZTEN Seite — daraus kommen DREI Felder!\n'
    +'   GANZ UNTEN auf der letzten Seite stehen drei Zeilen UNTEREINANDER:\n'
    +'     "Saldo lfd. Monat" ........................... <Betrag>\n'
@@ -5500,6 +5517,16 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'   true = wenn der Korrektur-Beleg KEINE 603-Zeile mit Gage > 0 hat\n'
    +'         (nur Saldenfortschreibung, kein neuer Bruttowert)\n'
    +'   false = wenn mindestens eine 603-Zeile mit Gage > 0 vorhanden\n\n'
+   +'== SELBST-CHECK VOR DER ANTWORT (PFLICHT) ==\n'
+   +'Bevor du antwortest, prüfe den SALDEN-FUSSBLOCK der letzten Seite nochmal:\n'
+   +' - Hast du eine Bank-/IBAN-Zeile gefunden? Dann MUSS bank_iban gesetzt sein\n'
+   +'   UND auszahlungs_ziel UND saldo_folgemonat. Wenn eines davon leer ist,\n'
+   +'   hast du die Zeile nicht fertig gelesen — geh zurück und lies sie ganz.\n'
+   +' - Steht im Fussblock "Differenz aus Vormonat" mit einem Betrag? Dann MUSS\n'
+   +'   saldo_vormonat diesen Betrag haben. Leer lassen NUR wenn die Zeile fehlt.\n'
+   +' - Ein Feld nur dann leer/weglassen, wenn die zugehörige Zeile im PDF\n'
+   +'   WIRKLICH NICHT existiert. Niemals leer lassen weil schwer lesbar —\n'
+   +'   dann genauer hinschauen. Niemals einen Wert raten oder erfinden.\n\n'
    +'== ANTWORT-FORMAT ==\n'
    +'Nur JSON, keine Erklärung, keine Markdown-Codeblöcke:\n'
    +'{"verbindlichkeit_monat":"...","lohnsteuer_zielmonat":"...","print_datum":"...",\n'
