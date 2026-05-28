@@ -3228,7 +3228,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '778';
+  if(el) el.textContent = '779';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5483,9 +5483,15 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'   anderer Bankname            → "andere"\n'
    +'   Du findest fast immer eine IBAN-Zeile. Nur weglassen wenn WIRKLICH keine\n'
    +'   Bank-/IBAN-Zeile im gesamten PDF steht.\n\n'
-   +'7b. bank_iban (String): Die KOMPLETTE IBAN aus derselben Bank-Zeile,\n'
-   +'   ohne Leerzeichen, z.B. "DE12200505500000000000". Schreibe sie einfach ab.\n'
-   +'   Wenn keine IBAN vorhanden: weglassen.\n\n'
+   +'7b. ⚠ WICHTIG — bank_iban (String): Die KOMPLETTE IBAN.\n'
+   +'   Diese steht NICHT auf der ersten Seite (Lohntabelle), sondern auf einer\n'
+   +'   SPÄTEREN Seite (Auszahlungs-/Überweisungsseite), meist in der Zeile mit\n'
+   +'   dem EUR-Auszahlungsbetrag, z.B.:\n'
+   +'   "Hamburger Sparkasse  IBAN DE97 2005 0550 1059 7508 34  EUR 161,57"\n'
+   +'   SCHAU JEDE SEITE DURCH, besonders die LETZTE. Schreibe die IBAN als\n'
+   +'   zusammenhängende Zeichenkette OHNE Leerzeichen ab, z.B.\n'
+   +'   "DE12200505500000000000". Format: DE + 20 Ziffern.\n'
+   +'   Nur weglassen, wenn auf KEINER Seite eine IBAN steht.\n\n'
    +'8. ist_leer_korrektur (Boolean true/false):\n'
    +'   true = wenn der Korrektur-Beleg KEINE 603-Zeile mit Gage > 0 hat\n'
    +'         (nur Saldenfortschreibung, kein neuer Bruttowert)\n'
