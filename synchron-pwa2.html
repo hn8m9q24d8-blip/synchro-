@@ -2055,6 +2055,40 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
   }
 })();
 // ═══════════════════════════════════════════════════════════════
+// ─── Build 772: Verwaiste Legacy-Geister einmalig bereinigen ───
+// db.abrechnungen-Einträge die auf ein Dokument zeigen das es nicht mehr
+// gibt (z.B. nach altem Rückgängig vor Build 772) sind Müll und tauchen als
+// "KEIN DOK"-Geister in der Diagnose auf. Einmalig entfernen. Idempotent.
+(function(){
+  if(!db || !db.abrechnungen || db._geisterBereinigt772) return;
+  var dokIds = {};
+  (db.dokumente||[]).forEach(function(x){ if(x && x.id) dokIds[x.id]=true; });
+  var vorher = db.abrechnungen.length;
+  db.abrechnungen = db.abrechnungen.filter(function(a){
+    // Einen Dok-Verweis bestimmen (verschiedene mögliche Feldnamen)
+    var ref = a.dokId || a.pdf_datei_id || a._pdfDateiId || a._dokId || null;
+    // Nur entfernen wenn ein Verweis EXISTIERT aber ins Leere zeigt.
+    // Einträge ohne jeden Dok-Verweis (manuell/migriert) NICHT anfassen.
+    if(ref && !dokIds[ref]) return false;
+    return true;
+  });
+  db._geisterBereinigt772 = true;
+  var entfernt = vorher - db.abrechnungen.length;
+  if(entfernt > 0){
+    console.log('[Build 772] '+entfernt+' verwaiste Legacy-Geister entfernt');
+  }
+  save(db);
+})();
+// ─── Build 776: (bewusst KEINE automatische Termin-Massenbereinigung) ───
+// Eine Start-Bereinigung "alle abgerechneten Termine ohne lebende Dok-Referenz
+// zurücksetzen" wäre zu riskant: abrechn_dateiname/abgerechnet überleben
+// dokDeleteAll() ABSICHTLICH (Termin behält seinen Status auch wenn das PDF
+// gelöscht wurde). Solche Termine sind KORREKT, nicht verwaist. Ein pauschaler
+// Reset würde echte Daten zerstören → verstößt gegen "Datenbasis muss stimmen".
+// Stattdessen: der gezielte Reset im Rückgängig-Pfad (siehe dok_bestaetigt)
+// fängt künftige Fälle sauber ab. Für bereits verwaiste Einzelfälle gibt es den
+// manuellen Reset im Termin-Detail.
+// ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
 console.log('[v2] Schema v2 geladen. Entitäten:', Object.keys(dbv2).filter(function(k){return k.charAt(0) !== '_';}));
@@ -3194,7 +3228,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '771';
+  if(el) el.textContent = '778';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4369,7 +4403,41 @@ function openDetail(id){
   // ── AKTIONEN ───────────────────────────────────────────────
   var aktionen='';
 
-  // ── PENDING MERGE BANNER ──────────────────────────────────
+  // ── Build 776: "Abrechnung zurücksetzen" bei verwaistem gelbem Termin ──
+  // Wenn der Termin Abrechnungs-Spuren hat (gelb), aber KEIN lebendes Dokument
+  // und KEINE dbv2-Junction ihn mehr referenziert, ist er nach einem Rückgängig
+  // verwaist. Dann Button zum manuellen Zurücksetzen anbieten.
+  (function(){
+    var hatAbSpur = !!(t.abgerechnet || t.abrechnungBrutto || t.brutto_termin || t.gutschrift_nr || t.abrechn_dateiname || t.abId);
+    if(!hatAbSpur) return;
+    // Lebende Referenz aus Dokumenten?
+    var refLebt = false;
+    (db.dokumente||[]).forEach(function(dok){
+      if(dok.terminId === id) refLebt = true;
+      if(dok.sessions) dok.sessions.forEach(function(ss){ if(ss.terminId === id) refLebt = true; });
+    });
+    // Lebende dbv2-Junction?
+    try {
+      if(!refLebt && dbv2 && dbv2.abrechnung_termin_links){
+        var abIds = {};
+        (dbv2.abrechnungen||[]).forEach(function(a){ if(a.id) abIds[a.id]=true; });
+        dbv2.abrechnung_termin_links.forEach(function(l){
+          if(l.termin_id === id && abIds[l.abrechnung_id]) refLebt = true;
+        });
+      }
+    } catch(e){}
+    // Archiv-Dateiname zählt als legitime Spur (Dok wurde bewusst über dokDeleteAll
+    // gelöscht, Termin behält Status) → NICHT als verwaist behandeln.
+    if(t.abrechn_dateiname) refLebt = true;
+    if(db._archivLog && db._archivLog.find(function(e){ return e.terminId===id && (e.typ==='abrechn'||e.typ==='monats_abrechn'); })) refLebt = true;
+    if(refLebt) return;
+    // → verwaist: Button anbieten
+    aktionen+='<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+      +'<div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:4px">⚠ Verwaiste Abrechnung</div>'
+      +'<div style="font-size:11px;color:#78350f;margin-bottom:10px">Dieser Termin ist noch als abgerechnet markiert (gelb), aber das zugehörige Dokument existiert nicht mehr. Du kannst den Abrechnungs-Status zurücksetzen.</div>'
+      +'<button type="button" onclick="terminAbrechnungZuruecksetzen(\''+id+'\')" style="width:100%;background:#d97706;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation">↩ Abrechnungs-Status zurücksetzen</button>'
+      +'</div>';
+  })();
   var mergeBanner='';
   if(t._hasPendingMerge || (t._mergeSuggestions && Object.keys(t._mergeSuggestions).length)){
     var suggHtml='';
@@ -4514,6 +4582,7 @@ function _setAbBezahlt(ab, zahlDatum){
 }
 
 function saveMergeChanges(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   if(!ctid) return;
   var t=(db.termine||[]).find(function(x){return x.id===ctid;});
   if(t){
@@ -5299,6 +5368,29 @@ function dokSetK4Field(v2AbId, fieldName, rawValue){
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Build 773: IBAN → auszahlungs_ziel (deterministisch, kein KI-Raten)
+// ═══════════════════════════════════════════════════════════════
+// Studio Hamburg zahlt entweder über Holvi oder die Hamburger Sparkasse.
+// Die IBAN ist eindeutig — daraus das Ziel ableiten. Bekannte Präfixe:
+//   Hamburger Sparkasse: BLZ 200 505 50 → IBAN DE..200505 50..
+//   Holvi (Payment Services): DE..10011001.. (Solarisbank/Holvi-BLZ)
+// Robust gehalten: Sparkasse-BLZ exakt, sonst Holvi-Heuristik, sonst null.
+function _ibanZuAuszahlungsziel(iban){
+  if(!iban) return null;
+  iban = String(iban).replace(/\s+/g,'').toUpperCase();
+  if(!/^DE\d{20}$/.test(iban)) return null;
+  // BLZ = Stellen 5-12 (8-stellige deutsche Bankleitzahl)
+  var blz = iban.slice(4, 12);
+  // Hamburger Sparkasse
+  if(blz === '20050550') return 'sparkasse';
+  // Holvi läuft über Solarisbank (BLZ 110 101 00) bzw. zeigt sich als 11010100
+  if(blz === '11010100') return 'holvi';
+  // Weitere Sparkassen-BLZ (beginnen oft mit charakteristischem Muster) —
+  // konservativ: nur die bekannte HH-Sparkasse exakt. Alles andere unklar.
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // BUILD 762/763: Separater fokussierter KI-Call für Studio-Hamburg-K4-Felder
 // ═══════════════════════════════════════════════════════════════
 // Der Hauptscan-Prompt ist ~17000 Tokens lang. Die KI ignoriert dort
@@ -5376,7 +5468,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'   auf der LETZTEN Seite. Diese Zeile enthält einen Banknamen, eine IBAN\n'
    +'   (beginnt mit DE) und einen EUR-Betrag ganz rechts:\n'
    +'   "Holvi Payment Services Zw IBAN DE49... EUR 326,63" → 326.63\n'
-   +'   "Hamburger Sparkasse IBAN DE97200505501059750834 EUR 161,57" → 161.57\n'
+   +'   "Hamburger Sparkasse IBAN DE12200505500000000000 EUR 161,57" → 161.57\n'
    +'   Akzeptiere JEDEN Banknamen (Holvi, Hamburger Sparkasse, Sparkasse, andere).\n'
    +'   WICHTIG: NICHT die "Differenz für Folgemonate" der Korrektur-Seite 1 nehmen,\n'
    +'   sondern den Betrag der IBAN-Zeile auf der letzten Seite.\n'
@@ -5391,6 +5483,9 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'   anderer Bankname            → "andere"\n'
    +'   Du findest fast immer eine IBAN-Zeile. Nur weglassen wenn WIRKLICH keine\n'
    +'   Bank-/IBAN-Zeile im gesamten PDF steht.\n\n'
+   +'7b. bank_iban (String): Die KOMPLETTE IBAN aus derselben Bank-Zeile,\n'
+   +'   ohne Leerzeichen, z.B. "DE12200505500000000000". Schreibe sie einfach ab.\n'
+   +'   Wenn keine IBAN vorhanden: weglassen.\n\n'
    +'8. ist_leer_korrektur (Boolean true/false):\n'
    +'   true = wenn der Korrektur-Beleg KEINE 603-Zeile mit Gage > 0 hat\n'
    +'         (nur Saldenfortschreibung, kein neuer Bruttowert)\n'
@@ -5399,12 +5494,13 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'Nur JSON, keine Erklärung, keine Markdown-Codeblöcke:\n'
    +'{"verbindlichkeit_monat":"...","lohnsteuer_zielmonat":"...","print_datum":"...",\n'
    +' "saldo_vormonat":...,"saldo_bereits_erhalten":...,"saldo_folgemonat":...,\n'
-   +' "auszahlungs_ziel":"...","ist_leer_korrektur":false}\n\n'
+   +' "auszahlungs_ziel":"...","bank_iban":"...","ist_leer_korrektur":false}\n\n'
    +'BEISPIEL (Seite 1 "Korrektur 1/2026 (für 2/2026)", Seite 2 mit\n'
    +'"Differenz aus Vormonat 161,57" und "Hamburger Sparkasse IBAN DE97... EUR 161,57"):\n'
    +'{"verbindlichkeit_monat":"2026-01","lohnsteuer_zielmonat":"2026-02",\n'
    +' "print_datum":"2026-01-28","saldo_vormonat":161.57,\n'
-   +' "saldo_folgemonat":161.57,"auszahlungs_ziel":"sparkasse","ist_leer_korrektur":false}\n';
+   +' "saldo_folgemonat":161.57,"auszahlungs_ziel":"sparkasse",\n'
+   +' "bank_iban":"DE12200505500000000000","ist_leer_korrektur":false}\n';
 
   var contentBlocks = pageDataURLs.map(function(url){
     return {type:'image',source:{type:'base64',media_type:'image/jpeg',data:url.split(',')[1]}};
@@ -5479,10 +5575,24 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
         var sf = parseFloat(j.saldo_folgemonat);
         if(!isNaN(sf) && sf > 0){ d.saldo_folgemonat = sf; changed++; }
       }
-      // 7. auszahlungs_ziel
+      // 7. auszahlungs_ziel — KI-Direktwert hat Vorrang
       if(j.auszahlungs_ziel && /^(holvi|sparkasse|andere)$/.test(j.auszahlungs_ziel)){
         d.auszahlungs_ziel = j.auszahlungs_ziel;
         changed++;
+      }
+      // 7b. bank_iban roh speichern + auszahlungs_ziel daraus ableiten (Build 773)
+      // Die KI liest die IBAN zuverlässiger ab als sie den Banknamen klassifiziert.
+      // Aus der IBAN deterministisch das Ziel ableiten — robuster als KI-Rateversuch.
+      if(j.bank_iban){
+        var _iban = String(j.bank_iban).replace(/\s+/g,'').toUpperCase();
+        if(/^DE\d{20}$/.test(_iban)){
+          d.bank_iban = _iban;
+          // Wenn die KI auszahlungs_ziel nicht (gültig) geliefert hat: aus IBAN ableiten
+          if(!d.auszahlungs_ziel){
+            var _ziel = _ibanZuAuszahlungsziel(_iban);
+            if(_ziel){ d.auszahlungs_ziel = _ziel; changed++; }
+          }
+        }
       }
       // 8. ist_leer_korrektur
       if(typeof j.ist_leer_korrektur === 'boolean'){
@@ -5565,6 +5675,7 @@ function dokReklassifizieren(dokId){
 }
 
 function dokSetTyp(dokId, newTyp){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
   var typVorher=d.typ;
@@ -5979,6 +6090,22 @@ function terminDifferenzKlaeren(terminId){
   showToast('✓ Differenz als geklärt markiert');
 }
 
+function terminAbrechnungZuruecksetzen(terminId){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;});
+  if(!t) return;
+  if(!confirm('Abrechnungs-Status dieses Termins zurücksetzen? Der Termin wird wieder als "offen" (rot) markiert.')) return;
+  t.abId=null; t.abgerechnet=false; t.status='offen';
+  t.abrechn_dateiname='';
+  t.brutto_termin=null; t.mwst_anteil=null; t.gutschrift_nr='';
+  t.abrechnungBrutto=null;
+  delete t.dokId; delete t._fromDokId;
+  save(db);
+  showToast('↩ Abrechnungs-Status zurückgesetzt');
+  try { openDetail(terminId); } catch(e){}
+  try { rTermine(); } catch(e){}
+  try { rDokumente(); } catch(e){}
+}
+
 function applyMergeSuggestion(terminId, field){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!t||!t._mergeSuggestions||!t._mergeSuggestions[field]) return;
@@ -6194,6 +6321,7 @@ function abrechnungEditUst(satz){
 }
 
 function abrechnungEditSave(abId){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var ab=(db.abrechnungen||[]).find(function(a){return a.id===abId;});
   if(!ab){showToast('Abrechnung nicht gefunden');return;}
   var t=ctid?(db.termine||[]).find(function(x){return x.id===ctid;}):null;
@@ -6222,6 +6350,7 @@ function abrechnungEditSave(abId){
 }
 
 function deleteCurrentTermin(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   if(!ctid)return;
   var t=db.termine.find(function(x){return x.id===ctid;});
   var name=t?(esc(t.titel||t.studio||'Termin')):'Termin';
@@ -6279,6 +6408,7 @@ function closeTerminSheet(){
 }
 
 function saveTermin(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var fidEl=document.getElementById('f-id');
   var id=fidEl?fidEl.value:'';
   var isNew=!id;
@@ -7595,6 +7725,7 @@ function holviKeineZuordnung(matchIdx){
 }
 
 function holviBestaetigen(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var matches = window._holviMatches || [];
   if(!db.zahlungen) db.zahlungen = [];
   if(!db.holviImportIds) db.holviImportIds = [];
@@ -10066,6 +10197,27 @@ function rSozialStat(){
     });
     // Auch aus Termin-Feldern — immer, als Ergänzung wenn ab.kv fehlt
     (db.termine||[]).filter(function(t){return (t.datum||'').startsWith(String(yr));}).forEach(function(t){
+      // Build 777: Termin nur ergänzend zählen, wenn er von etwas Lebendem
+      // referenziert wird — sonst zählt eine verwaiste Leiche (nach Rückgängig)
+      // KV/RV/PV/brutto fälschlich mit. Konsistent mit "eine Quelle, alle lesen daraus".
+      var refLebt = false;
+      (db.dokumente||[]).forEach(function(dok){
+        if(dok.terminId === t.id) refLebt = true;
+        if(dok.sessions) dok.sessions.forEach(function(ss){ if(ss.terminId === t.id) refLebt = true; });
+      });
+      try {
+        if(!refLebt && dbv2 && dbv2.abrechnung_termin_links){
+          var _abIds = {};
+          (dbv2.abrechnungen||[]).forEach(function(a){ if(a.id) _abIds[a.id]=true; });
+          dbv2.abrechnung_termin_links.forEach(function(l){
+            if(l.termin_id === t.id && _abIds[l.abrechnung_id]) refLebt = true;
+          });
+        }
+      } catch(e){}
+      // abrechn_dateiname / _archivLog = bewusst überlebende Spur nach dokDeleteAll → gilt als lebend
+      if(t.abrechn_dateiname) refLebt = true;
+      if(db._archivLog && db._archivLog.find(function(e){ return e.terminId===t.id && (e.typ==='abrechn'||e.typ==='monats_abrechn'); })) refLebt = true;
+      if(!refLebt) return; // verwaiste Leiche → nicht zählen
       var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
       var abHatKV = ab && (parseFloat(ab.kv)||0) > 0;
       if(!abHatKV && (parseFloat(t.kv_abzug)||0)>0){
@@ -10184,24 +10336,158 @@ function switchView(v){
 
 // ── BUCHHALTUNG QUICK OVERVIEW ────────────────────────────────
 // ══ UNDO-SYSTEM ══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// Build 778: Snapshot-Undo — Rückgängig = exakt Zustand davor
+// ═══════════════════════════════════════════════════════════════
+// Statt feldweise zurückzudrehen (fehleranfällig, siehe Máxima-Bug) wird vor
+// jeder Aktion ein VOLLER Snapshot von db+dbv2 gemacht. Beim Rückgängig wird
+// er 1:1 zurückgespielt — wie ein JSON-Import des Zustands davor.
+//
+// Speicher: RAM-Ringpuffer, max 10 Schritte, OHNE Bilder (dataURL/thumb/
+// pageImages) → ~0.6 MB pro Snapshot, ~6 MB für 10. Unkritisch fürs RAM.
+// Die Bild-Felder werden beim Restore aus dem Live-Zustand beibehalten (sie
+// ändern sich durch Bestätigen/Verknüpfen nicht relevant).
+// Flüchtig: überlebt keinen Reload (dann greift die alte feldweise Logik als
+// Sicherheitsnetz). Für Undo direkt nach einer Aktion — der Normalfall.
+window._undoSnapshots = window._undoSnapshots || []; // [{actionId, db, dbv2}]
+var _UNDO_MAX = 10;
+
+// Tiefe Kopie ohne große Bild-Felder
+function _snapshotOhneBilder(obj){
+  if(!obj) return null;
+  var copy = JSON.parse(JSON.stringify(obj));
+  if(copy.dokumente){
+    copy.dokumente.forEach(function(d){
+      delete d.dataURL; delete d.thumb; delete d.pageImages;
+    });
+  }
+  return copy;
+}
+
+// Vor einer Aktion aufrufen: sichert aktuellen Zustand unter actionId
+function pushSnapshot(actionId){
+  try {
+    window._undoSnapshots.push({
+      actionId: actionId,
+      db:   _snapshotOhneBilder(db),
+      dbv2: _snapshotOhneBilder(dbv2)
+    });
+    // Ringpuffer: nur die letzten _UNDO_MAX behalten
+    while(window._undoSnapshots.length > _UNDO_MAX){
+      window._undoSnapshots.shift();
+    }
+  } catch(e){ console.warn('[Build 778] Snapshot fehlgeschlagen:', e); }
+}
+
+// Stellt den Snapshot zu actionId wieder her. true = erfolgreich.
+function restoreSnapshot(actionId){
+  var snapIdx = -1;
+  for(var i=window._undoSnapshots.length-1; i>=0; i--){
+    if(window._undoSnapshots[i].actionId === actionId){ snapIdx = i; break; }
+  }
+  if(snapIdx < 0) return false; // kein Snapshot (z.B. nach Reload)
+  var snap = window._undoSnapshots[snapIdx];
+  try {
+    // Bild-Felder aus aktuellem Live-Zustand merken (Snapshot hat keine)
+    var bilderMap = {};
+    (db.dokumente||[]).forEach(function(d){
+      bilderMap[d.id] = { dataURL: d.dataURL, thumb: d.thumb, pageImages: d.pageImages };
+    });
+    // db wiederherstellen
+    var neuDb = JSON.parse(JSON.stringify(snap.db));
+    // Bilder zurückspielen, soweit das Dok im Snapshot noch existiert
+    if(neuDb.dokumente){
+      neuDb.dokumente.forEach(function(d){
+        var b = bilderMap[d.id];
+        if(b){
+          if(b.dataURL != null)    d.dataURL = b.dataURL;
+          if(b.thumb != null)      d.thumb = b.thumb;
+          if(b.pageImages != null) d.pageImages = b.pageImages;
+        }
+      });
+    }
+    // Globale Variablen ersetzen + persistieren
+    db = neuDb;
+    if(snap.dbv2){ dbv2 = JSON.parse(JSON.stringify(snap.dbv2)); }
+    save(db);
+    if(snap.dbv2) saveV2(dbv2);
+    // Diesen + alle NEUEREN Snapshots verwerfen (man kann nur nach hinten gehen)
+    window._undoSnapshots = window._undoSnapshots.slice(0, snapIdx);
+    return true;
+  } catch(e){
+    console.warn('[Build 778] Restore fehlgeschlagen:', e);
+    return false;
+  }
+}
+
 function logAction(typ, beschr, undoData){
   if(!db.actionLog) db.actionLog = [];
+  var actId = 'act'+Date.now();
+  // ─── Build 778: Snapshot-Bindung ZUERST (vor dem Log-Eintrag) ───
+  // pushSnapshotVorAktion() wird am Anfang jeder Aktionsfunktion aufgerufen und
+  // hält den Zustand DAVOR in _pendingSnapshot. Schutz gegen verwaiste Snapshots
+  // (Aktion brach ab ohne logAction): älter als 30s → neu erstellen.
+  if(_pendingSnapshot && _pendingSnapshot._ts && (Date.now() - _pendingSnapshot._ts) > 30000){
+    _pendingSnapshot = null;
+  }
+  if(!_pendingSnapshot){
+    pushSnapshotVorAktion();
+  }
+  var _hatSnap = false;
+  if(_pendingSnapshot){
+    _pendingSnapshot.actionId = actId;
+    window._undoSnapshots.push(_pendingSnapshot);
+    while(window._undoSnapshots.length > _UNDO_MAX){ window._undoSnapshots.shift(); }
+    _pendingSnapshot = null;
+    _hatSnap = true;
+  }
   db.actionLog.unshift({
-    id: 'act'+Date.now(),
+    id: actId,
     typ: typ,           // 'holvi_import' | 'dok_bestaetigt' | 'termin_bezahlt' | 'dok_verknuepft' | 'multi_link'
     beschr: beschr,     // Lesbare Beschreibung
     datum: today(),
     zeit: new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
-    undoData: undoData  // Was zum Rückgängig-Machen nötig ist
+    undoData: undoData, // Was zum Rückgängig-Machen nötig ist (Fallback)
+    _hatSnapshot: _hatSnap // Build 778: gibt es einen passenden Snapshot?
   });
-  // Max 20 Einträge
+  // Max 20 Einträge (actionLog); Snapshots separat auf 10 begrenzt
   if(db.actionLog.length > 20) db.actionLog = db.actionLog.slice(0,20);
+}
+
+// Build 778: Vor einer Aktion aufrufen — bereitet einen Snapshot vor, der dann
+// in logAction an die entstehende actionId gebunden wird.
+var _pendingSnapshot = null;
+function pushSnapshotVorAktion(){
+  try {
+    _pendingSnapshot = {
+      actionId: null, // wird in logAction gesetzt
+      _ts: Date.now(),
+      db:   _snapshotOhneBilder(db),
+      dbv2: _snapshotOhneBilder(dbv2)
+    };
+  } catch(e){ console.warn('[Build 778] Snapshot-Vorbereitung fehlgeschlagen:', e); _pendingSnapshot = null; }
 }
 
 function undoAction(actionId){
   var idx = (db.actionLog||[]).findIndex(function(a){return a.id===actionId;});
   if(idx < 0) return;
   var action = db.actionLog[idx];
+
+  // ─── Build 778: Snapshot-Restore zuerst versuchen ───
+  // Wenn ein RAM-Snapshot zu dieser Aktion existiert, stellen wir den exakten
+  // Zustand davor wieder her (wie JSON-Import) — robust und vollständig.
+  // Nur wenn kein Snapshot da ist (z.B. nach Reload), fällt es auf die alte
+  // feldweise Logik (switch unten) zurück.
+  // WICHTIG: actionLog ist Teil von db — nach restoreSnapshot ist db ersetzt
+  // und enthält das Log OHNE diese Aktion (Snapshot war ja von davor).
+  if(action._hatSnapshot && restoreSnapshot(actionId)){
+    try { rTermine(); } catch(e){}
+    try { rDokumente(); } catch(e){}
+    try { rMahnwesen && rMahnwesen(); } catch(e){}
+    try { rUndoLog(); } catch(e){}
+    showToast('↩ Zustand vor der Aktion wiederhergestellt');
+    return;
+  }
 
   try{
     switch(action.typ){
@@ -10231,6 +10517,22 @@ function undoAction(actionId){
         if(action.undoData.abId){
           db.abrechnungen = (db.abrechnungen||[]).filter(function(a){return a.id!==action.undoData.abId;});
         }
+        // ─── Build 772: Legacy-Geister mitlöschen ───
+        // Bei monats_abrechn-Belegen hängen db.abrechnungen-Einträge über die
+        // Dokument-ID (nicht über abId). Diese blieben bisher als verwaiste
+        // "KEIN DOK"-Geister zurück. Jetzt alle Legacy-Einträge entfernen, die
+        // auf das gelöschte Dokument zeigen — egal über welches Feld.
+        if(action.undoData.dokId){
+          var _delDokId = action.undoData.dokId;
+          db.abrechnungen = (db.abrechnungen||[]).filter(function(a){
+            // Verschiedene Felder die auf ein Dokument verweisen können
+            if(a.dokId === _delDokId) return false;
+            if(a.pdf_datei_id === _delDokId) return false;
+            if(a._pdfDateiId === _delDokId) return false;
+            if(a._dokId === _delDokId) return false;
+            return true;
+          });
+        }
         // ─── Build 764/765: dbv2-Einträge mitlöschen ───
         // Beim Bestätigen schreibt _konsolidiereDokumentNachV2 Einträge in
         // dbv2.abrechnungen (mit pdf_datei_id = dokId) und entsprechende
@@ -10246,6 +10548,17 @@ function undoAction(actionId){
             }
             return true;
           });
+          // Build 776: betroffene Termin-IDs aus den Junctions SAMMELN bevor
+          // wir sie löschen — damit wir gleich ALLE Termine zurücksetzen können.
+          var _betroffeneTerminIds = [];
+          if(entferntIds.length && dbv2.abrechnung_termin_links){
+            dbv2.abrechnung_termin_links.forEach(function(l){
+              if(entferntIds.indexOf(l.abrechnung_id) >= 0 && l.termin_id){
+                _betroffeneTerminIds.push(l.termin_id);
+              }
+            });
+          }
+          window._undoBetroffeneTerminIds = _betroffeneTerminIds; // an Reset-Block übergeben
           // Junctions die auf entfernte Abrechnungen zeigen, auch raus
           if(entferntIds.length && dbv2.abrechnung_termin_links){
             dbv2.abrechnung_termin_links = dbv2.abrechnung_termin_links.filter(function(l){
@@ -10255,15 +10568,34 @@ function undoAction(actionId){
           saveV2(dbv2);
         }
         // Termin-Verknüpfung lösen + Status/Felder zurücksetzen
-        if(action.undoData.terminId){
-          var t2 = (db.termine||[]).find(function(x){return x.id===action.undoData.terminId;});
+        // Build 776: ALLE betroffenen Termine zurücksetzen — nicht nur undoData.terminId.
+        // Quellen: (1) undoData.terminId, (2) Junction-Termine, (3) Termine mit t.dokId===dokId
+        var _resetTerminIds = {};
+        if(action.undoData.terminId) _resetTerminIds[action.undoData.terminId] = true;
+        if(window._undoBetroffeneTerminIds){
+          window._undoBetroffeneTerminIds.forEach(function(tid){ _resetTerminIds[tid] = true; });
+          delete window._undoBetroffeneTerminIds;
+        }
+        // Termine die direkt aufs gelöschte Dok zeigen
+        if(action.undoData.dokId){
+          (db.termine||[]).forEach(function(t){
+            if(t.dokId === action.undoData.dokId) _resetTerminIds[t.id] = true;
+            if(t._fromDokId === action.undoData.dokId) _resetTerminIds[t.id] = true;
+          });
+        }
+        Object.keys(_resetTerminIds).forEach(function(tid){
+          var t2 = (db.termine||[]).find(function(x){return x.id===tid;});
           if(t2){
             t2.abId=null; t2.abgerechnet=false;
             t2.status='offen';
             t2.abrechn_dateiname='';
             t2.brutto_termin=null; t2.mwst_anteil=null; t2.gutschrift_nr='';
+            // Build 776: abrechnungBrutto wird beim Bestätigen gesetzt (Z.11652)
+            // und muss auch weg — sonst bleibt die Ampel gelb + Zahlen sichtbar.
+            t2.abrechnungBrutto=null;
+            delete t2.dokId; delete t2._fromDokId;
           }
-        }
+        });
         // Build 765: Dokument selbst KOMPLETT entfernen + Geschwister (Split-Kinder)
         if(action.undoData.dokId){
           // Split-Kinder mitlöschen (mehrere PDFs die ein Original geteilt hat)
@@ -11544,6 +11876,7 @@ function dokFooterBestaetigen(){
 
 
 function dokBestaetigen(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
   _applyEditedFields(d);
@@ -13741,6 +14074,51 @@ function dokOpenDetail(id){
       }
       body+=_editRow('mwst',mwstLabel2,d.mwst||'');
       body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
+
+      // ─── Build 774: SthH-K4-Zusatzfelder anzeigen (nur Studio Hamburg) ───
+      // Zeigt die Match-Engine-/Lohnsteuer-Felder direkt im Erkannte-Daten-Block.
+      // Vorhandene Werte normal, fehlende mit ⚠ — so sieht man sofort was die KI
+      // nicht extrahiert hat. Read-only (Korrektur via Bank-Match-Banner unten).
+      if(d.studio === 'Studio Hamburg'){
+        var _v2k4 = (dbv2 && dbv2.abrechnungen||[]).find(function(a){ return a.pdf_datei_id === d.id; });
+        // Werte primär aus dbv2 (nach Konsolidierung), Fallback auf d (vor Bestätigung)
+        var _g = function(v2f, df){
+          if(_v2k4 && _v2k4[v2f] != null && _v2k4[v2f] !== '') return _v2k4[v2f];
+          if(d[df] != null && d[df] !== '') return d[df];
+          return null;
+        };
+        var _leistMon = _g('leistungs_monat','verbindlichkeit_monat');
+        var _lohnZiel = _g('lohnsteuer_zielmonat','lohnsteuer_zielmonat');
+        var _printD   = _g('_print_datum','print_datum');
+        var _auszZiel = _g('auszahlungs_ziel','auszahlungs_ziel');
+        var _iban     = _g('bank_iban','bank_iban');
+        var _saldoFol = _g('saldo_folgemonat','saldo_folgemonat');
+        var _saldoVor = _g('saldo_vormonat','saldo_vormonat');
+        var _saldoBer = _g('saldo_bereits_erhalten','saldo_bereits_erhalten');
+
+        // Zeile bauen: Wert oder ⚠ fehlt
+        function _k4row(label, val, opt){
+          var hasVal = (val != null && val !== '');
+          var disp = hasVal ? esc(String(val)) : '<span style="color:#c2410c;font-weight:700">⚠ fehlt</span>';
+          if(opt && hasVal) disp = esc(String(val)); // optionale Felder: kein ⚠ wenn leer
+          if(opt && !hasVal) disp = '<span style="color:#9ca3af">— nicht vorhanden</span>';
+          return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f0fdf4">'
+            +'<div style="font-size:11px;color:#999;flex:1">'+label+'</div>'
+            +'<div style="font-size:13px;font-weight:700;text-align:right;color:#1a1a1a">'+disp+'</div>'
+            +'</div>';
+        }
+        body+='<div style="margin:8px 0 2px;border-top:1px solid #d1fae5;padding-top:8px">';
+        body+='<div style="font-size:10px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🏦 Studio-Hamburg-Zusatz (K4)</div>';
+        body+='</div>';
+        body+=_k4row('Verbindlichk./Leistungsmonat', _leistMon);
+        body+=_k4row('Lohnsteuer-Zielmonat', _lohnZiel, true);
+        body+=_k4row('Druckdatum', _printD);
+        body+=_k4row('Auszahlungsziel', _auszZiel);
+        body+=_k4row('Bank-IBAN', _iban, true);
+        body+=_k4row('Differenz Folgemonat €', _saldoFol, true);
+        body+=_k4row('Differenz aus Vormonat €', _saldoVor, true);
+        body+=_k4row('Bereits erhalten €', _saldoBer, true);
+      }
     }
     body+='</div>';
 
@@ -14048,7 +14426,7 @@ function openStudioPwSheet(){
   var box = document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
   box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">🔒 PDF-Passwörter</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::Passwort</b> — je Zeile ein Studio<br>Mehrere Zeilen mit gleichem Namen → alle werden durchprobiert<br>Beispiel: Studio Hamburg::0911810834</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::Passwort</b> — je Zeile ein Studio<br>Mehrere Zeilen mit gleichem Namen → alle werden durchprobiert<br>Beispiel: Studio Hamburg::dein-PDF-Passwort</div>'
     +'<textarea id="studio-pw-input" rows="5" style="width:100%;box-sizing:border-box;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px;font-size:13px;font-family:monospace;resize:vertical">'+entries+'</textarea>'
     +'<button type="button" onclick="saveStudioPws()" style="margin-top:10px;width:100%;background:#15803d;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
     +'<button type="button" onclick="removeStudioPwOverlay()" style="margin-top:8px;width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
@@ -14121,15 +14499,15 @@ function openStudioEmailSheet(){
   // Vorausfüllen wenn leer
   if(!entries){
     entries = [
-      'Berliner Synchron::mbecker@berliner-synchron.de',
-      'Iyuno::buchhaltung@iyuno-sdi.com',
-      'VSI::mwinkler@vsi-berlin.tv',
-      'Interopa::stanisavljevic@interopa.de',
-      'Studio Hamburg::info@studio-hamburg.de',
-      'Oxygen::info@o2studios.com',
-      'TNT::info@tnt-media.de',
-      'Globaloc::info@globaloc.de',
-      'Lavendel Film::doreen.stavenhagen@lavendelfilm.de',
+      'Berliner Synchron::',
+      'Iyuno::',
+      'VSI::',
+      'Interopa::',
+      'Studio Hamburg::',
+      'Oxygen::',
+      'TNT::',
+      'Globaloc::',
+      'Lavendel Film::',
       'Cinephon::',
       'Arena::',
       'FFS::',
@@ -14727,6 +15105,7 @@ function dokSessionGotoKalender(dokId, si){
 
 // Kandidat aus dem Sheet gewählt → direkt verknüpfen + Vorschau
 function dokSessionLinkSheetPick(terminId){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   dokSessionLinkSheetClose();
   var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
   if(!d||!d.sessions||!d.sessions[_pendingSessionIdx]) return;
@@ -14743,6 +15122,7 @@ function dokSessionLinkSheetPick(terminId){
 
 // Neuen Termin aus der Session anlegen + sofort verknüpfen
 function dokSessionLinkSheetNeu(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   dokSessionLinkSheetClose();
   var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
   if(!d||!d.sessions||!d.sessions[_pendingSessionIdx]) return;
@@ -14950,6 +15330,7 @@ function dokSessionSkip(dokId, si){
 }
 
 function dokBestaetigenMonat(dokId){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   try {
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions){ showToast('⚠ Dok nicht gefunden: '+dokId); return; }
@@ -15531,6 +15912,7 @@ function _applyEditedFields(d){
 // sondern als negativer Einnahme-Beleg gebucht (Schema-konform mit ist_storno=true).
 // Steuerlich korrekt: USt-Korrektur landet in der USt-VA, Bank-Bewegung matcht.
 function dokStornoVerbuchen(dokId){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
 
@@ -15634,6 +16016,7 @@ function dokStornoAlsAusgabe(dokId){
   dokDetailClose();
 }
 function dokBestaetigenMitTermin(dokId, terminId){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d) return;
@@ -16020,6 +16403,7 @@ function dokAssignTermin(dokId, terminId){
 }
 
 function _checkPendingDokLink(terminId){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   if(!_pendingDokLink) return;
   var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
@@ -16060,6 +16444,7 @@ function _checkPendingDokLink(terminId){
 }
 
 function dokLinkMultiConfirm(){
+  pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var dokId=_pendingDokLink;
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   var terminIds=window._dokLinkMulti||[];
