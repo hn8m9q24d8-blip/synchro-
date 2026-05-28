@@ -3233,7 +3233,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '784';
+  if(el) el.textContent = '786';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5556,7 +5556,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
   showToast('🏦 Lese K4-Felder (Studio Hamburg)…');
   var xhr = new XMLHttpRequest();
   xhr.open('POST','https://api.anthropic.com/v1/messages');
-  xhr.timeout = 60000;
+  xhr.timeout = 120000; // Build 785: 60s→120s. Hi-res-Bilder (scale 2.5) = größerer Payload.
   xhr.setRequestHeader('Content-Type','application/json');
   xhr.setRequestHeader('x-api-key', apiKey);
   xhr.setRequestHeader('anthropic-version','2023-06-01');
@@ -5566,6 +5566,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
       var data = JSON.parse(xhr.responseText);
       if(!data.content || !data.content[0]){
         console.warn('[Build 763] Keine Antwort:', xhr.responseText.slice(0,200));
+        showToast('⚠ K4-Fehler: '+((data.error&&data.error.message)||('HTTP '+xhr.status)).slice(0,80));
         if(cb) cb(); return;
       }
       var txt = data.content[0].text || '';
@@ -5574,6 +5575,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
       var start = txt.indexOf('{'), end = txt.lastIndexOf('}');
       if(start<0 || end<0){
         console.warn('[Build 763] Kein JSON in Antwort');
+        showToast('⚠ K4: KI gab kein JSON zurück');
         if(cb) cb(); return;
       }
       var j = JSON.parse(txt.slice(start, end+1));
@@ -5650,14 +5652,17 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
   };
   xhr.onerror = function(){
     console.warn('[Build 763] XHR-Fehler');
+    showToast('⚠ K4: Netzfehler beim Bank-Match-Scan');
     if(cb) cb();
   };
   xhr.ontimeout = function(){
     console.warn('[Build 763] Timeout');
+    showToast('⚠ K4: Timeout — Bild evtl. zu groß. Nochmal versuchen.');
     if(cb) cb();
   };
   try { xhr.send(bodyStr); } catch(e){
     console.warn('[Build 763] Send-Fehler:', e.message);
+    showToast('⚠ K4 Send-Fehler: '+e.message.slice(0,60));
     if(cb) cb();
   }
 }
@@ -12662,8 +12667,18 @@ function dokAnalyseDoc(d, key, cb){
             var hatGesamtbrutto = txt.indexOf('Gesamtbrutto') >= 0;
             var hatNullBrutto = /Gesamtbrutto[\s\S]{0,60}?0,00/.test(txt);
             var hatEchtenBetrag = hatGesamtbrutto && !hatNullBrutto;
+            // Build 785-FIX: Eine "Gesamtbrutto 0,00"-Seite ist NICHT wertlos,
+            // wenn sie den Salden-/Bank-Fussblock trägt (IBAN, Differenz aus
+            // Vormonat, bereits erhalten). Genau diese Seite enthält bei Studio
+            // Hamburg die Auszahlungs-IBAN + Salden — sie DARF NICHT verworfen
+            // werden, sonst sieht die KI IBAN/Salden nie.
+            var hatBankOderSaldo = /IBAN/i.test(txt)
+                 || /Differenz aus Vormonat/i.test(txt)
+                 || /bereits erhalten/i.test(txt)
+                 || /Differenz für Folgemonate?/i.test(txt)
+                 || /Sparkasse|Holvi/i.test(txt);
             // Fallback: Seite ohne 'Gesamtbrutto' immer mitsenden (könnte andere Infos haben)
-            var relevant = !hatGesamtbrutto || hatEchtenBetrag;
+            var relevant = !hatGesamtbrutto || hatEchtenBetrag || hatBankOderSaldo;
             return {page: page, relevant: relevant, txt: txt.slice(0,100)};
           });
         });
