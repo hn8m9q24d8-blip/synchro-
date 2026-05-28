@@ -3194,7 +3194,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '765';
+  if(el) el.textContent = '768';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4778,9 +4778,76 @@ function inlineEditCommit(inp, terminId, field){
   // Feld als manuell markieren — hat höchste Priorität beim Merge
   if(!t._manualFields) t._manualFields = [];
   if(t._manualFields.indexOf(field) < 0) t._manualFields.push(field);
+
+  // ─── Build 766/767: Sender-Propagation auf gleiche Staffel ───
+  // Wenn der Sender manuell gesetzt wird, übernehmen ihn alle Termine
+  // derselben Produktion UND Staffel (Titel + Staffel), die noch keinen
+  // Sender haben. Der Sender wechselt oft pro Staffel → nur gleiche Staffel.
+  var _propagiert = 0;
+  if(field === 'sender' && newVal && t.titel){
+    var _prodKey = _senderProdKey(t);
+    // Ins Produktions-Gedächtnis speichern → gilt auch für künftige Dispo-Importe
+    if(!db._senderProProduktion) db._senderProProduktion = {};
+    db._senderProProduktion[_prodKey] = { sender: newVal, kuerzel: t.sender_kuerzel || null };
+    (db.termine||[]).forEach(function(other){
+      if(other.id === terminId) return;
+      if(_senderProdKey(other) !== _prodKey) return; // gleiche Produktion + Staffel
+      // Nur ergänzen wenn noch kein Sender ODER Sender nicht manuell gesetzt wurde
+      var otherManual = other._manualFields && other._manualFields.indexOf('sender') >= 0;
+      if(!other.sender || (!otherManual && other.sender !== newVal)){
+        other.sender = newVal;
+        if(t.sender_kuerzel) other.sender_kuerzel = t.sender_kuerzel;
+        _propagiert++;
+      }
+    });
+  }
+
   save(db);
   rTermine();
   openDetail(terminId);
+  if(_propagiert > 0){
+    showToast('✓ Sender "'+newVal+'" auf '+_propagiert+' weitere '+(_propagiert===1?'Folge':'Folgen')+' derselben Staffel übernommen');
+  }
+}
+
+// ─── Build 766/767: Sender aus Produktions-Gedächtnis ergänzen ───
+// Sender gilt NUR pro Staffel (nicht pro ganzer Produktion), weil der Sender
+// zwischen Staffeln oft wechselt. Match-Key = Titel + Staffel.
+// Bei neuer Staffel wird erst wieder eine manuelle Eintragung abgewartet.
+function _staffelVonTermin(t){
+  if(!t) return 1;
+  // 1. Aus gvl_takes_detail: erste Folgennummer → Staffel ableiten
+  if(t.gvl_takes_detail && t.gvl_takes_detail.length){
+    var fStr = String(t.gvl_takes_detail[0].folge||'');
+    if(fStr.length===3) return parseInt(fStr[0])||1;
+    if(fStr.length===4) return parseInt(fStr.slice(0,2))||1;
+    if(fStr.length>2)   return parseInt(fStr.slice(0,-2))||1;
+  }
+  // 2. Direkte Staffel-Felder
+  if(t.gvl_staffel)        return parseInt(t.gvl_staffel)||1;
+  if(t.gvl_staffel_header) return parseInt(t.gvl_staffel_header)||1;
+  // 3. Episode-Feld (manchmal "S2" o.ä.)
+  if(t.episode){
+    var m = String(t.episode).match(/(?:s|staffel)\s*(\d+)/i);
+    if(m) return parseInt(m[1])||1;
+  }
+  // Fallback: Staffel 1 (gilt auch für Filme/FFS ohne Episoden)
+  return 1;
+}
+function _senderProdKey(t){
+  return (t.titel||'').trim().toLowerCase() + '##s' + _staffelVonTermin(t);
+}
+function _senderAusGedaechtnis(t){
+  if(!t || t.sender || !t.titel) return false;
+  if(!db._senderProProduktion) return false;
+  var key = _senderProdKey(t);
+  var eintrag = db._senderProProduktion[key];
+  if(eintrag && eintrag.sender){
+    t.sender = eintrag.sender;
+    if(eintrag.kuerzel) t.sender_kuerzel = eintrag.kuerzel;
+    return true;
+  }
+  return false;
 }
 
 function gvlTerminBearbeiten(terminId){
@@ -5287,29 +5354,43 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'   "8003: SP_Data PA YYYYgmmw RB:YYYYMMDD - DD.MM.YYYY HH:MM:SS"\n'
    +'   Beispiel: "RB:20251219 - 12.03.2026 12:48:48" → "2026-03-12"\n'
    +'   Bei mehrseitigen PDFs: einmal nehmen reicht.\n\n'
+   +'!!! WICHTIG FÜR FELDER 4-7: Diese stehen auf der LETZTEN Seite des PDFs !!!\n'
+   +'Studio-Hamburg-PDFs haben oft 2 Seiten:\n'
+   +'  Seite 1 = "Korrektur Gehaltsabrechnung X/YYYY (für Y/YYYY)" → Gage + USt\n'
+   +'  Seite 2 = "Gehaltsabrechnung Y/YYYY" (OHNE "Korrektur") → Auszahlung + IBAN\n'
+   +'Du MUSST die letzte Seite genau lesen. Dort stehen am unteren Ende\n'
+   +'untereinander: "Saldo lfd. Monat", "Differenz aus Vormonat" und eine\n'
+   +'Bank-Zeile mit IBAN und EUR-Betrag.\n\n'
    +'4. saldo_vormonat (Zahl in Euro, kann negativ sein):\n'
-   +'   "Differenz aus Vormonat" auf der Folge-Monatsseite.\n'
-   +'   Wenn nicht vorhanden: weglassen.\n\n'
+   +'   Zeile "Differenz aus Vormonat" auf der LETZTEN Seite.\n'
+   +'   Beispiel: "Differenz aus Vormonat   161,57" → 161.57\n'
+   +'   Diese Zeile steht direkt über der Bank-/IBAN-Zeile. Lies sie genau.\n'
+   +'   Nur weglassen wenn die Zeile WIRKLICH nicht existiert.\n\n'
    +'5. saldo_bereits_erhalten (Zahl in Euro, normalerweise negativ):\n'
-   +'   "bereits erhalten" auf der Folge-Monatsseite.\n'
+   +'   Zeile "bereits erhalten" auf der letzten Seite.\n'
    +'   Beispiel: "bereits erhalten -424,98" → -424.98\n'
    +'   Wenn positiv ausgewiesen: trotzdem als negative Zahl speichern.\n'
    +'   Wenn nicht vorhanden: weglassen.\n\n'
    +'6. saldo_folgemonat (Zahl in Euro, normalerweise positiv):\n'
-   +'   Tatsächlich überwiesener Betrag dieser Korrektur-Periode.\n'
-   +'   Steht auf einer FOLGE-Seite mit Überschrift "Gehaltsabrechnung Y/YYYY"\n'
-   +'   (OHNE "Korrektur"-Wort) als IBAN-Zeile mit Euro-Betrag:\n'
-   +'   "Holvi Payment Services Zw IBAN DE491... EUR 326,63" → 326.63\n'
-   +'   "Hamburger Sparkasse IBAN DE972... EUR 161,57" → 161.57\n'
-   +'   Akzeptiere JEDEN Bankname (Holvi, Hamburger Sparkasse, andere).\n'
-   +'   WICHTIG: NICHT die "Differenz für Folgemonate" der Korrektur-Hauptseite!\n'
-   +'   WICHTIG: Wenn keine Folge-Seite existiert: weglassen.\n\n'
+   +'   Tatsächlich überwiesener Betrag = der EUR-Betrag in der Bank-/IBAN-Zeile\n'
+   +'   auf der LETZTEN Seite. Diese Zeile enthält einen Banknamen, eine IBAN\n'
+   +'   (beginnt mit DE) und einen EUR-Betrag ganz rechts:\n'
+   +'   "Holvi Payment Services Zw IBAN DE49... EUR 326,63" → 326.63\n'
+   +'   "Hamburger Sparkasse IBAN DE97200505501059750834 EUR 161,57" → 161.57\n'
+   +'   Akzeptiere JEDEN Banknamen (Holvi, Hamburger Sparkasse, Sparkasse, andere).\n'
+   +'   WICHTIG: NICHT die "Differenz für Folgemonate" der Korrektur-Seite 1 nehmen,\n'
+   +'   sondern den Betrag der IBAN-Zeile auf der letzten Seite.\n'
+   +'   Falls es keine zweite Seite gibt, aber Seite 1 selbst eine IBAN-Bank-Zeile\n'
+   +'   mit EUR-Betrag hat: diesen nehmen.\n\n'
    +'7. auszahlungs_ziel (String "holvi" / "sparkasse" / "andere"):\n'
-   +'   Aus der IBAN auf der Folge-Monatsseite ableiten:\n'
-   +'   "Holvi Payment Services" → "holvi"\n'
-   +'   "Hamburger Sparkasse"     → "sparkasse"\n'
-   +'   Andere Bank              → "andere"\n'
-   +'   Wenn keine Folge-Seite mit IBAN: weglassen.\n\n'
+   +'   Aus der Bank-/IBAN-Zeile derselben (letzten) Seite ableiten — anhand des\n'
+   +'   Banknamens, NICHT raten:\n'
+   +'   enthält "Holvi"             → "holvi"\n'
+   +'   enthält "Sparkasse"         → "sparkasse"\n'
+   +'   (z.B. "Hamburger Sparkasse" → "sparkasse")\n'
+   +'   anderer Bankname            → "andere"\n'
+   +'   Du findest fast immer eine IBAN-Zeile. Nur weglassen wenn WIRKLICH keine\n'
+   +'   Bank-/IBAN-Zeile im gesamten PDF steht.\n\n'
    +'8. ist_leer_korrektur (Boolean true/false):\n'
    +'   true = wenn der Korrektur-Beleg KEINE 603-Zeile mit Gage > 0 hat\n'
    +'         (nur Saldenfortschreibung, kein neuer Bruttowert)\n'
@@ -5318,7 +5399,12 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'Nur JSON, keine Erklärung, keine Markdown-Codeblöcke:\n'
    +'{"verbindlichkeit_monat":"...","lohnsteuer_zielmonat":"...","print_datum":"...",\n'
    +' "saldo_vormonat":...,"saldo_bereits_erhalten":...,"saldo_folgemonat":...,\n'
-   +' "auszahlungs_ziel":"...","ist_leer_korrektur":false}\n';
+   +' "auszahlungs_ziel":"...","ist_leer_korrektur":false}\n\n'
+   +'BEISPIEL (Seite 1 "Korrektur 1/2026 (für 2/2026)", Seite 2 mit\n'
+   +'"Differenz aus Vormonat 161,57" und "Hamburger Sparkasse IBAN DE97... EUR 161,57"):\n'
+   +'{"verbindlichkeit_monat":"2026-01","lohnsteuer_zielmonat":"2026-02",\n'
+   +' "print_datum":"2026-01-28","saldo_vormonat":161.57,\n'
+   +' "saldo_folgemonat":161.57,"auszahlungs_ziel":"sparkasse","ist_leer_korrektur":false}\n';
 
   var contentBlocks = pageDataURLs.map(function(url){
     return {type:'image',source:{type:'base64',media_type:'image/jpeg',data:url.split(',')[1]}};
@@ -5327,7 +5413,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
 
   var bodyStr;
   try {
-    bodyStr = JSON.stringify({model:'claude-sonnet-4-6', max_tokens:800,
+    bodyStr = JSON.stringify({model:'claude-sonnet-4-6', max_tokens:1000,
       messages:[{role:'user',content:contentBlocks}]});
   } catch(e){
     console.warn('[Build 763] JSON build failed:', e.message);
@@ -8168,6 +8254,7 @@ function autoCreate(parsed){
     doneTakes:[],
     createdAt:new Date().toISOString()
   };
+  _senderAusGedaechtnis(t); // Build 766: Sender aus Produktions-Gedächtnis
   db.termine.push(t);
   save(db);
   rTermine();updateBadge();
@@ -11479,6 +11566,7 @@ function dokBestaetigen(){
       if(d.titel&&!t2.titel) t2.titel=d.titel;
       if(d.uhrzeit&&!t2.uhrzeit) t2.uhrzeit=d.uhrzeit;
       if(d.takes&&!t2.takes) t2.takes=d.takes;
+      _senderAusGedaechtnis(t2); // Build 766: Sender aus Produktions-Gedächtnis
       if(d.typ==='abrechn'&&d.auszahlung){t2.abgerechnet=true;t2.abrechnungBrutto=parseFloat(d.auszahlung);}
     }
   } else if(d.datum&&d.studio){
@@ -11489,6 +11577,7 @@ function dokBestaetigen(){
       if(d.regie&&!match.regie) match.regie=d.regie;
       if(d.titel&&!match.titel) match.titel=d.titel;
       if(d.takes&&!match.takes) match.takes=d.takes;
+      _senderAusGedaechtnis(match); // Build 766: Sender aus Produktions-Gedächtnis
       // Dateiname direkt am Termin speichern
       if(d.typ==='dispo' && (d.dateiname||d.beschr)) match._dispoDateiname = d.dateiname||d.beschr||'';
       else if((d.typ==='abrechn'||d.typ==='monats_abrechn') && (d.dateiname||d.beschr)) match.abrechn_dateiname = d.dateiname||'';
@@ -13311,9 +13400,13 @@ function dokOpenDetail(id){
         body+='<div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
       }
     }
-    // Nochmal analysieren (immer sichtbar in State 2)
+    // Analyse-Button: beim ersten Mal "KI Analyse", danach "Nochmal analysieren"
+    // Erkennung: hat das Dok schon erkannte Felder (titel/regie/studio/beschreibung/datum)?
+    var _schonAnalysiert = !!(d.titel || d.regie || d.studio || d.beschreibung || d.datum
+                              || (d.posten && d.posten.length) || (d.sessions && d.sessions.length));
+    var _analyseBtnLabel = _schonAnalysiert ? '🔄 Nochmal analysieren' : '✨ KI Analyse';
     body+='<div style="margin-bottom:12px">';
-    body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:#f5f5f5;color:#374151;border:1.5px solid #d1d5db;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">🔄 Nochmal analysieren</button>';
+    body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:#f5f5f5;color:#374151;border:1.5px solid #d1d5db;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">'+_analyseBtnLabel+'</button>';
     body+='</div>';
 
     // ── ERKANNTE DATEN (editierbar — Korrekturen möglich) ──
