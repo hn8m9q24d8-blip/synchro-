@@ -3194,7 +3194,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '768';
+  if(el) el.textContent = '771';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12808,6 +12808,25 @@ function dokAnalyseDoc(d, key, cb){
               }
             }
             showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
+            // ─── Build 771: Auto-Match Session→Kalendertermin (NUR Studio Hamburg) ───
+            // Der SH-Spezialpfad hat — anders als der normale monats_abrechn-Pfad —
+            // bisher KEINEN Auto-Match auf Kalendertermine gemacht. Dadurch blieben
+            // SH-Sessions immer orange ("Tippen zum Zuordnen"), obwohl der passende
+            // Kalendertermin existierte. Hier gezielt nachgezogen — greift nur für
+            // Studio Hamburg, lässt alle anderen Studios unberührt.
+            if(d.sessions && Array.isArray(d.sessions) && d.sessions.length){
+              var _shBelegte = [];
+              (db.dokumente||[]).forEach(function(x){
+                if(x.id === d.id) return;
+                if(x.terminId) _shBelegte.push(x.terminId);
+                if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) _shBelegte.push(ss.terminId); });
+              });
+              d.sessions.forEach(function(s){
+                if(s.terminId || !s.datum) return;
+                var _tm = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, _shBelegte, true);
+                if(_tm){ s.terminId = _tm.id; _shBelegte.push(_tm.id); }
+              });
+            }
             save(db); rDokumente();
             // ─── Build 762: zweiter KI-Call für Bank-Match-Felder ───
             // Nur wenn Studio Hamburg erkannt und PDF-Daten verfügbar
@@ -14628,7 +14647,148 @@ function dokLinkCancel(){
 }
 
 // Kalender öffnen um eine ungematche Session manuell einem Termin zuzuordnen
+// ═══ Build 769: Inline-Session-Zuordnung (kein Kalender-Raussprung mehr) ═══
+// Wenn der Auto-Match nicht greift, öffnet sich ein Bottom-Sheet IM Dokument:
+//  - Liste der besten Termin-Kandidaten am selben Datum (auch knappe Scores)
+//  - Button "Neuen Termin aus dieser Session anlegen"
+//  - Schließen → zurück zur KI-Übersicht (kein Verlust des Kontexts)
 function dokSessionGotoKalender(dokId, si){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d||!d.sessions||!d.sessions[si]) return;
+  // Build 771: Inline-Sheet NUR für Studio Hamburg. Alle anderen Studios
+  // behalten den bewährten Kalender-Weg unverändert (Tim: "alles andere geht").
+  if(d.studio !== 'Studio Hamburg'){
+    _dokSessionGotoKalenderLegacy(dokId, si);
+    return;
+  }
+  var s=d.sessions[si];
+  _pendingDokLink=dokId;
+  _pendingSessionIdx=si;
+
+  // Kandidaten finden: alle Termine am selben Datum (ohne Score-Filter),
+  // dann nach dokFindTermin-Score sortiert. So sieht der Nutzer auch knappe Treffer.
+  var belegteIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
+  var sameDay = (db.termine||[]).filter(function(t){
+    if(belegteIds.indexOf(t.id)>=0) return false;
+    return t.datum === s.datum;
+  });
+  // Falls am exakten Tag nichts: ±2 Tage als erweiterte Kandidaten
+  var nearDay = [];
+  if(!sameDay.length && s.datum){
+    var sD = new Date(s.datum+'T00:00:00');
+    nearDay = (db.termine||[]).filter(function(t){
+      if(belegteIds.indexOf(t.id)>=0 || !t.datum) return false;
+      var diff = Math.abs(new Date(t.datum+'T00:00:00') - sD)/(1000*60*60*24);
+      return diff>0 && diff<=2;
+    });
+  }
+  var kandidaten = sameDay.length ? sameDay : nearDay;
+
+  var overlay = document.getElementById('_session-link-sheet');
+  if(overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = '_session-link-sheet';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;flex-direction:column;justify-content:flex-end';
+  overlay.onclick = function(e){ if(e.target===overlay) dokSessionLinkSheetClose(); };
+
+  var label = (s.datum?s.datum.split('-').reverse().join('.')+' · ':'')+(s.titel||d.titel||'Session');
+  var html = '<div style="background:#fff;border-radius:20px 20px 0 0;padding:18px 16px 28px;max-height:80vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,.2)">'
+    + '<div style="width:40px;height:4px;background:#d1d5db;border-radius:2px;margin:0 auto 14px"></div>'
+    + '<div style="font-size:15px;font-weight:900;margin-bottom:2px">Session zuordnen</div>'
+    + '<div style="font-size:12px;color:#888;margin-bottom:16px">'+esc(label)+'</div>';
+
+  if(kandidaten.length){
+    html += '<div style="font-size:11px;font-weight:800;color:#1d6fa8;letter-spacing:.5px;margin-bottom:8px">'
+          + (sameDay.length ? 'TERMINE AM '+(s.datum?s.datum.split('-').reverse().join('.'):'') : 'TERMINE IN DER NÄHE (±2 Tage)')
+          + '</div>';
+    kandidaten.forEach(function(t){
+      var sub = [t.studio||'', t.uhrzeit?t.uhrzeit+' Uhr':''].filter(Boolean).join(' · ');
+      html += '<div onclick="dokSessionLinkSheetPick(\''+t.id+'\')" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;touch-action:manipulation">'
+        + '<div style="font-size:13px;font-weight:800;color:#15803d">'+esc(t.titel||t.studio||'Termin')+' →</div>'
+        + (sub?'<div style="font-size:11px;color:#666;margin-top:2px">'+esc(sub)+'</div>':'')
+        + '</div>';
+    });
+  } else {
+    html += '<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;font-size:12px;color:#9a3412;margin-bottom:14px">'
+          + 'Kein passender Kalendertermin am '+(s.datum?esc(s.datum.split('-').reverse().join('.')):'Datum')+' gefunden.</div>';
+  }
+
+  // Neuen Termin anlegen — immer verfügbar
+  html += '<button type="button" onclick="dokSessionLinkSheetNeu()" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-top:6px">+ Neuen Termin aus dieser Session anlegen</button>';
+  // In Kalender wechseln (alter Weg, als Fallback)
+  html += '<button type="button" onclick="dokSessionLinkSheetKalender()" style="width:100%;background:#f5f5f5;color:#374151;border:1.5px solid #d1d5db;border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:8px">📅 Im Kalender suchen</button>';
+  // Schließen
+  html += '<button type="button" onclick="dokSessionLinkSheetClose()" style="width:100%;background:transparent;color:#888;border:none;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:4px">Abbrechen</button>';
+  html += '</div>';
+
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+}
+
+// Kandidat aus dem Sheet gewählt → direkt verknüpfen + Vorschau
+function dokSessionLinkSheetPick(terminId){
+  dokSessionLinkSheetClose();
+  var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
+  if(!d||!d.sessions||!d.sessions[_pendingSessionIdx]) return;
+  var s=d.sessions[_pendingSessionIdx];
+  s.terminId = terminId;
+  s._manuallyAssigned = true;
+  save(db);
+  logAction('session_link', 'Session manuell zugeordnet · '+(d.beschr||d.dateiname||''),
+    {dokId:d.id, sessionIdx:_pendingSessionIdx, terminId:terminId});
+  // Detail neu öffnen → Session ist jetzt grün, Peek-Vorschau verfügbar
+  dokOpenDetail(d.id);
+  showToast('✓ Session zugeordnet');
+}
+
+// Neuen Termin aus der Session anlegen + sofort verknüpfen
+function dokSessionLinkSheetNeu(){
+  dokSessionLinkSheetClose();
+  var d=(db.dokumente||[]).find(function(x){return x.id===_pendingDokLink;});
+  if(!d||!d.sessions||!d.sessions[_pendingSessionIdx]) return;
+  var s=d.sessions[_pendingSessionIdx];
+  var neuT={
+    id:uid(),
+    titel: s.titel || d.titel || 'Unbenannt',
+    datum: s.datum || d.datum || today(),
+    uhrzeit: s.uhrzeit || d.uhrzeit || '',
+    studio: d.studio || '',
+    regie: s.regie || d.regie || '',
+    rolle: s.rolle || d.rolle || '',
+    takes: s.takes || '',
+    rate: parseFloat(s.take_gage)||0,
+    kommgage: parseFloat(s.grundgage)||0,
+    status:'offen',
+    doneTakes:[],
+    createdAt:new Date().toISOString(),
+    _ausSessionAngelegt:true
+  };
+  _senderAusGedaechtnis(neuT); // Build 766: Sender-Gedächtnis
+  db.termine.push(neuT);
+  s.terminId = neuT.id;
+  s._manuallyAssigned = true;
+  save(db);
+  logAction('session_link', 'Termin aus Session angelegt · '+(s.titel||d.titel||''),
+    {dokId:d.id, sessionIdx:_pendingSessionIdx, terminId:neuT.id, terminNeuAngelegt:true});
+  rTermine(); updateBadge();
+  dokOpenDetail(d.id);
+  showToast('✓ Neuer Termin angelegt & verknüpft');
+}
+
+// Fallback: doch in den Kalender wechseln (alter Weg)
+function dokSessionLinkSheetKalender(){
+  var dokId=_pendingDokLink, si=_pendingSessionIdx;
+  dokSessionLinkSheetClose();
+  _dokSessionGotoKalenderLegacy(dokId, si);
+}
+
+function dokSessionLinkSheetClose(){
+  var overlay=document.getElementById('_session-link-sheet');
+  if(overlay) overlay.remove();
+}
+
+// Alter Kalender-Sprung-Weg (als Fallback erhalten)
+function _dokSessionGotoKalenderLegacy(dokId, si){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions||!d.sessions[si]) return;
   var s=d.sessions[si];
