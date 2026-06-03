@@ -8,6 +8,7 @@
 
 <title>Synchron</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 
@@ -1035,8 +1036,15 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
     <!-- Empfänger / Studio -->
     <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">RECHNUNGSEMPFÄNGER</div>
-      <input id="re-empf" class="sheet-input" placeholder="Studio / Produktionsfirma">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <div style="font-size:11px;font-weight:700;color:#666">RECHNUNGSEMPFÄNGER</div>
+        <div onclick="openAuftraggeberSheet()" style="font-size:11px;color:#1a6ea8;cursor:pointer;font-weight:600">📇 Adressbuch</div>
+      </div>
+      <select id="re-empf-sel" class="sheet-input" style="appearance:auto;margin-bottom:6px" onchange="reEmpfSelected()">
+        <option value="">– Manuell eingeben –</option>
+      </select>
+      <input id="re-empf" class="sheet-input" placeholder="Empfänger (Firma, Straße, PLZ Ort — eine Zeile pro Datenfeld)">
+      <textarea id="re-empf-adresse" class="sheet-input" rows="3" placeholder="Vollständige Adresse (mehrzeilig, optional — wird unter dem Namen aufs PDF gedruckt)" style="resize:none;margin-top:6px;font-size:13px"></textarea>
     </div>
 
     <!-- Termin verknüpfen -->
@@ -1450,6 +1458,26 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div class="bs-footer">
     <button class="btn-primary" onclick="saveBankIbans()">Speichern</button>
     <button class="btn-secondary" onclick="closeBankIbansSheet()">Abbrechen</button>
+  </div>
+</div>
+
+<div class="overlay-bg" id="auftraggeber-bg" onclick="closeAuftraggeberSheet()"></div>
+<div class="bottom-sheet" id="auftraggeber-sheet">
+  <div class="bs-handle"></div>
+  <div class="bs-title">Adressbuch · Auftraggeber</div>
+  <div class="bs-scroll">
+    <div id="auftraggeber-list" style="margin-bottom:16px"></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:8px;letter-spacing:.5px">NEUER AUFTRAGGEBER</div>
+      <div class="form-field"><label class="form-label">Name (Firma)</label>
+        <input class="form-input" id="ag-name" type="text" placeholder="z.B. mobyDOK GmbH"></div>
+      <div class="form-field"><label class="form-label">Adresse (mehrzeilig)</label>
+        <textarea class="form-input" id="ag-adresse" rows="3" placeholder="Wolfshagener Str. 79&#10;13187 Berlin" style="resize:none"></textarea></div>
+      <button class="btn-primary" onclick="addAuftraggeber()" style="margin-top:4px">+ Hinzufügen</button>
+    </div>
+  </div>
+  <div class="bs-footer">
+    <button class="btn-secondary" onclick="closeAuftraggeberSheet()">Schließen</button>
   </div>
 </div>
 
@@ -3254,7 +3282,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '789';
+  if(el) el.textContent = '790';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18884,6 +18912,7 @@ function rRechnungen(){
 // ── RECHNUNG SHEET ────────────────────────────────────────────
 function openRechnungSheet(id){
   db.rechnungen=db.rechnungen||[];
+  db.auftraggeber=db.auftraggeber||[];
   var r=id?db.rechnungen.find(function(x){return x.id===id;}):null;
 
   // Termin-Dropdown füllen
@@ -18899,16 +18928,35 @@ function openRechnungSheet(id){
     });
   }
 
-  // Rechnungsnummer vorschlagen
+  // Auftraggeber-Dropdown füllen (Build 790)
+  var empfSel=document.getElementById('re-empf-sel');
+  if(empfSel){
+    empfSel.innerHTML='<option value="">– Manuell eingeben –</option>';
+    (db.auftraggeber||[]).slice().sort(function(a,b){
+      return String(a.name||'').localeCompare(String(b.name||''));
+    }).forEach(function(a){
+      var opt=document.createElement('option');
+      opt.value=a.id;
+      opt.textContent=a.name||'(unbenannt)';
+      empfSel.appendChild(opt);
+    });
+  }
+
+  // Rechnungsnummer vorschlagen — Build 790: Format NN/YYYY, pro Jahr neu starten
   if(!r){
     var y=new Date().getFullYear();
-    var count=(db.rechnungen||[]).filter(function(x){return x.datum&&x.datum.startsWith(String(y));}).length+1;
-    var nr=y+'-'+String(count).padStart(3,'0');
+    // Nur Eigenrechnungen DIESES Jahres zählen (sortable Suffix "/YYYY")
+    var jahrEnde='/'+String(y);
+    var count=(db.rechnungen||[]).filter(function(x){
+      return x.nr && String(x.nr).endsWith(jahrEnde);
+    }).length+1;
+    var nr=String(count).padStart(2,'0')+'/'+y;
     document.getElementById('re-nr').value=nr;
     document.getElementById('re-datum').value=today();
     var faellig=new Date(); faellig.setDate(faellig.getDate()+14);
     document.getElementById('re-faellig').value=dateToISO(faellig);
     document.getElementById('re-empf').value='';
+    var adrEl=document.getElementById('re-empf-adresse'); if(adrEl) adrEl.value='';
     document.getElementById('re-leistung').value='';
     document.getElementById('re-leistdatum').value='';
     document.getElementById('re-id').value='';
@@ -18923,6 +18971,7 @@ function openRechnungSheet(id){
     document.getElementById('re-datum').value=r.datum||today();
     document.getElementById('re-faellig').value=r.faellig||'';
     document.getElementById('re-empf').value=r.empf||'';
+    var adrEl2=document.getElementById('re-empf-adresse'); if(adrEl2) adrEl2.value=r.empfAdresse||'';
     document.getElementById('re-leistung').value=r.leistung||'';
     document.getElementById('re-leistdatum').value=r.leistdatum||'';
     document.getElementById('re-sheet-title').textContent='Rechnung bearbeiten';
@@ -19041,6 +19090,8 @@ function saveRechnung(){
   r.datum=document.getElementById('re-datum').value;
   r.faellig=document.getElementById('re-faellig').value;
   r.empf=document.getElementById('re-empf').value;
+  var adrEl3=document.getElementById('re-empf-adresse');
+  r.empfAdresse=adrEl3?adrEl3.value:'';
   r.leistung=document.getElementById('re-leistung').value;
   r.leistdatum=document.getElementById('re-leistdatum').value;
   r.positionen=JSON.parse(JSON.stringify(_rePositionen));
@@ -19065,8 +19116,312 @@ function saveRechnung(){
   showToast('✓ Rechnung '+(isNew?'erstellt':'gespeichert'));
 }
 
-// ── PDF GENERATION ────────────────────────────────────────────
+// ── AUFTRAGGEBER-ADRESSBUCH (Build 790) ───────────────────────
+// Speichert wiederkehrende Rechnungsempfänger (Firma + Adresse).
+// Beim Auswählen werden die Felder ins Rechnungs-Sheet übertragen.
+function reEmpfSelected(){
+  var sel=document.getElementById('re-empf-sel');
+  if(!sel||!sel.value){ return; }
+  db.auftraggeber=db.auftraggeber||[];
+  var a=db.auftraggeber.find(function(x){return x.id===sel.value;});
+  if(!a) return;
+  var emp=document.getElementById('re-empf');
+  var adr=document.getElementById('re-empf-adresse');
+  if(emp) emp.value = a.name || '';
+  if(adr) adr.value = a.adresse || '';
+}
+
+// Auftraggeber-Verwaltung als Bottom-Sheet
+function openAuftraggeberSheet(){
+  db.auftraggeber=db.auftraggeber||[];
+  _renderAuftraggeberList();
+  var sheet=document.getElementById('auftraggeber-sheet');
+  var bg=document.getElementById('auftraggeber-bg');
+  if(sheet) sheet.classList.add('open');
+  if(bg) bg.style.display='block';
+}
+function closeAuftraggeberSheet(){
+  var sheet=document.getElementById('auftraggeber-sheet');
+  var bg=document.getElementById('auftraggeber-bg');
+  if(sheet) sheet.classList.remove('open');
+  if(bg) bg.style.display='none';
+}
+function _renderAuftraggeberList(){
+  var list=document.getElementById('auftraggeber-list');
+  if(!list) return;
+  db.auftraggeber=db.auftraggeber||[];
+  if(db.auftraggeber.length===0){
+    list.innerHTML='<div style="padding:24px;text-align:center;color:#888;font-size:13px">Noch keine Auftraggeber gespeichert.<br>Lege unten einen an.</div>';
+    return;
+  }
+  var html='';
+  db.auftraggeber.slice().sort(function(a,b){
+    return String(a.name||'').localeCompare(String(b.name||''));
+  }).forEach(function(a){
+    html+='<div style="padding:12px;border:1px solid #eee;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:700;font-size:14px;color:#1a1a1a">'+esc(a.name||'(unbenannt)')+'</div>'
+      +(a.adresse?'<div style="font-size:12px;color:#666;white-space:pre-line;margin-top:2px">'+esc(a.adresse)+'</div>':'')
+      +'</div>'
+      +'<div onclick="deleteAuftraggeber(\''+a.id+'\')" style="color:#e53935;font-size:18px;cursor:pointer;line-height:1;padding:4px">×</div>'
+      +'</div>';
+  });
+  list.innerHTML=html;
+}
+function addAuftraggeber(){
+  var nameEl=document.getElementById('ag-name');
+  var adrEl=document.getElementById('ag-adresse');
+  if(!nameEl) return;
+  var name=String(nameEl.value||'').trim();
+  if(!name){ showToast('Name fehlt'); return; }
+  db.auftraggeber=db.auftraggeber||[];
+  db.auftraggeber.push({
+    id: uid(),
+    name: name,
+    adresse: String((adrEl&&adrEl.value)||'').trim(),
+    createdAt: new Date().toISOString()
+  });
+  save(db);
+  nameEl.value=''; if(adrEl) adrEl.value='';
+  _renderAuftraggeberList();
+  // Dropdown im Rechnungs-Sheet aktualisieren
+  var empfSel=document.getElementById('re-empf-sel');
+  if(empfSel){
+    var last=db.auftraggeber[db.auftraggeber.length-1];
+    var opt=document.createElement('option');
+    opt.value=last.id; opt.textContent=last.name;
+    empfSel.appendChild(opt);
+  }
+  showToast('✓ Auftraggeber gespeichert');
+}
+function deleteAuftraggeber(id){
+  if(!confirm('Auftraggeber löschen?')) return;
+  db.auftraggeber=(db.auftraggeber||[]).filter(function(a){return a.id!==id;});
+  save(db);
+  _renderAuftraggeberList();
+  // Aus Dropdown entfernen
+  var empfSel=document.getElementById('re-empf-sel');
+  if(empfSel){
+    var opt=empfSel.querySelector('option[value="'+id+'"]');
+    if(opt) opt.remove();
+  }
+}
+
+// ── PDF GENERATION (Build 790: jsPDF, Arte42-Layout, iOS-Share) ─
+// Generiert eine PDF-Datei aus der Rechnung im minimalistischen Layout
+// der bestehenden Eigenrechnungs-Vorlage. Bietet iOS-Share-Sheet wenn
+// verfügbar (Web Share API), sonst Direkt-Download als Fallback.
 function generateRechnungPDF(){
+  var id=document.getElementById('re-id').value;
+  saveRechnung();
+  db.rechnungen=db.rechnungen||[];
+  var r=id?db.rechnungen.find(function(x){return x.id===id;}):null;
+  if(!r&&db.rechnungen.length) r=db.rechnungen[db.rechnungen.length-1];
+  if(!r){ showToast('Keine Rechnung gefunden'); return; }
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    showToast('PDF-Bibliothek nicht geladen — Internet?');
+    return;
+  }
+  try {
+    _erzeugeUndTeileRechnungPDF(r);
+  } catch(e){
+    console.error('PDF-Fehler:', e);
+    showToast('PDF-Fehler: '+e.message);
+  }
+}
+
+function _erzeugeUndTeileRechnungPDF(r){
+  var p = db.profil || {};
+  var netto = r.netto || 0;
+  var ur = r.ust || 0.07;
+  var ustBetrag = r.ustBetrag || 0;
+  var brutto = r.brutto || 0;
+
+  // jsPDF aufrufen (UMD-Wrapper)
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit:'mm', format:'a4' });
+
+  // A4: 210 x 297 mm. Rand: 25 mm links/rechts, 25 mm oben.
+  var L = 25, R = 210 - 25, T = 25;
+  var y = T;
+
+  // ─── Absender oben links (klein, einzeilig) ───
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  var absenderTeile = [];
+  if(p.name) absenderTeile.push(p.name);
+  if(p.strasse) absenderTeile.push(p.strasse);
+  var plzOrt = ((p.plz||'')+' '+(p.ort||'')).trim();
+  if(plzOrt) absenderTeile.push(plzOrt);
+  // Eine Zeile, "Name · Straße · PLZ Ort"
+  if(absenderTeile.length){
+    var absText = absenderTeile.join(' · ');
+    doc.setTextColor(120,120,120);
+    doc.text(absText, L, y);
+    // Unterlinie als optisches Trennzeichen
+    doc.setDrawColor(200,200,200);
+    doc.line(L, y+1.5, R, y+1.5);
+    y += 8;
+  }
+  doc.setTextColor(0,0,0);
+
+  // ─── Datum rechts oben ───
+  doc.setFontSize(10);
+  var ortDatum = (p.ort||'')+', '+_fmtDatumDE(r.datum||new Date().toISOString().slice(0,10));
+  doc.text(ortDatum, R, y, {align:'right'});
+  y += 10;
+
+  // ─── Empfänger (links) ───
+  doc.setFontSize(10);
+  if(r.empf){ doc.text(String(r.empf), L, y); y += 5; }
+  if(r.empfAdresse){
+    var adrLines = String(r.empfAdresse).split('\n');
+    adrLines.forEach(function(line){
+      if(String(line).trim()){ doc.text(String(line).trim(), L, y); y += 5; }
+    });
+  }
+  y += 8;
+
+  // ─── Steuerdaten links unter Adresse (klein, dezent) ───
+  doc.setFontSize(9);
+  doc.setTextColor(110,110,110);
+  if(p.steuernr){ doc.text('Steuer-Nr.: '+p.steuernr, L, y); y += 4; }
+  if(p.famt){ doc.text('Finanzamt: '+p.famt, L, y); y += 4; }
+  if(p.ustid){ doc.text('Steuer-ID: '+p.ustid, L, y); y += 4; }
+  doc.setTextColor(0,0,0);
+  y += 6;
+
+  // ─── Rechnungs-Header zentriert ───
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14);
+  doc.text('Rechnung', 105, y, {align:'center'});
+  // Unterstreichung
+  var titleWidth = doc.getTextWidth('Rechnung');
+  doc.setLineWidth(0.3);
+  doc.line(105-titleWidth/2, y+1, 105+titleWidth/2, y+1);
+  doc.setFont('helvetica','normal');
+  y += 10;
+
+  // ─── Rechnungsnummer + Projekt + Leistungsdatum (linksbündig, kompakt) ───
+  doc.setFontSize(10);
+  if(r.nr){ doc.text('Rechnungsnummer: '+r.nr, L, y); y += 5; }
+  // Wir nehmen das erste Wort der Leistung als "Titel"-Indikator
+  if(r.leistung){ doc.text('Titel: '+String(r.leistung).split('\n')[0], L, y); y += 5; }
+  if(r.leistdatum){ doc.text('Leistungsdatum: '+_fmtDatumDE(r.leistdatum), L, y); y += 5; }
+  y += 6;
+
+  // ─── Anrede + Einleitung ───
+  doc.text('Sehr geehrte Damen und Herren,', L, y); y += 6;
+  var einleitung = 'Hiermit erlaube ich mir, Ihnen für meine Tätigkeit als Sprecher wie folgt in Rechnung zu stellen:';
+  var einleitWrap = doc.splitTextToSize(einleitung, R-L);
+  doc.text(einleitWrap, L, y);
+  y += einleitWrap.length * 5 + 4;
+
+  // ─── Posten-Tabelle (minimalistisch, ohne Rahmen) ───
+  // Format: Beschreibung links — Betrag rechts
+  doc.setFontSize(10);
+  (r.positionen||[]).forEach(function(pos){
+    var beschr = String(pos.beschr || '').trim();
+    if(!beschr) return;
+    var gesamt = (pos.menge||1) * (pos.preis||0);
+    // Wrap lange Beschreibungen
+    var lines = doc.splitTextToSize(beschr, R-L-40);
+    for(var i=0; i<lines.length; i++){
+      doc.text(lines[i], L, y);
+      if(i === lines.length-1){
+        doc.text(_fmtEur(gesamt), R, y, {align:'right'});
+      }
+      y += 5;
+    }
+  });
+  y += 4;
+
+  // ─── Nettobetrag, USt, Brutto ───
+  doc.line(L+90, y, R, y); y += 5;
+  doc.text('Nettobetrag', L+90, y); doc.text(_fmtEur(netto), R, y, {align:'right'}); y += 5;
+  doc.text('zzgl. '+Math.round(ur*100)+' % MWSt.', L+90, y);
+  doc.text(_fmtEur(ustBetrag), R, y, {align:'right'}); y += 5;
+  doc.setFont('helvetica','bold');
+  doc.text('zus.:', L+90, y); doc.text(_fmtEur(brutto), R, y, {align:'right'});
+  doc.setFont('helvetica','normal');
+  y += 12;
+
+  // ─── Zahlungsaufforderung ───
+  var bankBlock=[];
+  if(p.bank) bankBlock.push(p.bank);
+  if(p.iban) bankBlock.push('IBAN '+p.iban);
+  if(p.bic) bankBlock.push('BIC '+p.bic);
+  var zahlText = 'Bitte überweisen Sie o.g. Betrag binnen 4 Wochen auf mein Konto'
+    + (bankBlock.length ? ' bei der '+bankBlock[0]+',' : '')
+    + (p.iban ? '\nIBAN '+p.iban+'.' : '.');
+  var zahlWrap = doc.splitTextToSize(zahlText, R-L);
+  doc.text(zahlWrap, L, y);
+  y += zahlWrap.length * 5 + 10;
+
+  // ─── Grußformel ───
+  doc.text('Mit freundlichen Grüßen,', L, y); y += 8;
+  if(p.name){ doc.text(p.name, L, y); }
+
+  // ─── Seitenzahl unten ───
+  doc.setFontSize(8);
+  doc.setTextColor(150,150,150);
+  doc.text('1', 105, 290, {align:'center'});
+
+  // ─── PDF erzeugen + iOS-Share ───
+  var rgNum = (r.nr||'').replace(/\//g,'-');  // "01/2026" → "01-2026"
+  var empfShort = String(r.empf||'').split(/[\s,]/)[0] || 'Empfaenger';
+  var dateStr = (r.datum||new Date().toISOString().slice(0,10)).replace(/-/g,'');
+  var fileName = 'Rechnung_'+rgNum+'_'+empfShort+'_'+dateStr+'.pdf';
+
+  // Blob → File für Web Share API
+  var blob = doc.output('blob');
+  var file = new File([blob], fileName, {type:'application/pdf'});
+
+  // iOS-Share-Sheet bevorzugt
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({
+      files: [file],
+      title: 'Rechnung '+(r.nr||''),
+      text: 'Rechnung '+(r.nr||'')+(r.empf?' an '+r.empf:'')
+    }).then(function(){
+      showToast('✓ Geteilt');
+      closeRechnungSheet();
+    }).catch(function(err){
+      // User canceled — kein Toast
+      if(err && err.name !== 'AbortError'){
+        // Echter Fehler → Fallback Download
+        _downloadPDFFallback(doc, fileName);
+      }
+    });
+  } else {
+    // Fallback: Direkt-Download
+    _downloadPDFFallback(doc, fileName);
+  }
+}
+
+function _downloadPDFFallback(doc, fileName){
+  try {
+    doc.save(fileName);
+    showToast('✓ PDF gespeichert: '+fileName);
+  } catch(e){
+    showToast('Speichern fehlgeschlagen: '+e.message);
+  }
+}
+
+// Kleine Helfer für PDF-Formatierung (lokal, kein Konflikt mit fmtEur/fd)
+function _fmtEur(v){
+  var n = Number(v||0);
+  return n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.') + ' €';
+}
+function _fmtDatumDE(iso){
+  if(!iso) return '';
+  var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return String(iso);
+  return m[3]+'.'+m[2]+'.'+m[1];
+}
+
+// Legacy-Funktion bleibt für HTML-Preview-Mode bestehen (printRechnung nutzt sie noch)
+function generateRechnungPDFHTMLPreview(){
   var id=document.getElementById('re-id').value;
   saveRechnung();
   db.rechnungen=db.rechnungen||[];
