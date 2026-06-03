@@ -430,11 +430,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div id="view-profil" class="view">
   <div class="app-header"><div class="header-title">Profil</div></div>
   <div class="scroll">
-    <div class="profile-avatar" id="profil-avatar">—</div>
-    <div class="profile-name" id="profil-name">Mein Profil</div>
+    <div class="profile-avatar" id="profil-avatar" onclick="switchView('stammdaten')" style="cursor:pointer">—</div>
+    <div class="profile-name" id="profil-name" onclick="switchView('stammdaten')" style="cursor:pointer">Mein Profil</div>
     <div class="profile-sub" id="profil-beruf">Synchronsprecher</div>
     <div class="settings-group">
 
+      <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div class="sr-icon" style="background:#e0e7ff">👤</div><div class="sr-label">Stammdaten (Name, Adresse, Steuer, Bank)</div></div><div class="sr-right" id="stammdaten-status">→</div></div>
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Eigene Bank-IBANs</div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
@@ -3282,7 +3283,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '792';
+  if(el) el.textContent = '793';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9625,12 +9626,26 @@ function rBankverbindung(){
   });
 }
 
+// Build 793: Finanzamt-Felder beim Öffnen laden (fehlte bisher)
+function rFinanzamt(){
+  var p=db.profil||{};
+  ['steuernr','ustid','famt'].forEach(function(f){
+    var el=document.getElementById('pf-'+f);
+    if(el)el.value=p[f]||'';
+  });
+  var voranmEl=document.getElementById('pf-voranm');
+  if(voranmEl && p.voranm) voranmEl.value=p.voranm;
+}
+
 function saveProfil(){
   var p=db.profil||{};
   ['name','beruf','strasse','plz','ort','iban','bic','bank','steuernr','ustid','famt'].forEach(function(f){
     var el=document.getElementById('pf-'+f);
     if(el&&el.value!==undefined)p[f]=el.value;
   });
+  // Build 793: Voranmeldung-Frequenz
+  var voranmEl=document.getElementById('pf-voranm');
+  if(voranmEl)p.voranm=voranmEl.value;
   var ustEl=document.getElementById('pf-ust-pct');
   if(ustEl&&ustEl.value)p.ust=parseFloat(ustEl.value)/100;
   var svEl=document.getElementById('pf-svnr');
@@ -10522,6 +10537,25 @@ function rProfil(){
   if(icalStatus) icalStatus.textContent=icalUrl?'Gesetzt ✓':'Nicht gesetzt';
   // Build 789: Bank-IBANs Status
   try { updateBankIbansStatus(); } catch(e){}
+  // Build 793: Stammdaten-Vollständigkeit anzeigen
+  var stammStatus=document.getElementById('stammdaten-status');
+  if(stammStatus){
+    // 3 Bereiche prüfen
+    var hasPers = !!(p.name && p.strasse && p.plz && p.ort);
+    var hasBank = !!(p.iban);
+    var hasFamt = !!(p.steuernr);
+    var anz = (hasPers?1:0) + (hasBank?1:0) + (hasFamt?1:0);
+    if(anz === 3){
+      stammStatus.textContent='Vollständig ✓';
+      stammStatus.style.color='';
+    } else if(anz === 0){
+      stammStatus.textContent='Bitte ausfüllen';
+      stammStatus.style.color='#d97706';
+    } else {
+      stammStatus.textContent=anz+' von 3 ✓';
+      stammStatus.style.color='#d97706';
+    }
+  }
 }
 
 
@@ -10576,6 +10610,9 @@ function switchView(v){
   else if(v==='dispos'){rDispos();}
   else if(v==='gvl'){rGVL();}
   else if(v==='profil'){rProfil();}
+  else if(v==='pers-daten'){rPersDaten();}
+  else if(v==='bankverbindung'){rBankverbindung();}
+  else if(v==='finanzamt'){rFinanzamt();}
   else if(v==='buch'){var bv=document.getElementById('view-buchhaltung');if(bv)bv.classList.add('active');rBuchQuick();}
   else if(v==='suche'){var sv=document.getElementById('view-suche');if(sv)sv.classList.add('active');setTimeout(function(){var inp=document.getElementById('suche-input');if(inp){inp.focus();}},300);}
   else if(v==='buchhaltung'){rBuchQuick();}
