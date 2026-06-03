@@ -437,7 +437,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
       <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div class="sr-icon" style="background:#e0e7ff">👤</div><div class="sr-label">Stammdaten (Name, Adresse, Steuer, Bank)</div></div><div class="sr-right" id="stammdaten-status">→</div></div>
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
-      <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Eigene Bank-IBANs</div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Studio-Hamburg-Bankzuordnung</div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🔒</div><div class="sr-label">PDF-Passwörter (Studios)</div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioEmailSheet()"><div class="sr-left"><div class="sr-icon" style="background:#eff6ff">✉</div><div class="sr-label">E-Mail-Adressen (Studios)</div></div><div class="sr-right" id="studio-email-status">Nicht gesetzt</div></div>
@@ -1145,9 +1145,6 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
   </div>
   <div class="view-scroll" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px;font-size:12px;color:#856404;margin-bottom:4px">
-      <strong>ACHTUNG:</strong> Änderungen haben aktuell noch keine Auswirkungen auf deine Daten auf www.stammdatenblatt.de.
-    </div>
     <div class="menu-row" onclick="switchView('pers-daten')">
       <div class="menu-icon">👤</div>
       <div class="menu-label">Persönliche Daten</div>
@@ -1155,32 +1152,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div class="menu-row" onclick="switchView('bankverbindung')">
       <div class="menu-icon">💳</div>
-      <div class="menu-label">Bankverbindung</div>
-      <div class="menu-chevron">›</div>
-    </div>
-    <div class="menu-row" onclick="switchView('sozialversicherung')">
-      <div class="menu-icon">🛡</div>
-      <div class="menu-label">Sozialversicherung</div>
+      <div class="menu-label">Rechnungs-Bankverbindung</div>
       <div class="menu-chevron">›</div>
     </div>
     <div class="menu-row" onclick="switchView('finanzamt')">
       <div class="menu-icon">🏛</div>
       <div class="menu-label">Finanzamt</div>
-      <div class="menu-chevron">›</div>
-    </div>
-    <div class="menu-row" onclick="switchView('standardgagen')">
-      <div class="menu-icon">💰</div>
-      <div class="menu-label">Standardgagen</div>
-      <div class="menu-chevron">›</div>
-    </div>
-    <div class="menu-row" onclick="switchView('voranmeldungen')">
-      <div class="menu-icon">📋</div>
-      <div class="menu-label">Voranmeldungen</div>
-      <div class="menu-chevron">›</div>
-    </div>
-    <div class="menu-row" onclick="switchView('statistiken')">
-      <div class="menu-icon">📊</div>
-      <div class="menu-label">Statistiken</div>
       <div class="menu-chevron">›</div>
     </div>
   </div>
@@ -1224,11 +1201,14 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div class="app-header" style="background:var(--blue)">
     <div class="header-left" style="display:flex;align-items:center;gap:12px">
       <div onclick="switchView('stammdaten')" style="font-size:22px;color:#fff;cursor:pointer;padding:4px 8px 4px 0">‹</div>
-      <div class="header-title" style="color:#fff">Bankverbindung</div>
+      <div class="header-title" style="color:#fff">Rechnungs-Bankverbindung</div>
     </div>
     <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
   <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;font-size:12px;color:#0c4a6e;line-height:1.5">
+      Diese Bankverbindung erscheint auf deinen <strong>eigenen Rechnungen</strong> (z.B. an mobyDOK).
+    </div>
     <div class="info-card">
       <div class="info-card-header"><span>Kontodaten</span></div>
       <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
@@ -1445,12 +1425,14 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div class="overlay-bg" id="bank-ibans-bg" onclick="closeBankIbansSheet()"></div>
 <div class="bottom-sheet" id="bank-ibans-sheet">
   <div class="bs-handle"></div>
-  <div class="bs-title">Eigene Bank-IBANs</div>
+  <div class="bs-title">Studio-Hamburg-Bankzuordnung</div>
   <div class="bs-scroll">
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--ink2);line-height:1.6">
-      Trage deine eigenen IBANs ein. Sie werden nur lokal auf diesem Gerät gespeichert (kein Server, kein Cloud-Upload, nicht im Code).
+      <strong>Nur für Studio-Hamburg-Belege.</strong> Trage hier deine IBANs ein, auf die Studio Hamburg auszahlt — je nach Verbindlichkeitsmonat über Hamburger Sparkasse oder Holvi.
       <br><br>
-      Verwendung: Studio-Hamburg-Belege geben das Auszahlungsziel (Sparkasse oder Holvi) an. Falls die KI die IBAN auf dem Beleg nicht lesen konnte, wird sie aus dem hier hinterlegten Wert ergänzt.
+      Wird nur als Fallback verwendet, falls die KI die IBAN auf einem mehrseitigen Beleg nicht lesen konnte. Die IBANs werden nur lokal auf diesem Gerät gespeichert.
+      <br><br>
+      <em>Deine Rechnungs-IBAN (für eigene Ausgangsrechnungen) trägst du separat unter Stammdaten → Rechnungs-Bankverbindung ein.</em>
     </div>
     <div class="form-field"><label class="form-label">Hamburger Sparkasse</label><input class="form-input" id="iban-sparkasse-input" type="text" placeholder="DE.. (22 Zeichen)" autocomplete="off" autocapitalize="characters"></div>
     <div class="form-field"><label class="form-label">Holvi</label><input class="form-input" id="iban-holvi-input" type="text" placeholder="DE.. (22 Zeichen)" autocomplete="off" autocapitalize="characters"></div>
@@ -1752,6 +1734,19 @@ const DBK='synchron_v4';
 // ── UTILS ─────────────────────────────────────────────────────
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Build 795: PII-frei. Liefert den User-Namen zur Laufzeit aus dem Profil.
+// Wird in KI-Prompts und PDF-Templates eingesetzt — so steht im Code-Quelltext
+// kein konkreter Personenname mehr. Fallback ist generisch, damit Prompts auch
+// vor dem Profil-Setup nicht hart fehlschlagen (KI wird schlechter erkennen).
+function _getUserName(){
+  try {
+    if(typeof db !== 'undefined' && db && db.profil && db.profil.name){
+      var n = String(db.profil.name).trim();
+      if(n) return n;
+    }
+  } catch(e){}
+  return 'dem Hauptnutzer';
+}
 function norm(s){return(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
 function normalize(s){return norm(s);}
 function today(){
@@ -2205,11 +2200,24 @@ function _klassifiziereAbrechnung(ab, dok){
   // Klasse 2: toneworx — Beleg-Nr TW-NNNN-YYYY
   if(/\btw[-_\s]?\d{3,4}[-_\s]?\d{4}\b/i.test(gnr) || studio.indexOf('toneworx') >= 0) return '2';
 
-  // Klasse 3: Eigenrechnung (Tim Knauer als Rechnungssteller)
-  // Heuristik: Rechnungs-Nr NN/YYYY oder Dateiname enthält "rechnung"/"eigen"
+  // Klasse 3: Eigenrechnung (User als Rechnungssteller)
+  // Heuristik: Rechnungs-Nr NN/YYYY, "eigen" im Studio, oder Dateiname enthält
+  // "rechnung"/"eigen" oder den User-Namen (aus Profil) als Bestandteil.
   if(/^r?\d{1,3}[\/\-]\d{4}$/i.test(gnr)
      || studio.indexOf('eigen') >= 0
-     || /eigenrechnung|tim[\s_\-]?knauer/i.test(dateiname)) return '3';
+     || /eigenrechnung/i.test(dateiname)) return '3';
+  // Zusätzlich: Dateiname enthält Vor- oder Nachnamen aus dem Profil
+  // (z.B. "rechnung_mustermann.pdf" → wer auch immer Mustermann heißt)
+  try {
+    var pname = (typeof db !== 'undefined' && db && db.profil && db.profil.name) ? String(db.profil.name).trim() : '';
+    if(pname && dateiname){
+      var parts = pname.split(/\s+/).filter(function(p){ return p.length >= 3; });
+      for(var i=0; i<parts.length; i++){
+        // Wortteil als case-insensitive Subsstring im Dateinamen
+        if(dateiname.toLowerCase().indexOf(parts[i].toLowerCase()) >= 0) return '3';
+      }
+    }
+  } catch(e){}
 
   // Klasse 1: SESAM-GNRs — Ziffern-Suffix-Muster
   var digits = gnr.replace(/\D/g, '');
@@ -3283,7 +3291,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '793';
+  if(el) el.textContent = '796';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9084,7 +9092,7 @@ function exportGVLExcel(){
   // Header
   html+='<div class="header">'
     +'<div><h1>GVL Meldung '+year+'</h1>'
-    +'<div class="sub">Tim Knauer &bull; Synchronsprecher &bull; '+date+'</div></div>'
+    +'<div class="sub">'+esc(_getUserName())+' &bull; Synchronsprecher &bull; '+date+'</div></div>'
     +'<button onclick="window.print()">Drucken / Speichern</button>'
     +'</div>';
 
@@ -12356,12 +12364,14 @@ function dokAnalyseDoc(d, key, cb){
     showToast('⚠ Bild nicht mehr im Speicher — bitte Dokument löschen und neu einlesen');
     if(cb) cb(); return;
   }
+  // Build 795: User-Name aus Profil — PII bleibt aus dem Code-Quelltext
+  var _uname = _getUserName();
   var lernEx='';
   // Lernbeispiele aus bestaetigten Dokumenten
   var confirmed=(db.dokumente||[]).filter(function(x){return x.bestaetigt&&x.typ==='dispo'&&x.studio;}).slice(-3);
   if(confirmed.length) lernEx='\n\nBekannte Studios in diesem Kontext: '+confirmed.map(function(x){return x.studio;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
 
-  var prompt='Du analysierst ein Dokument von Synchronsprecher TIM KNAUER.\n'
+  var prompt='Du analysierst ein Dokument von Synchronsprecher '+_uname.toUpperCase()+'.\n'
     +'\n'
     +'⛔ BUCHHALTUNGSREGEL — ABSOLUT VERBINDLICH:\n'
     +'  ERFINDE NIEMALS Werte. Jede Zahl im JSON MUSS direkt und wörtlich aus dem Dokument lesbar sein.\n'
@@ -12390,51 +12400,51 @@ function dokAnalyseDoc(d, key, cb){
     +'  regie: Name des Regisseurs — NUR den Personennamen (z.B. "Tobias Schmitz", "Max Müller")\n'
     +'    Zeile heißt oft "Regie:", "Dialogregie:", "Synchronregie:" oder "Regie/Buch:" — jeweils nur den NAMEN danach!\n'
     +'    NICHT die Bezeichnung selbst (nicht "Dialogregie" oder "Synchronregie") — nur den Personennamen!\n'
-    +'  rolle + takes + EPS: NUR aus der Zeile mit "Tim Knauer" als Sprecher!\n'
+    +'  rolle + takes + EPS: NUR aus der Zeile mit "'+_uname+'" als Sprecher!\n'
     +'    ABLAUF — ZWINGEND in dieser Reihenfolge:\n'
     +'    1) Scanne die Sprecher-Spalte von oben nach unten\n'
-    +'    2) Finde die Zeile wo "Tim Knauer" (oder "T. Knauer" o.ä.) steht\n'
-    +'    3) Die ROLLE steht in der Spalte LINKS neben dem Sprecher-Namen — lies sie aus TIM KNAUERs Zeile\n'
+    +'    2) Finde die Zeile wo "'+_uname+'" (auch Abkürzungen wie Initial + Nachname möglich) steht\n'
+    +'    3) Die ROLLE steht in der Spalte LINKS neben dem Sprecher-Namen — lies sie aus '+_uname.toUpperCase()+'s Zeile\n'
     +'    ⚠⚠⚠ TABELLENFORMAT-FALLE: Manchmal steht die Rolle LINKS und der Sprecher RECHTS.\n'
-    +'       Beispiel: "Dave | Tim Knauer | 14:00 | 14:20 | 12 | 110:12"\n'
-    +'       → Rolle = "Dave" (links), Sprecher = "Tim Knauer" (rechts davon)\n'
-    +'       Die Rolle gehört zur Zeile wo Tim Knauers Name steht — NICHT zur Zeile darüber oder darunter!\n'
+    +'       Beispiel: "Dave | '+_uname+' | 14:00 | 14:20 | 12 | 110:12"\n'
+    +'       → Rolle = "Dave" (links), Sprecher = "'+_uname+'" (rechts davon)\n'
+    +'       Die Rolle gehört zur Zeile wo '+_uname+'s Name steht — NICHT zur Zeile darüber oder darunter!\n'
     +'    4) Alle anderen Zeilen komplett ignorieren — auch wenn sie ähnliche EPS-Nummern haben!\n'
-    +'    KREUZPRÜFUNG: Die Zeile muss eine Uhrzeit (von/bis) haben — das ist Tims Aufnahmezeit.\n'
-    +'    Wenn "Tim Knauer" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
-    +'  uhrzeit: Startzeit von Tim Knauers Zeile (VON-Spalte, Format HH:MM)\n'
-    +'  bis_uhrzeit: Endzeit von Tim Knauers Zeile (BIS-Spalte, Format HH:MM)\n'
-    +'  takes: Anzahl Takes aus Tim Knauers Zeile (TAKES-Spalte)\n'
+    +'    KREUZPRÜFUNG: Die Zeile muss eine Uhrzeit (von/bis) haben — das ist die User-Aufnahmezeit.\n'
+    +'    Wenn "'+_uname+'" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
+    +'  uhrzeit: Startzeit von '+_uname+'s Zeile (VON-Spalte, Format HH:MM)\n'
+    +'  bis_uhrzeit: Endzeit von '+_uname+'s Zeile (BIS-Spalte, Format HH:MM)\n'
+    +'  takes: Anzahl Takes aus '+_uname+'s Zeile (TAKES-Spalte)\n'
     +'    Wenn "Trailer", "TR", "Trailer-Aufnahme" o.ä. im Titel oder in der Zeile steht:\n'
     +'    → produktionstyp_kino=false, takes=0, take_gage=0 (Trailer werden pauschal abgerechnet)\n'
     +'    ⚠ HANDSCHRIFTLICHE ERGÄNZUNG: Wenn neben der gedruckten Zahl noch eine handschriftliche Zahl steht\n'
     +'    (z.B. "72" gedruckt + "3+" handschriftlich), diese ADDIEREN: takes = 72+3 = 75\n'
     +'    Formate: "+3" vor der Zahl, "3+" nach der Zahl, "*3" → immer addieren!\n'
     +'\n'
-    +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus TIM KNAUERs eigener Tabellenzeile:\n'
+    +'★ GVL-TAKES-DETAIL — AUSSCHLIESSLICH aus '+_uname.toUpperCase()+'s eigener Tabellenzeile:\n'
     +'  ⚠ NIEMALS EPS oder Takes-Werte aus anderen Sprecher-Zeilen übernehmen!\n'
-    +'  Tims Zeile erkennst du an: Sprecher="Tim Knauer" UND hat eine Uhrzeit (von/bis)\n'
-    +'  MEHRERE ZEILEN FÜR TIM: Manchmal hat Tim mehrere Tabellenzeilen ohne eigene Zeitangabe\n'
-    +'    aber direkt unter seiner Hauptzeile — diese gehören ALLE zu Tim!\n'
-    +'    Erkennbar daran: Sprecher-Zelle leer ODER nur Rollenname, aber in Tims Zeitblock.\n'
-    +'    Beispiel: Zeile 1 "Fielder / Tim Knauer / 09:00-09:45 / 20 / 505:20"\n'
+    +'  die User-Zeile erkennst du an: Sprecher="'+_uname+'" UND hat eine Uhrzeit (von/bis)\n'
+    +'  MEHRERE ZEILEN FÜR DEN USER: Manchmal hat der User mehrere Tabellenzeilen ohne eigene Zeitangabe\n'
+    +'    aber direkt unter seiner Hauptzeile — diese gehören ALLE zum User!\n'
+    +'    Erkennbar daran: Sprecher-Zelle leer ODER nur Rollenname, aber in die User-Zeitblock.\n'
+    +'    Beispiel: Zeile 1 "Fielder / '+_uname+' / 09:00-09:45 / 20 / 505:20"\n'
     +'             Zeile 2 "Fielder / (leer)     / (leer)      /  5 / 502:5"\n'
-    +'    → BEIDE Zeilen zu Tim: gvl_takes_detail=[{"folge":505,"takes":20},{"folge":502,"takes":5}]\n'
+    +'    → BEIDE Zeilen zum User: gvl_takes_detail=[{"folge":505,"takes":20},{"folge":502,"takes":5}]\n'
     +'    → takes = 20+5 = 25 gesamt\n'
     +'  Die Zeile direkt darüber oder darunter mit ANDEREM Sprecher-Namen gehört einem anderen Sprecher — ignorieren!\n'
-    +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile(n) mit "Tim Knauer" als Sprecher.\n'
+    +'  Verwende NUR: EPS-Spalte UND Takes-Spalte aus der Zeile(n) mit "'+_uname+'" als Sprecher.\n'
     +'\n'
-    +'  LAYOUT A: Takes-Spalte von Tim enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
+    +'  LAYOUT A: Takes-Spalte des Users enthält Folgen-Codes mit Doppelpunkt z.B. "506:25, 507:19" oder "809:1"\n'
     +'    → IMMER als gvl_takes_detail auslesen, auch wenn nur eine Folge und nur 1 Take!\n'
     +'    "809:1" → [{"folge":809,"takes":1}] — 809 = Staffel 8 Folge 09, 1 Take\n'
     +'  LAYOUT D: Separate Spalte "Episode:Takes" oder "EPS:Takes" oder "Folge:Takes" — z.B. "304:10" oder "05:32"\n'
     +'    Diese Spalte enthält direkt Folgennummer DOPPELPUNKT Takes — genau wie Layout A behandeln!\n'
-    +'    ⚠ AUCH wenn Tims Takes-Spalte dieselbe Zahl zeigt: Die Episode:Takes-Spalte hat VORRANG!\n'
+    +'    ⚠ AUCH wenn die User-Takes-Spalte dieselbe Zahl zeigt: Die Episode:Takes-Spalte hat VORRANG!\n'
     +'    Zweistellige Folgencodes MIT führender Null: "05:32" → folge=5, takes=32\n'
     +'    "05:32" bedeutet NICHT Staffel 0 Folge 5 — sondern einfach Folge 5, Takes 32!\n'
-    +'    Beispiel: Tim Zeile hat Takes=32, letzte Spalte="05:32" → gvl_takes_detail=[{"folge":5,"takes":32}]\n'
-    +'    Beispiel: Tim Zeile hat Takes=10, Episode:Takes="304:10" → gvl_takes_detail=[{"folge":304,"takes":10}]\n'
-    +'    Beispiel: Tim Zeile hat Takes=100, Episode:Takes="604:100" → gvl_takes_detail=[{"folge":604,"takes":100}]\n'
+    +'    Beispiel: User-Zeile hat Takes=32, letzte Spalte="05:32" → gvl_takes_detail=[{"folge":5,"takes":32}]\n'
+    +'    Beispiel: User-Zeile hat Takes=10, Episode:Takes="304:10" → gvl_takes_detail=[{"folge":304,"takes":10}]\n'
+    +'    Beispiel: User-Zeile hat Takes=100, Episode:Takes="604:100" → gvl_takes_detail=[{"folge":604,"takes":100}]\n'
     +'    Mehrere kommagetrennt: "303:38, 302:87" → [{"folge":303,"takes":38},{"folge":302,"takes":87}]\n'
     +'    ⚠ WICHTIG: Diese Spalte hat VORRANG vor der normalen Takes-Spalte für gvl_takes_detail!\n'
     +'  LAYOUT E: GVL-Code in BEMERKUNG-Spalte (auch "Anmerkung", "Notiz", "Notes", "Remarks")\n'
@@ -12444,7 +12454,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    Beispiel: Bemerkung="104:46 Abgedreht", Takes=46 → gvl_takes_detail=[{"folge":104,"takes":46}]\n'
     +'    Beispiel: Bemerkung="103:21 104:58" → [{"folge":103,"takes":21},{"folge":104,"takes":58}]\n'
     +'    ⚠ Wörter wie "Abgedreht", "Sprachberatung", "Akzentberatung" in Bemerkung IGNORIEREN — nur Zahlen:Zahlen auslesen!\n'
-    +'  LAYOUT B: Takes-Spalte von Tim = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
+    +'  LAYOUT B: Takes-Spalte des Users = Gesamtzahl, RECHTS daneben "106:37, 108:36" → auslesen\n'
     +'  Format: StaffelFolge DOPPELPUNKT Takes → "106:37" bedeutet Folge=106, Takes=37 (NICHT Folge 637!)\n'
     +'  Der DOPPELPUNKT trennt Folgennummer von Take-Anzahl — IMMER als zwei separate Zahlen lesen!\n'
     +'  106:37 → {"folge":106,"takes":37} | 108:36 → {"folge":108,"takes":36} | 506:25 → {"folge":506,"takes":25}\n'
@@ -12456,17 +12466,17 @@ function dokAnalyseDoc(d, key, cb){
     +'    WICHTIG: 210 ist NICHT Staffel 21 Folge 0 — es ist Staffel 2 Folge 10!\n'
     +'  Extrahiere als: gvl_takes_detail = [{"folge":106,"takes":37},{"folge":108,"takes":36}]\n'
     +'\n'
-    +'  LAYOUT C: EPS-Spalte von Tim = Folgennummer(n), Takes-Spalte = Gesamtzahl\n'
-    +'  ⚠⚠ KRITISCH: Der Takes-Wert MUSS aus der Zeile mit "Tim Knauer" kommen — NIEMALS aus einer anderen Zeile!\n'
-    +'  Selbst wenn eine andere Zeile dieselben EPS-Nummern hat — ignorieren! Nur Tims Takes zählen.\n'
+    +'  LAYOUT C: EPS-Spalte des Users = Folgennummer(n), Takes-Spalte = Gesamtzahl\n'
+    +'  ⚠⚠ KRITISCH: Der Takes-Wert MUSS aus der Zeile mit "'+_uname+'" kommen — NIEMALS aus einer anderen Zeile!\n'
+    +'  Selbst wenn eine andere Zeile dieselben EPS-Nummern hat — ignorieren! Nur die User-Takes zählen.\n'
     +'  Auch wenn NUR EINE Folge in EPS steht, IMMER als gvl_takes_detail auslesen!\n'
     +'  ⚠ EPS-Nummern (z.B. "306, 307" oder "306") sind StaffelFolge-Codes — IMMER als gvl_takes_detail speichern!\n'
     +'    NIEMALS nur als gvl_staffel_header — IMMER mit Takes aufteilen in gvl_takes_detail!\n'
-    +'  → Verfahren: 1) Finde Zeile mit "Tim Knauer" → 2) Lies Takes aus DIESER Zeile → 3) Verteile auf EPS-Folgen\n'
-    +'  → Beispiel: Tim Zeile: EPS="306, 307", Takes=71 → 71÷2=35 Rest 1 → [{"folge":306,"takes":36},{"folge":307,"takes":35}]\n'
-    +'  → Beispiel: Tim Zeile: EPS="203, 204", Takes=6 → 6÷2=3 → [{"folge":203,"takes":3},{"folge":204,"takes":3}]\n'
-    +'  → Beispiel: Tim Zeile: EPS="301, 302, 303", Takes=80 → 80÷3=26 Rest 2 → [{"folge":301,"takes":28},{"folge":302,"takes":26},{"folge":303,"takes":26}]\n'
-    +'  → Beispiel: Tim Zeile: EPS="208", Takes=6 → [{"folge":208,"takes":6}] — NICHT die 13 Takes aus einer anderen Zeile!\n'
+    +'  → Verfahren: 1) Finde Zeile mit "'+_uname+'" → 2) Lies Takes aus DIESER Zeile → 3) Verteile auf EPS-Folgen\n'
+    +'  → Beispiel: User-Zeile: EPS="306, 307", Takes=71 → 71÷2=35 Rest 1 → [{"folge":306,"takes":36},{"folge":307,"takes":35}]\n'
+    +'  → Beispiel: User-Zeile: EPS="203, 204", Takes=6 → 6÷2=3 → [{"folge":203,"takes":3},{"folge":204,"takes":3}]\n'
+    +'  → Beispiel: User-Zeile: EPS="301, 302, 303", Takes=80 → 80÷3=26 Rest 2 → [{"folge":301,"takes":28},{"folge":302,"takes":26},{"folge":303,"takes":26}]\n'
+    +'  → Beispiel: User-Zeile: EPS="208", Takes=6 → [{"folge":208,"takes":6}] — NICHT die 13 Takes aus einer anderen Zeile!\n'
     +'  HANDSCHRIFTLICHE ERGÄNZUNGEN: Wenn neben gedruckten Takes handschriftlich weitere\n'
     +'  Takes hinzugefügt wurden (Formate: "+3", "3+", "*3", oder Zahl daneben):\n'
     +'  → Gesamt-Takes erhöhen: "72 3+" bedeutet takes=75\n'
@@ -12479,7 +12489,7 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'  LAYOUT F: FFS-Format — EPS-Spalte enthält nur Folgennummer, Staffel steht im Kopf\n'
     +'    Kopf der Dispo: "Chicago Medical S11 Staffel 11" → gvl_staffel_header="11"\n'
-    +'    Tims Zeile: Rolle=HALSTEAD, EPS=17, Takes=53\n'
+    +'    die User-Zeile: Rolle=HALSTEAD, EPS=17, Takes=53\n'
     +'    Folgencode = Staffel(11) × 100 + Folge(17) = 1117\n'
     +'    → gvl_takes_detail=[{"folge":1117,"takes":53}]\n'
     +'    Wenn EPS-Spalte mehrere Nummern enthält z.B. "17, 1112":\n'
@@ -12495,9 +12505,9 @@ function dokAnalyseDoc(d, key, cb){
     +'    Erkennbar an: "Ep. 403-404" oder "Ep. 403, 404" in der Kopfzeile der Dispo (Datum-Zeile)\n'
     +'    Beispiel Kopf: "Mittwoch, 25. März 2026, Ep. 403-404, 13. Tag"\n'
     +'    → Episoden im Bereich einzeln auflisten: 403 UND 404 (Staffel 4, Folgen 03 und 04)\n'
-    +'    → Tims Takes gleichmäßig aufteilen auf alle Folgen im Bereich (Rest zur ersten Folge)\n'
-    +'    → Beispiel: "Ep. 403-404", Tim 81 Takes → [{"folge":403,"takes":41},{"folge":404,"takes":40}]\n'
-    +'    → Beispiel: "Ep. 201-203", Tim 90 Takes → [{"folge":201,"takes":30},{"folge":202,"takes":30},{"folge":203,"takes":30}]\n'
+    +'    → die User-Takes gleichmäßig aufteilen auf alle Folgen im Bereich (Rest zur ersten Folge)\n'
+    +'    → Beispiel: "Ep. 403-404", User 81 Takes → [{"folge":403,"takes":41},{"folge":404,"takes":40}]\n'
+    +'    → Beispiel: "Ep. 201-203", User 90 Takes → [{"folge":201,"takes":30},{"folge":202,"takes":30},{"folge":203,"takes":30}]\n'
     +'    → gvl_staffel_header = erste Ziffer(n) des Folgencodes (403 → "4")\n'
     +'    ⚠ Bindestrich zwischen Folgennummern = BEREICH → ALLE Folgen einzeln aufführen!\n'
     +'    ⚠ "Ep. 403-404" = ZWEI Folgen — NICHT eine Folge "403404"!\n'
@@ -12545,7 +12555,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ NIEMALS nur eine KV-Zeile nehmen — immer alle KV-Zeilen dieser Abrechnung addieren!\n'
     +'  rv_abzug = NUR Rentenversicherungs-Abzug (z.B. 30.23)\n'
     +'  pv_abzug = NUR Pflegeversicherungs-Abzug (z.B. 5.04)\n'
-    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN (Tim Knauer als Rechnungssteller, z.B. toneworx-Format):\n'
+    +'  ⚠ SELBST AUSGESTELLTE RECHNUNGEN ('+_uname+' als Rechnungssteller, z.B. toneworx-Format):\n'
     +'    KV/RV/PV stehen als Prozentzeillen: "abzgl. anteiliger AN-Beitrag zur Krankenversicherung 8,345% → 91,80€"\n'
     +'    → kv_abzug = der BETRAG (91.80), NICHT der Prozentsatz!\n'
     +'    RV: "abzgl. anteiliger AN-Beitrag zur Rentenversicherung 9,300%" → rv_abzug = Betrag\n'
@@ -12554,7 +12564,7 @@ function dokAnalyseDoc(d, key, cb){
     +'    brutto = SUMME aller Positionen VOR MwSt: "Vereinbartes Sozialversicherungspflichtiges Nettohonorar" (z.B. 1100€) + "Vergütung für Übertragung der Nutzungsrechte § 73ff UrhG" (z.B. 2200€) = 3300€\n'
     +'      DANN + MwSt (7%) dazuaddieren → brutto = 3300 + 231 = 3531€ (= "Zwischensumme inkl. Mehrwertsteuer")\n'
     +'      Also: brutto = die "Zwischensumme inkl. Mehrwertsteuer" — NICHT nur das Nettohonorar allein!\n'
-    +'    netto = brutto (da Tim selbst versteuert)\n'
+    +'    netto = brutto (da der User selbst versteuert)\n'
     +'    mwst = "zzgl. Gesetzliche Mehrwertsteuer" Betrag\n'
     +'    auszahlung = "Brutto Total Zahlbetrag" Betrag\n'
     +'  netto = NETTO GAGE dieser Abrechnung (nach SV-Abzügen, VOR MwSt) — steht in der Zeile "NETTO GAGE"\n'
@@ -12826,8 +12836,8 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'Bei "ausgabe" — Beleg/Quittung/Rechnung für eine Betriebsausgabe:\n'
     +'  ⚠ NICHT "ausgabe" wenn: Sozialversicherungsabzüge (KV/RV/PV), Nutzungsrechte §73ff UrhG, Synchronsprecher-Honorar — das ist "abrechn"!\n'
-    +'  ⚠ NICHT "ausgabe" wenn: Tim selbst eine Rechnung ausstellt (Rechnungssteller = Tim Knauer) — das ist "abrechn"!\n'
-    +'  "ausgabe" NUR wenn Tim der EMPFÄNGER/KÄUFER ist — also er selbst etwas bezahlt hat.\n'
+    +'  ⚠ NICHT "ausgabe" wenn: der User selbst eine Rechnung ausstellt (Rechnungssteller = '+_uname+') — das ist "abrechn"!\n'
+    +'  "ausgabe" NUR wenn der User der EMPFÄNGER/KÄUFER ist — also er selbst etwas bezahlt hat.\n'
     +'  beschr = RESTAURANTNAME bei Bewirtung: Name aus Briefkopf/Logo (z.B. "Ishin", "Pastarium")\n'
     +'    NICHT Tischbezeichnung ("To Go", "Tisch 23") oder Rechnungsnummer!\n'
     +'    Bei anderen Ausgaben: was wurde gekauft\n'
@@ -12835,7 +12845,7 @@ function dokAnalyseDoc(d, key, cb){
     +'  brutto = Bruttobetrag gesamt in Euro\n'
     +'  netto = Nettobetrag (ohne USt)\n'
     +'  ust_satz = Umsatzsteuersatz als Dezimalzahl (0.19, 0.07 oder 0 = steuerbefreit)\n'
-    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer fuer Tim)\n'
+    +'  mwst = Umsatzsteuerbetrag in Euro (= Vorsteuer fuer den User)\n'
     +'    ⚠ IMMER den auf dem Beleg ausgewiesenen Betrag nehmen — NIEMALS selbst berechnen!\n'
     +'    Steht oft als "MwSt. 7% auf 30,84: € 2,16" → mwst=2.16, ust_satz=0.07, netto=30.84\n'
     +'    Wenn der Beleg keinen USt-Betrag ausweist → mwst aus brutto berechnen\n'
@@ -15366,7 +15376,7 @@ function dokSessionGotoKalender(dokId, si){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions||!d.sessions[si]) return;
   // Build 771: Inline-Sheet NUR für Studio Hamburg. Alle anderen Studios
-  // behalten den bewährten Kalender-Weg unverändert (Tim: "alles andere geht").
+  // behalten den bewährten Kalender-Weg unverändert (User: "alles andere geht").
   if(d.studio !== 'Studio Hamburg'){
     _dokSessionGotoKalenderLegacy(dokId, si);
     return;
@@ -18425,7 +18435,7 @@ function mahnEmail(terminId){
     +'\nGemaess § 271a BGB ist die Zahlung innerhalb von 30 Tagen nach Rechnungsstellung '
     +'faellig. Diese Frist ist leider verstrichen.\n\n'
     +'Bitte ueberweisen Sie den ausstehenden Betrag baldmoeglichst auf das Ihnen bekannte Konto.\n\n'
-    +'Mit freundlichen Gruessen\n'+(profil.name||'Tim Knauer');
+    +'Mit freundlichen Gruessen\n'+(profil.name||'');
 
   var studioEmail = _findStudioEmail(t.studio||'');
   var mailtoBase = studioEmail ? 'mailto:'+studioEmail : 'mailto:';
@@ -18895,7 +18905,7 @@ function abMahnEmail(tid){
       ?'Es scheint mir zuviel abgerechnet worden zu sein. Bitte um kurze Rueckmeldung, wie wir das bereinigen.\n'
       :'Koennten Sie mir bitte erlaeutern, warum der abgerechnete Brutto-Betrag von der vereinbarten Gage abweicht?\n'
     )
-    +'\nMit freundlichen Gruessen\n'+(profil.name||'Tim Knauer');
+    +'\nMit freundlichen Gruessen\n'+(profil.name||'');
   window.location.href='mailto:?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   var btn=document.getElementById('mahn-btn-'+tid);
   if(btn){btn.textContent='Check Mail geoeffnet';btn.style.color='#15803d';btn.style.borderColor='#86efac';btn.style.background='#f0fdf4';}
@@ -20246,6 +20256,8 @@ function dsAnalyze(){
   if(!_dsImg){showToast("Kein Bild");return;}
   var k=getKey();
   if(!k){showToast("Bitte Key eintragen");dsToggleKeyInput();return;}
+  // Build 795: User-Name aus Profil
+  var _uname = _getUserName();
   var t=_dsTid?db.termine.find(function(x){return x.id===_dsTid;}):null;
   var ctx=t?"Titel="+t.titel+", Datum="+t.datum+". ":"";
   document.getElementById("ds-btn-analyze").style.display="none";
@@ -20253,7 +20265,7 @@ function dsAnalyze(){
   var _doAnalyze=function(srcImg){
     var b64=srcImg.split(",")[1];
     var mt=srcImg.split(";")[0].split(":")[1]||"image/jpeg";
-    var promptText=ctx+"Du bist Assistent fuer Synchronsprecher Tim Knauer. Lies diesen Synchron-Dispositionszettel und finde den Eintrag fuer Tim Knauer. Antworte NUR mit reinem JSON ohne Markdown: {titel, staffel(Zahl/0), folge(Zahl/0), datum(YYYY-MM-DD), uhrzeit_von(HH:MM), uhrzeit_bis(HH:MM), studio, regie, rolle(Rollenname von Tim Knauer), takes(Zahl), rate(Euro pro Take/0), notizen}";
+    var promptText=ctx+"Du bist Assistent fuer Synchronsprecher "+_uname+". Lies diesen Synchron-Dispositionszettel und finde den Eintrag fuer "+_uname+". Antworte NUR mit reinem JSON ohne Markdown: {titel, staffel(Zahl/0), folge(Zahl/0), datum(YYYY-MM-DD), uhrzeit_von(HH:MM), uhrzeit_bis(HH:MM), studio, regie, rolle(Rollenname von "+_uname+"), takes(Zahl), rate(Euro pro Take/0), notizen}";
     fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":k,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
@@ -20463,6 +20475,8 @@ function abRunScan(){
   var k=getKey();
   if(!k){showToast('Bitte API-Key in Profil eintragen');return;}
   if(!_abFileB64){showToast('Bitte erst Datei waehlen');return;}
+  // Build 795: User-Name aus Profil
+  var _uname = _getUserName();
   document.getElementById('ab-scan-btn').style.display='none';
   document.getElementById('ab-scan-spinner').style.display='block';
   document.getElementById('ab-scan-result').style.display='none';
@@ -20474,7 +20488,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher Tim Knauer. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","ausstellungsdatum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE WICHTIGEN DATUMS-FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann Tim im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"ausstellungsdatum" = das DRUCKDATUM/RECHNUNGSDATUM der Gutschrift - meist oben rechts auf dem Beleg, oft mit Uhrzeit (z.B. "31.03.2026 14:21" -> ausstellungsdatum="2026-03-31"). Bei einem Storno- oder Korrektur-Beleg unterscheidet sich dieses Datum oft vom Aufnahmedatum. Wenn nicht eindeutig auffindbar: null.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher '+_uname+'. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","ausstellungsdatum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE WICHTIGEN DATUMS-FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann der User im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"ausstellungsdatum" = das DRUCKDATUM/RECHNUNGSDATUM der Gutschrift - meist oben rechts auf dem Beleg, oft mit Uhrzeit (z.B. "31.03.2026 14:21" -> ausstellungsdatum="2026-03-31"). Bei einem Storno- oder Korrektur-Beleg unterscheidet sich dieses Datum oft vom Aufnahmedatum. Wenn nicht eindeutig auffindbar: null.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
