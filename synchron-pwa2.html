@@ -429,12 +429,13 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div id="view-profil" class="view">
   <div class="app-header"><div class="header-title">Profil</div></div>
   <div class="scroll">
-    <div class="profile-avatar" id="profil-avatar">TK</div>
-    <div class="profile-name" id="profil-name">Tim Knauer</div>
+    <div class="profile-avatar" id="profil-avatar">—</div>
+    <div class="profile-name" id="profil-name">Mein Profil</div>
     <div class="profile-sub" id="profil-beruf">Synchronsprecher</div>
     <div class="settings-group">
 
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Eigene Bank-IBANs</div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🔒</div><div class="sr-label">PDF-Passwörter (Studios)</div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioEmailSheet()"><div class="sr-left"><div class="sr-icon" style="background:#eff6ff">✉</div><div class="sr-label">E-Mail-Adressen (Studios)</div></div><div class="sr-right" id="studio-email-status">Nicht gesetzt</div></div>
@@ -1429,6 +1430,26 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div class="bs-footer">
     <button class="btn-primary" onclick="saveApiKey()">Key speichern</button>
     <button class="btn-secondary" onclick="closeApiKeySheet()">Abbrechen</button>
+  </div>
+</div>
+
+<div class="overlay-bg" id="bank-ibans-bg" onclick="closeBankIbansSheet()"></div>
+<div class="bottom-sheet" id="bank-ibans-sheet">
+  <div class="bs-handle"></div>
+  <div class="bs-title">Eigene Bank-IBANs</div>
+  <div class="bs-scroll">
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--ink2);line-height:1.6">
+      Trage deine eigenen IBANs ein. Sie werden nur lokal auf diesem Gerät gespeichert (kein Server, kein Cloud-Upload, nicht im Code).
+      <br><br>
+      Verwendung: Studio-Hamburg-Belege geben das Auszahlungsziel (Sparkasse oder Holvi) an. Falls die KI die IBAN auf dem Beleg nicht lesen konnte, wird sie aus dem hier hinterlegten Wert ergänzt.
+    </div>
+    <div class="form-field"><label class="form-label">Hamburger Sparkasse</label><input class="form-input" id="iban-sparkasse-input" type="text" placeholder="DE.. (22 Zeichen)" autocomplete="off" autocapitalize="characters"></div>
+    <div class="form-field"><label class="form-label">Holvi</label><input class="form-input" id="iban-holvi-input" type="text" placeholder="DE.. (22 Zeichen)" autocomplete="off" autocapitalize="characters"></div>
+    <div id="bank-ibans-feedback" style="font-size:12px;color:var(--rose);margin-top:-8px;min-height:16px"></div>
+  </div>
+  <div class="bs-footer">
+    <button class="btn-primary" onclick="saveBankIbans()">Speichern</button>
+    <button class="btn-secondary" onclick="closeBankIbansSheet()">Abbrechen</button>
   </div>
 </div>
 
@@ -3233,7 +3254,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '788';
+  if(el) el.textContent = '789';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5564,7 +5585,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'einen EUR-BETRAG. Beispiel-Layout (Punkte = Leerraum der Betragsspalte):\n'
    +'   "Saldo lfd. Monat" ......................... 0,00\n'
    +'   "Differenz aus Vormonat" ................... 161,57\n'
-   +'   "Hamburger Sparkasse IBAN DE97...0834" ..... EUR 161,57\n'
+   +'   "Hamburger Sparkasse IBAN DE12...0000" ..... EUR 161,57\n'
    +'⚠ Dieser Fussblock ist KEIN Briefkopf und KEIN Fliesstext — es sind echte\n'
    +'Datenzeilen. Lies JEDE Zeile dieses Blocks von links (Text) nach rechts\n'
    +'(Betrag). Lass dich vom Leerraum zwischen Text und Betrag NICHT täuschen:\n'
@@ -5595,12 +5616,12 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +'     gehören zur SELBEN Zeile, auch wenn optisch eine ganze Spalte\n'
    +'     dazwischen liegt. Lass dich vom Abstand NICHT täuschen.\n'
    +'   So sieht die echte Zeile aus (Punkte = Leerraum):\n'
-   +'   "Hamburger Sparkasse IBAN DE97200505501059750834 ........ EUR 161,57"\n'
-   +'   "Holvi Payment Services Zw IBAN DE49110101010123456789 ... EUR 326,63"\n'
+   +'   "Hamburger Sparkasse IBAN DE12200505500000000000 ........ EUR 161,57"\n'
+   +'   "Holvi Payment Services Zw IBAN DE12110101000000000000 ... EUR 326,63"\n'
    +'   Zerlege diese EINE Zeile vollständig in:\n'
    +'     • bank_iban        = die komplette IBAN OHNE Leerzeichen, beginnt\n'
    +'                          LINKS in der Zeile direkt nach dem Wort "IBAN".\n'
-   +'                          Format: DE + 20 Ziffern (z.B. DE9720050550...).\n'
+   +'                          Format: DE + 20 Ziffern (z.B. DE12200505500000000000).\n'
    +'     • auszahlungs_ziel = aus dem Banknamen LINKS: "Holvi"→"holvi",\n'
    +'                          "Sparkasse"/"Hamburger Sparkasse"→"sparkasse",\n'
    +'                          sonst→"andere"\n'
@@ -5636,7 +5657,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
    +' "saldo_vormonat":...,"saldo_bereits_erhalten":...,"saldo_folgemonat":...,\n'
    +' "auszahlungs_ziel":"...","bank_iban":"...","ist_leer_korrektur":false}\n\n'
    +'BEISPIEL (Seite 1 "Korrektur 1/2026 (für 2/2026)", Seite 2 mit\n'
-   +'"Differenz aus Vormonat 161,57" und "Hamburger Sparkasse IBAN DE97... EUR 161,57"):\n'
+   +'"Differenz aus Vormonat 161,57" und "Hamburger Sparkasse IBAN DE12... EUR 161,57"):\n'
    +'{"verbindlichkeit_monat":"2026-01","lohnsteuer_zielmonat":"2026-02",\n'
    +' "print_datum":"2026-01-28","saldo_vormonat":161.57,\n'
    +' "saldo_folgemonat":161.57,"auszahlungs_ziel":"sparkasse",\n'
@@ -5736,17 +5757,25 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
           }
         }
       }
-      // Build 788: IBAN-Fallback. Bei mehrseitigen SthH-PDFs übersieht die KI
-      // gelegentlich die IBAN-Zeile (KI-Schwankung), liest aber den Banknamen
-      // → auszahlungs_ziel ist gesetzt, bank_iban fehlt. Da Studio Hamburg pro
-      // Bank IMMER dieselbe IBAN nutzt (auf allen Belegen identisch verifiziert),
-      // die bekannte IBAN aus dem Ziel ableiten. Kein Erfinden — dokumentierter,
-      // konstanter Wert derselben Firma. Nur als Fallback, KI-Direktwert hat Vorrang.
-      if(!d.bank_iban && d.auszahlungs_ziel){
-        var _knownIban = (d.auszahlungs_ziel === 'sparkasse') ? 'DE97200505501059750834'
-                       : (d.auszahlungs_ziel === 'holvi')     ? 'DE49100179977953941890'
-                       : null;
-        if(_knownIban){ d.bank_iban = _knownIban; changed++; }
+      // Build 789: IBAN-Fallback aus db.profil (KEINE PII im Code).
+      // Bei mehrseitigen SthH-PDFs übersieht die KI gelegentlich die IBAN-Zeile
+      // (KI-Schwankung), liest aber den Banknamen → auszahlungs_ziel ist gesetzt,
+      // bank_iban fehlt. Da Studio Hamburg pro Bank IMMER dieselbe IBAN nutzt
+      // (auf allen Belegen identisch verifiziert), die bekannte IBAN aus dem
+      // Profil ableiten. Voraussetzung: User hat die IBANs in db.profil eingetragen
+      // (profil.iban_sparkasse, profil.iban_holvi).
+      // Kein Erfinden — dokumentierter, konstanter Wert. KI-Direktwert hat Vorrang.
+      if(!d.bank_iban && d.auszahlungs_ziel && db.profil){
+        var _knownIban = null;
+        if(d.auszahlungs_ziel === 'sparkasse' && db.profil.iban_sparkasse){
+          _knownIban = String(db.profil.iban_sparkasse).replace(/\s+/g,'').toUpperCase();
+        } else if(d.auszahlungs_ziel === 'holvi' && db.profil.iban_holvi){
+          _knownIban = String(db.profil.iban_holvi).replace(/\s+/g,'').toUpperCase();
+        }
+        if(_knownIban && /^DE\d{20}$/.test(_knownIban)){
+          d.bank_iban = _knownIban;
+          changed++;
+        }
       }
       // 8. ist_leer_korrektur
       if(typeof j.ist_leer_korrektur === 'boolean'){
@@ -6830,6 +6859,54 @@ function saveApiKey(){
   closeApiKeySheet();
   updateApiNotice();
   showToast('✓ API-Key gespeichert');
+}
+
+// Build 789: Bank-IBANs als Profil-Daten (KEINE PII im Code)
+function openBankIbansSheet(){
+  var sheet=document.getElementById('bank-ibans-sheet');
+  if(!sheet)return;
+  if(!db.profil) db.profil={};
+  var sp=document.getElementById('iban-sparkasse-input');
+  var hv=document.getElementById('iban-holvi-input');
+  if(sp) sp.value=db.profil.iban_sparkasse||'';
+  if(hv) hv.value=db.profil.iban_holvi||'';
+  var fb=document.getElementById('bank-ibans-feedback');
+  if(fb) fb.textContent='';
+  sheet.classList.add('open');
+}
+function closeBankIbansSheet(){
+  var sheet=document.getElementById('bank-ibans-sheet');
+  if(sheet)sheet.classList.remove('open');
+}
+function saveBankIbans(){
+  var sp=document.getElementById('iban-sparkasse-input');
+  var hv=document.getElementById('iban-holvi-input');
+  var fb=document.getElementById('bank-ibans-feedback');
+  if(!sp || !hv) return;
+  var spVal=String(sp.value||'').replace(/\s+/g,'').toUpperCase();
+  var hvVal=String(hv.value||'').replace(/\s+/g,'').toUpperCase();
+  // Validierung: entweder leer, oder DE + 20 Ziffern
+  function ok(v){ return v==='' || /^DE\d{20}$/.test(v); }
+  if(!ok(spVal) || !ok(hvVal)){
+    if(fb) fb.textContent='⚠ Eine IBAN ist ungültig (Format: DE + 20 Ziffern)';
+    return;
+  }
+  if(!db.profil) db.profil={};
+  if(spVal) db.profil.iban_sparkasse=spVal; else delete db.profil.iban_sparkasse;
+  if(hvVal) db.profil.iban_holvi=hvVal;     else delete db.profil.iban_holvi;
+  save(db);
+  closeBankIbansSheet();
+  updateBankIbansStatus();
+  showToast('✓ Bank-IBANs gespeichert');
+}
+function updateBankIbansStatus(){
+  var el=document.getElementById('bank-ibans-status');
+  if(!el) return;
+  var p=db.profil||{};
+  var n=0;
+  if(p.iban_sparkasse) n++;
+  if(p.iban_holvi) n++;
+  el.textContent = n===0 ? 'Nicht gesetzt' : (n+'×')+' gesetzt ✓';
 }
 
 function icalDebugOrganizer(){
@@ -10415,6 +10492,8 @@ function rProfil(){
   var icalStatus=document.getElementById('ical-worker-status');
   var icalUrl=(p.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
   if(icalStatus) icalStatus.textContent=icalUrl?'Gesetzt ✓':'Nicht gesetzt';
+  // Build 789: Bank-IBANs Status
+  try { updateBankIbansStatus(); } catch(e){}
 }
 
 
