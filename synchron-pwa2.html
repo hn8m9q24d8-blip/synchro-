@@ -3282,7 +3282,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '790';
+  if(el) el.textContent = '792';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18942,15 +18942,47 @@ function openRechnungSheet(id){
     });
   }
 
-  // Rechnungsnummer vorschlagen — Build 790: Format NN/YYYY, pro Jahr neu starten
+  // Rechnungsnummer vorschlagen — Build 792: scannt die ganze Pipeline
+  // (db.dokumente mit klasse 3) UND db.rechnungen, nimmt die höchste laufende
+  // Zahl des aktuellen Jahres und addiert 1. Erkennt Formate:
+  //   "NN/YYYY"   (neu, ab Build 790)
+  //   "YYYY-NNN"  (alt)
+  //   "Rg.-Nr. NN/YYYY" oder Variationen aus eingescannten Belegen
   if(!r){
     var y=new Date().getFullYear();
-    // Nur Eigenrechnungen DIESES Jahres zählen (sortable Suffix "/YYYY")
-    var jahrEnde='/'+String(y);
-    var count=(db.rechnungen||[]).filter(function(x){
-      return x.nr && String(x.nr).endsWith(jahrEnde);
-    }).length+1;
-    var nr=String(count).padStart(2,'0')+'/'+y;
+    var yStr=String(y);
+    var maxNr=0;
+    function _extractNr(s, jahr){
+      if(!s) return 0;
+      var str=String(s);
+      // Format "NN/YYYY"
+      var m1=str.match(/^(\d{1,3})\/(\d{4})$/);
+      if(m1 && m1[2]===jahr) return parseInt(m1[1],10);
+      // Format "YYYY-NNN"
+      var m2=str.match(/^(\d{4})-(\d{1,3})$/);
+      if(m2 && m2[1]===jahr) return parseInt(m2[2],10);
+      // Format mit Prefix oder weiteren Zeichen (z.B. "Rg.-Nr. 01/2026" oder "01_2026")
+      var m3=str.match(/(\d{1,3})[\/_\-](\d{4})/);
+      if(m3 && m3[2]===jahr) return parseInt(m3[1],10);
+      return 0;
+    }
+    // App-interne Rechnungen
+    (db.rechnungen||[]).forEach(function(x){
+      var n=_extractNr(x.nr, yStr);
+      if(n>maxNr) maxNr=n;
+    });
+    // Pipeline: alle eingescannten Klasse-3-Dokumente dieses Jahres
+    (db.dokumente||[]).forEach(function(d){
+      if(d.klasse!=='3' && d.klasse!==3) return;
+      // Beleg-Nummer kann in d.gsNr, d.beleg, d.rechnungsnr, d.nr stehen
+      var kandidaten=[d.gsNr, d.beleg, d.rechnungsnr, d.nr, d.dokNr];
+      kandidaten.forEach(function(k){
+        var n=_extractNr(k, yStr);
+        if(n>maxNr) maxNr=n;
+      });
+    });
+    var nextNr=maxNr+1;
+    var nr=String(nextNr).padStart(2,'0')+'/'+y;
     document.getElementById('re-nr').value=nr;
     document.getElementById('re-datum').value=today();
     var faellig=new Date(); faellig.setDate(faellig.getDate()+14);
@@ -19368,6 +19400,8 @@ function _erzeugeUndTeileRechnungPDF(r){
   doc.text('1', 105, 290, {align:'center'});
 
   // ─── PDF erzeugen + iOS-Share ───
+  // Build 790.1: iOS Safari ignoriert files-Anhänge wenn auch text/title
+  // gesetzt sind — wir teilen daher NUR die Datei, ohne Text-Begleitung.
   var rgNum = (r.nr||'').replace(/\//g,'-');  // "01/2026" → "01-2026"
   var empfShort = String(r.empf||'').split(/[\s,]/)[0] || 'Empfaenger';
   var dateStr = (r.datum||new Date().toISOString().slice(0,10)).replace(/-/g,'');
@@ -19377,24 +19411,24 @@ function _erzeugeUndTeileRechnungPDF(r){
   var blob = doc.output('blob');
   var file = new File([blob], fileName, {type:'application/pdf'});
 
-  // iOS-Share-Sheet bevorzugt
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    navigator.share({
-      files: [file],
-      title: 'Rechnung '+(r.nr||''),
-      text: 'Rechnung '+(r.nr||'')+(r.empf?' an '+r.empf:'')
-    }).then(function(){
+  // iOS-Share-Sheet bevorzugt — NUR die Datei mitgeben, sonst droppt iOS sie.
+  var sharePayload = { files: [file] };
+  if(navigator.canShare && navigator.canShare(sharePayload)){
+    navigator.share(sharePayload).then(function(){
       showToast('✓ Geteilt');
       closeRechnungSheet();
     }).catch(function(err){
-      // User canceled — kein Toast
-      if(err && err.name !== 'AbortError'){
-        // Echter Fehler → Fallback Download
-        _downloadPDFFallback(doc, fileName);
+      if(err && err.name === 'AbortError'){
+        // User canceled — kein Toast, nichts tun
+        return;
       }
+      // Echter Fehler → Fallback Download mit klarer Diagnose
+      console.warn('[790] Share fehlgeschlagen, Fallback:', err);
+      _downloadPDFFallback(doc, fileName);
     });
   } else {
-    // Fallback: Direkt-Download
+    // canShare sagt nein — direkt Download
+    showToast('iOS Share nicht verfügbar → Download');
     _downloadPDFFallback(doc, fileName);
   }
 }
