@@ -3291,7 +3291,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '796';
+  if(el) el.textContent = '797';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8486,24 +8486,28 @@ function diagnoseGutschriften(){
 }
 
 function confirmReset(){
-  if(!confirm('Alle Daten unwiderruflich löschen?\n\n(API-Key, iCal-URL, Studio-Passwörter und Studio-E-Mails bleiben erhalten.)'))return;
-  // Konfig retten (Build 759: jetzt auch Studio-PWs + Studio-Emails)
+  if(!confirm('Datenbestand löschen?\n\nGelöscht: Termine, Dokumente, Abrechnungen, Eigenrechnungen, GVL.\nErhalten: Profil-Stammdaten, Bankverbindungen, API-Key, Studio-Passwörter, Adressbuch.'))return;
+  // Build 797: Stammdaten retten — alles, was nicht Datenbestand ist.
+  // Klare Trennung: Stammdaten bleiben (Profil, Bank, Steuer, Adressbuch),
+  // der Datenbestand (Termine/Dokumente/Abrechnungen/Eigenrechnungen) wird platt.
   var savedApiKey  = null;
   var savedIcalUrl = null;
-  var savedStudioPasswords = null;
-  var savedStudioEmails    = null;
-  var savedName            = null;
-  var savedUst             = null;
+  var savedProfil  = null;
+  var savedAuftraggeber = null;
   try{ savedApiKey  = localStorage.getItem('anthropic_api_key'); }catch(e){}
   try{ savedIcalUrl = localStorage.getItem('ical_worker_url');   }catch(e){}
   try{
     if(db && db.profil){
-      if(db.profil.studioPasswords) savedStudioPasswords = JSON.parse(JSON.stringify(db.profil.studioPasswords));
-      if(db.profil.studioEmails)    savedStudioEmails    = JSON.parse(JSON.stringify(db.profil.studioEmails));
-      if(db.profil.name)            savedName            = db.profil.name;
-      if(db.profil.ust!=null)       savedUst             = db.profil.ust;
+      // Komplettes Profil-Objekt sichern (alle Stammdaten):
+      // name, beruf, strasse, plz, ort, iban, bic, bank, steuernr, ustid,
+      // famt, voranm, ust, iban_sparkasse, iban_holvi,
+      // studioPasswords, studioEmails, icalWorkerUrl, svnr, kk
+      savedProfil = JSON.parse(JSON.stringify(db.profil));
     }
-  }catch(e){ console.warn('Profil-Sicherung vor Reset:', e); }
+    if(db && db.auftraggeber){
+      savedAuftraggeber = JSON.parse(JSON.stringify(db.auftraggeber));
+    }
+  }catch(e){ console.warn('Stammdaten-Sicherung vor Reset:', e); }
   // Alles platt — robust gegen zukünftige Keys
   try{ localStorage.clear(); }catch(e){
     // Fallback: bekannte Keys einzeln
@@ -8514,18 +8518,21 @@ function confirmReset(){
   // Konfig zurückschreiben
   if(savedApiKey)  try{ localStorage.setItem('anthropic_api_key', savedApiKey);  }catch(e){}
   if(savedIcalUrl) try{ localStorage.setItem('ical_worker_url',   savedIcalUrl); }catch(e){}
-  // In-Memory neu
+  // In-Memory neu — leere Strukturen
   db   = ddb();
   dbv2 = loadV2();
-  // Build 759: Profil wiederherstellen
-  if(!db.profil) db.profil = {};
-  if(savedStudioPasswords) db.profil.studioPasswords = savedStudioPasswords;
-  if(savedStudioEmails)    db.profil.studioEmails    = savedStudioEmails;
-  if(savedName)            db.profil.name            = savedName;
-  if(savedUst!=null)       db.profil.ust             = savedUst;
+  // Build 797: Stammdaten zurückschreiben
+  if(savedProfil){
+    db.profil = savedProfil;
+  } else if(!db.profil){
+    db.profil = {};
+  }
+  if(savedAuftraggeber){
+    db.auftraggeber = savedAuftraggeber;
+  }
   save(db);
   saveV2(dbv2);
-  // Re-Render — alle Views inkl. Aggregate (Build 729)
+  // Re-Render — alle Views inkl. Aggregate
   rTermine();updateBadge();rProfil();rDispos();rGVL();
   if(typeof rDokumente==='function')      rDokumente();
   if(typeof rJahresabschluss==='function')try{rJahresabschluss();}catch(e){}
@@ -8533,8 +8540,9 @@ function confirmReset(){
   if(typeof rSozialStat==='function')     try{rSozialStat();}catch(e){}
   if(typeof rVerdienst==='function')      try{rVerdienst();}catch(e){}
   if(typeof rStat==='function')           try{rStat();}catch(e){}
+  if(typeof rRechnungen==='function')     try{rRechnungen();}catch(e){}
   closeProfilSheet();
-  showToast('✓ Alle Daten gelöscht');
+  showToast('✓ Datenbestand gelöscht · Stammdaten erhalten');
 }
 
 // ── DISPOS ────────────────────────────────────────────────────
