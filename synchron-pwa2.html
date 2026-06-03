@@ -2193,6 +2193,9 @@ function _klassifiziereAbrechnung(ab, dok){
   var studio = String((ab && ab.studio)||(dok && dok.studio)||'').toLowerCase();
   var gnr    = String((ab && ab.gutschrift_nr)||(ab && ab.gesamt_gutschrift_nr)||'').trim();
   var dateiname = String((dok && dok.dateiname)||(ab && ab.dateiname)||'').toLowerCase();
+  // Build 798: zusätzliche Felder für Honorarvereinbarungs-Erkennung
+  var beschr = String((dok && dok.beschr)||(ab && ab.beschr)||'').toLowerCase();
+  var titel = String((dok && dok.titel)||(ab && ab.titel)||'').toLowerCase();
 
   // Klasse 4: Studio Hamburg Synchron GmbH (Personalnummer 01444)
   if(studio.indexOf('studio hamburg') >= 0 || /01444/.test(gnr)) return '4';
@@ -2206,15 +2209,36 @@ function _klassifiziereAbrechnung(ab, dok){
   if(/^r?\d{1,3}[\/\-]\d{4}$/i.test(gnr)
      || studio.indexOf('eigen') >= 0
      || /eigenrechnung/i.test(dateiname)) return '3';
-  // Zusätzlich: Dateiname enthält Vor- oder Nachnamen aus dem Profil
-  // (z.B. "rechnung_mustermann.pdf" → wer auch immer Mustermann heißt)
+  // Build 798: Honorarvereinbarung/Honorarrechnung — der Beleg-Typ, bei dem
+  // der User selbst Rechnungssteller ist, ohne klassische GS-Nr im NN/YYYY-Format.
+  // Schlüsselwörter in Beschreibung, Titel, Dateiname oder Studio.
+  var honorarPattern = /honorarvereinbarung|honorarrechnung|honorarabrechnung|honorarnote/i;
+  if(honorarPattern.test(beschr) || honorarPattern.test(titel)
+     || honorarPattern.test(dateiname) || honorarPattern.test(studio)) return '3';
+  // Profil-Namensteile im Dateinamen (z.B. "rechnung_mustermann.pdf")
   try {
     var pname = (typeof db !== 'undefined' && db && db.profil && db.profil.name) ? String(db.profil.name).trim() : '';
     if(pname && dateiname){
       var parts = pname.split(/\s+/).filter(function(p){ return p.length >= 3; });
       for(var i=0; i<parts.length; i++){
-        // Wortteil als case-insensitive Subsstring im Dateinamen
         if(dateiname.toLowerCase().indexOf(parts[i].toLowerCase()) >= 0) return '3';
+      }
+    }
+  } catch(e){}
+  // Build 798: Studio steht im Auftraggeber-Adressbuch — sicherer Klasse-3-Marker.
+  // Das Adressbuch wird nur für Eigenrechnungs-Empfänger gepflegt; ein Match
+  // bedeutet, der User stellt diesem Empfänger selbst Rechnungen aus.
+  try {
+    if(studio && typeof db !== 'undefined' && db && db.auftraggeber && db.auftraggeber.length){
+      var studioNorm = studio.replace(/[^a-z0-9]/g, '');
+      if(studioNorm.length >= 4){
+        for(var j=0; j<db.auftraggeber.length; j++){
+          var agName = String(db.auftraggeber[j].name||'').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if(agName.length >= 4){
+            // beidseitiger Substring-Match: "ashoerspiel" findet "ashoerspielgmbh"
+            if(studioNorm.indexOf(agName) >= 0 || agName.indexOf(studioNorm) >= 0) return '3';
+          }
+        }
       }
     }
   } catch(e){}
@@ -3291,7 +3315,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '797';
+  if(el) el.textContent = '798';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12394,6 +12418,7 @@ function dokAnalyseDoc(d, key, cb){
     +'  WICHTIG: Eine Abrechnung mit NUR EINEM Aufnahmedatum ("von:/bis:" gleich) ist IMMER "abrechn", NIEMALS "monats_abrechn"!\n'
     +'  "Bisherige Jahressummen" unten auf der Seite = KUMULATIVWERTE, IGNORIEREN für Typerkennung und Beträge!\n'
     +'  "ausgabe" = Quittung/Rechnung, "sonstig" = sonstiges\n'
+    +'  BESONDERS: Honorarvereinbarung / Honorarrechnung / Honorarabrechnung / Honorarnote, bei der '+_uname+' selbst als Zahlungsempfänger genannt ist (oft mit Unterschrift "Zahlungsempfänger"), gilt als "abrechn"! Diese Belege enthalten meist: Honorar netto, USt 7%, Gesamtbetrag, Bank/IBAN des Sprechers. Studio-Feld = Auftraggeber (z.B. "AS Hörspiel GmbH"). Brutto = Gesamtbetrag inkl. USt. gutschrift_nr = Beleg-/Vereinbarungs-Nr. (z.B. "AS-OD-26-30").\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
@@ -14387,7 +14412,7 @@ function dokOpenDetail(id){
       } else {
         body+='<div class="info-row" style="background:#f0fdf4;border-radius:6px;padding:6px 8px"><div class="ir-key" style="color:#15803d;font-weight:700">Vorsteuer '+Math.round(ustSatzAg2*100)+'%</div><div class="ir-val" style="color:#15803d;font-weight:800">'+fmtEur(mwstAg2)+'</div></div>';
       }
-      body+='<div style="margin-top:10px"><button type="button" onclick="dokReklassifizieren(\''+d.id+'\')" style="width:100%;background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">⚠ Falsch klassifiziert? Typ ändern</button></div>';
+      // Build 798: Typ-ändern-Button hier entfernt — ist jetzt universal unten verfügbar.
     }
     if(d.typ==='monats_abrechn'){
       // Build 755: Titel + Rolle auch für monats_abrechn anzeigen.
@@ -14470,6 +14495,15 @@ function dokOpenDetail(id){
         body+=_k4row('Bereits erhalten €', _saldoBer, true);
       }
     }
+    // Build 798: Universal "Typ ändern" — bei JEDEM Beleg verfügbar.
+    // Vorher nur bei typ='ausgabe' sichtbar (Zeile 14390), aber bei falsch
+    // klassifizierten Belegen (z.B. Honorarvereinbarung als 'sonstig') muss
+    // man auch manuell auf 'abrechn' umstellen können.
+    body+='<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #bbf7d0">'
+      +'<button type="button" onclick="dokReklassifizieren(\''+d.id+'\')" '
+      +'style="width:100%;background:rgba(255,255,255,.7);color:#15803d;border:1.5px solid #86efac;border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">'
+      +'Falsch klassifiziert? → Typ ändern'
+      +'</button></div>';
     body+='</div>';
 
     // ── Produktions-Info-Box ──
