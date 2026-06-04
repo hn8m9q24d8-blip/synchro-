@@ -3405,7 +3405,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '806';
+  if(el) el.textContent = '807';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6083,24 +6083,11 @@ function showDateinamen(el){
   var label = el.getAttribute('data-label')||'Dokument';
   if(!namen.length) return;
 
-  // Erstmal: Dokument noch in App? Dann direkt öffnen
+  // Build 807: Einheitliches Verhalten — Klick auf Abrechnungs-Ampel führt IMMER
+  // zum Zwischenablage-Sheet mit Dateinamen-Kopie + Dateien-App-Öffnen.
+  // Vorher: Bei dataURL im Speicher → dokOpenDetail (PDF-Vorschau),
+  // sonst Zwischenablage-Sheet → Inkonsistente UX. User-Feedback: lieber einheitlich.
   var firstDoc = null;
-  // Prio 1: noch mit Bild (dataURL vorhanden)
-  for(var ni=0; ni<namen.length; ni++){
-    var found = (db.dokumente||[]).find(function(d){ return d.dateiname===namen[ni] && d.dataURL; });
-    if(found){ firstDoc=found; break; }
-  }
-  // Prio 2: bestätigt aber Bild gelöscht — NUR öffnen wenn KEIN Split-Kind
-  // Split-Kinder (1/7, 2/7...) haben kein eigenes Bild — zeigen nur leeres Übersichtsblatt
-  // → für Split-Kinder immer den Dateinamen ins Clipboard (Dateiordner-Suche)
-  if(!firstDoc){
-    for(var ni=0; ni<namen.length; ni++){
-      var found2 = (db.dokumente||[]).find(function(d){
-        return d.dateiname===namen[ni] && !d._splitFromPdf && !d._splitGroup;
-      });
-      if(found2){ firstDoc=found2; break; }
-    }
-  }
   if(firstDoc){
     var panelClose = document.querySelector('[data-namen-ov]');
     if(panelClose) panelClose.remove();
