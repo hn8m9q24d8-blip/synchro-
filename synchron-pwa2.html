@@ -436,6 +436,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div class="settings-group">
 
       <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div class="sr-icon" style="background:#e0e7ff">👤</div><div class="sr-label">Stammdaten (Name, Adresse, Steuer, Bank)</div></div><div class="sr-right" id="stammdaten-status">→</div></div>
+      <div class="settings-row" onclick="openAuftraggeberSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fff7ed">📇</div><div class="sr-label">Auftraggeber-Adressbuch</div></div><div class="sr-right" id="auftraggeber-status">→</div></div>
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Studio-Hamburg-Bankzuordnung</div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
@@ -2419,10 +2420,12 @@ function _konsolidiereDokumentNachV2(dokId){
     };
     var klasse = _klassifiziereAbrechnung(beispielAb, d);
 
-    // Build 800: Klasse-3-Auto-Fill — wenn Studio leer und Klasse 3, dann
-    // Empfänger aus db.rechnungen[] (Beleg-Nr-Match) oder Auftraggeber-Adressbuch
-    // (Dateinamen-Substring) ableiten. Sonst landet "—" als Studio in dbv2.abrechner,
-    // und die Jahresabschluss-Tabelle zeigt eine leere Studio-Spalte für Eigenrechnungen.
+    // Build 800/802: Klasse-3-Auto-Fill — wenn Studio leer und Klasse 3, dann
+    // in dieser Reihenfolge ableiten:
+    //   (a) Empfänger aus db.rechnungen[] (Beleg-Nr-Match) — wenn Rechnung in App erstellt
+    //   (b) Auftraggeber aus Adressbuch via Dateinamen-Substring
+    //   (c) NEU: Studio des verknüpften Termins (über sessions[].terminId)
+    // Sonst landet "—" als Studio in dbv2.abrechner.
     var studioFuerAbrechner = d.studio || gruppenSessions[0].studio || '';
     if(klasse === '3' && !studioFuerAbrechner){
       var belegNrZumMatch = (beispielAb && beispielAb.gutschrift_nr) || '';
@@ -2443,6 +2446,20 @@ function _konsolidiereDokumentNachV2(dokId){
           return nLower && nLower.length >= 4 && dnLower.indexOf(nLower) >= 0;
         });
         if(agMatch) studioFuerAbrechner = agMatch.name;
+      }
+      // (c) Build 802: Studio des verknüpften Termins. Beleg ist via Session an
+      // einen Termin geknüpft — wenn der Termin ein Studio-Feld hat (vom User
+      // im Termin-Detail manuell eingetragen), übernehmen wir das als Abrechner.
+      if(!studioFuerAbrechner && gruppenSessions.length){
+        for(var si=0; si<gruppenSessions.length; si++){
+          var tid = gruppenSessions[si].terminId;
+          if(!tid) continue;
+          var termin = (db.termine||[]).find(function(x){return x.id===tid;});
+          if(termin && termin.studio){
+            studioFuerAbrechner = termin.studio;
+            break;
+          }
+        }
       }
       // Wenn gefunden → auch ins d.studio-Feld schreiben, damit konsistent
       if(studioFuerAbrechner && !d.studio){
@@ -3346,7 +3363,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '800';
+  if(el) el.textContent = '802';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10652,6 +10669,18 @@ function rProfil(){
     } else {
       stammStatus.textContent=anz+' von 3 ✓';
       stammStatus.style.color='#d97706';
+    }
+  }
+  // Build 801: Adressbuch-Counter
+  var agStatus=document.getElementById('auftraggeber-status');
+  if(agStatus){
+    var anzAg=(db.auftraggeber||[]).length;
+    if(anzAg === 0){
+      agStatus.textContent='Leer';
+      agStatus.style.color='#9ca3af';
+    } else {
+      agStatus.textContent=anzAg+' Auftraggeber';
+      agStatus.style.color='';
     }
   }
 }
