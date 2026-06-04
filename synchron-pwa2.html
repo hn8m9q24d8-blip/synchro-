@@ -2745,6 +2745,15 @@ function _konsolidiereDokumentNachV2(dokId){
         });
         linksErstellt++;
       }
+      // Build 806: t.abrechn_dateiname am Termin mitschreiben, damit der Klick auf
+      // die Abrechnungs-Ampel im Termin den Dateinamen sofort hat — auch nachdem
+      // das Bild via save()-Strip entfernt wurde.
+      if(d.dateiname){
+        var _tBack = (db.termine||[]).find(function(x){return x.id===tid;});
+        if(_tBack && _tBack.abrechn_dateiname !== d.dateiname){
+          _tBack.abrechn_dateiname = d.dateiname;
+        }
+      }
     });
 
     /* alter Loop (Build 728/736) — durch Pairing ersetzt
@@ -2886,11 +2895,20 @@ function _konsolidiereDokumentNachV2(dokId){
     if(v2Ab.auszahlung != null && v2Ab.brutto){
       var bruttoBetrag = v2Ab.brutto || 0;
       var istStorno = bruttoBetrag < 0;
-      // Build 782: Klasse 2 (toneworx) — USt ist BEREITS im Brutto enthalten
-      // (Honorar + Nutzungsrechte + MwSt = "Zwischensumme inkl. MwSt" = Brutto).
+      // Build 782/803: Klasse 2 (toneworx) UND Klasse 3 (Eigenrechnung) — USt ist
+      // BEREITS im Brutto enthalten (Honorar+Nutzungsrechte+MwSt bzw. Netto+MwSt).
       // Daher Auszahlung = Brutto − SV, OHNE USt nochmal draufzurechnen.
-      // Bei SESAM (1a/1b) ist Brutto netto-vor-USt → USt kommt obendrauf.
-      var ustImCheck = (v2Ab.klasse === '2') ? 0 : (v2Ab.ust_betrag || 0);
+      // Bei SESAM (1a/1b) und Studio Hamburg (4) ist Brutto netto-vor-USt → USt obendrauf.
+      var klasseIstInklUst = (v2Ab.klasse === '2' || v2Ab.klasse === '3');
+      // Build 803: Fallback für ältere Belege ohne klasse-Feld — anhand Beleg-Nr-Muster
+      //   "TW-..."     → toneworx Klasse 2
+      //   "NN/YYYY"    → Eigenrechnung Klasse 3 (z.B. "01/2026")
+      if(!v2Ab.klasse && v2Ab.beleg_nr){
+        var bn = String(v2Ab.beleg_nr);
+        if(/^TW-/i.test(bn)) klasseIstInklUst = true;
+        else if(/^\d{1,3}\/\d{4}$/.test(bn)) klasseIstInklUst = true;
+      }
+      var ustImCheck = klasseIstInklUst ? 0 : (v2Ab.ust_betrag || 0);
       var auszErw = istStorno
         ? bruttoBetrag + svSumme + ustImCheck
         : bruttoBetrag - svSumme + ustImCheck;
@@ -3339,6 +3357,30 @@ function v2ZaehleAbgerechneteTermine(jahr){
     if(_t) _t.abId = keep.id;
     changed = true;
   });
+
+  // ── Build 806: Termin-Dateinamen via dbv2-Kette nachfüllen ──
+  // Idempotent: setzt t.abrechn_dateiname nur wenn leer.
+  // Kette: termin_id → abrechnung_termin_links → abrechnungen.pdf_datei_id → dokumente.dateiname
+  if(dbv2 && dbv2.abrechnung_termin_links && dbv2.abrechnungen){
+    var dbv2RepReichweite = 0, dbv2RepGesetzt = 0;
+    (db.termine||[]).forEach(function(t){
+      if(t.abrechn_dateiname) return;  // schon gesetzt
+      var lnk = dbv2.abrechnung_termin_links.find(function(l){return l.termin_id===t.id;});
+      if(!lnk) return;
+      dbv2RepReichweite++;
+      var v2Ab = dbv2.abrechnungen.find(function(a){return a.id===lnk.abrechnung_id;});
+      if(!v2Ab || !v2Ab.pdf_datei_id) return;
+      var dok = (db.dokumente||[]).find(function(d){return d.id===v2Ab.pdf_datei_id;});
+      if(!dok || !dok.dateiname) return;
+      t.abrechn_dateiname = dok.dateiname;
+      dbv2RepGesetzt++;
+      changed = true;
+    });
+    if(dbv2RepGesetzt > 0){
+      console.log('[Build 806] Termin-Dateinamen nachgefüllt: '+dbv2RepGesetzt+' von '+dbv2RepReichweite+' (via dbv2-Kette)');
+    }
+  }
+
   if(changed) try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
 })();
 
@@ -3363,7 +3405,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '802';
+  if(el) el.textContent = '806';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -14065,6 +14107,32 @@ function _dispRow(label, val, color){
     +'</div>';
 }
 
+// Build 804: Inline-Edit für Felder eines bestätigten Dokuments (Studio, Titel etc.)
+// Nutzt nativen prompt() für iOS-PWA-Kompatibilität. Nach Edit wird die V2-Konsolidierung
+// neu ausgelöst, damit dbv2.abrechner/produktionen automatisch aktualisiert wird.
+function dokEditFieldInline(rowEl, dokId, field){
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  var labels = { studio:'Studio', titel:'Titel', rolle:'Rolle' };
+  var current = d[field] != null ? String(d[field]) : '';
+  var neu = prompt((labels[field]||field) + ' ändern:', current);
+  if(neu === null) return;
+  neu = neu.trim();
+  if(neu === current.trim()) return;
+  d[field] = neu;
+  // Snapshot für Undo
+  try { if(typeof pushSnapshotVorAktion === 'function') pushSnapshotVorAktion(); } catch(e){}
+  // V2-Konsolidierung re-triggern → aktualisiert dbv2.abrechner/produktionen
+  try { _autoKonsolidiereNachBestaetigen(d.id); } catch(e){ console.error('[v2 hook dokEditField]', e); }
+  save(db);
+  saveV2(dbv2);
+  showToast('✓ '+(labels[field]||field)+' aktualisiert');
+  // Detail-Ansicht + Termin-Liste + Jahresabschluss neu rendern
+  dokOpenDetail(dokId);
+  try { rTermine(); } catch(e){}
+  try { if(typeof rJahresabschluss === 'function') rJahresabschluss(); } catch(e){}
+}
+
 function dokOpenDetail(id){
   _dokCurrentId = id;
   var d = (db.dokumente||[]).find(function(x){return x.id===id;});
@@ -14820,6 +14888,72 @@ function dokOpenDetail(id){
         + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
         + '-webkit-tap-highlight-color:transparent;display:block">'
         + btnLabel + '</button></div>';
+    }
+  }
+
+  // ── STATE 3: BESTÄTIGT — Übersicht der gespeicherten Daten ─────────
+  // Build 804: Vorher blieb body komplett leer für bestätigte Dokumente, weil
+  // weder STATE 1 (typ='offen') noch STATE 2 (awaitConfirm||!bestaetigt) griff.
+  // Klick auf Ampel führte daher zu blank page. Jetzt: kompakte Daten-Übersicht,
+  // editierbares Studio-Feld (wichtig für Klasse-3-Nachbearbeitung), Termin-Link.
+  else if(d.bestaetigt){
+    // Bestätigt-Banner
+    body += '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+      + '<div style="font-size:18px">✓</div>'
+      + '<div style="font-size:12px;color:#15803d;font-weight:700">Bestätigt'
+      + (d.bestaetigt_am ? ' am ' + (String(d.bestaetigt_am).slice(0,10).split('-').reverse().join('.')) : '')
+      + '</div></div>';
+
+    // Vorschau (Thumb oder PDF-Canvas)
+    if(d.thumb){
+      body += '<div style="margin-bottom:12px;text-align:center">'
+        + '<img src="'+d.thumb+'" style="max-width:100%;max-height:280px;border-radius:8px;border:1.5px solid #e5e7eb;cursor:pointer" onclick="dokShowFullImg(\''+d.id+'\')">'
+        + '</div>';
+    } else if(d.dataURL && d.mime==='application/pdf'){
+      body += '<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:#1d6fa8;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">📄 PDF öffnen</button>';
+    }
+
+    // Erkannte Daten in kompakter Form
+    body += '<div style="background:#fafafa;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:12px">'
+      + '<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Erkannte Daten</div>';
+
+    function _row(label, val, editable){
+      var v = val != null && String(val).trim() ? esc(String(val)) : '<span style="color:#ccc">—</span>';
+      var editAttr = editable
+        ? ' onclick="dokEditFieldInline(this,\''+d.id+'\',\''+editable+'\')" style="cursor:pointer" title="Antippen zum Bearbeiten"'
+        : '';
+      var pencil = editable ? ' <span style="color:#ccc;font-size:10px">✎</span>' : '';
+      return '<div'+editAttr+' style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:13px;'+(editable?'cursor:pointer':'')+'">'
+        + '<span style="color:#6b7280">'+label+'</span>'
+        + '<span style="color:#111;font-weight:600;text-align:right;max-width:60%">'+v+pencil+'</span>'
+        + '</div>';
+    }
+
+    body += _row('Studio',  d.studio,  'studio');
+    body += _row('Titel',   d.titel,   'titel');
+    body += _row('Datum',   d.datum ? fd(d.datum) : null, null);
+    if(d.gutschrift_nr) body += _row('Beleg-Nr.', d.gutschrift_nr, null);
+    if(d.brutto != null)     body += _row('Brutto', fmtEur(d.brutto), null);
+    if(d.mwst != null)       body += _row('MwSt',   fmtEur(d.mwst), null);
+    if(d.auszahlung != null) body += _row('Auszahlung', fmtEur(d.auszahlung), null);
+    body += '</div>';
+
+    // Termin-Link
+    if(termin){
+      body += '<button type="button" onclick="openDetail(\''+termin.id+'\')" style="width:100%;background:#e5e7eb;color:#374151;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📅 Zum verknüpften Termin</button>';
+    }
+    // Sessions-Übersicht bei Monats-Abrechnungen
+    if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length){
+      body += '<div style="background:#fafafa;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+        + '<div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">📋 '+d.sessions.length+' Termin(e) in dieser Sammel-Abrechnung</div>';
+      d.sessions.slice(0, 8).forEach(function(s){
+        body += '<div style="font-size:11px;color:#555;padding:3px 0;border-top:1px solid #f0f0f0">'
+          + (s.datum ? fd(s.datum) : '?') + ' · ' + esc(s.titel||'—')
+          + (s.brutto != null ? ' · ' + fmtEur(s.brutto) : '')
+          + '</div>';
+      });
+      if(d.sessions.length > 8) body += '<div style="font-size:10px;color:#9ca3af;margin-top:4px">…und '+(d.sessions.length-8)+' weitere</div>';
+      body += '</div>';
     }
   }
 
