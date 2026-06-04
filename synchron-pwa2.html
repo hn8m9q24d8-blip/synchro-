@@ -2419,8 +2419,39 @@ function _konsolidiereDokumentNachV2(dokId){
     };
     var klasse = _klassifiziereAbrechnung(beispielAb, d);
 
+    // Build 800: Klasse-3-Auto-Fill — wenn Studio leer und Klasse 3, dann
+    // Empfänger aus db.rechnungen[] (Beleg-Nr-Match) oder Auftraggeber-Adressbuch
+    // (Dateinamen-Substring) ableiten. Sonst landet "—" als Studio in dbv2.abrechner,
+    // und die Jahresabschluss-Tabelle zeigt eine leere Studio-Spalte für Eigenrechnungen.
+    var studioFuerAbrechner = d.studio || gruppenSessions[0].studio || '';
+    if(klasse === '3' && !studioFuerAbrechner){
+      var belegNrZumMatch = (beispielAb && beispielAb.gutschrift_nr) || '';
+      // (a) Match über Beleg-Nr in db.rechnungen[]
+      if(belegNrZumMatch && db.rechnungen){
+        var rechMatch = db.rechnungen.find(function(r){
+          return String(r.nr||'').trim() === String(belegNrZumMatch).trim();
+        });
+        if(rechMatch && rechMatch.empf){
+          studioFuerAbrechner = rechMatch.empf;
+        }
+      }
+      // (b) Match über Dateinamen-Substring im Auftraggeber-Adressbuch
+      if(!studioFuerAbrechner && db.auftraggeber && d.dateiname){
+        var dnLower = String(d.dateiname||'').toLowerCase();
+        var agMatch = db.auftraggeber.find(function(ag){
+          var nLower = String(ag.name||'').toLowerCase().replace(/\s+gmbh|\s+gbr|\s+ag/g,'').trim();
+          return nLower && nLower.length >= 4 && dnLower.indexOf(nLower) >= 0;
+        });
+        if(agMatch) studioFuerAbrechner = agMatch.name;
+      }
+      // Wenn gefunden → auch ins d.studio-Feld schreiben, damit konsistent
+      if(studioFuerAbrechner && !d.studio){
+        d.studio = studioFuerAbrechner;
+      }
+    }
+
     // Stammdaten
-    var abrId  = _upsertV2Abrechner(d.studio || gruppenSessions[0].studio, klasse);
+    var abrId  = _upsertV2Abrechner(studioFuerAbrechner, klasse);
     var prodId = _upsertV2Produktion(d.titel || gruppenSessions[0].titel);
 
     // Leistungs-Zeitraum aus Session-Daten
@@ -3315,7 +3346,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '798';
+  if(el) el.textContent = '800';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3931,6 +3962,10 @@ function openDetail(id){
         ab = {
           id:             v2viewD.ab.id,
           gutschrift_nr:  v2viewD.ab.beleg_nr,
+          // Build 799: Klasse durchreichen für korrekten Vergleich bei Eigenrechnungen
+          klasse:         v2viewD.ab.klasse || null,
+          ust_satz:       v2viewD.ab.ust_satz || null,
+          ust_betrag:     v2viewD.ab.ust_betrag || null,
           dokId:          v2viewD.ab.pdf_datei_id,
           bezahlt:        false, // Zahlungsstatus → separate Holvi-Logik (später)
           datum:          v2viewD.ab.ausstellungs_datum,
@@ -4121,7 +4156,15 @@ function openDetail(id){
     // Differenzen sollen bewusst stehen bleiben (Mahnwesen).
     +(function(){
       // Vergleich mit Abrechnung
-      var abBrutto = ab ? (parseFloat(ab.brutto)||0) : 0;
+      // Build 799: Bei Eigenrechnungen (Klasse 3) ist ab.brutto = Rechnungs-Gesamtbetrag
+      // INKL. USt — bei Studio-Abrechnungen (Klasse 1/2/4) ohne USt. App-Netto muss
+      // also mit (abBrutto - ust_betrag) verglichen werden, sonst entsteht eine
+      // unechte Differenz in Höhe der USt.
+      var abBruttoRaw = ab ? (parseFloat(ab.brutto)||0) : 0;
+      var abBrutto    = abBruttoRaw;
+      if(ab && ab.klasse === '3' && ab.ust_betrag){
+        abBrutto = Math.round((abBruttoRaw - parseFloat(ab.ust_betrag||0)) * 100) / 100;
+      }
       var abTakes  = ab ? (parseInt(ab.takes)||0) : 0;
       var abGG     = ab ? (parseFloat(ab.grundgage)||0) : 0;
       var abRate   = ab ? (parseFloat(ab.take_gage)||0) : 0;
@@ -4213,8 +4256,12 @@ function openDetail(id){
       }
 
       // Netto = Studio-Brutto (Hauptzeile, grün/rot)
+      // Build 799: Label bei Klasse 3 ehrlich: "Abrechn.-Netto", weil Beleg-Brutto inkl. USt
+      var _bruttoLabel = ab
+        ? (ab.klasse === '3' ? ' = Abrechn.-Netto (vor USt)' : ' = Abrechn.-Brutto')
+        : '';
       html += '<div class="gage-row" style="margin-top:8px;padding-top:8px;border-top:1.5px solid #e5e7eb">'
-        +'<span style="color:'+cNet+';font-weight:800;'+bgNet+'">Brutto'+(ab?' = Abrechn.-Brutto':'')+'</span>'
+        +'<span style="color:'+cNet+';font-weight:800;'+bgNet+'">Brutto'+_bruttoLabel+'</span>'
         +'<span style="color:'+cNet+';font-weight:900;font-size:16px;'+bgNet+'">'+net.toFixed(2).replace('.',',')+' €'
         +(ab&&!netBruttoOk?' <span style="font-size:11px">(Diff: '+fmtEur(Math.abs(net-abBrutto))+')</span>':'')
         +'</span></div>';
@@ -4231,7 +4278,12 @@ function openDetail(id){
     // v2-Pfad: keine Master/Tochter-Unterscheidung mehr.
     // Einzel-Anteile kommen direkt aus der Junction.
     {
-    var abBrutto=parseFloat(ab.brutto)||0;
+    var abBruttoRaw2 = parseFloat(ab.brutto)||0;
+    // Build 799: Klasse 3 → Brutto inkl. USt → für Vergleich USt rausrechnen
+    var abBrutto = abBruttoRaw2;
+    if(ab.klasse === '3' && ab.ust_betrag){
+      abBrutto = Math.round((abBruttoRaw2 - parseFloat(ab.ust_betrag||0)) * 100) / 100;
+    }
     // Build 737: Wenn Sammel-GS und kein Brutto-Anteil im PDF erkennbar → neutral statt rot
     var bruttoAnteilFehlt = ab._v2IstTeilVonSammel && (ab.brutto==null);
     var netBruttoOk = bruttoAnteilFehlt ? true : Math.abs(net-abBrutto)<0.02;
@@ -4281,7 +4333,13 @@ function openDetail(id){
         fmtEur(ab.grundgage)+(gageDiff?' <span style="font-size:10px;font-weight:700;color:#c2410c">≠ Dispo: '+fmtEur(t.kommgage)+'</span>':'')+'</div></div>':'')
       +(ab.take_gage?'<div class="info-row"><div class="ir-key" style="color:#888">Take-Gage</div><div class="ir-val" style="color:#888">'+fmtEur(ab.take_gage)+' / Take</div></div>':'')
       +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
-        '<div class="ir-key" style="color:'+matchCol+';font-weight:800">Brutto'+(bruttoAnteilFehlt?'-Anteil':' = App-Netto')+'</div>'+
+        '<div class="ir-key" style="color:'+matchCol+';font-weight:800">'
+        + (bruttoAnteilFehlt
+            ? 'Brutto-Anteil'
+            : (ab.klasse === '3'
+                ? 'Brutto (inkl. USt)'
+                : 'Brutto = App-Netto'))
+        + '</div>'+
         '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+(ab.brutto==null?'<span style="font-style:italic">—</span>':fmtEur(ab.brutto))+'</div></div>'
       +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
         (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
