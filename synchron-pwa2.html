@@ -3405,7 +3405,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '808';
+  if(el) el.textContent = '810';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -21575,9 +21575,19 @@ function _mev6StammFuerStudio(e, belege){
   });
   return best;
 }
+function _mev6AbrechnerName(ab){
+  // dbv2-Abrechnung speichert abrechner_id (FK), nicht den Namen.
+  // Build 809: Namen aus dbv2.abrechner[] auflösen, sonst scheitern alle Studio-Pfade.
+  if(ab.abrechner) return ab.abrechner;                 // falls doch denormalisiert
+  if(ab.abrechner_id && typeof dbv2!=='undefined' && dbv2.abrechner){
+    var a=dbv2.abrechner.find(function(x){ return x.id===ab.abrechner_id; });
+    if(a && a.name) return a.name;
+  }
+  return '';
+}
 function _mev6StudioPasst(ab, e){
-  // bestehende Alias-Logik wiederverwenden (abrechner ↔ gegenpartei)
-  try{ if(typeof _studioPasst==='function') return _studioPasst(ab.abrechner||'', e.gegenpartei||''); }catch(x){}
+  // bestehende Alias-Logik wiederverwenden (abrechner-Name ↔ gegenpartei)
+  try{ if(typeof _studioPasst==='function') return _studioPasst(_mev6AbrechnerName(ab), e.gegenpartei||''); }catch(x){}
   return false;
 }
 
@@ -21688,12 +21698,57 @@ function _mev6UstNote(belege){
 }
 
 /* READ-ONLY Diagnose-Overlay */
+/* Build 810: Diagnose als Text (Format wie Datensatz-Dump) + Clipboard-Copy */
+function _mev6Text(rows){
+  var cnt={}; rows.forEach(function(r){ cnt[r.typ]=(cnt[r.typ]||0)+1; });
+  var bn=document.getElementById('app-build-nr'); bn=bn?bn.textContent:'?';
+  var L=[];
+  L.push('═══ MATCH-ENGINE v6 · DIAGNOSE ═══');
+  L.push('Build '+bn+' · '+rows.length+' Eingänge · read-only');
+  L.push('');
+  L.push('── VERTEILUNG ──');
+  Object.keys(cnt).sort().forEach(function(t){ L.push('  '+t+': '+cnt[t]); });
+  L.push('');
+  L.push('── EINGÄNGE ──');
+  rows.forEach(function(r){
+    var e=r._e, betr=(parseFloat(e.betrag)||0).toFixed(2);
+    var konf=(r.konfidenz==='—'||r.konfidenz==='deferred')?r.konfidenz:(r.konfidenz+'%');
+    var dl=(r.delta===null?'':(' Δ'+(r.delta>0?'+':'')+r.delta.toFixed(2)));
+    L.push((e.datum||'?')+' | '+betr+' € | '+(e.gegenpartei||''));
+    L.push('   '+r.typ+' ('+konf+')'+dl+(r.ustNote?(' | '+r.ustNote):''));
+    if(r.belege.length) L.push('   → '+r.belege.map(function(a){return a.beleg_nr;}).join(', '));
+  });
+  L.push('');
+  L.push('── ENDE ──');
+  return L.join('\n');
+}
+function _mev6CopyFallback(txt, done){
+  try{
+    var ta=document.createElement('textarea'); ta.value=txt;
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try{ ta.setSelectionRange(0, txt.length); }catch(e){}
+    document.execCommand('copy'); document.body.removeChild(ta); done();
+  }catch(x){ if(typeof showToast==='function') showToast('Kopieren nicht möglich'); }
+}
+function _mev6Copy(){
+  var txt=_mev6Text(window._mev6Last||[]);
+  var done=function(){
+    var b=document.getElementById('mev6-copybtn');
+    if(b){ var o=b.textContent; b.textContent='✓ Kopiert'; setTimeout(function(){ b.textContent=o; }, 1600); }
+    if(typeof showToast==='function') showToast('Diagnose kopiert');
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ _mev6CopyFallback(txt, done); });
+  } else { _mev6CopyFallback(txt, done); }
+}
 function MEV6run(){
   var eing=_mev6Eingaenge();
   if(!eing.length){ if(typeof showToast==='function') showToast('Kein Holvi-Auszug geladen'); return; }
   var rows=eing.slice().sort(function(a,b){return (a.datum||'')<(b.datum||'')?-1:1;}).map(function(e){
     var r=_mev6Resolve(e); r._e=e; return r;
   });
+  window._mev6Last=rows;
   var cnt={};
   rows.forEach(function(r){ cnt[r.typ]=(cnt[r.typ]||0)+1; });
   var col=function(t,kf,delta){
@@ -21729,7 +21784,10 @@ function MEV6run(){
     +'<div style="padding:14px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
       +'<div><div style="font-weight:800;font-size:15px">Match-Engine v6 · Diagnose</div>'
       +'<div style="font-size:11px;color:#999">read-only · schreibt nichts · '+rows.length+' Eingänge</div></div>'
-      +'<div onclick="var o=document.getElementById(\'mev6-ov\');o&&o.remove()" style="font-size:26px;color:#999;cursor:pointer;line-height:1">&times;</div></div>'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+        +'<button id="mev6-copybtn" onclick="_mev6Copy()" style="background:#eff6ff;border:1px solid #2563eb;color:#1d4ed8;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📋 Kopieren</button>'
+        +'<div onclick="var o=document.getElementById(\'mev6-ov\');o&&o.remove()" style="font-size:26px;color:#999;cursor:pointer;line-height:1">&times;</div>'
+      +'</div></div>'
     +'<div style="padding:14px 16px;overflow:auto">'+head+body+'</div></div>';
   document.body.appendChild(ov);
   try{ console.table(rows.map(function(r){return {datum:r._e.datum,betrag:r._e.betrag,gegen:r._e.gegenpartei,typ:r.typ,konf:r.konfidenz,belege:r.belege.map(function(a){return a.beleg_nr;}).join(','),delta:r.delta};})); }catch(x){}
