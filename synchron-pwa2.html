@@ -3403,7 +3403,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '814';
+  if(el) el.textContent = '815';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -21520,7 +21520,7 @@ function suchHL(text,q){
 function _mev6Belege(){ return (typeof dbv2!=='undefined' && dbv2.abrechnungen) ? dbv2.abrechnungen : []; }
 function _mev6Eingaenge(){ return (typeof db!=='undefined' && db.holviAbgleich) ? db.holviAbgleich : []; }
 function _mev6Round(x){ return Math.round(x*100)/100; }
-function _mev6Ausz(ab){ var a=parseFloat(ab.auszahlung); if(!isNaN(a)&&a>0) return a; var b=parseFloat(ab.brutto); return isNaN(b)?0:b; }
+function _mev6Ausz(ab){ var a=parseFloat(ab.auszahlung); if(!isNaN(a)&&a!==0) return a; var b=parseFloat(ab.brutto); return isNaN(b)?0:b; }
 
 /* Klassifizierungs-Filter — überspringt die Match-Hierarchie */
 function _mev6Classify(e){
