@@ -3403,7 +3403,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '816';
+  if(el) el.textContent = '817';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8428,6 +8428,7 @@ function diagnoseGutschriften(){
   lines.push('  davon _isMultiMaster: ' + dbAbs.filter(function(a){return a._isMultiMaster;}).length);
   lines.push('dbv2.abrechnungen: ' + v2Abs.length);
   lines.push('dbv2 Junctions: ' + v2Lnks.length);
+  lines.push('dbv2 Zahlungsgruppen: ' + ((dbv2&&dbv2.zahlungsgruppen?dbv2.zahlungsgruppen.length:0)));
   lines.push('');
   lines.push('── DOC-TYPEN-BREAKDOWN ──');
   Object.keys(typBreakdown).sort().forEach(function(k){
@@ -8461,9 +8462,18 @@ function diagnoseGutschriften(){
       v2Match.forEach(function(v){
         lines.push('       v2 beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0)
           +' ausz='+(v.auszahlung!=null?v.auszahlung:'-')
+          +' zahlt='+(v.zahlungs_datum||'-')
           +' leist='+(v.leistungs_datum_von||'-')+' ausst='+(v.ausstellungs_datum||'-'));
       });
     });
+  });
+  lines.push('');
+  lines.push('── ZAHLUNGSGRUPPEN (mev6-Anker, Build 816) ──');
+  var zgs = (dbv2&&dbv2.zahlungsgruppen)?dbv2.zahlungsgruppen:[];
+  lines.push('Anzahl: ' + zgs.length);
+  zgs.forEach(function(g){
+    lines.push('  valuta='+(g.valuta||'-')+' betrag='+(g.betrag||0)+' '+(g.match_typ||'')+' ('+(g.konfidenz||'')+') '+((g.gegenpartei||'').substr(0,24)));
+    lines.push('     belege: '+((g.beleg_ids||[]).map(function(id){var b=v2Abs.filter(function(x){return x.id===id;})[0];return b?b.beleg_nr:id;}).join(', ')));
   });
   lines.push('');
   lines.push('── DBV2 GEISTER (kein PDF-Doc dazu) ──');
