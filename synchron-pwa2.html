@@ -3403,7 +3403,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '817';
+  if(el) el.textContent = '818';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11183,6 +11183,24 @@ function undoAction(actionId){
           }
         }
         showToast('↩ Session-Zuordnung zurückgesetzt');
+        break;
+
+      case 'mev6_anker':
+        // Build 818: mev6-Anker rückgängig (Fallback nach Reload, wenn RAM-Snapshot weg).
+        var _mud=action.undoData||{};
+        (_mud.grpIds||[]).forEach(function(gid){
+          if(dbv2 && dbv2.zahlungsgruppen) dbv2.zahlungsgruppen=dbv2.zahlungsgruppen.filter(function(g){return g.id!==gid;});
+        });
+        (_mud.before||[]).forEach(function(b){
+          var abx=(dbv2.abrechnungen||[]).find(function(x){return x.id===b.id;});
+          if(abx){
+            if(b.zd==null)   delete abx.zahlungs_datum;    else abx.zahlungs_datum=b.zd;
+            if(b.zgid==null) delete abx.zahlungsgruppe_id; else abx.zahlungsgruppe_id=b.zgid;
+            if(b.sj==null)   delete abx.steuer_jahr;       else abx.steuer_jahr=b.sj;
+          }
+        });
+        saveV2(dbv2);
+        showToast('↩ mev6-Anker rückgängig');
         break;
     }
 
@@ -21792,6 +21810,7 @@ function _mev6PersistOne(r){
   if(!dbv2.zahlungsgruppen) dbv2.zahlungsgruppen=[];
   var valuta=e.datum;                       // = Valutadatum (Geldeingang) = Ist-Steuer-Anker
   var grpId='zg_'+uid();
+  var before=[];
   dbv2.zahlungsgruppen.push({
     id:grpId, eingang_id:_mev6EingangId(e), valuta:valuta,
     betrag:parseFloat(e.betrag)||0, gegenpartei:e.gegenpartei||'',
@@ -21800,11 +21819,15 @@ function _mev6PersistOne(r){
     erstellt:new Date().toISOString(), quelle:'mev6'
   });
   r.belege.forEach(function(ab){
+    before.push({ id:ab.id,
+      zd:(ab.zahlungs_datum!=null?ab.zahlungs_datum:null),
+      zgid:(ab.zahlungsgruppe_id!=null?ab.zahlungsgruppe_id:null),
+      sj:(ab.steuer_jahr!=null?ab.steuer_jahr:null) });
     ab.zahlungs_datum=valuta;               // Ist-Anker an jedem Beleg
     ab.zahlungsgruppe_id=grpId;
     var jy=(valuta||'').slice(0,4); if(jy) ab.steuer_jahr=jy;   // Jahresgrenzen-Shift
   });
-  return {ok:true};
+  return {ok:true, grpId:grpId, before:before};
 }
 function _mev6Refresh(){ var o=document.getElementById('mev6-ov'); if(o) o.remove(); MEV6run(); }
 function _mev6PersistBulk(){
@@ -21812,9 +21835,10 @@ function _mev6PersistBulk(){
   var todo=rows.filter(function(r){ return typeof r.konfidenz==='number' && r.konfidenz>=95 && r.belege.length && !_mev6IstGeschrieben(r._e); });
   if(!todo.length){ if(typeof showToast==='function') showToast('Nichts Neues zu schreiben'); return; }
   pushSnapshotVorAktion();
-  var n=0; todo.forEach(function(r){ if(_mev6PersistOne(r).ok) n++; });
+  var n=0, grpIds=[], before=[];
+  todo.forEach(function(r){ var res=_mev6PersistOne(r); if(res.ok){ n++; grpIds.push(res.grpId); before=before.concat(res.before); } });
+  logAction('mev6_anker', n+' Anker geschrieben (Stapel)', {grpIds:grpIds, before:before});   // VOR save → wird persistiert
   save(db); saveV2(dbv2);
-  logAction('mev6_anker', n+' Zahlungsgruppen + Anker geschrieben (Stapel)', {n:n});
   if(typeof showToast==='function') showToast('✓ '+n+' geschrieben');
   _mev6Refresh();
 }
@@ -21824,8 +21848,8 @@ function _mev6PersistRow(idx){
   pushSnapshotVorAktion();
   var res=_mev6PersistOne(r);
   if(!res.ok){ if(typeof showToast==='function') showToast('Nicht schreibbar'); return; }
+  logAction('mev6_anker', '1 Anker ('+r.typ+') · '+((r._e.gegenpartei||'').substr(0,20)), {grpIds:[res.grpId], before:res.before});   // VOR save
   save(db); saveV2(dbv2);
-  logAction('mev6_anker', '1 Zahlungsgruppe + Anker ('+r.typ+') geschrieben', {});
   if(typeof showToast==='function') showToast('✓ geschrieben');
   _mev6Refresh();
 }
