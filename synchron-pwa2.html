@@ -3403,7 +3403,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '818';
+  if(el) el.textContent = '820';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18341,7 +18341,8 @@ function rHolviAbgleich(){
   _updateHolviAbgleichBadge();
 
   var html='';
-  html+='<button onclick="MEV6run()" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #2563eb;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer">\uD83D\uDD0D Match-Engine v6 \u00b7 Diagnose (read-only)</button>';
+  html+='<button onclick="MEV6run()" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #2563eb;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer">\uD83D\uDD0D Match-Engine v6 \u00b7 Abgleich &amp; Anker</button>';
+  html+='<button onclick="MEV7run()" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #059669;background:#ecfdf5;color:#047857;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer">\uD83D\uDCCA Phase 7 \u00b7 USt-Vergleich (dbv2 vs Gold)</button>';
 
   // Offene zuerst, dann bestätigte
   var sorted=liste.slice().sort(function(a,b){
@@ -21731,7 +21732,7 @@ function _mev6Text(rows){
   var bn=document.getElementById('app-build-nr'); bn=bn?bn.textContent:'?';
   var L=[];
   L.push('═══ MATCH-ENGINE v6 · DIAGNOSE ═══');
-  L.push('Build '+bn+' · '+rows.length+' Eingänge · read-only');
+  L.push('Build '+bn+' · '+rows.length+' Eingänge · Abgleich & Anker');
   L.push('');
   L.push('── VERTEILUNG ──');
   Object.keys(cnt).sort().forEach(function(t){ L.push('  '+t+': '+cnt[t]); });
@@ -21852,6 +21853,91 @@ function _mev6PersistRow(idx){
   save(db); saveV2(dbv2);
   if(typeof showToast==='function') showToast('✓ geschrieben');
   _mev6Refresh();
+}
+/* === BUILD 820: Phase 7 — USt-Vergleich dbv2-Anker vs. Goldstandard (READ-ONLY) ===
+   Summiert ust_betrag der dbv2-Belege mit gesetztem zahlungs_datum, gruppiert nach
+   Valuta-Monat (Ist-Versteuerung). Bucket: klasse 4 → Studio HH, satz≥0.13 → 19%, sonst 7%.
+   Vergleicht gegen den an die Steuerberaterin gelieferten Goldstandard. Schreibt NICHTS. */
+var _MEV7_GOLD = {
+  '2026-01': {u7:620.83, u19:95.00, k4:0.00},
+  '2026-02': {u7:571.20, u19:0.00,  k4:12.88},
+  '2026-03': {u7:232.30, u19:0.00,  k4:59.92},
+  '2026-04': {u7:1377.15,u19:0.00,  k4:25.20}
+};
+function _mev7Buckets(){
+  var by={};
+  (dbv2.abrechnungen||[]).forEach(function(a){
+    if(!a.zahlungs_datum) return;
+    var m=String(a.zahlungs_datum).slice(0,7);
+    if(!by[m]) by[m]={u7:0,u19:0,k4:0,n:0};
+    var ust=parseFloat(a.ust_betrag)||0;
+    var satz=parseFloat(a.ust_satz)||0;
+    if(String(a.klasse)==='4') by[m].k4+=ust;
+    else if(satz>=0.13)        by[m].u19+=ust;
+    else                       by[m].u7+=ust;
+    by[m].n++;
+  });
+  return by;
+}
+function _mev7Text(){
+  var by=_mev7Buckets();
+  var monate=Object.keys(by).concat(Object.keys(_MEV7_GOLD))
+    .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
+  var L=[]; L.push('═══ PHASE 7 · USt-VERGLEICH dbv2 vs GOLDSTANDARD ═══'); L.push('');
+  monate.forEach(function(m){
+    var d=by[m]||{u7:0,u19:0,k4:0,n:0}; var g=_MEV7_GOLD[m];
+    var ds=d.u7+d.u19+d.k4;
+    L.push('── '+m+' ('+(d.n||0)+' Belege) ──');
+    L.push('  dbv2:  7%='+d.u7.toFixed(2)+'  19%='+d.u19.toFixed(2)+'  StudioHH='+d.k4.toFixed(2)+'  Σ='+ds.toFixed(2));
+    if(g){
+      var gs=g.u7+g.u19+g.k4;
+      L.push('  Gold:  7%='+g.u7.toFixed(2)+'  19%='+g.u19.toFixed(2)+'  StudioHH='+g.k4.toFixed(2)+'  Σ='+gs.toFixed(2));
+      L.push('  Δ Σ = '+(ds-gs>=0?'+':'')+(ds-gs).toFixed(2)+' €'+(Math.abs(ds-gs)<=0.01?'  ✓':'  ← offen'));
+    } else { L.push('  (kein Goldstandard hinterlegt)'); }
+    L.push('');
+  });
+  return L.join('\n');
+}
+function MEV7run(){
+  var by=_mev7Buckets();
+  var monate=Object.keys(by).concat(Object.keys(_MEV7_GOLD))
+    .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
+  var rows='';
+  monate.forEach(function(m){
+    var d=by[m]||{u7:0,u19:0,k4:0,n:0}; var g=_MEV7_GOLD[m];
+    var ds=d.u7+d.u19+d.k4;
+    var diffTxt='', diffCol='#666', head='#111';
+    if(g){
+      var gs=g.u7+g.u19+g.k4; var diff=ds-gs;
+      var ok=Math.abs(diff)<=0.01;
+      diffCol = ok?'#15803d':'#b45309';
+      diffTxt = (ok?'✓ stimmt':('Δ '+(diff>=0?'+':'')+diff.toFixed(2)+' €'));
+    } else { diffTxt='kein Goldstandard'; }
+    rows+='<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<span style="font-weight:800;font-size:13px;color:'+head+'">'+m+'</span>'
+        +'<span style="font-weight:800;font-size:12px;color:'+diffCol+'">'+diffTxt+'</span></div>'
+      +'<div style="font-size:11px;color:#444;font-family:monospace;line-height:1.6">'
+        +'dbv2&nbsp;&nbsp;7%='+d.u7.toFixed(2)+' · 19%='+d.u19.toFixed(2)+' · SH='+d.k4.toFixed(2)+' · <b>Σ '+ds.toFixed(2)+'</b> ('+d.n+')'
+        +(g?('<br>Gold&nbsp;&nbsp;7%='+g.u7.toFixed(2)+' · 19%='+g.u19.toFixed(2)+' · SH='+g.k4.toFixed(2)+' · <b>Σ '+(g.u7+g.u19+g.k4).toFixed(2)+'</b>'):'')
+      +'</div></div>';
+  });
+  var old=document.getElementById('mev7-ov'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='mev7-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:560px;width:100%;margin:auto;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.3)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+      +'<div><div style="font-weight:800;font-size:15px">Phase 7 · USt-Vergleich</div>'
+      +'<div style="font-size:11px;color:#999">dbv2-Anker vs. Goldstandard · read-only</div></div>'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+        +'<button onclick="_mev6Download(_mev7Text(),\'ust-vergleich.txt\')" style="background:#ecfdf5;border:1px solid #059669;color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📄 Datei</button>'
+        +'<div onclick="var o=document.getElementById(\'mev7-ov\');if(o)o.remove();" style="font-size:24px;color:#999;cursor:pointer;line-height:1;padding:0 4px">&times;</div>'
+      +'</div></div>'
+    +rows
+    +'<div style="font-size:10px;color:#999;margin-top:6px">Σ = USt aus Einnahmen (ohne Vorsteuer). Offene Differenzen = noch nicht verankerte Teile (Haspa-Konto, K2 Toneworx, K4 Studio HH).</div>'
+    +'</div>';
+  ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
 }
 function MEV6run(){
   var eing=_mev6Eingaenge();
