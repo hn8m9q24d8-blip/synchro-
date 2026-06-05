@@ -3405,7 +3405,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '807';
+  if(el) el.textContent = '808';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18314,6 +18314,7 @@ function rHolviAbgleich(){
   _updateHolviAbgleichBadge();
 
   var html='';
+  html+='<button onclick="MEV6run()" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #2563eb;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer">\uD83D\uDD0D Match-Engine v6 \u00b7 Diagnose (read-only)</button>';
 
   // Offene zuerst, dann bestätigte
   var sorted=liste.slice().sort(function(a,b){
@@ -21501,6 +21502,238 @@ function suchHL(text,q){
     }
   }, 1500);
 })();
+
+/* === BUILD 808: Match-Engine v6 (read-only) === */
+/* ============================================================================
+   MATCH-ENGINE v6  (Build 808)  —  READ-ONLY DIAGNOSE
+   Liest db.holviAbgleich (Bank-Eingänge) + dbv2.abrechnungen (Belege).
+   Schreibt NICHTS. Ändert NICHT _holviAbgleichMatch und keine Legacy-Struktur.
+   Offline gegen 27 echte Holvi-Eingänge validiert (BELEG-LUECKE 0, TC-16/17 ok).
+   Hierarchie: GS-NR > GS-NR-SAMMEL > GS-NR-SAMMEL-SUB > AUFTRAGGEBER+BETRAG.
+   Härtungen ggü. Spec v1:
+     - Harter Tokenizer (Holvi-Truncation @~140 + Zufalls-Spaces in GS-Nr)
+     - Einzel→Monats-Kollaps  (Bank schickt nnnn/YYYYMMDD, dbv2 hat nnnn/YYYYMM)
+     - NN/YYYY beleg-getrieben (Eigenrechnung NUR wenn Klasse-3-Beleg existiert;
+       Satz IMMER aus dem Beleg; sonst Studio-Monatsbeleg via Stamm-Ableitung)
+     - Range studio-gefiltert über _studioPasst(abrechner, gegenpartei)
+     - Perioden-Vervollständigung bei trunkiertem VZ
+   ========================================================================== */
+function _mev6Belege(){ return (typeof dbv2!=='undefined' && dbv2.abrechnungen) ? dbv2.abrechnungen : []; }
+function _mev6Eingaenge(){ return (typeof db!=='undefined' && db.holviAbgleich) ? db.holviAbgleich : []; }
+function _mev6Round(x){ return Math.round(x*100)/100; }
+function _mev6Ausz(ab){ var a=parseFloat(ab.auszahlung); if(!isNaN(a)&&a>0) return a; var b=parseFloat(ab.brutto); return isNaN(b)?0:b; }
+
+/* Klassifizierungs-Filter — überspringt die Match-Hierarchie */
+function _mev6Classify(e){
+  var g=(e.gegenpartei||'').toLowerCase(), n=(e.nachricht||'').toLowerCase();
+  if(g.indexOf('studio hamburg')>=0) return 'KLASSE4';
+  if(g.indexOf('toneworx')>=0)       return 'KLASSE2';
+  if(g.indexOf('knauer')>=0||g.indexOf('friesicke')>=0) return 'PRIVAT';
+  if(g.indexOf('krankenkasse')>=0||g.indexOf('techniker krankenkasse')>=0||n.indexOf('beihilfe')>=0) return 'PRIVAT';
+  if(g.indexOf('db vertrieb')>=0||g.indexOf('deutsche bahn')>=0) return 'PRIVAT';
+  if(g.indexOf('gvl')===0||n.indexOf('gvl aussch')>=0) return 'GVL';
+  if(n.indexOf('abschluss')>=0) return 'BANK';
+  return null;
+}
+
+/* Harter Tokenizer: liefert {einzel:[], monats:[], nnyyyy:[], range:[von,bis]|null} */
+function _mev6Extract(text){
+  text=String(text||'');
+  var einzel=[], monats=[], nnyyyy=[];
+  var re=/(?:^|[^\dA-Za-z])(\d{1,4}|[A-Z]\d{1,3})\//g, m;
+  while((m=re.exec(text))!==null){
+    var pref=m[1], j=re.lastIndex, digits='';
+    while(j<text.length && digits.length<8){
+      var c=text.charAt(j);
+      if(c>='0'&&c<='9') digits+=c;
+      else if(c===' '){ /* interne Spaces überspringen (Holvi-Mangling) */ }
+      else break;
+      j++;
+    }
+    if(digits.length===8) einzel.push(pref+'/'+digits);
+    else if(digits.length===6) monats.push(pref+'/'+digits);
+    else if(digits.length===4 && digits.substr(0,2)==='20' && /^\d{1,3}$/.test(pref)) nnyyyy.push(pref+'/'+digits);
+  }
+  var rm=text.match(/(\d{8})\s*bis\s*(\d{8})/i);
+  var dedup=function(a){var s={},r=[];a.forEach(function(x){if(!s[x]){s[x]=1;r.push(x);}});return r;};
+  return { einzel:dedup(einzel), monats:dedup(monats), nnyyyy:dedup(nnyyyy), range: rm?[rm[1],rm[2]]:null };
+}
+
+/* GS-Nr Datum-Teil (8-stellig) → 'YYYY-MM-DD' */
+function _mev6GsDatum(belegNr){
+  var mm=String(belegNr||'').match(/\/(\d{8})$/);
+  if(!mm) return null;
+  var d=mm[1]; return d.substr(0,4)+'-'+d.substr(4,2)+'-'+d.substr(6,2);
+}
+/* Studio-Stamm aus vorhandenen Monats-Belegen des Eingangs ableiten (kein Hardcode) */
+function _mev6StammFuerStudio(e, belege){
+  var best=null;
+  belege.forEach(function(ab){
+    if(!_mev6StudioPasst(ab,e)) return;
+    var mm=String(ab.beleg_nr||'').match(/^(\d{1,4})\/\d{6}$/);
+    if(mm) best=mm[1];
+  });
+  return best;
+}
+function _mev6StudioPasst(ab, e){
+  // bestehende Alias-Logik wiederverwenden (abrechner ↔ gegenpartei)
+  try{ if(typeof _studioPasst==='function') return _studioPasst(ab.abrechner||'', e.gegenpartei||''); }catch(x){}
+  return false;
+}
+
+/* Subset-Sum (≤0,50 €) — für GS-NR-SAMMEL-SUB; klein gehalten (DFS, Pruning) */
+function _mev6Subset(belege, ziel){
+  var n=belege.length; if(n>16) return null; // Schutz gegen Explosion
+  var vals=belege.map(_mev6Ausz);
+  var best=null;
+  function dfs(i, acc, picked){
+    if(Math.abs(acc-ziel)<=0.50){ if(best===null||picked.length<best.length) best=picked.slice(); return; }
+    if(i>=n||acc-ziel>0.50) return;
+    dfs(i+1, _mev6Round(acc+vals[i]), picked.concat([i]));
+    dfs(i+1, acc, picked);
+  }
+  dfs(0,0,[]);
+  return best ? best.map(function(idx){return belege[idx];}) : null;
+}
+
+/* Kern: ein Eingang → {typ, konfidenz, belege:[], sumAusz, delta, ustNote} */
+function _mev6Resolve(e){
+  var k=_mev6Classify(e);
+  if(k) return { typ:k, konfidenz:(k==='KLASSE2'||k==='KLASSE4'||k==='GVL'?'deferred':'—'), belege:[], sumAusz:0, delta:null, ustNote:'' };
+
+  var belege=_mev6Belege();
+  var byNr={}; belege.forEach(function(ab){ if(ab.beleg_nr) (byNr[ab.beleg_nr]=byNr[ab.beleg_nr]||[]).push(ab); });
+  var pick=function(nr){ return (byNr[nr]&&byNr[nr][0])||null; };
+
+  var ex=_mev6Extract(e.nachricht);
+  var pool=[], seen={};
+  var add=function(ab){ if(ab && !seen[ab.id]){ seen[ab.id]=1; pool.push(ab); } };
+
+  // 1) Einzel-GS-Nrn — gefunden? sonst Einzel→Monats-Kollaps (nnnn/YYYYMM)
+  ex.einzel.forEach(function(g){
+    var ab=pick(g);
+    if(ab){ add(ab); return; }
+    var sp=g.split('/'), mm=sp[0]+'/'+sp[1].substr(0,6);
+    add(pick(mm));
+  });
+  // 2) NN/YYYY — beleg-getrieben (Eigenrechnung NUR wenn Klasse-3-Beleg da; Satz aus Beleg)
+  ex.nnyyyy.forEach(function(g){
+    var ab=pick(g);
+    if(ab){ add(ab); return; }                 // existierende Rechnungs-Nr → Satz aus Beleg (7 od. 19)
+    var stamm=_mev6StammFuerStudio(e, belege);  // sonst Studio-Monatsbeleg
+    if(stamm){ var t=g.split('/'); add(pick(stamm+'/'+t[1]+(t[0].length<2?'0'+t[0]:t[0]))); }
+  });
+  // 3) Monats-Sammel direkt
+  ex.monats.forEach(function(g){ add(pick(g)); });
+  // 4) Range — studio-gefiltert über abrechner
+  if(ex.range){
+    var v=ex.range[0], b=ex.range[1];
+    belege.forEach(function(ab){
+      var d=String(ab.beleg_nr||'').match(/\/(\d{8})$/);
+      if(d && d[1]>=v && d[1]<=b && _mev6StudioPasst(ab,e)) add(ab);
+    });
+  }
+  // 5) Truncation-Vervollständigung (VZ am Holvi-Cap & Einzel gefunden → ganze Periode des Stamms)
+  if((e.nachricht||'').length>=138 && ex.einzel.length){
+    var stamm2=ex.einzel[0].split('/')[0], monatsK={};
+    ex.einzel.forEach(function(g){ monatsK[g.split('/')[1].substr(0,6)]=1; });
+    belege.forEach(function(ab){
+      var sp=String(ab.beleg_nr||'').split('/');
+      if(sp[0]===stamm2 && sp[1] && sp[1].length===8 && monatsK[sp[1].substr(0,6)]) add(ab);
+    });
+  }
+
+  var sig = !!(ex.einzel.length||ex.monats.length||ex.nnyyyy.length||ex.range);
+  var betrag=parseFloat(e.betrag)||0;
+
+  // ----- kein Pool -----
+  if(!pool.length){
+    if(sig) return { typ:'BELEG-LUECKE', konfidenz:100, belege:[], sumAusz:0, delta:null,
+                     ustNote:'GS-Signal im VZ, aber kein Beleg in dbv2: '+ex.einzel.concat(ex.monats,ex.nnyyyy).join(', ') };
+    // Fallback AUFTRAGGEBER+BETRAG
+    var cand=belege.filter(function(ab){
+      if(!_mev6StudioPasst(ab,e)) return false;
+      if(Math.abs(_mev6Ausz(ab)-betrag)>0.50) return false;
+      var ds=ab.ausstellungs_datum; if(ds){ var diff=(new Date(e.datum)-new Date(ds))/86400000; if(diff< -3||diff>90) return false; }
+      return true;
+    });
+    if(cand.length===1) return { typ:'AUFTRAGGEBER+BETRAG', konfidenz:90, belege:cand, sumAusz:_mev6Ausz(cand[0]), delta:_mev6Round(_mev6Ausz(cand[0])-betrag), ustNote:'' };
+    if(cand.length>1)  return { typ:'MEHRDEUTIG', konfidenz:50, belege:cand, sumAusz:0, delta:null, ustNote:cand.length+' Studio-Belege passen auf den Betrag' };
+    return { typ:'KEIN-MATCH', konfidenz:0, belege:[], sumAusz:0, delta:null, ustNote:'' };
+  }
+
+  // ----- 1 Beleg -----
+  if(pool.length===1){
+    var a=_mev6Ausz(pool[0]), d=_mev6Round(a-betrag);
+    return { typ:(Math.abs(d)<=0.50?'GS-NR':'GS-NR-DIFF'), konfidenz:(Math.abs(d)<=0.50?100:60),
+             belege:pool, sumAusz:a, delta:d, ustNote:_mev6UstNote(pool) };
+  }
+
+  // ----- mehrere Belege -----
+  var sumAll=_mev6Round(pool.reduce(function(s,ab){return s+_mev6Ausz(ab);},0));
+  if(Math.abs(sumAll-betrag)<=0.50)
+    return { typ:'GS-NR-SAMMEL', konfidenz:100, belege:pool, sumAusz:sumAll, delta:_mev6Round(sumAll-betrag), ustNote:_mev6UstNote(pool) };
+  var sub=_mev6Subset(pool, betrag);
+  if(sub){ var ss=_mev6Round(sub.reduce(function(s,ab){return s+_mev6Ausz(ab);},0));
+    return { typ:'GS-NR-SAMMEL-SUB', konfidenz:95, belege:sub, sumAusz:ss, delta:_mev6Round(ss-betrag), ustNote:_mev6UstNote(sub) };
+  }
+  return { typ:'GS-NR-FEHLBETRAG', konfidenz:40, belege:pool, sumAusz:sumAll, delta:_mev6Round(sumAll-betrag),
+           ustNote:'VZ-Liste evtl. unvollständig — Summe weicht ab' };
+}
+function _mev6UstNote(belege){
+  var s7=0,s19=0;
+  belege.forEach(function(ab){ var r=parseFloat(ab.ust_satz)||0; if(r>=0.15) s19++; else s7++; });
+  if(s19&&s7) return '⚠ gemischt: '+s7+'×7% / '+s19+'×19%';
+  return s19? (s19+'× 19%') : (s7+'× 7%');
+}
+
+/* READ-ONLY Diagnose-Overlay */
+function MEV6run(){
+  var eing=_mev6Eingaenge();
+  if(!eing.length){ if(typeof showToast==='function') showToast('Kein Holvi-Auszug geladen'); return; }
+  var rows=eing.slice().sort(function(a,b){return (a.datum||'')<(b.datum||'')?-1:1;}).map(function(e){
+    var r=_mev6Resolve(e); r._e=e; return r;
+  });
+  var cnt={};
+  rows.forEach(function(r){ cnt[r.typ]=(cnt[r.typ]||0)+1; });
+  var col=function(t,kf,delta){
+    if(t==='GS-NR'||t==='GS-NR-SAMMEL'||t==='GS-NR-SAMMEL-SUB'||t==='AUFTRAGGEBER+BETRAG') return '#16a34a';
+    if(t==='BELEG-LUECKE') return '#ea580c';
+    if(t==='KLASSE2'||t==='KLASSE4') return '#2563eb';
+    if(t==='PRIVAT'||t==='BANK') return '#9ca3af';
+    if(t==='GVL') return '#7c3aed';
+    if(t==='KEIN-MATCH') return '#dc2626';
+    return '#d97706'; // Warn
+  };
+  var head='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+  Object.keys(cnt).forEach(function(t){ head+='<span style="font-size:11px;font-weight:700;color:#fff;background:'+col(t)+';padding:3px 8px;border-radius:10px">'+t+' '+cnt[t]+'</span>'; });
+  head+='</div>';
+  var body='';
+  rows.forEach(function(r){
+    var e=r._e, c=col(r.typ);
+    var bel=r.belege.map(function(ab){return ab.beleg_nr;}).join(', ');
+    var deltaTxt=(r.delta===null)?'':(' · Δ '+(r.delta>0?'+':'')+r.delta.toFixed(2)+'€');
+    body+='<div style="border-left:3px solid '+c+';background:#fafafa;border-radius:6px;padding:8px 10px;margin-bottom:6px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#555">'
+        +'<span>'+(e.datum||'?')+' · '+(e.gegenpartei||'').substr(0,30)+'</span>'
+        +'<span style="font-weight:700">'+(parseFloat(e.betrag)||0).toFixed(2)+' €</span></div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+c+';margin:3px 0">'+r.typ+(r.konfidenz!=='—'?(' ('+r.konfidenz+(typeof r.konfidenz==='number'?'%':'')+')'):'')+deltaTxt+'</div>'
+      +(bel?('<div style="font-size:11px;color:#333;font-family:monospace">'+bel+'</div>'):'')
+      +(r.ustNote?('<div style="font-size:10px;color:#777;margin-top:2px">'+r.ustNote+'</div>'):'')
+      +'</div>';
+  });
+  var ov=document.createElement('div');
+  ov.id='mev6-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 0';
+  ov.innerHTML='<div style="background:#fff;margin:24px 12px;border-radius:14px;display:flex;flex-direction:column;max-height:90vh;overflow:hidden">'
+    +'<div style="padding:14px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center">'
+      +'<div><div style="font-weight:800;font-size:15px">Match-Engine v6 · Diagnose</div>'
+      +'<div style="font-size:11px;color:#999">read-only · schreibt nichts · '+rows.length+' Eingänge</div></div>'
+      +'<div onclick="var o=document.getElementById(\'mev6-ov\');o&&o.remove()" style="font-size:26px;color:#999;cursor:pointer;line-height:1">&times;</div></div>'
+    +'<div style="padding:14px 16px;overflow:auto">'+head+body+'</div></div>';
+  document.body.appendChild(ov);
+  try{ console.table(rows.map(function(r){return {datum:r._e.datum,betrag:r._e.betrag,gegen:r._e.gegenpartei,typ:r.typ,konf:r.konfidenz,belege:r.belege.map(function(a){return a.beleg_nr;}).join(','),delta:r.delta};})); }catch(x){}
+}
 
 </script>
 
