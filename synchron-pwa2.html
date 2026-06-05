@@ -448,8 +448,6 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="exportData()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">💾</div><div class="sr-label">JSON-Backup exportieren</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="document.getElementById('backup-import-input').click()"><div class="sr-left"><div class="sr-icon" style="background:#e8f4fd">📂</div><div class="sr-label">JSON-Backup importieren</div></div><div class="sr-right">›</div></div>
       <input type="file" id="backup-import-input" accept=".json" style="display:none" onchange="importData(this)">
-      <div class="settings-row" onclick="document.getElementById('holvi-import-input').click()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Holvi-Kontoauszug importieren</div></div><div class="sr-right" id="holvi-import-status">›</div></div>
-      <input type="file" id="holvi-import-input" accept=".xlsx,.xls" style="display:none" onchange="holviImport(this)">
       <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">🛡</div><div class="sr-label">Sozialabgaben (KV/RV/PV)</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div class="sr-icon" style="background:#fef9c3">📋</div><div class="sr-label">Jahresabschluss</div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
@@ -849,7 +847,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Eingang &amp; Abgleich</div>
   </div>
   <div style="background:#fff;padding:12px 16px;display:flex;gap:8px;flex-shrink:0;border-bottom:2px solid #eee">
-    <div onclick="abHolviOpen()" style="flex:1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px;text-align:center;cursor:pointer">
+    <div onclick="switchView('holvi-abgleich')" style="flex:1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px;text-align:center;cursor:pointer">
       <div style="font-size:20px">&#127974;</div>
       <div style="font-size:11px;font-weight:700;color:#15803d;margin-top:2px">Holvi CSV Import</div>
     </div>
@@ -1000,7 +998,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   </div>
   <!-- Schnellzugriff-Buttons (nur bei Studio-Tab) -->
   <div id="zahl-toolbar" style="background:#f8f9fa;padding:8px 12px;display:flex;gap:8px;flex-shrink:0;border-bottom:1px solid #e5e7eb">
-    <div onclick="abHolviOpen()" style="flex:1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
+    <div onclick="switchView('holvi-abgleich')" style="flex:1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
       <div style="font-size:14px">🏦</div><div style="font-size:10px;font-weight:700;color:#15803d;margin-top:1px">Holvi</div>
     </div>
     <div onclick="switchView('ust-voranmeldung')" style="flex:1;background:#fdf2ff;border:1.5px solid #d8b4fe;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
@@ -3405,7 +3403,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '810';
+  if(el) el.textContent = '814';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8462,6 +8460,7 @@ function diagnoseGutschriften(){
       lines.push('     -> db.abrechn: '+dbMatch.length+'  dbv2: '+v2Match.length);
       v2Match.forEach(function(v){
         lines.push('       v2 beleg='+(v.beleg_nr||'-')+' brutto='+(v.brutto||0)
+          +' ausz='+(v.auszahlung!=null?v.auszahlung:'-')
           +' leist='+(v.leistungs_datum_von||'-')+' ausst='+(v.ausstellungs_datum||'-'));
       });
     });
@@ -21742,6 +21741,29 @@ function _mev6Copy(){
     navigator.clipboard.writeText(txt).then(done).catch(function(){ _mev6CopyFallback(txt, done); });
   } else { _mev6CopyFallback(txt, done); }
 }
+/* Build 812: Diagnose als .txt-Datei (iOS Share-Sheet, sonst Download) */
+function _mev6Download(txt, fn){
+  try{
+    var blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=fn;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ try{ document.body.removeChild(a); URL.revokeObjectURL(a.href); }catch(e){} }, 600);
+    if(typeof showToast==='function') showToast('Datei erstellt');
+  }catch(x){ if(typeof showToast==='function') showToast('Export nicht möglich'); }
+}
+function _mev6File(){
+  var txt=_mev6Text(window._mev6Last||[]);
+  var fn='match-diagnose-'+new Date().toISOString().slice(0,10)+'.txt';
+  try{
+    var file=new File([txt], fn, {type:'text/plain'});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      navigator.share({files:[file], title:'Match-Diagnose'}).catch(function(){ _mev6Download(txt, fn); });
+      return;
+    }
+  }catch(x){}
+  _mev6Download(txt, fn);
+}
 function MEV6run(){
   var eing=_mev6Eingaenge();
   if(!eing.length){ if(typeof showToast==='function') showToast('Kein Holvi-Auszug geladen'); return; }
@@ -21786,6 +21808,7 @@ function MEV6run(){
       +'<div style="font-size:11px;color:#999">read-only · schreibt nichts · '+rows.length+' Eingänge</div></div>'
       +'<div style="display:flex;align-items:center;gap:10px">'
         +'<button id="mev6-copybtn" onclick="_mev6Copy()" style="background:#eff6ff;border:1px solid #2563eb;color:#1d4ed8;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📋 Kopieren</button>'
+        +'<button onclick="_mev6File()" style="background:#ecfdf5;border:1px solid #059669;color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📄 Datei</button>'
         +'<div onclick="var o=document.getElementById(\'mev6-ov\');o&&o.remove()" style="font-size:26px;color:#999;cursor:pointer;line-height:1">&times;</div>'
       +'</div></div>'
     +'<div style="padding:14px 16px;overflow:auto">'+head+body+'</div></div>';
