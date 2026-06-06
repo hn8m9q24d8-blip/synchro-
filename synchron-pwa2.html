@@ -3407,7 +3407,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '825';
+  if(el) el.textContent = '826';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -21976,44 +21976,71 @@ function _mev7Buckets(){
 }
 function _mev7Text(){
   var by=_mev7Buckets();
-  var monate=Object.keys(by).sort();
-  var L=[]; L.push('═══ PHASE 7 · USt AUS BELEGEN (Ist-Versteuerung §20, ohne Vorsteuer) ═══'); L.push('');
+  var vst=_mev7Vorsteuer();
+  var monate=Object.keys(by).concat(_mev7ShowVst?Object.keys(vst):[])
+    .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
+  var L=[]; L.push('═══ PHASE 7 · USt AUS BELEGEN (Ist-Versteuerung §20'+(_mev7ShowVst?', mit Vorsteuer → Zahllast':', ohne Vorsteuer')+') ═══'); L.push('');
   monate.forEach(function(m){
-    var d=by[m]; var ds=d.u7+d.u19+d.k4;
+    var d=by[m]||{u7:0,u19:0,k4:0,n:0}; var ds=d.u7+d.u19+d.k4;
     L.push('── '+m+' ('+(d.n||0)+' Belege) ──');
-    L.push('  7%='+d.u7.toFixed(2)+'  19%='+d.u19.toFixed(2)+'  StudioHH='+d.k4.toFixed(2)+'  Σ='+ds.toFixed(2));
+    L.push('  USt  7%='+d.u7.toFixed(2)+'  19%='+d.u19.toFixed(2)+'  StudioHH='+d.k4.toFixed(2)+'  Σ='+ds.toFixed(2));
+    if(_mev7ShowVst){
+      var v=Math.round((vst[m]||0)*100)/100;
+      L.push('  − Vorsteuer='+v.toFixed(2)+'   = Zahllast='+(Math.round((ds-v)*100)/100).toFixed(2));
+    }
     L.push('');
   });
   return L.join('\n');
 }
+var _mev7ShowVst=false;
+/* Build 826: Vorsteuer pro Monat aus db.ausgaben (mwst = Vorsteuer aus dem Beleg).
+   Timing: Beleg-datum-Monat (Vorsteuerabzug = wenn Rechnung+Leistung vorliegen, NICHT Geldfluss). */
+function _mev7Vorsteuer(){
+  var by={};
+  (db.ausgaben||[]).forEach(function(a){
+    if(!a.datum) return;
+    var m=String(a.datum).slice(0,7);
+    by[m]=(by[m]||0)+(parseFloat(a.mwst)||0);
+  });
+  return by;
+}
 function MEV7run(){
   var by=_mev7Buckets();
-  var monate=Object.keys(by).sort();
+  var vst=_mev7Vorsteuer();
+  var monate=Object.keys(by).concat(_mev7ShowVst?Object.keys(vst):[])
+    .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
   var rows='';
   monate.forEach(function(m){
-    var d=by[m]; var ds=d.u7+d.u19+d.k4;
+    var d=by[m]||{u7:0,u19:0,k4:0,n:0}; var ds=d.u7+d.u19+d.k4;
+    var v=Math.round((vst[m]||0)*100)/100; var zl=Math.round((ds-v)*100)/100;
     rows+='<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
         +'<span style="font-weight:800;font-size:13px;color:#111">'+m+'</span>'
-        +'<span style="font-weight:800;font-size:13px;color:#111">Σ '+ds.toFixed(2)+' €</span></div>'
+        +'<span style="font-weight:800;font-size:13px;color:#111">'+(_mev7ShowVst?('Zahllast '+zl.toFixed(2)+' €'):('Σ '+ds.toFixed(2)+' €'))+'</span></div>'
       +'<div style="font-size:11px;color:#444;font-family:monospace;line-height:1.6">'
-        +'7%='+d.u7.toFixed(2)+' · 19%='+d.u19.toFixed(2)+' · Studio&nbsp;HH='+d.k4.toFixed(2)+' · '+d.n+' Belege'
+        +'USt 7%='+d.u7.toFixed(2)+' · 19%='+d.u19.toFixed(2)+' · Studio&nbsp;HH='+d.k4.toFixed(2)+' · <b>Σ '+ds.toFixed(2)+'</b>'
+        +(_mev7ShowVst?('<br><span style="color:#b45309">− Vorsteuer '+v.toFixed(2)+'</span> · <b style="color:#111">= Zahllast '+zl.toFixed(2)+'</b>'):'')
       +'</div></div>';
   });
   if(!rows) rows='<div style="color:#999;font-size:12px;padding:8px">Noch keine verankerten Belege.</div>';
+  var vstBtn='<button onclick="_mev7ShowVst=!_mev7ShowVst;MEV7run();" style="background:'+(_mev7ShowVst?'#fff7ed':'#f3f4f6')+';border:1px solid '+(_mev7ShowVst?'#f59e0b':'#d1d5db')+';color:'+(_mev7ShowVst?'#b45309':'#374151')+';font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">'+(_mev7ShowVst?'− Vorsteuer aus':'+ Vorsteuer / Zahllast')+'</button>';
+  var note=_mev7ShowVst
+    ? 'Zahllast = USt aus Einnahmen − Vorsteuer. Vorsteuer pro Beleg-Monat aus db.ausgaben (mwst). Nur so vollständig wie die erfassten Ausgaben — eine Zahllast ist erst belastbar, wenn alle Ausgaben des Monats eingepflegt sind.'
+    : 'Σ = USt aus Einnahmen pro Geldeingangs-Monat (Ist-Versteuerung §20 UStG), ohne Vorsteuer. Eigenständig aus den Belegen (ust_betrag) berechnet.';
   var old=document.getElementById('mev7-ov'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='mev7-ov';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
   ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:560px;width:100%;margin:auto;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.3)">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
       +'<div><div style="font-weight:800;font-size:15px">Phase 7 · USt aus Belegen</div>'
-      +'<div style="font-size:11px;color:#999">Ist-Versteuerung §20 · ohne Vorsteuer · read-only</div></div>'
-      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-        +'<button onclick="_mev6Download(_mev7Text(),\'ust-vergleich.txt\')" style="background:#ecfdf5;border:1px solid #059669;color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📄 Datei</button>'
+      +'<div style="font-size:11px;color:#999">Ist-Versteuerung §20 · '+(_mev7ShowVst?'mit Vorsteuer → Zahllast':'ohne Vorsteuer')+' · read-only</div></div>'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        +vstBtn
+        +'<button onclick="_mev6Download(_mev7Text(),\'ust-phase7.txt\')" style="background:#ecfdf5;border:1px solid #059669;color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📄 Datei</button>'
         +'<div onclick="var o=document.getElementById(\'mev7-ov\');if(o)o.remove();" style="font-size:24px;color:#999;cursor:pointer;line-height:1;padding:0 4px">&times;</div>'
       +'</div></div>'
     +rows
-    +'<div style="font-size:10px;color:#999;margin-top:6px">Σ = USt aus Einnahmen pro Geldeingangs-Monat (Ist-Versteuerung §20 UStG), ohne Vorsteuer. Eigenständig aus den Belegen (ust_betrag) berechnet. Vollständig erst, wenn alle Konten erfasst sind (Haspa/K2/K4).</div>'
+    +'<div style="font-size:10px;color:#999;margin-top:6px">'+note+'</div>'
     +'</div>';
   ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
   document.body.appendChild(ov);
