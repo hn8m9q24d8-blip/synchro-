@@ -752,6 +752,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       📂 Excel
       <input type="file" accept=".xlsx,.xls" style="display:none" onchange="holviAbgleichLoad(this)">
     </label>
+    <label style="color:#fff;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.2);border-radius:8px;padding:6px 10px;white-space:nowrap;margin-left:6px">
+      🏦 Haspa
+      <input type="file" accept=".csv,.txt" style="display:none" onchange="haspaAbgleichLoad(this)">
+    </label>
   </div>
   <div class="scroll" id="holvi-abgleich-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
@@ -3403,7 +3407,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '823';
+  if(el) el.textContent = '824';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18108,7 +18112,8 @@ function holviAbgleichLoad(inp){
           gegenpartei: String(r[4]||'').trim(),
           nachricht: String(r[7]||'').trim(),
           bestaetigt: false,
-          zahlungsId: String(r[8]||'').trim()
+          zahlungsId: String(r[8]||'').trim(),
+          quelle: 'holvi'
         };
       });
       if(!eingaenge.length){ showToast('Keine Zahlungseingänge gefunden'); return; }
@@ -18127,7 +18132,7 @@ function holviAbgleichLoad(inp){
       eingaenge = eingaenge.filter(function(e){
         return !e.bestaetigt || (e.datum||'') >= _cutoffISO;
       });
-      db.holviAbgleich = eingaenge;
+      db.holviAbgleich = (db.holviAbgleich||[]).filter(function(x){ return x.quelle==='haspa'; }).concat(eingaenge);
       save(db);
       _updateHolviAbgleichBadge();
       rHolviAbgleich();
@@ -18135,6 +18140,72 @@ function holviAbgleichLoad(inp){
     } catch(ex){ showToast('Fehler: '+ex.message); }
   };
   reader.readAsArrayBuffer(file);
+}
+
+/* === BUILD 824: Haspa-Import (Sparkassen-CAMT-CSV) ===
+   Parst die Sparkassen-CSV und legt die Eingänge in dieselbe db.holviAbgleich-Liste
+   wie Holvi (gleiche Form + quelle:'haspa'), damit beide Konten durch dieselbe
+   Match→Anker-Pipeline laufen. Quellen-bewusster Merge: ersetzt nur Haspa-Zeilen. */
+function _haspaCsvSplit(line){
+  var out=[], cur='', q=false;
+  for(var i=0;i<line.length;i++){
+    var c=line.charAt(i);
+    if(q){ if(c==='"'){ if(line.charAt(i+1)==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"') q=true; else if(c===';'){ out.push(cur); cur=''; } else cur+=c; }
+  }
+  out.push(cur); return out;
+}
+function _haspaDat(s){
+  s=String(s||'').trim();
+  var m=s.match(/^(\d{2})\.(\d{2})\.(\d{2,4})$/);
+  if(!m) return '';
+  var y=m[3]; if(y.length===2) y='20'+y;
+  return y+'-'+m[2]+'-'+m[1];
+}
+function _haspaBetrag(s){
+  s=String(s||'').trim().replace(/\./g,'').replace(',','.');
+  var n=parseFloat(s); return isNaN(n)?0:n;
+}
+function haspaAbgleichLoad(inp){
+  var file=inp.files[0]; if(!file){ return; } inp.value='';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var text=String(e.target.result||'');
+      var lines=text.split(/\r\n|\n|\r/).filter(function(l){ return l.trim().length; });
+      var hIdx=lines.findIndex(function(l){ return l.indexOf('Valutadatum')>=0 && l.indexOf('Betrag')>=0; });
+      if(hIdx<0){ showToast('⚠ Kein Sparkassen-CSV-Format erkannt'); return; }
+      var header=_haspaCsvSplit(lines[hIdx]).map(function(h){ return String(h).trim(); });
+      function col(name){ return header.indexOf(name); }
+      var iDat=col('Valutadatum'), iBet=col('Betrag'),
+          iGeg=col('Beguenstigter/Zahlungspflichtiger'),
+          iVz=col('Verwendungszweck'), iRef=col('Kundenreferenz (End-to-End)');
+      if(iDat<0||iBet<0||iGeg<0||iVz<0){ showToast('⚠ Spalten fehlen (Valutadatum/Betrag/Beguenstigter/Verwendungszweck)'); return; }
+      var neu=[];
+      lines.slice(hIdx+1).forEach(function(l){
+        var r=_haspaCsvSplit(l);
+        var betrag=_haspaBetrag(r[iBet]);
+        if(!(betrag>0)) return;                 // nur Eingänge
+        var datum=_haspaDat(r[iDat]);
+        var geg=String(r[iGeg]||'').trim();
+        var vz=String(r[iVz]||'').trim();
+        var ref=iRef>=0 ? String(r[iRef]||'').trim() : '';
+        var id=ref || ('haspa|'+datum+'|'+betrag.toFixed(2)+'|'+geg);  // deterministisch
+        neu.push({ id:id, datum:datum, betrag:betrag, gegenpartei:geg,
+                   nachricht:vz, bestaetigt:false, zahlungsId:id, quelle:'haspa' });
+      });
+      if(!neu.length){ showToast('Keine Haspa-Eingänge gefunden'); return; }
+      var vorher=(db.holviAbgleich||[]).reduce(function(m,x){ if(x.bestaetigt) m[x.zahlungsId||x.id]=true; return m; },{});
+      neu.forEach(function(x){ if(vorher[x.zahlungsId||x.id]) x.bestaetigt=true; });
+      var rest=(db.holviAbgleich||[]).filter(function(x){ return x.quelle!=='haspa'; });  // Holvi behalten
+      db.holviAbgleich = rest.concat(neu);
+      save(db);
+      _updateHolviAbgleichBadge();
+      rHolviAbgleich();
+      showToast('✓ '+neu.length+' Haspa-Eingänge geladen');
+    }catch(ex){ showToast('Fehler: '+ex.message); }
+  };
+  reader.readAsText(file);
 }
 
 function _holviAbgleichMatch(z){
