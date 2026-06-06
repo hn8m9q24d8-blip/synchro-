@@ -3407,7 +3407,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '824';
+  if(el) el.textContent = '825';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -21707,9 +21707,36 @@ function _mev6Subset(belege, ziel){
 }
 
 /* Kern: ein Eingang → {typ, konfidenz, belege:[], sumAusz, delta, ustNote} */
+/* Build 825: K4-Resolver (Studio Hamburg). Bindet einen SH-Bank-Eingang an den
+   richtigen K4-Beleg. Priorität auszahlung > |saldo_bereits_erhalten| > saldo_folgemonat.
+   Überholte Belege (_ueberholt_durch) werden NIE Ziel — die Korrektur-Fassung gewinnt.
+   So landen beide März-Raten (424,98 + 326,63) auf dem korrigierten 856er-Beleg. */
+function _mev6K4Match(e){
+  var betr=parseFloat(e.betrag)||0;
+  var near=function(v){ return v!=null && v!=='' && Math.abs((parseFloat(v)||0)-betr)<=0.50; };
+  var k4=_mev6Belege().filter(function(ab){ return String(ab.klasse)==='4' && !ab._ueberholt_durch; });
+  var byAusz=k4.filter(function(ab){ return near(ab.auszahlung); });
+  if(byAusz.length===1) return {beleg:byAusz[0], via:'auszahlung'};
+  var byBer =k4.filter(function(ab){ return near(Math.abs(parseFloat(ab.saldo_bereits_erhalten)||0)); });
+  if(byBer.length===1) return {beleg:byBer[0], via:'saldo_bereits_erhalten'};
+  var byFol =k4.filter(function(ab){ return near(ab.saldo_folgemonat); });
+  if(byFol.length===1) return {beleg:byFol[0], via:'saldo_folgemonat'};
+  var all=byAusz.concat(byBer,byFol).filter(function(v,i,s){return s.indexOf(v)===i;});
+  return {beleg:null, cands:all};
+}
 function _mev6Resolve(e){
   var k=_mev6Classify(e);
-  if(k) return { typ:k, konfidenz:(k==='KLASSE2'||k==='KLASSE4'||k==='GVL'?'deferred':'—'), belege:[], sumAusz:0, delta:null, ustNote:'' };
+  if(k==='KLASSE4'){
+    var km=_mev6K4Match(e);
+    if(km.beleg){
+      var lm=km.beleg.leistungs_monat||'?';
+      return { typ:'KLASSE4', konfidenz:90, belege:[km.beleg], sumAusz:parseFloat(e.betrag)||0, delta:null,
+               ustNote:'K4 '+lm+' · brutto '+(km.beleg.brutto)+' · via '+km.via };
+    }
+    return { typ:'KLASSE4', konfidenz:'deferred', belege:[], sumAusz:0, delta:null,
+             ustNote:(km.cands&&km.cands.length?('mehrdeutig: '+km.cands.length+' K4-Belege'):'kein passender K4-Beleg') };
+  }
+  if(k) return { typ:k, konfidenz:(k==='KLASSE2'||k==='GVL'?'deferred':'—'), belege:[], sumAusz:0, delta:null, ustNote:'' };
 
   var belege=_mev6Belege();
   var byNr={}; belege.forEach(function(ab){ if(ab.beleg_nr) (byNr[ab.beleg_nr]=byNr[ab.beleg_nr]||[]).push(ab); });
@@ -21934,13 +21961,15 @@ function _mev7Buckets(){
   var by={};
   (dbv2.abrechnungen||[]).forEach(function(a){
     if(!a.zahlungs_datum) return;
+    if(a._ueberholt_durch) return;            // Build 825: überholte K4-Korrektur nie zählen
     var m=String(a.zahlungs_datum).slice(0,7);
     if(!by[m]) by[m]={u7:0,u19:0,k4:0,n:0};
-    var ust=parseFloat(a.ust_betrag)||0;
-    var satz=parseFloat(a.ust_satz)||0;
-    if(String(a.klasse)==='4') by[m].k4+=ust;
-    else if(satz>=0.13)        by[m].u19+=ust;
-    else                       by[m].u7+=ust;
+    var ust=parseFloat(a.ust_betrag);
+    if(String(a.klasse)==='4'){
+      if(!(ust>0)) ust=Math.round((parseFloat(a.brutto)||0)*0.07*100)/100;  // K4: 7% auf brutto (Konto 996)
+      by[m].k4+=ust;
+    } else if((parseFloat(a.ust_satz)||0)>=0.13){ by[m].u19+=(ust||0); }
+    else { by[m].u7+=(ust||0); }
     by[m].n++;
   });
   return by;
