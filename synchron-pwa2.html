@@ -3407,7 +3407,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '826';
+  if(el) el.textContent = '827';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3710,8 +3710,22 @@ function tCard(t){
   var folge=dispoDok&&dispoDok.gvl_episode_header||t.gvl_folge||t.episode||'';
   var produktion=dispoDok&&dispoDok.produktion||t.produktion||'';
 
-  var hasZahlung=!!(t.status==='bezahlt'||t.zahlungDatum||
-    (db.zahlungen||[]).find(function(z){return z.terminId===t.id;}));
+  // Build 827 · Cutover Schritt 1: Termin-Ampel liest den dbv2-Anker.
+  // Auf dem v2-Pfad (Junction vorhanden) entscheidet zahlungs_datum:
+  //   gesetzt → bezahlt (grün), sonst → abgerechnet (orange).
+  // Ohne v2-Beleg bleibt die alte Legacy-Logik (t.status) als Sicherheitsnetz.
+  var v2Stat=null;
+  if(v2view && v2view.quelle==='v2'){
+    v2Stat = (v2view.ab && v2view.ab.zahlungs_datum) ? 'bezahlt' : 'abrechnung';
+  }
+  var ampelStatus = v2Stat || t.status;
+  if(t.status!=='storno'){
+    sc = ampelStatus==='bezahlt' ? '#43a047'
+       : (ampelStatus==='ausstehend'||ampelStatus==='abrechnung') ? '#fb8c00'
+       : '#e53935';
+  }
+  var hasZahlung = (ampelStatus==='bezahlt') ||
+    (!v2Stat && !!(t.zahlungDatum || (db.zahlungen||[]).find(function(z){return z.terminId===t.id;})));
 
   // Ampel-Dots: Dispo=rot, Abrechnung=gelb, Zahlung=grün
   var ampelDots='';
@@ -3771,7 +3785,7 @@ function tCard(t){
     +'<div class="t-chips">'
     +(t.uhrzeit?'<span class="chip chip-time">'+esc(t.uhrzeit)+' Uhr</span>':'')
     +(t.rolle?'<span style="background:var(--leaf3);color:var(--leaf);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">'+esc(t.rolle)+'</span>':'')
-    +tlabel(t.status)
+    +tlabel(ampelStatus)
     +'</div>'
     +extraLines
     +ampelDots
