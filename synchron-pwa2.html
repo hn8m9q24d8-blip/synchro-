@@ -3407,7 +3407,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '827';
+  if(el) el.textContent = '829';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3773,6 +3773,11 @@ function tCard(t){
     }
   }
 
+  // Build 829: Mit-grün-Tag (nur_anzeige) → Hinweis statt Betrag
+  if(v2view && v2view.quelle==='v2' && v2view.junction && v2view.junction.nur_anzeige){
+    extraLines+='<div style="font-size:11px;color:#15803d;margin-top:2px;font-weight:600">↳ mitabgerechnet</div>';
+  }
+
   var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
   var monthShort=d?monthNames2[d.getMonth()]:'';
   return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')" style="'+multiStyle+'">'
@@ -4087,7 +4092,18 @@ function openDetail(id){
     (db._archivLog && db._archivLog.find(function(e){
       return e.terminId===id && (e.typ==='abrechn'||e.typ==='monats_abrechn');
     })));
-  var hasZahlung=!!(zahlung||t.status==='bezahlt');
+  // Build 828 · Cutover: Zahlungs-Ampel im Detail liest dbv2-Anker (Legacy als Fallback).
+  var _payView=null; try { _payView=v2TerminView(id); } catch(e){}
+  var _payAb=(_payView && _payView.quelle==='v2' && _payView.ab) ? _payView.ab : null;
+  var _bezahltV2=!!(_payAb && _payAb.zahlungs_datum);
+  var _zg=(_payAb && _payAb.zahlungsgruppe_id)
+            ? (dbv2.zahlungsgruppen||[]).find(function(g){return g.id===_payAb.zahlungsgruppe_id;}) : null;
+  var _bankQuelle='';
+  if(_zg){
+    var _be=(db.holviAbgleich||[]).find(function(e){return (e.zahlungsId||e.id)===_zg.eingang_id;});
+    _bankQuelle=_be ? (_be.quelle==='haspa'?'Haspa':_be.quelle==='holvi'?'Holvi':(_be.quelle||'')) : '';
+  }
+  var hasZahlung=_bezahltV2 || !!(zahlung||t.status==='bezahlt');
 
   var dpScroll=document.getElementById('dp-scroll');
   if(!dpScroll)return;
@@ -4104,10 +4120,20 @@ function openDetail(id){
       +'</div>';
   }
   var zahlungDatumLabel = [];
-  if(t.zahlungDatum) zahlungDatumLabel.push('Eingegangen: '+t.zahlungDatum.split('-').reverse().join('.'));
-  else if(zahlung&&zahlung.datum) zahlungDatumLabel.push('Eingegangen: '+zahlung.datum.split('-').reverse().join('.'));
-  if(t.gutschrift_nr) zahlungDatumLabel.push('Gutschrift-Nr.: '+t.gutschrift_nr);
-  else if(zahlung&&zahlung.betrag) zahlungDatumLabel.push(fmtEur(zahlung.betrag)+' eingegangen');
+  if(_bezahltV2){
+    zahlungDatumLabel.push('Eingegangen: '+_payAb.zahlungs_datum.split('-').reverse().join('.'));
+    if(_zg){
+      zahlungDatumLabel.push(fmtEur(_zg.betrag)+' von '+(_zg.gegenpartei||'?'));
+      if(_bankQuelle) zahlungDatumLabel.push('Konto: '+_bankQuelle);
+      if(_zg.match_typ) zahlungDatumLabel.push('Match: '+_zg.match_typ);
+    }
+    if(_payAb.beleg_nr) zahlungDatumLabel.push('GS-Nr.: '+_payAb.beleg_nr);
+  } else {
+    if(t.zahlungDatum) zahlungDatumLabel.push('Eingegangen: '+t.zahlungDatum.split('-').reverse().join('.'));
+    else if(zahlung&&zahlung.datum) zahlungDatumLabel.push('Eingegangen: '+zahlung.datum.split('-').reverse().join('.'));
+    if(t.gutschrift_nr) zahlungDatumLabel.push('Gutschrift-Nr.: '+t.gutschrift_nr);
+    else if(zahlung&&zahlung.betrag) zahlungDatumLabel.push(fmtEur(zahlung.betrag)+' eingegangen');
+  }
 
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
     +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
@@ -4687,7 +4713,7 @@ function openDetail(id){
       +'</div>';
   }
 
-  dpScroll.innerHTML=mergeBanner+diffWarnHtml+ampel+header+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
+  dpScroll.innerHTML=mergeBanner+diffWarnHtml+ampel+header+_mitGruenCardHtml(id)+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
 
   // Gage-Mapping Vorschlag befüllen
   var gmHintEl = document.getElementById('gage-mapping-hint');
@@ -22005,6 +22031,100 @@ function _mev7Text(){
     L.push('');
   });
   return L.join('\n');
+}
+/* === BUILD 829: "Weiterer Aufnahmetag (nur grün)" ===
+   Markiert zusätzliche Termine als mit-abgerechnet: legt eine nur_anzeige-Junction
+   zum dbv2-Beleg des Wert-Tags an. KEIN Wert-Split — der volle Betrag bleibt am
+   Wert-Tag, USt zählt 1× (Phase 7 summiert pro Beleg). Der Zusatztag wird grün
+   (teilt den Anker) und zeigt nur den Hinweis "↳ mitabgerechnet", keinen Betrag. */
+function _mitGruenCardHtml(terminId){
+  var vv=null; try{ vv=v2TerminView(terminId); }catch(e){}
+  if(!vv || vv.quelle!=='v2') return '';
+  var j=vv.junction;
+  if(j && j.nur_anzeige){
+    var qt=j.nur_anzeige_quelle_termin ? (db.termine||[]).find(function(x){return x.id===j.nur_anzeige_quelle_termin;}) : null;
+    var qd=qt&&qt.datum?qt.datum.split('-').reverse().join('.'):'';
+    return '<div class="info-card"><div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+      +'<div style="font-size:12px;color:#15803d;font-weight:700">↳ mitabgerechnet'+(qd?' · '+qd:'')+'</div>'
+      +'<button type="button" onclick="terminMitGruenRemove(\''+terminId+'\')" style="background:#fff;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Entfernen</button>'
+      +'</div></div>';
+  }
+  if(vv.ab){
+    return '<div class="info-card"><div style="padding:10px 16px">'
+      +'<button type="button" onclick="terminMitGruenStart(\''+terminId+'\')" style="width:100%;background:#ecfdf5;color:#047857;border:1px solid #6ee7b7;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">➕ Weiterer Aufnahmetag (nur grün)</button>'
+      +'</div></div>';
+  }
+  return '';
+}
+function terminMitGruenStart(valueTerminId){
+  var vt=(db.termine||[]).find(function(x){return x.id===valueTerminId;});
+  var vv=null; try{ vv=v2TerminView(valueTerminId); }catch(e){}
+  if(!vt || !(vv&&vv.ab)){ showToast('Kein Beleg am Wert-Tag'); return; }
+  var base=vt.datum?new Date(vt.datum+'T00:00:00'):null;
+  var cands=(db.termine||[]).filter(function(t){
+    if(t.id===valueTerminId||!t.datum) return false;
+    if(base){ var diff=Math.abs(new Date(t.datum+'T00:00:00')-base)/(1000*60*60*24); if(diff>14) return false; }
+    var hatLink=(dbv2.abrechnung_termin_links||[]).some(function(l){return l.termin_id===t.id;});
+    return !hatLink;
+  }).sort(function(a,b){return a.datum<b.datum?-1:1;});
+  var rows='';
+  if(!cands.length){
+    rows='<div style="color:#999;font-size:12px;padding:10px">Keine freien Termine ±14 Tage gefunden (Termine mit eigener Abrechnung werden ausgeblendet).</div>';
+  } else {
+    cands.forEach(function(t){
+      rows+='<div onclick="terminMitGruenAdd(\''+valueTerminId+'\',\''+t.id+'\')" style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;cursor:pointer;background:#fff">'
+        +'<div style="font-weight:700;font-size:13px">'+esc(t.titel||'(ohne Titel)')+'</div>'
+        +'<div style="font-size:11px;color:#999">'+(t.datum?t.datum.split('-').reverse().join('.'):'')+(t.uhrzeit?' · '+esc(t.uhrzeit):'')+(t.studio?' · '+esc(t.studio):'')+'</div>'
+        +'</div>';
+    });
+  }
+  var old=document.getElementById('mitgruen-ov'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='mitgruen-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:480px;width:100%;margin:auto;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.3)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div style="font-weight:800;font-size:15px">Weiterer Aufnahmetag</div>'
+      +'<div onclick="var o=document.getElementById(\'mitgruen-ov\');if(o)o.remove();" style="font-size:24px;color:#999;cursor:pointer;padding:0 4px">&times;</div></div>'
+    +'<div style="font-size:11px;color:#777;margin-bottom:10px">Wird grün markiert (mitabgerechnet) — ohne eigenen Betrag. Der volle Wert bleibt am Wert-Tag.</div>'
+    +rows
+    +'</div>';
+  ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+function terminMitGruenAdd(valueTerminId, extraTerminId){
+  var vv=null; try{ vv=v2TerminView(valueTerminId); }catch(e){}
+  if(!(vv&&vv.ab)){ showToast('Kein Beleg am Wert-Tag'); return; }
+  if(!dbv2.abrechnung_termin_links) dbv2.abrechnung_termin_links=[];
+  var abId=vv.ab.id;
+  if(dbv2.abrechnung_termin_links.some(function(l){return l.abrechnung_id===abId && l.termin_id===extraTerminId;})){
+    showToast('Schon verknüpft'); return;
+  }
+  pushSnapshotVorAktion();
+  dbv2.abrechnung_termin_links.push({
+    id:_v2uuid('lnk'), abrechnung_id:abId, termin_id:extraTerminId,
+    brutto_anteil_display:null, grundgage_anteil:null, takegage_anteil:null,
+    takes_anteil:null, tarif_erkannt:null, berechnung_check:null,
+    datum_ambiguitaet:false, buchungskonto:null,
+    nur_anzeige:true, nur_anzeige_quelle_termin:valueTerminId,
+    notiz:'mitabgerechnet', erstellt_am:new Date().toISOString()
+  });
+  logAction('mitgruen_add','Aufnahmetag mit-grün markiert', {abId:abId, terminId:extraTerminId});
+  saveV2(dbv2); save(db);
+  var o=document.getElementById('mitgruen-ov'); if(o) o.remove();
+  showToast('✓ Tag mit-grün markiert');
+  openDetail(valueTerminId);
+}
+function terminMitGruenRemove(extraTerminId){
+  if(!dbv2.abrechnung_termin_links) return;
+  var weg=dbv2.abrechnung_termin_links.filter(function(l){return l.termin_id===extraTerminId && l.nur_anzeige;});
+  if(!weg.length){ showToast('Nichts zu entfernen'); return; }
+  pushSnapshotVorAktion();
+  var quelle=weg[0].nur_anzeige_quelle_termin;
+  dbv2.abrechnung_termin_links=dbv2.abrechnung_termin_links.filter(function(l){ return !(l.termin_id===extraTerminId && l.nur_anzeige); });
+  logAction('mitgruen_remove','Mit-grün-Markierung entfernt', {terminId:extraTerminId});
+  saveV2(dbv2); save(db);
+  showToast('✓ Markierung entfernt');
+  openDetail(quelle||extraTerminId);
 }
 var _mev7ShowVst=false;
 /* Build 826: Vorsteuer pro Monat aus db.ausgaben (mwst = Vorsteuer aus dem Beleg).
