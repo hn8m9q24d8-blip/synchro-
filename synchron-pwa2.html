@@ -3407,7 +3407,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '829';
+  if(el) el.textContent = '830';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -17605,6 +17605,34 @@ function rUstVoranmeldung(){
       // Termin wird in Voranmeldung als "ohne Abrechnung" übersprungen
     }
   });
+
+  // ── Build 830 · Cutover Schritt 2: Einnahmen-USt aus dbv2-Anker ──────────
+  // Ersetzt die Legacy-Termin-Schleife oben: gleiche Quelle wie Phase 7
+  // (ust_betrag pro dbv2-Beleg mit zahlungs_datum im Monat, _ueberholt_durch raus,
+  //  K4-Fallback brutto×0,07). Validiert cent-genau gegen die eingereichten Werte.
+  einnNetto=0; einnUstEcht=0; einnUstBerechnet=0; einnZeilen=[];
+  (function(){
+    var v2abs=(typeof dbv2!=='undefined' && dbv2.abrechnungen)||[];
+    var abrIdx={}; ((dbv2&&dbv2.abrechner)||[]).forEach(function(r){ abrIdx[r.id]=r; });
+    v2abs.forEach(function(a){
+      var zd=a.zahlungs_datum;
+      if(!zd || zd.slice(0,7)!==ym || a._ueberholt_durch) return;
+      var brutto=parseFloat(a.brutto)||0;
+      var ust=parseFloat(a.ust_betrag)||0;
+      if(String(a.klasse)==='4' && !ust) ust=Math.round(brutto*0.07*100)/100;
+      var satz=a.ust_satz||0; satz=(Math.abs(satz-0.19)<0.02)?0.19:0.07;
+      einnNetto+=brutto; einnUstEcht+=ust;
+      var r=abrIdx[a.abrechner_id];
+      var nm=r?(r.name||r.anzeigename||''):'';
+      var lbl=nm?(a.beleg_nr?nm+' · '+a.beleg_nr:nm):(a.beleg_nr||'(Beleg)');
+      einnZeilen.push({
+        label: esc(lbl),
+        sub: (String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||'')),
+        zahlDatum: zd, netto: brutto, ust: ust, ust_satz: satz
+      });
+    });
+    einnZeilen.sort(function(x,y){ return x.zahlDatum<y.zahlDatum?-1:1; });
+  })();
 
   var einnUst = Math.round((einnUstEcht + einnUstBerechnet)*100)/100;
 
