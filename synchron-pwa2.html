@@ -3407,7 +3407,9 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  if(el) el.textContent = '830';
+  // Build 834: Umklassifizieren zu "Gagenabrechnung" bestätigt direkt mit (kein
+  // zweiter Klick) — läuft sofort durch bis Jahresübersicht. Andere Typen unverändert.
+  if(el) el.textContent = '834';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4109,12 +4111,14 @@ function openDetail(id){
   if(!dpScroll)return;
 
   // ── AMPEL (kompakt) ────────────────────────────────────────
-  function ampelDot(label, ok, farbe, dateinamen){
+  function ampelDot(label, ok, farbe, dateinamen, customOnclick){
     var bg=ok?farbe:'#e5e7eb';
     var tc=ok?farbe:'#9ca3af';
     var clkAttr='';
-    if(ok&&dateinamen&&dateinamen.length) clkAttr=' onclick="showDateinamen(this)" data-namen="'+dateinamen.join('|')+'" data-label="'+label+'"';
-    return '<div style="display:flex;align-items:center;gap:5px;cursor:'+(ok&&dateinamen&&dateinamen.length?'pointer':'default')+'"'+clkAttr+'>'
+    var clickable = ok && (customOnclick || (dateinamen&&dateinamen.length));
+    if(ok && customOnclick) clkAttr=' onclick="'+customOnclick+'"';
+    else if(ok&&dateinamen&&dateinamen.length) clkAttr=' onclick="showDateinamen(this)" data-namen="'+dateinamen.join('|')+'" data-label="'+label+'"';
+    return '<div style="display:flex;align-items:center;gap:5px;cursor:'+(clickable?'pointer':'default')+'"'+clkAttr+'>'
       +'<div style="width:10px;height:10px;border-radius:50%;background:'+bg+'"></div>'
       +'<div style="font-size:11px;color:'+tc+';font-weight:'+(ok?'700':'400')+'">'+label+'</div>'
       +'</div>';
@@ -4138,8 +4142,7 @@ function openDetail(id){
   var ampel='<div style="display:flex;gap:12px;padding:8px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">'
     +ampelDot('Dispo',hasDispo,'#e53935',dispoDateinamen)
     +ampelDot('Abrechnung',hasAbrechn,'#f5c518',abDateinamen)
-    +ampelDot('Zahlung',hasZahlung,'#22c55e',zahlungDatumLabel)
-    +(hasZahlung&&t._holviZahlungsId?'<span onclick="holviAbgleichZeigeEintrag(\''+t._holviZahlungsId+'\')" style="font-size:9px;color:#16a34a;cursor:pointer;text-decoration:underline;display:block;margin-top:-2px;margin-left:2px">→ Holvi</span>':'')
+    +ampelDot('Zahlung',hasZahlung,'#22c55e',null,(hasZahlung?"showZahlungPopup('"+id+"')":''))
     +'</div>';
 
   // ── HEADER ─────────────────────────────────────────────────
@@ -6097,8 +6100,17 @@ function dokSetTyp(dokId, newTyp){
   d.bestaetigt=false;
   d.awaitConfirm=false;
   save(db);
-  rDokumente();
   document.querySelectorAll('[style*="z-index:3000"]').forEach(function(el){el.remove();});
+  // Build 834: Umklassifizieren zu Gagenabrechnung bestätigt direkt mit — kein
+  // zweiter Klick nötig. Nutzt den getesteten Bestätigungs-Weg (dokFooterBestaetigen
+  // → Konsolidierung → dbv2 → Jahresübersicht). Andere Typen (dispo/ausgabe) bleiben
+  // beim manuellen Bestätigen, da sie eigene Folgeschritte haben (z.B. Ausgaben-Formular).
+  if(newTyp==='abrechn'){
+    _dokCurrentId = dokId;
+    dokFooterBestaetigen();
+    return;
+  }
+  rDokumente();
   dokOpenDetail(dokId);
   showToast('✓ Typ geändert → Bitte neu bestätigen');
 }
@@ -12268,6 +12280,7 @@ function _dokImportAndAnalyse(files, katFn){
       db.dokumente.push({
         id:id, dateiname:file.name, mime:mime, dataURL:dataURL,
         typ: typHint||null,
+        _folderTyp: typHint||null,
         addedAt:new Date().toISOString(),
         beschr:null, datum:null, studio:null, terminId:null, ausgabeId:null
       });
@@ -13261,7 +13274,7 @@ function dokAnalyseDoc(d, key, cb){
       }
       txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
-      d.typ     = j.typ || 'sonstig';
+      d.typ     = _dokTypAufloesen(d, j.typ, j.gutschrift_nr);
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
       // Build 747: Ausstellungsdatum eigenes Feld (war bisher in d.datum mit Aufnahme
@@ -13661,7 +13674,7 @@ function dokAnalyseDoc(d, key, cb){
             _txt = _txt.slice(_s,_e+1);
             var _j = JSON.parse(_txt);
             // Felder direkt übernehmen (gleiche Logik wie _sendToAPI)
-            d.typ = _j.typ||'sonstig'; d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
+            d.typ = _dokTypAufloesen(d, _j.typ, _j.gutschrift_nr); d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
             d.ausstellungsdatum = _j.ausstellungsdatum||null; // Build 747
             d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
             // Build 787: SthH-Titel-Präfix ("Gage Synchronsprecher ...") abschneiden
@@ -22077,11 +22090,8 @@ function _mitGruenCardHtml(terminId){
       +'<button type="button" onclick="terminMitGruenRemove(\''+terminId+'\')" style="background:#fff;color:#c2410c;border:1.5px solid #fca5a5;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Entfernen</button>'
       +'</div></div>';
   }
-  if(vv.ab){
-    return '<div class="info-card"><div style="padding:10px 16px">'
-      +'<button type="button" onclick="terminMitGruenStart(\''+terminId+'\')" style="width:100%;background:#ecfdf5;color:#047857;border:1px solid #6ee7b7;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">➕ Weiterer Aufnahmetag (nur grün)</button>'
-      +'</div></div>';
-  }
+  // Build 832: separater "Weiterer Aufnahmetag"-Button entfernt — Mehrtages-Zuordnung
+  // läuft über die bestehende manuelle Mehrfach-Verknüpfung (📎 Dok verknüpfen).
   return '';
 }
 function terminMitGruenStart(valueTerminId){
@@ -22153,6 +22163,62 @@ function terminMitGruenRemove(extraTerminId){
   saveV2(dbv2); save(db);
   showToast('✓ Markierung entfernt');
   openDetail(quelle||extraTerminId);
+}
+/* === BUILD 831: Eigener Zahlungs-Popup (statt generischem Datei-Popup) ===
+   Zeigt Eingangsdatum, Betrag+Auftraggeber, Bank (Haspa/Holvi), Match, GS-Nr.
+   Bank-Inferenz: quelle 'haspa' → Haspa, sonst → Holvi (untagged Altbestand = Holvi;
+   Haspa-Import taggt immer, also kann untagged nie Haspa sein). Nur Anzeige, keine Datenänderung. */
+function showZahlungPopup(terminId){
+  var vv=null; try{ vv=v2TerminView(terminId); }catch(e){}
+  var ab=(vv&&vv.quelle==='v2'&&vv.ab)?vv.ab:null;
+  if(!ab||!ab.zahlungs_datum){ showToast('Kein verankerter Geldeingang'); return; }
+  var zg=ab.zahlungsgruppe_id ? (dbv2.zahlungsgruppen||[]).find(function(g){return g.id===ab.zahlungsgruppe_id;}) : null;
+  var bank='';
+  if(zg){
+    var be=(db.holviAbgleich||[]).find(function(e){return (e.zahlungsId||e.id)===zg.eingang_id;});
+    if(be) bank = (be.quelle==='haspa') ? 'Haspa' : 'Holvi';
+  }
+  var datum=ab.zahlungs_datum.split('-').reverse().join('.');
+  function row(key,val,copyVal){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:11px 12px;border-top:1px solid #f0f0f0">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:10px;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">'+esc(key)+'</div>'
+      +'<div style="font-size:14px;font-weight:700;color:#374151;word-break:break-word">'+esc(val)+'</div></div>'
+      +(copyVal?'<button type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+esc(copyVal).replace(/'/g,"\\'")+'\');showToast(\'Kopiert\')" style="flex-shrink:0;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">Kopieren</button>':'')
+      +'</div>';
+  }
+  var rows='';
+  rows+=row('Eingegangen', datum, null);
+  if(zg) rows+=row('Betrag', fmtEur(zg.betrag)+(zg.gegenpartei?' · '+zg.gegenpartei:''), (zg.betrag!=null?String(zg.betrag).replace('.',','):null));
+  if(bank) rows+=row('Konto', bank, null);
+  if(zg&&zg.match_typ) rows+=row('Match', zg.match_typ, null);
+  if(ab.beleg_nr) rows+=row('Gutschrift-Nr.', ab.beleg_nr, ab.beleg_nr);
+
+  var ov=document.createElement('div');
+  ov.id='zahlung-popup-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 36px;width:100%;max-width:480px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div style="font-size:15px;font-weight:800;color:#15803d">💶 Geldeingang</div>'
+      +'<div onclick="var o=document.getElementById(\'zahlung-popup-ov\');if(o)o.remove();" style="font-size:24px;color:#999;cursor:pointer;padding:0 6px">&times;</div>'
+    +'</div>'
+    +'<div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">'+rows.replace('border-top:1px solid #f0f0f0','border-top:none')+'</div>'
+    +'<button type="button" onclick="var o=document.getElementById(\'zahlung-popup-ov\');if(o)o.remove();" style="width:100%;margin-top:12px;background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>'
+    +'</div>';
+  ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+// Build 833: Dok-Typ-Auflösung — Ordner-Kategorie und Eigenrechnungs-Marker sind
+// autoritativ und dürfen NICHT von der KI-Vermutung überschrieben werden.
+//  - _folderTyp: aus dem Ordner-Import (z.B. Gagenabrechnungen → 'abrechn')
+//  - Dateiname "Rechnung_..." / "Rechnung ..." (NICHT "Abrechnung_...") → Eigenrechnung
+//  - GS-Nr im Format NN/YYYY → Eigenrechnung
+// So muss der User seine eigenen Rechnungen nie mehr manuell umklassifizieren.
+function _dokTypAufloesen(d, kiTyp, kiGs){
+  if(d && d._folderTyp) return d._folderTyp;
+  var fn = String((d&&d.dateiname)||'');
+  var gs = String(kiGs||(d&&d.gutschrift_nr)||'');
+  if(/^rechnung[ _\-]/i.test(fn) || /^r?\d{1,3}\/\d{4}$/.test(gs)) return 'abrechn';
+  return kiTyp || 'sonstig';
 }
 var _mev7ShowVst=false;
 /* Build 826: Vorsteuer pro Monat aus db.ausgaben (mwst = Vorsteuer aus dem Beleg).
