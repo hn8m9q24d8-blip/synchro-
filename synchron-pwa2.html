@@ -2529,10 +2529,19 @@ function _konsolidiereDokumentNachV2(dokId){
     v2Ab.leistungs_monat     = leistMonat;
     v2Ab.brutto              = brutto;
     v2Ab.ust_betrag          = mwst;
-    // Bei Synchron-Gutschriften: USt wird AUF Brutto aufgeschlagen → ust_basis = brutto
-    v2Ab.ust_basis           = brutto || null;
-    v2Ab.ust_satz            = (brutto && mwst!=null && mwst!==0)
-                               ? Math.round((mwst/brutto)*10000)/10000 : null;
+    // Build 835: USt-Basis & -Satz korrekt nach Beleg-Typ + Snapping auf gültige Sätze.
+    //  - Synchron-Gutschriften (K1/2/4): Feld "brutto" = Netto-Honorar (Bemessungsgrundlage),
+    //    USt wird aufgeschlagen → Basis = brutto.
+    //  - Eigenrechnung (K3): Feld "brutto" = echtes Brutto INKL. USt → Basis = Netto = brutto - USt.
+    //  Danach Satz auf 0 / 7% / 19% runden (in DE gibt es nur diese Sätze), Schwelle 0,13
+    //  wie in Phase 7 — so wird nie 15,97% statt 19% gespeichert. USt-Betrag bleibt
+    //  unverändert maßgeblich; Buckets/Summen ändern sich dadurch nicht.
+    var _ustBasis = (klasse==='3')
+        ? Math.round((brutto - (mwst||0))*100)/100
+        : (brutto || null);
+    v2Ab.ust_basis           = _ustBasis;
+    var _ustSatzRaw = (_ustBasis && mwst!=null && mwst!==0) ? (mwst/_ustBasis) : 0;
+    v2Ab.ust_satz            = (_ustSatzRaw<=0) ? null : (_ustSatzRaw>=0.13 ? 0.19 : 0.07);
     v2Ab.sv_kv_an            = kv;
     v2Ab.sv_rv_an            = rv;
     v2Ab.sv_pv_an            = pv;
@@ -3114,6 +3123,8 @@ function _autoKonsolidiereNachBestaetigen(dokId){
     console.error('[v2] Auto-Hook Fehler:', e);
     // Niemals Exception hochbubbeln — der alte Pfad soll weiterlaufen
   }
+  // Build 837: aktive Ansicht sofort auffrischen (Beleg ohne Umweg sichtbar)
+  try { _refreshNachKonsolidierung(); } catch(e){}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3407,9 +3418,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  // Build 834: Umklassifizieren zu "Gagenabrechnung" bestätigt direkt mit (kein
-  // zweiter Klick) — läuft sofort durch bis Jahresübersicht. Andere Typen unverändert.
-  if(el) el.textContent = '834';
+  // Build 839: "Einnahme ohne Termin" (Issue #20). Beim Bestätigen einer Abrechnung
+  // jetzt Option "🚫 Keinen Termin zuordnen" (GVL/Nachgage/Pauschale/Lizenz). Erzeugt
+  // einen dbv2-Beleg ohne Junction; USt zählt im Monat des Zahlungseingangs (Ist).
+  // Auto-Termin-Zuordnung wird dabei unterdrückt; rückgängig per "Doch Termin zuordnen".
+  if(el) el.textContent = '839';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3685,7 +3698,9 @@ function tCard(t){
           auszahlung:               v2view.istTeilVonSammel ? null : (v2view.ab && v2view.ab.auszahlung),
           _v2IstTeilVonSammel:      v2view.istTeilVonSammel,
           _v2AnzahlTermineInSammel: v2view.anzahlTermineInSammel,
-          _v2GesamtBrutto:          v2view.ab && v2view.ab.brutto
+          _v2GesamtBrutto:          v2view.ab && v2view.ab.brutto,
+          klasse:                   v2view.ab && v2view.ab.klasse,
+          ust_betrag:               (v2view.ab && v2view.ab.ust_betrag) || null
         };
       } else if(v2view.altAb){
         // Fallback aus altem db.abrechnungen (nur für Bestands-Daten vor v2-Umstieg)
@@ -3757,6 +3772,11 @@ function tCard(t){
     var billT=rawT>0&&rawT<10?10:rawT;
     var cardNet=(parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
     var abBrutto = parseFloat(ab.brutto)||0;
+    // Build 836: Klasse-3-Eigenrechnung — ab.brutto ist Brutto INKL. USt; mit Netto
+    // vergleichen (wie Detail-Ansicht, Build 799), sonst unechte USt-Differenz auf der Karte.
+    if(ab && ab.klasse==='3' && ab.ust_betrag){
+      abBrutto = Math.round((abBrutto - parseFloat(ab.ust_betrag||0))*100)/100;
+    }
     var diffBetrag = cardNet - abBrutto;
     var diffOk=Math.abs(diffBetrag)<0.02||ab._aufgeteiltN>0||ab._v2IstTeilVonSammel;
     var anteilLabel='';
@@ -12443,7 +12463,7 @@ function dokBestaetigen(){
       _senderAusGedaechtnis(t2); // Build 766: Sender aus Produktions-Gedächtnis
       if(d.typ==='abrechn'&&d.auszahlung){t2.abgerechnet=true;t2.abrechnungBrutto=parseFloat(d.auszahlung);}
     }
-  } else if(d.datum&&d.studio){
+  } else if(d.datum&&d.studio&&!d._keinTermin){
     var match=dokFindTermin(d.datum,d.studio);
     if(match){
       d.terminId=match.id;
@@ -14819,7 +14839,14 @@ function dokOpenDetail(id){
     } else {
 
     // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
-    if(termin){
+    if(d._keinTermin){
+      // Build 839: Beleg bewusst OHNE Termin (GVL-Ausschüttung, Nachgage, Pauschale, …)
+      body += '<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
+        + '<div style="font-size:11px;font-weight:800;color:#1d4ed8;margin-bottom:3px">🚫 Ohne Termin</div>'
+        + '<div style="font-size:12px;color:#374151">Wird als Einnahme ohne Termin gebucht — kein Aufnahmetermin nötig. USt zählt im Monat des Zahlungseingangs (Ist).</div>'
+        + '<button type="button" onclick="dokDochTerminZuordnen(\''+d.id+'\')" style="margin-top:8px;background:#fff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">↩︎ Doch Termin zuordnen</button>'
+        + '</div>';
+    } else if(termin){
       // Prüfen ob Termin bereits eine Dispo hat
       var terminHatDispo = !!(termin.dispoImg || (db.dokumente||[]).find(function(x){
         return x.terminId===termin.id && x.typ==='dispo' && x.bestaetigt;
@@ -14838,6 +14865,7 @@ function dokOpenDetail(id){
         + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:'+terminLabelColor+';color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
         + '</div>';
       body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:#f8fafc;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
+      body += '<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🚫 Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
       // Storno-Hinweis bei negativem Brutto
       if(parseFloat(d.brutto||0) < 0){
         body += '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 14px;margin-bottom:10px">'
@@ -14904,7 +14932,7 @@ function dokOpenDetail(id){
 
       if(vorschlaege.length){
         // Besten Vorschlag direkt zuordnen (wie dokFindTermin-Fallback)
-        if(!d.terminId){ d.terminId=vorschlaege[0].id; save(db); }
+        if(!d.terminId && !d._keinTermin){ d.terminId=vorschlaege[0].id; save(db); }
         body+='<div style="font-size:11px;font-weight:700;color:#c2410c;margin-bottom:8px">📅 PASSENDER TERMIN GEFUNDEN</div>';
         vorschlaege.forEach(function(tv){
           var diff3=d.datum?Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24):99;
@@ -14934,6 +14962,7 @@ function dokOpenDetail(id){
         +'<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="flex:1;background:#e5e7eb;color:#374151;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📅 Im Kalender suchen</button>'
         +'<button type="button" onclick="dokNewTerminAusDok(\''+d.id+'\')" style="flex:1;background:#e5e7eb;color:#374151;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
         +'</div>';
+      body+='<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🚫 Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
     }
     } // end else (nicht monats_abrechn)
 
@@ -22219,6 +22248,41 @@ function _dokTypAufloesen(d, kiTyp, kiGs){
   var gs = String(kiGs||(d&&d.gutschrift_nr)||'');
   if(/^rechnung[ _\-]/i.test(fn) || /^r?\d{1,3}\/\d{4}$/.test(gs)) return 'abrechn';
   return kiTyp || 'sonstig';
+}
+// Build 837: Nach einer Konsolidierung die aktuell sichtbare Ansicht sofort neu
+// zeichnen, damit ein bestätigter Beleg ohne Umweg (Reset/Tab-Wechsel) erscheint.
+function _refreshNachKonsolidierung(){
+  try{
+    var active = document.querySelector('.view.active');
+    var id = active ? active.id : '';
+    if(id==='view-ust-voranmeldung' && typeof rUstVoranmeldung==='function') rUstVoranmeldung();
+    else if(id==='view-buchhaltung' && typeof rBuchQuick==='function') rBuchQuick();
+    else if(id==='view-dokumente' && typeof rDokumente==='function') rDokumente();
+    else if(id==='view-termine' && typeof rTermine==='function') rTermine();
+  }catch(e){ console.warn('[refresh]', e); }
+}
+// Build 839: "Einnahme ohne Termin" (Issue #20) — Beleg bewusst ohne Aufnahmetermin
+// buchen (GVL-Ausschüttung, Nachgage, Pauschale, Lizenz). Setzt _keinTermin, löscht
+// jede (auto-)Termin-Zuordnung inkl. Session-terminIds → Konsolidierung erzeugt den
+// dbv2-Beleg ohne Junction. USt zählt im Monat des Zahlungseingangs (Ist).
+function dokKeinTerminZuordnen(dokId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  if(typeof pushSnapshotVorAktion==='function') pushSnapshotVorAktion();
+  d._keinTermin = true;
+  d.terminId = null;
+  if(Array.isArray(d.sessions)) d.sessions.forEach(function(s){ s.terminId = null; });
+  save(db);
+  if(typeof dokOpenDetail==='function') dokOpenDetail(dokId);
+  showToast('🚫 Ohne Termin — du kannst jetzt bestätigen');
+}
+function dokDochTerminZuordnen(dokId){
+  var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  d._keinTermin = false;
+  save(db);
+  if(typeof dokOpenDetail==='function') dokOpenDetail(dokId);
+  showToast('↩︎ Termin-Zuordnung wieder aktiv');
 }
 var _mev7ShowVst=false;
 /* Build 826: Vorsteuer pro Monat aus db.ausgaben (mwst = Vorsteuer aus dem Beleg).
