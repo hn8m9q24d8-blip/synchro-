@@ -3418,10 +3418,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  // Build 840: Bestätigte Belege korrigierbar — Brutto/MwSt/Auszahlung jetzt antippbar
-  // editierbar (deutsche Komma-Eingabe wird geparst), Änderung re-konsolidiert sofort
-  // in dbv2 + Jahresabschluss. Behebt z.B. falsch ausgelesenes GVL-Brutto.
-  if(el) el.textContent = '840';
+  // Build 842: Analyse-Prompt kennt jetzt GVL — GVL-Auszahlungsmitteilungen werden als
+  // EINNAHME (nie Ausgabe) erkannt, Studio=GVL, Beträge aus dem unteren Block
+  // (Zwischensumme/USt/Auszahlungsbetrag) statt der Verteilungsjahr-Summe; Privatkopie-
+  // Sonderfall (USt-frei + 19% Verwaltungskosten) wird geflaggt statt geraten.
+  if(el) el.textContent = '842';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11906,8 +11907,14 @@ function rDokumente(){
   // Build 742: Stubs (aufgeräumte Abrechn-Docs ohne Vorschau) ausblenden.
   // Sie leben weiter im Datenmodell, damit dbv2-Verknüpfung erhalten bleibt,
   // aber visuell sind sie aus dem Arbeitsbereich raus.
-  var sichtbar = db.dokumente.filter(function(d){ return !d._stubAfterDeleteAll; });
-  var nStubs = db.dokumente.length - sichtbar.length;
+  // Build 841: Archiv-Schalter — bestätigte Stub-Belege (PDF entfernt) auf Wunsch
+  // einblenden, damit man sie öffnen und Werte korrigieren kann.
+  if(typeof window._dokZeigeArchiv === 'undefined') window._dokZeigeArchiv = false;
+  var nStubs = db.dokumente.filter(function(d){ return d._stubAfterDeleteAll; }).length;
+  var sichtbar = db.dokumente.filter(function(d){ return window._dokZeigeArchiv ? true : !d._stubAfterDeleteAll; });
+  var _archivToggleHtml = nStubs>0
+    ? '<div onclick="window._dokZeigeArchiv=!window._dokZeigeArchiv;rDokumente()" style="text-align:center;padding:10px;margin-bottom:10px;background:'+(window._dokZeigeArchiv?'#eef2ff':'#f8fafc')+';border:1.5px solid #e5e7eb;border-radius:10px;font-size:12px;font-weight:700;color:#4338ca;cursor:pointer;touch-action:manipulation">'+(window._dokZeigeArchiv?'📂 Archiv ausblenden':'📦 '+nStubs+' archivierte Belege anzeigen (zum Korrigieren)')+'</div>'
+    : '';
 
   // Badge: unanalysed count (Stubs zählen nicht mit)
   var unanalysed = sichtbar.filter(function(d){return !d.typ||d.typ==='offen';}).length;
@@ -11936,7 +11943,7 @@ function rDokumente(){
   });
 
   if(!docs.length){
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:#999">'
+    el.innerHTML = _archivToggleHtml + '<div style="text-align:center;padding:48px 20px;color:#999">'
       +'<div style="font-size:48px;margin-bottom:10px">📂</div>'
       +'<div style="font-weight:700;font-size:15px;margin-bottom:6px">Keine Dokumente</div>'
       +'<div style="font-size:13px">Füge Dispos, Abrechnungen und Belege hier hinzu.<br>Die KI ordnet sie automatisch zu.</div>'
@@ -11948,6 +11955,7 @@ function rDokumente(){
   docs.forEach(function(d){
     var t = DOK_TYPES[d.typ||'sonstig'] || DOK_TYPES.sonstig;
     var linked = d.terminId ? '✓ Termin' : (d.ausgabeId ? '✓ Ausgabe' : '');
+    if(d._stubAfterDeleteAll) linked = (linked?linked+' · ':'')+'📦 archiviert';
     var linkedColor = (d.terminId||d.ausgabeId) ? '#15803d' : '';
     // Build 756: SH-Korrektur-Überholt-Badge
     var ueberholtBadge = '';
@@ -11978,7 +11986,7 @@ function rDokumente(){
       +'</div>';
   });
 
-  el.innerHTML = html;
+  el.innerHTML = _archivToggleHtml + html;
 }
 
 function dokGotFiles(inp){
@@ -12638,6 +12646,14 @@ function dokAnalyseDoc(d, key, cb){
     +'  "Bisherige Jahressummen" unten auf der Seite = KUMULATIVWERTE, IGNORIEREN für Typerkennung und Beträge!\n'
     +'  "ausgabe" = Quittung/Rechnung, "sonstig" = sonstiges\n'
     +'  BESONDERS: Honorarvereinbarung / Honorarrechnung / Honorarabrechnung / Honorarnote, bei der '+_uname+' selbst als Zahlungsempfänger genannt ist (oft mit Unterschrift "Zahlungsempfänger"), gilt als "abrechn"! Diese Belege enthalten meist: Honorar netto, USt 7%, Gesamtbetrag, Bank/IBAN des Sprechers. Studio-Feld = Auftraggeber (z.B. "AS Hörspiel GmbH"). Brutto = Gesamtbetrag inkl. USt. gutschrift_nr = Beleg-/Vereinbarungs-Nr. (z.B. "AS-OD-26-30").\n'
+    +'\n'
+    +'★ GVL-AUSZAHLUNGSMITTEILUNG / GVL-GUTSCHRIFT (Gesellschaft zur Verwertung von Leistungsschutzrechten):\n'
+    +'  Eine GVL-Auszahlungsmitteilung ist IMMER eine EINNAHME von '+_uname+' → typ="abrechn", NIEMALS "ausgabe" (auch wenn "Gutschrift" draufsteht)!\n'
+    +'  studio="GVL"; titel = Vergütungsart (z.B. "GVL Rechteüberlassung"); gutschrift_nr = die "Gutschrift Nr." (z.B. 202527500); datum = Gutschriftdatum.\n'
+    +'  ⚠ BETRÄGE — häufigste Falle: NICHT die Summe der "Verteilungsjahr"-Zeilen nehmen! Das sind Brutto-Ansprüche VOR Abzug bereits geleisteter Vorauszahlungen.\n'
+    +'     Maßgeblich ist NUR der untere Abrechnungsblock: netto = "Zwischensumme"; mwst = ausgewiesener USt-Betrag (z.B. "zzgl. 7,00 % USt. 101,12"); brutto = auszahlung = "Auszahlungsbetrag".\n'
+    +'     PFLICHT-PROBE: netto + mwst = brutto = auszahlung. Geht das nicht auf, hast du die falschen Zeilen erwischt — dann erneut nur den unteren Block lesen.\n'
+    +'  ⚠ SONDERFALL "Private Vervielfältigung" / "Vermietung & Verleih": umsatzsteuerlich GEMISCHT (USt-freie Vergütung nach EuGH/§§54 UrhG + 19% nur auf abgezogene Verwaltungskosten). NICHT als simple Einnahme buchen: titel="GVL Privatkopie (gemischt – mit Steuerberatung klären)", brutto=auszahlung="Auszahlungsbetrag", netto=Auszahlungsbetrag, mwst=null.\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
