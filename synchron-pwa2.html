@@ -3418,11 +3418,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
 (function(){
   var el = document.getElementById('app-build-nr');
-  // Build 839: "Einnahme ohne Termin" (Issue #20). Beim Bestätigen einer Abrechnung
-  // jetzt Option "🚫 Keinen Termin zuordnen" (GVL/Nachgage/Pauschale/Lizenz). Erzeugt
-  // einen dbv2-Beleg ohne Junction; USt zählt im Monat des Zahlungseingangs (Ist).
-  // Auto-Termin-Zuordnung wird dabei unterdrückt; rückgängig per "Doch Termin zuordnen".
-  if(el) el.textContent = '839';
+  // Build 840: Bestätigte Belege korrigierbar — Brutto/MwSt/Auszahlung jetzt antippbar
+  // editierbar (deutsche Komma-Eingabe wird geparst), Änderung re-konsolidiert sofort
+  // in dbv2 + Jahresabschluss. Behebt z.B. falsch ausgelesenes GVL-Brutto.
+  if(el) el.textContent = '840';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -14204,16 +14203,27 @@ function _dispRow(label, val, color){
 function dokEditFieldInline(rowEl, dokId, field){
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
-  var labels = { studio:'Studio', titel:'Titel', rolle:'Rolle' };
+  var labels = { studio:'Studio', titel:'Titel', rolle:'Rolle', brutto:'Brutto €', mwst:'MwSt €', auszahlung:'Auszahlung €', netto:'Netto €' };
+  // Build 840: numerische Felder (Komma/Punkt) korrekt parsen
+  var numericFields = ['brutto','netto','mwst','auszahlung','take_gage','grundgage','kv_abzug','rv_abzug','pv_abzug','takes'];
   var current = d[field] != null ? String(d[field]) : '';
   var neu = prompt((labels[field]||field) + ' ändern:', current);
   if(neu === null) return;
   neu = neu.trim();
-  if(neu === current.trim()) return;
-  d[field] = neu;
+  if(numericFields.indexOf(field) >= 0){
+    if(neu === ''){ d[field] = null; }
+    else {
+      var num = (neu.indexOf(',')>=0) ? parseFloat(neu.replace(/\./g,'').replace(',','.')) : parseFloat(neu);
+      if(isNaN(num)){ showToast('⚠ Ungültige Zahl'); return; }
+      d[field] = num;
+    }
+  } else {
+    if(neu === current.trim()) return;
+    d[field] = neu;
+  }
   // Snapshot für Undo
   try { if(typeof pushSnapshotVorAktion === 'function') pushSnapshotVorAktion(); } catch(e){}
-  // V2-Konsolidierung re-triggern → aktualisiert dbv2.abrechner/produktionen
+  // V2-Konsolidierung re-triggern → aktualisiert dbv2-Beleg (Brutto/USt etc.)
   try { _autoKonsolidiereNachBestaetigen(d.id); } catch(e){ console.error('[v2 hook dokEditField]', e); }
   save(db);
   saveV2(dbv2);
@@ -15033,9 +15043,9 @@ function dokOpenDetail(id){
     body += _row('Titel',   d.titel,   'titel');
     body += _row('Datum',   d.datum ? fd(d.datum) : null, null);
     if(d.gutschrift_nr) body += _row('Beleg-Nr.', d.gutschrift_nr, null);
-    if(d.brutto != null)     body += _row('Brutto', fmtEur(d.brutto), null);
-    if(d.mwst != null)       body += _row('MwSt',   fmtEur(d.mwst), null);
-    if(d.auszahlung != null) body += _row('Auszahlung', fmtEur(d.auszahlung), null);
+    if(d.brutto != null)     body += _row('Brutto', fmtEur(d.brutto), 'brutto');
+    if(d.mwst != null)       body += _row('MwSt',   fmtEur(d.mwst), 'mwst');
+    if(d.auszahlung != null) body += _row('Auszahlung', fmtEur(d.auszahlung), 'auszahlung');
     body += '</div>';
 
     // Termin-Link
