@@ -2849,6 +2849,12 @@ function _konsolidiereDokumentNachV2(dokId){
     // Toleranz: 1,50 € (locker — fängt nur grobe Fehler, keine Rundungs-Pingeligkeit)
     var TOL = 1.5;
     var checks = {};
+    // Build 848: K1b-Monats-Sammel & Storno OHNE explizite Einzel-Anteile im PDF —
+    // Termin-Anteile/Posten sind dort Anzeige-Ableitungen (N:M-Prinzip: autoritative
+    // Finanzwerte leben am Beleg, per-Termin nur Anzeige). Ein Vergleich gegen das
+    // PDF-Brutto wäre Äpfel/Birnen → bruttoSumme/posten werden "nicht prüfbar".
+    var _hatExplAnteile848 = gruppenSessions.some(function(s){ return (parseFloat(s.brutto)||0) > 0; });
+    var _anteilsNichtPruefbar848 = !_hatExplAnteile848 && (d.typ === 'monats_abrechn' || (v2Ab.brutto||0) < 0);
 
     // (1) Σ Junction-Brutto-Anteile dieser Abrechnung ≈ ab.brutto
     // Build 758 (#4): Storno-Behandlung — bei brutto < 0 sind Junction-Anteile
@@ -2862,7 +2868,9 @@ function _konsolidiereDokumentNachV2(dokId){
       if(l.brutto_anteil_display == null) anyAnteilFehlt = true;
       else summeAnteile += parseFloat(l.brutto_anteil_display) || 0;
     });
-    if(junctions_dieser_ab.length === 0){
+    if(_anteilsNichtPruefbar848){
+      checks.bruttoSumme = { status:'nicht_pruefbar', grund:'Monats-Sammel/Storno ohne Einzel-Anteile im PDF — Termin-Anteile sind Anzeige-Schätzung' };
+    } else if(junctions_dieser_ab.length === 0){
       checks.bruttoSumme = { status:'nicht_pruefbar', grund:'keine Termine verknüpft' };
     } else if(anyAnteilFehlt){
       checks.bruttoSumme = { status:'nicht_pruefbar', grund:'mindestens 1 Anteil fehlt im PDF' };
@@ -2962,7 +2970,9 @@ function _konsolidiereDokumentNachV2(dokId){
       if(sB > 0) postenSumme += sB;
       else postenSumme += sGG + (sT * sR);
     });
-    if(postenSumme > 0 && v2Ab.brutto){
+    if(_anteilsNichtPruefbar848){
+      checks.posten = { status:'nicht_pruefbar', grund:'Monats-Sammel/Storno ohne Einzel-Anteile im PDF — Posten sind Anzeige-Schätzung' };
+    } else if(postenSumme > 0 && v2Ab.brutto){
       // Build 758 (#4): Storno-aware — Posten sind positiv gespeichert auch bei Storno
       var bruttoAbsP = Math.abs(v2Ab.brutto || 0);
       var istStornoP = (v2Ab.brutto || 0) < 0;
@@ -3479,7 +3489,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Jahr des Zahlungseingangs (Dez-2025-Gutschriften, bezahlt Jan 2026 → EÜR 2026).
   // Unbezahlte: vorläufig nach Ausstellung einsortiert, separat als "offen" ausgewiesen,
   // zählen NICHT zur EÜR-Summe. Kachel + Tabellen-Summen entsprechend getrennt.
-  if(el) el.textContent = '847';
+  // Build 848: Konsistenz-Check — bruttoSumme/posten bei K1b-Monats-Sammeln und Storni
+  // ohne explizite Einzel-Anteile auf "nicht prüfbar" (Termin-Anteile sind Anzeige-
+  // Ableitungen, kein PDF-Vergleichswert). Behebt Warnungen 839/20260302, 2559/202603,
+  // 2229/202603 nach Re-Konsolidierung ("Reparieren" oder erneutes Bestätigen).
+  if(el) el.textContent = '848';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
