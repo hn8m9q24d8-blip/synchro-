@@ -2542,6 +2542,15 @@ function _konsolidiereDokumentNachV2(dokId){
     v2Ab.ust_basis           = _ustBasis;
     var _ustSatzRaw = (_ustBasis && mwst!=null && mwst!==0) ? (mwst/_ustBasis) : 0;
     v2Ab.ust_satz            = (_ustSatzRaw<=0) ? null : (_ustSatzRaw>=0.13 ? 0.19 : 0.07);
+    // Build 844: USt-freie Einnahme (z.B. GVL Privatkopie nach EuGH/§§54 UrhG).
+    // Flag lebt am Dokument (d.ust_frei) und fließt durch jede (Re-)Konsolidierung.
+    // steuerfrei ⇒ keine Ausgangssteuer, Basis = volles Brutto, eigene Zeile in der USt-VA.
+    v2Ab.steuerfrei          = !!d.ust_frei;
+    if(v2Ab.steuerfrei){
+      v2Ab.ust_betrag = 0;
+      v2Ab.ust_satz   = 0;
+      v2Ab.ust_basis  = brutto || null;
+    }
     v2Ab.sv_kv_an            = kv;
     v2Ab.sv_rv_an            = rv;
     v2Ab.sv_pv_an            = pv;
@@ -2874,9 +2883,23 @@ function _konsolidiereDokumentNachV2(dokId){
       };
     }
 
-    // (2) USt-Konsistenz: ust_betrag ≈ brutto × ust_satz
+    // (2) USt-Konsistenz: ust_betrag ≈ Basis × ust_satz
+    // Build 843: Bei Klasse 2/3 und GVL ist "brutto" BEREITS inkl. USt → Basis = brutto/(1+satz).
+    // Erkennung: klasse-Feld, Beleg-Nr-Muster, ODER mathematischer Selbsttest
+    // ((brutto − ust) × satz ≈ ust  ⇒ USt passt zur Netto-Basis ⇒ brutto ist inkl.)
+    var _inklUst = (v2Ab.klasse === '2' || v2Ab.klasse === '3');
+    if(!_inklUst && v2Ab.beleg_nr){
+      var _bn843 = String(v2Ab.beleg_nr);
+      if(/^TW-/i.test(_bn843) || /^\d{1,3}\/\d{4}$/.test(_bn843)) _inklUst = true;
+    }
+    if(!_inklUst && v2Ab.brutto && v2Ab.ust_betrag && v2Ab.ust_satz){
+      // ⚠ enge Toleranz (Cent-Rundung)! Mit lockerer TOL würden kleine SESAM-Belege
+      // (Diskriminanz = ust × satz, z.B. 9,24 € × 7% = 0,65 €) fälschlich als inkl. erkannt.
+      if(Math.abs(((v2Ab.brutto - v2Ab.ust_betrag) * v2Ab.ust_satz) - v2Ab.ust_betrag) <= 0.05) _inklUst = true;
+    }
     if(v2Ab.brutto && v2Ab.ust_satz != null && v2Ab.ust_betrag != null){
-      var ustErw = (v2Ab.brutto || 0) * (v2Ab.ust_satz || 0);
+      var _basis843 = _inklUst ? (v2Ab.brutto || 0) / (1 + (v2Ab.ust_satz || 0)) : (v2Ab.brutto || 0);
+      var ustErw = _basis843 * (v2Ab.ust_satz || 0);
       var diff_u = (v2Ab.ust_betrag || 0) - ustErw;
       checks.ust = {
         status: Math.abs(diff_u) <= TOL ? 'ok' : 'abweichung',
@@ -2910,15 +2933,9 @@ function _konsolidiereDokumentNachV2(dokId){
       // BEREITS im Brutto enthalten (Honorar+Nutzungsrechte+MwSt bzw. Netto+MwSt).
       // Daher Auszahlung = Brutto − SV, OHNE USt nochmal draufzurechnen.
       // Bei SESAM (1a/1b) und Studio Hamburg (4) ist Brutto netto-vor-USt → USt obendrauf.
-      var klasseIstInklUst = (v2Ab.klasse === '2' || v2Ab.klasse === '3');
-      // Build 803: Fallback für ältere Belege ohne klasse-Feld — anhand Beleg-Nr-Muster
-      //   "TW-..."     → toneworx Klasse 2
-      //   "NN/YYYY"    → Eigenrechnung Klasse 3 (z.B. "01/2026")
-      if(!v2Ab.klasse && v2Ab.beleg_nr){
-        var bn = String(v2Ab.beleg_nr);
-        if(/^TW-/i.test(bn)) klasseIstInklUst = true;
-        else if(/^\d{1,3}\/\d{4}$/.test(bn)) klasseIstInklUst = true;
-      }
+      // Build 843: nutzt die gemeinsame _inklUst-Erkennung von oben (klasse, Beleg-Nr-Muster
+      // UND mathematischer Selbsttest) — deckt damit auch GVL-Belege ab.
+      var klasseIstInklUst = _inklUst;
       var ustImCheck = klasseIstInklUst ? 0 : (v2Ab.ust_betrag || 0);
       var auszErw = istStorno
         ? bruttoBetrag + svSumme + ustImCheck
@@ -3088,6 +3105,30 @@ function _autoKonsolidiereNachBestaetigen(dokId){
           }
         }
       } catch(verifyE){ console.warn('[v2] Auto-Hook Verify-Fehler', verifyE); }
+
+      // Build 845: GVL Privatkopie — Verwaltungskosten-Ausgabe EINMALIG vorschlagen.
+      // Vorsteuer 0 (bei USt-freien Einnahmen nicht abziehbar, §15 Abs. 2 UStG — StB 06/2026).
+      // Kein Dauerknopf: Dialog erscheint nur beim Bestätigen, _gvlVwkAusgabeId verhindert Doppel.
+      try {
+        var _dG = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+        if(_dG && _dG.ust_frei && (_dG.gvl_vwk_netto || _dG.gvl_vwk_ust) && !_dG._gvlVwkAusgabeId){
+          var _vwkBr = Math.round(((_dG.gvl_vwk_netto||0)+(_dG.gvl_vwk_ust||0))*100)/100;
+          if(_vwkBr > 0 && confirm('GVL-Verwaltungskosten '+_vwkBr.toFixed(2).replace('.',',')+' € als Betriebsausgabe anlegen?\n\n(Vorsteuer 0 — bei USt-freien Einnahmen nicht abziehbar)')){
+            if(!db.ausgaben) db.ausgaben = [];
+            var _agIdG = 'ag'+Date.now()+'_gvl';
+            db.ausgaben.push({
+              id:_agIdG, beschr:'GVL-Verwaltungskosten'+(_dG.gutschrift_nr?' '+_dG.gutschrift_nr:''),
+              datum:_dG.datum||null, brutto:_vwkBr, netto:_vwkBr,
+              ustSatz:0, vorsteuer:0,
+              kat:'Sonstiges', ausgabe_kat_raw:'gvl_verwaltung',
+              erstelltAm:new Date().toISOString(), _gvlBelegDok:dokId
+            });
+            _dG._gvlVwkAusgabeId = _agIdG;
+            save(db);
+            showToast('✓ Verwaltungskosten '+_vwkBr.toFixed(2).replace('.',',')+' € als Ausgabe (Vorsteuer 0)');
+          }
+        }
+      } catch(gvlE){ console.warn('[845] GVL-VWK-Vorschlag', gvlE); }
 
       // Build 738: Konsistenz-Toast bei Abweichungen
       try {
@@ -3422,7 +3463,16 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // EINNAHME (nie Ausgabe) erkannt, Studio=GVL, Beträge aus dem unteren Block
   // (Zwischensumme/USt/Auszahlungsbetrag) statt der Verteilungsjahr-Summe; Privatkopie-
   // Sonderfall (USt-frei + 19% Verwaltungskosten) wird geflaggt statt geraten.
-  if(el) el.textContent = '842';
+  // Build 843: Konsistenz-Check versteht "Brutto inkl. USt" (Klasse 2/3, GVL, Eigen-
+  // rechnungen) — gemeinsame _inklUst-Erkennung (klasse, Beleg-Nr-Muster, mathematischer
+  // Selbsttest mit Cent-Toleranz). Behebt Fehlalarme bei 202527500, 01/02/03-2026.
+  // Build 844: USt-frei (0%) — Schalter im Beleg-Detail (d.ust_frei), fließt durch die
+  // Konsolidierung (steuerfrei, ust=0, Basis=Brutto), eigene Zeile "steuerfreie Umsätze"
+  // in USt-VA + Phase 7. Für GVL Privatkopie (EuGH/§§54 UrhG), Vorgabe StB 06/2026.
+  // Build 845: GVL Privatkopie vollautomatisch — KI liefert ust_frei + Verwaltungskosten,
+  // Pipeline setzt das Flag, nach Bestätigen einmaliger Dialog "Verwaltungskosten als
+  // Ausgabe (Vorsteuer 0) anlegen?". Kein manueller Schalter mehr nötig (bleibt als Korrektur).
+  if(el) el.textContent = '845';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5479,6 +5529,28 @@ function gvlDokSave(btn){
   if(ov)ov.remove();
   dokOpenDetail(did);
   showToast('✓ GVL gespeichert');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Build 844: USt-frei (0 %) Toggle für Einnahme-Belege
+// ═══════════════════════════════════════════════════════════════
+// Für umsatzsteuerfreie Einnahmen (z.B. GVL "Private Vervielfältigung" /
+// "Vermietung & Verleih" — EuGH 18.01.2017, §§54 UrhG). Flag lebt am
+// Dokument und fließt durch jede (Re-)Konsolidierung in dbv2:
+// ust_betrag=0, ust_satz=0, brutto = Bemessungsgrundlage → eigene Zeile
+// "steuerfreie Umsätze" in der USt-VA (Vorgabe Steuerberaterin 06/2026).
+function dokToggleUstFrei(dokId){
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  try{ pushSnapshotVorAktion('USt-frei umschalten'); }catch(e){}
+  d.ust_frei = !d.ust_frei;
+  if(d.ust_frei) d.mwst = 0;
+  save(db);
+  if(d.bestaetigt){
+    try{ _autoKonsolidiereNachBestaetigen(dokId); }catch(e){ console.warn('[844] Re-Konsolidierung', e); }
+  }
+  showToast(d.ust_frei ? '✓ steuerfrei (0%) — keine Ausgangssteuer' : 'USt-frei aus — MwSt ggf. manuell setzen');
+  dokOpenDetail(dokId);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -12653,7 +12725,10 @@ function dokAnalyseDoc(d, key, cb){
     +'  ⚠ BETRÄGE — häufigste Falle: NICHT die Summe der "Verteilungsjahr"-Zeilen nehmen! Das sind Brutto-Ansprüche VOR Abzug bereits geleisteter Vorauszahlungen.\n'
     +'     Maßgeblich ist NUR der untere Abrechnungsblock: netto = "Zwischensumme"; mwst = ausgewiesener USt-Betrag (z.B. "zzgl. 7,00 % USt. 101,12"); brutto = auszahlung = "Auszahlungsbetrag".\n'
     +'     PFLICHT-PROBE: netto + mwst = brutto = auszahlung. Geht das nicht auf, hast du die falschen Zeilen erwischt — dann erneut nur den unteren Block lesen.\n'
-    +'  ⚠ SONDERFALL "Private Vervielfältigung" / "Vermietung & Verleih": umsatzsteuerlich GEMISCHT (USt-freie Vergütung nach EuGH/§§54 UrhG + 19% nur auf abgezogene Verwaltungskosten). NICHT als simple Einnahme buchen: titel="GVL Privatkopie (gemischt – mit Steuerberatung klären)", brutto=auszahlung="Auszahlungsbetrag", netto=Auszahlungsbetrag, mwst=null.\n'
+    +'  ⚠ SONDERFALL "Private Vervielfältigung" / "Vermietung & Verleih": Diese Vergütung ist USt-FREI (EuGH 18.01.2017, §§54 UrhG); abgezogen werden GVL-Verwaltungskosten + 19% USt darauf.\n'
+    +'     So erfassen (Vorgabe Steuerberatung): ust_frei=true. titel="GVL Privatkopie (USt-frei)". brutto = netto = die USt-FREIE VERGÜTUNG (obere Zeile "Vergütung", z.B. 4.373,53) — NICHT der Auszahlungsbetrag! mwst=0. auszahlung="Auszahlungsbetrag".\n'
+    +'     Zusätzlich auslesen: gvl_verwaltungskosten_netto = abgezogene Verwaltungskosten (netto), gvl_verwaltungskosten_ust = die darauf ausgewiesene 19% USt.\n'
+    +'     PFLICHT-PROBE: brutto − gvl_verwaltungskosten_netto − gvl_verwaltungskosten_ust = auszahlung. Geht das nicht auf → Zeilen erneut lesen, nichts schätzen.\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
@@ -13356,6 +13431,11 @@ function dokAnalyseDoc(d, key, cb){
       d.ustSatz    = j.ust_satz || null;
       d.ust_details = j.ust_details || null;
       d.ausgabe_kat = j.ausgabe_kat || null;
+      // Build 845: GVL Privatkopie — USt-frei-Flag + Verwaltungskosten direkt von der KI.
+      // Nur übernehmen wenn die KI das Feld liefert (manuell gesetztes Flag bleibt sonst).
+      if(j.ust_frei != null) d.ust_frei = !!j.ust_frei;
+      if(j.gvl_verwaltungskosten_netto != null) d.gvl_vwk_netto = parseFloat(j.gvl_verwaltungskosten_netto)||null;
+      if(j.gvl_verwaltungskosten_ust  != null) d.gvl_vwk_ust  = parseFloat(j.gvl_verwaltungskosten_ust)||null;
       // Gemischte Steuersätze: mwst + netto aus ust_details summieren
       if(d.ust_details && Array.isArray(d.ust_details) && d.ust_details.length > 0){
         var _mwstSum = d.ust_details.reduce(function(s,e){ return s+(parseFloat(e.ust)||0); },0);
@@ -13722,6 +13802,10 @@ function dokAnalyseDoc(d, key, cb){
             d.kv_abzug=_j.kv_abzug||null; d.rv_abzug=_j.rv_abzug||null; d.pv_abzug=_j.pv_abzug||null;
             // USt-Satz sanitieren
             if(_j.ust_satz!=null){ var _ru=parseFloat(_j.ust_satz)||0; d.ustSatz=Math.abs(_ru-0.19)<0.02?0.19:Math.abs(_ru-0.07)<0.02?0.07:_ru===0?0:0.07; }
+            // Build 845: GVL Privatkopie — USt-frei-Flag + Verwaltungskosten (wie Site 1)
+            if(_j.ust_frei != null) d.ust_frei = !!_j.ust_frei;
+            if(_j.gvl_verwaltungskosten_netto != null) d.gvl_vwk_netto = parseFloat(_j.gvl_verwaltungskosten_netto)||null;
+            if(_j.gvl_verwaltungskosten_ust  != null) d.gvl_vwk_ust  = parseFloat(_j.gvl_verwaltungskosten_ust)||null;
             d.sessions=_j.sessions||null;
             // Build 753: Fallback wenn Beleg-Header-Titel/Rolle leer → aus erster Session ableiten
             if(!d.titel && d.sessions && Array.isArray(d.sessions)){
@@ -15062,6 +15146,14 @@ function dokOpenDetail(id){
     if(d.brutto != null)     body += _row('Brutto', fmtEur(d.brutto), 'brutto');
     if(d.mwst != null)       body += _row('MwSt',   fmtEur(d.mwst), 'mwst');
     if(d.auszahlung != null) body += _row('Auszahlung', fmtEur(d.auszahlung), 'auszahlung');
+    // Build 844: USt-frei-Schalter (z.B. GVL Privatkopie — EuGH/§§54 UrhG):
+    // keine Ausgangssteuer, Brutto = Bemessungsgrundlage → USt-VA-Zeile "steuerfreie Umsätze".
+    if(d.typ === 'abrechn'){
+      body += '<div onclick="dokToggleUstFrei(\''+d.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #f3f4f6;cursor:pointer;touch-action:manipulation">'
+        +'<div style="font-size:12px;color:#666">§ USt-frei (0 %)</div>'
+        +'<div style="font-size:12px;font-weight:800;color:'+(d.ust_frei?'#7c3aed':'#bbb')+'">'+(d.ust_frei?'✓ steuerfrei':'aus')+'</div>'
+        +'</div>';
+    }
     body += '</div>';
 
     // Termin-Link
@@ -17689,13 +17781,16 @@ function rUstVoranmeldung(){
       var ust=parseFloat(a.ust_betrag)||0;
       if(String(a.klasse)==='4' && !ust) ust=Math.round(brutto*0.07*100)/100;
       var satz=a.ust_satz||0; satz=(Math.abs(satz-0.19)<0.02)?0.19:0.07;
+      // Build 844: steuerfreie Umsätze (z.B. GVL Privatkopie) — 0% , keine Ausgangssteuer,
+      // brutto = Bemessungsgrundlage für die Zeile "steuerfreie Umsätze" der USt-VA.
+      if(a.steuerfrei){ satz=0; ust=0; }
       einnNetto+=brutto; einnUstEcht+=ust;
       var r=abrIdx[a.abrechner_id];
       var nm=r?(r.name||r.anzeigename||''):'';
       var lbl=nm?(a.beleg_nr?nm+' · '+a.beleg_nr:nm):(a.beleg_nr||'(Beleg)');
       einnZeilen.push({
         label: esc(lbl),
-        sub: (String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||'')),
+        sub: (a.steuerfrei?'steuerfrei (0%)':(String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||''))),
         zahlDatum: zd, netto: brutto, ust: ust, ust_satz: satz
       });
     });
@@ -17738,7 +17833,8 @@ function rUstVoranmeldung(){
   // Gruppierung nach USt-Satz für Anzeige
   var _einnGruppen = {};
   einnZeilen.forEach(function(e){
-    var k=Math.round((e.ust_satz||urEinn)*100);
+    // Build 844: e.ust_satz===0 (steuerfrei) darf NICHT auf urEinn (7%) zurückfallen
+    var k=Math.round(((e.ust_satz!=null)?e.ust_satz:urEinn)*100);
     if(!_einnGruppen[k]) _einnGruppen[k]={zeilen:[],sumNetto:0,sumUst:0};
     _einnGruppen[k].zeilen.push(e);
     _einnGruppen[k].sumNetto+=e.netto||0;
@@ -17752,22 +17848,31 @@ function rUstVoranmeldung(){
     _einnRaten.forEach(function(rPct){
       var grp=_einnGruppen[rPct];
       if(_einnRaten.length>1){
-        html += '<div style="font-size:11px;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 4px">'+rPct+'% Umsatzsteuer</div>';
+        html += '<div style="font-size:11px;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 4px">'+(rPct===0?'Steuerfreie Umsätze':rPct+'% Umsatzsteuer')+'</div>';
       }
       html += '<div style="background:#fff;border:1.5px solid #fecaca;border-radius:10px;overflow:hidden;margin-bottom:8px">';
       grp.zeilen.forEach(function(e,i){
         html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i>0?'border-top:1px solid #fef2f2':'')+'">'  
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.label+'</div>'
-          +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+(e.sub?' · '+esc(e.sub):'')+' · Netto '+fmtEur(e.netto)+' · USt '+Math.round((e.ust_satz||urEinn)*100)+'%</div>'
+          +'<div style="font-size:10px;color:#999">Eingang '+fd(e.zahlDatum)+(e.sub?' · '+esc(e.sub):'')+' · Netto '+fmtEur(e.netto)+' · USt '+Math.round(((e.ust_satz!=null)?e.ust_satz:urEinn)*100)+'%</div>'
           +'</div>'
           +'<div style="font-size:13px;font-weight:800;color:#c2410c;flex-shrink:0;margin-left:8px">+'+fmtEur(e.ust)+'</div>'
           +'</div>';
       });
-      html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:#fef2f2;border-top:1.5px solid #fecaca">'
-        +'<div style="font-size:12px;font-weight:800">Gesamt USt '+rPct+'%</div>'
-        +'<div style="font-size:13px;font-weight:900;color:#c2410c">+'+fmtEur(Math.round(grp.sumUst*100)/100)+'</div>'
-        +'</div></div>';
+      // Build 844: Fußzeile — bei 0% die Bemessungsgrundlage zeigen (Zeile "steuerfreie
+      // Umsätze" der USt-VA braucht den Umsatz, nicht die — per Definition 0,00 — USt).
+      if(rPct===0){
+        html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:#fef2f2;border-top:1.5px solid #fecaca">'
+          +'<div style="font-size:12px;font-weight:800">Steuerfreie Umsätze (in USt-VA eintragen)</div>'
+          +'<div style="font-size:13px;font-weight:900;color:#7c3aed">'+fmtEur(Math.round(grp.sumNetto*100)/100)+'</div>'
+          +'</div></div>';
+      } else {
+        html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:#fef2f2;border-top:1.5px solid #fecaca">'
+          +'<div style="font-size:12px;font-weight:800">Gesamt USt '+rPct+'%</div>'
+          +'<div style="font-size:13px;font-weight:900;color:#c2410c">+'+fmtEur(Math.round(grp.sumUst*100)/100)+'</div>'
+          +'</div></div>';
+      }
     });
     if(_einnRaten.length>1){
       html += '<div style="display:flex;justify-content:space-between;padding:8px 4px;border-top:2px solid #fecaca">'
@@ -22099,9 +22204,10 @@ function _mev7Buckets(){
     if(!a.zahlungs_datum) return;
     if(a._ueberholt_durch) return;            // Build 825: überholte K4-Korrektur nie zählen
     var m=String(a.zahlungs_datum).slice(0,7);
-    if(!by[m]) by[m]={u7:0,u19:0,k4:0,n:0};
+    if(!by[m]) by[m]={u7:0,u19:0,k4:0,frei:0,n:0};
     var ust=parseFloat(a.ust_betrag);
-    if(String(a.klasse)==='4'){
+    if(a.steuerfrei){ by[m].frei+=(parseFloat(a.brutto)||0); }  // Build 844: Bemessungsgrundlage, keine USt
+    else if(String(a.klasse)==='4'){
       if(!(ust>0)) ust=Math.round((parseFloat(a.brutto)||0)*0.07*100)/100;  // K4: 7% auf brutto (Konto 996)
       by[m].k4+=ust;
     } else if((parseFloat(a.ust_satz)||0)>=0.13){ by[m].u19+=(ust||0); }
@@ -22117,9 +22223,10 @@ function _mev7Text(){
     .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
   var L=[]; L.push('═══ PHASE 7 · USt AUS BELEGEN (Ist-Versteuerung §20'+(_mev7ShowVst?', mit Vorsteuer → Zahllast':', ohne Vorsteuer')+') ═══'); L.push('');
   monate.forEach(function(m){
-    var d=by[m]||{u7:0,u19:0,k4:0,n:0}; var ds=d.u7+d.u19+d.k4;
+    var d=by[m]||{u7:0,u19:0,k4:0,frei:0,n:0}; var ds=d.u7+d.u19+d.k4;
     L.push('── '+m+' ('+(d.n||0)+' Belege) ──');
     L.push('  USt  7%='+d.u7.toFixed(2)+'  19%='+d.u19.toFixed(2)+'  StudioHH='+d.k4.toFixed(2)+'  Σ='+ds.toFixed(2));
+    if(d.frei) L.push('  steuerfreie Umsätze='+d.frei.toFixed(2)+' (Bemessungsgrundlage, 0% USt)');
     if(_mev7ShowVst){
       var v=Math.round((vst[m]||0)*100)/100;
       L.push('  − Vorsteuer='+v.toFixed(2)+'   = Zahllast='+(Math.round((ds-v)*100)/100).toFixed(2));
