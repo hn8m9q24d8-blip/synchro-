@@ -2515,6 +2515,17 @@ function _konsolidiereDokumentNachV2(dokId){
       erstellt++;
     }
 
+    // Build 851: GLOBALER GS-Nr-Duplikatschutz — dieselbe Beleg-Nr aus einem ANDEREN
+    // PDF (z.B. Datei doppelt importiert/umbenannt + doppelt bestätigt) würde sonst
+    // still doppelt in Jahresabschluss + USt-VA zählen. Wird unten als Konsistenz-
+    // FEHLER markiert (⚠ in der Jahresübersicht). K4/leere Nummern ausgenommen.
+    var _gsDup851 = null;
+    if(belegNr && belegNr !== '-' && belegNr !== '?'){
+      _gsDup851 = dbv2.abrechnungen.find(function(a){
+        return a !== v2Ab && (a.beleg_nr||'') === belegNr && a.pdf_datei_id !== dokId && !a._ueberholt_durch;
+      });
+    }
+
     v2Ab.klasse              = klasse;
     v2Ab.abrechner_id        = abrId;
     v2Ab.produktion_id       = prodId;
@@ -2990,6 +3001,12 @@ function _konsolidiereDokumentNachV2(dokId){
       };
     } else {
       checks.posten = { status:'nicht_pruefbar', grund:'keine Posten-Werte' };
+    }
+
+    // Build 851: globales GS-Nr-Duplikat → harter Konsistenz-Fehler
+    if(_gsDup851){
+      checks.gsNrDuplikat = { status:'doppelzaehlung_verdacht',
+        grund:'Beleg-Nr '+belegNr+' existiert bereits aus anderem PDF — mögliche Doppelzählung in Jahresabschluss/USt-VA!' };
     }
 
     // Gesamt-Status: ok / warnung / fehler
@@ -3504,7 +3521,16 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // _archivLog mehr), (2) "🗑 Alle" + beide Einzel-Löschungen geben Dateinamen über
   // zentralen Helper frei (Multi-Doc-aware: gesperrt bleibt nur, was noch ein
   // bestätigtes Teil-Dokument hat). Re-Upload ohne Umbenennen.
-  if(el) el.textContent = '849';
+  // Build 850: 849-Regression gefixt — eingepflegte DISPOS (Termin-Link statt
+  // "bestaetigt") tauchten nach Pipeline-Löschung beim Ordner-Scan wieder auf.
+  // Freigabe jetzt nur, wenn weder ein bestätigtes Dokument noch ein Termin
+  // (_dispoDateiname/abrechn_dateiname) die Datei kennt.
+  // Build 851 (Integritäts-Audit): (1) _archiveDateiname stempelt den Dateinamen
+  // SOFORT am Termin — schließt die Same-Session-Lücke (Pipeline-Löschung direkt
+  // nach Einpflege gab fälschlich frei). (2) Globaler GS-Nr-Duplikatschutz in der
+  // Konsolidierung: gleiche Beleg-Nr aus anderem PDF → Konsistenz-FEHLER statt
+  // stiller Doppelzählung in Jahresabschluss/USt-VA.
+  if(el) el.textContent = '851';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -16623,6 +16649,14 @@ function _archiveDateiname(dateiname, terminId, typ){
       db.importedFiles.push(dateiname);
       if(db.importedFiles.length > 2000) db.importedFiles = db.importedFiles.slice(-2000);
     }
+    // Build 851: Dateiname SOFORT am Termin stempeln (nicht erst per Start-Reparatur).
+    // Schließt die Same-Session-Lücke: Pipeline-Löschung direkt nach Einpflege fand
+    // den Termin-Marker sonst noch nicht → _dateinameFreigeben gab fälschlich frei.
+    var _tA = (db.termine||[]).find(function(t){ return t.id===terminId; });
+    if(_tA){
+      if((typ||'')==='dispo'){ if(!_tA._dispoDateiname) _tA._dispoDateiname = dateiname; }
+      else if(!_tA.abrechn_dateiname){ _tA.abrechn_dateiname = dateiname; }
+    }
   }
   // _archivLog: mit terminId UND typ — damit Ampel sicher zwischen Dispo/Abrechn unterscheidet
   if(terminId){
@@ -17548,12 +17582,17 @@ function dokNewTerminAusDok(dokId){
   sheet.classList.add('open');
 }
 
-// Build 849 (Issue #21): Dateiname wieder freigeben — aber nur, wenn KEIN
-// bestätigtes Dokument ihn noch nutzt (Multi-Doc-PDFs: 1 Datei → n Teil-Belege).
+// Build 849/850 (Issue #21): Dateiname wieder freigeben — aber NUR, wenn wirklich
+// nichts eingepflegt wurde. "Eingepflegt" heißt: ein bestätigtes Dokument trägt den
+// Namen ODER ein Termin kennt die Datei (Dispo-/Abrechn-Verknüpfung). Build 850 fixt
+// die 849-Regression: eingepflegte Dispos (Pipeline gelöscht) tauchten beim
+// Ordner-Scan wieder auf, weil nur "bestaetigt" geprüft wurde.
 function _dateinameFreigeben(name){
   if(!name || !db.importedFiles) return;
-  var nochBestaetigt = (db.dokumente||[]).some(function(x){ return x.dateiname===name && x.bestaetigt; });
-  if(!nochBestaetigt){
+  var nochGenutzt =
+    (db.dokumente||[]).some(function(x){ return x.dateiname===name && (x.bestaetigt || x.terminId); }) ||
+    (db.termine||[]).some(function(t){ return t._dispoDateiname===name || t.abrechn_dateiname===name; });
+  if(!nochGenutzt){
     db.importedFiles = db.importedFiles.filter(function(n){ return n !== name; });
   }
 }
