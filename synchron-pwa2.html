@@ -3530,7 +3530,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // nach Einpflege gab fälschlich frei). (2) Globaler GS-Nr-Duplikatschutz in der
   // Konsolidierung: gleiche Beleg-Nr aus anderem PDF → Konsistenz-FEHLER statt
   // stiller Doppelzählung in Jahresabschluss/USt-VA.
-  if(el) el.textContent = '851';
+  // Build 852: Scan-Dedup hat jetzt DREI Quellen — importedFiles + bestätigte Docs
+  // + Termine (_dispoDateiname/abrechn_dateiname). Symmetrisch zur Freigabe-Regel;
+  // heilt Dispos, die durch die 849/850-Lücke von der Sperrliste gerutscht waren.
+  if(el) el.textContent = '852';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12288,6 +12291,13 @@ function dokGotFilesFolder(inp){
   (db.dokumente||[]).forEach(function(d){
     if(d.dateiname && d.bestaetigt){ _impSet[d.dateiname]=true; _impSet[normName(d.dateiname)]=true; }
   });
+  // Build 852: dritte Quelle — Termine, die eine Datei kennen (Dispo/Abrechn eingepflegt).
+  // Symmetrisch zur Freigabe-Regel; heilt Dateien, die durch die 849/850-Lücke
+  // fälschlich von der Sperrliste genommen wurden, ohne die Liste zu mutieren.
+  (db.termine||[]).forEach(function(t){
+    if(t._dispoDateiname){ _impSet[t._dispoDateiname]=true; _impSet[normName(t._dispoDateiname)]=true; }
+    if(t.abrechn_dateiname){ _impSet[t.abrechn_dateiname]=true; _impSet[normName(t.abrechn_dateiname)]=true; }
+  });
   allInFolder.forEach(function(f){
     if(_impSet[f.name]||_impSet[normName(f.name)]){
       var k=kategorieAusOrdner(f)||'sonstig';
@@ -12504,6 +12514,11 @@ function _dokQueueBannerShow(){
     // Nur bestätigte Docs als "bekannt" — unbestätigte aus Vorbatch nicht blockieren
     (db.dokumente||[]).forEach(function(d){if(d.dateiname && d.bestaetigt){exNames[d.dateiname]=true;exNorm[normN(d.dateiname)]=true;}});
     (db.importedFiles||[]).forEach(function(n){if(n){exNames[n]=true;exNorm[normN(n)]=true;}});
+    // Build 852: Termine als dritte Dedup-Quelle (wie im Haupt-Scan)
+    (db.termine||[]).forEach(function(t){
+      if(t._dispoDateiname){exNames[t._dispoDateiname]=true;exNorm[normN(t._dispoDateiname)]=true;}
+      if(t.abrechn_dateiname){exNames[t.abrechn_dateiname]=true;exNorm[normN(t.abrechn_dateiname)]=true;}
+    });
     var filtered=batch.filter(function(f){return !exNames[f.name]&&!exNorm[normN(f.name)];});
     if(!filtered.length){showToast('Alle Dokumente bereits importiert');_dokQueueBannerShow();return;}
     // Nicht-bestätigte aus Vorbatch bleiben als "offen" in db.dokumente — sichtbar im Offen-Tab
