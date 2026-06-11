@@ -3294,6 +3294,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
     try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
     return; // Migration überspringen — importedFiles bleibt leer
   }
+  // Build 849 (Issue #21): Migration läuft EINMALIG. Vorher lief sie bei jedem
+  // App-Start und hat Dateinamen gelöschter Pipelines aus _archivLog wieder
+  // gesperrt — Entsperrungen durch Löschen wurden so stets rückgängig gemacht
+  // (Symptom: Re-Upload nur nach Umbenennen möglich). Künftige Sperren kommen
+  // ausschließlich aus _archiveDateiname (beim Bestätigen).
+  if(db._importedFilesMigrated) return;
   // Schritt 1: bestätigte Docs MIT Kalendertermin eintragen — Regel: terminId erforderlich
   (db.dokumente||[]).forEach(function(d){
     if(d.bestaetigt && d.terminId && d.dateiname && db.importedFiles.indexOf(d.dateiname) < 0){
@@ -3493,7 +3499,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // ohne explizite Einzel-Anteile auf "nicht prüfbar" (Termin-Anteile sind Anzeige-
   // Ableitungen, kein PDF-Vergleichswert). Behebt Warnungen 839/20260302, 2559/202603,
   // 2229/202603 nach Re-Konsolidierung ("Reparieren" oder erneutes Bestätigen).
-  if(el) el.textContent = '848';
+  // Build 849 (Issue #21): Datei-Sperre repariert — (1) importedFiles-Migration läuft
+  // nur noch EINMAL statt bei jedem Start (kein Re-Lock gelöschter Pipelines aus
+  // _archivLog mehr), (2) "🗑 Alle" + beide Einzel-Löschungen geben Dateinamen über
+  // zentralen Helper frei (Multi-Doc-aware: gesperrt bleibt nur, was noch ein
+  // bestätigtes Teil-Dokument hat). Re-Upload ohne Umbenennen.
+  if(el) el.textContent = '849';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12697,6 +12708,10 @@ function dokDeleteAll(){
   });
   // Alle anderen raus
   db.dokumente = bestaetigtAbrechn;
+  // Build 849 (Issue #21): Dateinamen der gelöschten (unbestätigten) Docs freigeben,
+  // damit ein Re-Upload ohne Umbenennen möglich ist. Multi-Doc-PDFs bleiben gesperrt,
+  // solange noch ein bestätigtes Teil-Dokument denselben Dateinamen trägt.
+  rest.forEach(function(d){ _dateinameFreigeben(d.dateiname); });
   save(db);
   rDokumente();
   if(nStub && nDel) showToast('🗑 '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
@@ -17533,6 +17548,16 @@ function dokNewTerminAusDok(dokId){
   sheet.classList.add('open');
 }
 
+// Build 849 (Issue #21): Dateiname wieder freigeben — aber nur, wenn KEIN
+// bestätigtes Dokument ihn noch nutzt (Multi-Doc-PDFs: 1 Datei → n Teil-Belege).
+function _dateinameFreigeben(name){
+  if(!name || !db.importedFiles) return;
+  var nochBestaetigt = (db.dokumente||[]).some(function(x){ return x.dateiname===name && x.bestaetigt; });
+  if(!nochBestaetigt){
+    db.importedFiles = db.importedFiles.filter(function(n){ return n !== name; });
+  }
+}
+
 function dokDeleteCurrent(){
   if(!_dokCurrentId) return;
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
@@ -17549,6 +17574,7 @@ function dokDeleteCurrent(){
   }
   if(!confirm((d.beschr||'Dokument')+' löschen?')) return;
   db.dokumente=(db.dokumente||[]).filter(function(x){return x.id!==_dokCurrentId;});
+  _dateinameFreigeben(d.dateiname); // Build 849: Re-Upload wieder möglich
   save(db); dokDetailClose(); rDokumente();
   showToast('Gelöscht');
 }
@@ -17628,13 +17654,10 @@ function dokDeleteOne(){
     return;
   }
   if(!confirm((d.beschr||'Dokument')+' löschen?')) return;
-  // Wenn noch NICHT bestätigt: Dateiname aus importedFiles entfernen
-  // → kann beim nächsten Ordner-Scan neu eingelesen werden
-  // Wenn bestätigt: Dateiname IN importedFiles lassen (nicht erneut importieren)
-  if(!d.bestaetigt && d.dateiname && db.importedFiles){
-    db.importedFiles = db.importedFiles.filter(function(n){ return n !== d.dateiname; });
-  }
   db.dokumente = (db.dokumente||[]).filter(function(x){return x.id!==_dokCurrentId;});
+  // Build 849: Freigabe über zentralen Helper (Multi-Doc-aware) — Re-Upload möglich,
+  // sofern kein bestätigtes Dokument den Dateinamen mehr nutzt.
+  if(!d.bestaetigt) _dateinameFreigeben(d.dateiname);
   save(db); dokDetailClose(); rDokumente();
   showToast('Gelöscht');
 }
