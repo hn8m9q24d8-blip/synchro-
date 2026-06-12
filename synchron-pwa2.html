@@ -3311,12 +3311,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
     try{ localStorage.setItem('synchron_db', JSON.stringify(db)); }catch(e){}
     return; // Migration überspringen — importedFiles bleibt leer
   }
-  // Build 849 (Issue #21): Migration läuft EINMALIG. Vorher lief sie bei jedem
-  // App-Start und hat Dateinamen gelöschter Pipelines aus _archivLog wieder
-  // gesperrt — Entsperrungen durch Löschen wurden so stets rückgängig gemacht
-  // (Symptom: Re-Upload nur nach Umbenennen möglich). Künftige Sperren kommen
-  // ausschließlich aus _archiveDateiname (beim Bestätigen).
-  if(db._importedFilesMigrated) return;
+  // Build 853 (Revert von 849): Migration läuft wieder bei JEDEM Start — sie ist die
+  // selbstheilende Säule der Invariante "einmal eingepflegt = nie wieder in der Pipeline".
+  // Quellen: bestätigte Dokumente, _archivLog, Termine. Un-eingepflegte Dateien stehen
+  // nie auf der Liste, deren Re-Upload nach Pipeline-Löschung war nie betroffen.
+  // Der 849-Gedanke (Re-Import bestätigter, gelöschter Dateien für Reparaturen) ist seit
+  // Archiv-Schalter + editierbaren Belegen (840/841) obsolet — Korrektur statt Re-Import.
   // Schritt 1: bestätigte Docs MIT Kalendertermin eintragen — Regel: terminId erforderlich
   (db.dokumente||[]).forEach(function(d){
     if(d.bestaetigt && d.terminId && d.dateiname && db.importedFiles.indexOf(d.dateiname) < 0){
@@ -3533,7 +3533,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 852: Scan-Dedup hat jetzt DREI Quellen — importedFiles + bestätigte Docs
   // + Termine (_dispoDateiname/abrechn_dateiname). Symmetrisch zur Freigabe-Regel;
   // heilt Dispos, die durch die 849/850-Lücke von der Sperrliste gerutscht waren.
-  if(el) el.textContent = '852';
+  // Build 853: REVERT des 849-Kerns — die importedFiles-Migration läuft wieder bei
+  // jedem Start (selbstheilende Invariante: einmal eingepflegt = nie wieder Pipeline).
+  // Tims Analyse war korrekt: 849 löste ein obsoletes Problem (Re-Import zur Reparatur)
+  // und schwächte dafür die Säule. Sofort-Stempel (851), dritte Scan-Quelle (852) und
+  // GS-Nr-Duplikatschutz (851) bleiben als zusätzliche Sicherungen erhalten.
+  if(el) el.textContent = '853';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
