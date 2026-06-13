@@ -2956,9 +2956,17 @@ function _konsolidiereDokumentNachV2(dokId){
       // UND mathematischer Selbsttest) — deckt damit auch GVL-Belege ab.
       var klasseIstInklUst = _inklUst;
       var ustImCheck = klasseIstInklUst ? 0 : (v2Ab.ust_betrag || 0);
+      // Build 857: GVL Privatkopie (steuerfrei) — die Verwaltungskosten + deren USt werden
+      // direkt von der Auszahlung einbehalten. Auszahlung = Brutto − einbehaltene Kosten.
+      // Quelle: das Quelldokument (gvl_vwk_netto/ust). Ohne diese Korrektur meldet der
+      // Check fälschlich eine Abweichung in Höhe der Verwaltungskosten.
+      var gvlEinbehalt = 0;
+      if(v2Ab.steuerfrei && d && (d.gvl_vwk_netto || d.gvl_vwk_ust)){
+        gvlEinbehalt = (parseFloat(d.gvl_vwk_netto)||0) + (parseFloat(d.gvl_vwk_ust)||0);
+      }
       var auszErw = istStorno
         ? bruttoBetrag + svSumme + ustImCheck
-        : bruttoBetrag - svSumme + ustImCheck;
+        : bruttoBetrag - svSumme + ustImCheck - gvlEinbehalt;
       var diff_a = (v2Ab.auszahlung || 0) - auszErw;
       checks.auszahlung = {
         status: Math.abs(diff_a) <= TOL ? 'ok' : 'abweichung',
@@ -3556,7 +3564,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 856: GVL-Verwaltungskosten-Doppelbuchung verhindert — Dialog prueft jetzt auch
   // auf bereits existierende Ausgabe gleicher Beleg-Nr; Undo loescht die zugehoerige
   // Ausgabe mit. Behebt Doppel nach Rueckgaengig+Neu-Bestaetigen.
-  if(el) el.textContent = '856';
+  // Build 857: Auszahlungs-Check beruecksichtigt bei steuerfreien GVL-Belegen die
+  // einbehaltenen Verwaltungskosten (Auszahlung = Brutto - Einbehalt). Behebt die
+  // falsche Warnung bei 202527501 (Diff 1039,27 = Verwaltungskosten).
+  if(el) el.textContent = '857';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
