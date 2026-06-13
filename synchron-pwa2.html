@@ -3138,7 +3138,17 @@ function _autoKonsolidiereNachBestaetigen(dokId){
       // Kein Dauerknopf: Dialog erscheint nur beim Bestätigen, _gvlVwkAusgabeId verhindert Doppel.
       try {
         var _dG = (db.dokumente||[]).find(function(x){return x.id===dokId;});
-        if(_dG && _dG.ust_frei && (_dG.gvl_vwk_netto || _dG.gvl_vwk_ust) && !_dG._gvlVwkAusgabeId){
+        // Build 856: Doppelschutz erweitert — neben dem Dok-Marker (_gvlVwkAusgabeId)
+        // auch prüfen, ob bereits eine GVL-Verwaltungskosten-Ausgabe für DIESELBE
+        // Beleg-Nr existiert. Nötig, weil nach Rückgängig+Neu der Dok-Marker fehlt,
+        // die alte Ausgabe aber liegen bleiben kann → sonst doppelte Buchung.
+        var _gvlBnr = _dG && _dG.gutschrift_nr ? String(_dG.gutschrift_nr) : '';
+        var _schonDa = (db.ausgaben||[]).some(function(x){
+          return x.ausgabe_kat_raw==='gvl_verwaltung' &&
+                 ( (x._gvlBelegDok===dokId) ||
+                   (_gvlBnr && String(x.beschr||'').indexOf(_gvlBnr)>=0) );
+        });
+        if(_dG && _dG.ust_frei && (_dG.gvl_vwk_netto || _dG.gvl_vwk_ust) && !_dG._gvlVwkAusgabeId && !_schonDa){
           var _vwkBr = Math.round(((_dG.gvl_vwk_netto||0)+(_dG.gvl_vwk_ust||0))*100)/100;
           if(_vwkBr > 0 && confirm('GVL-Verwaltungskosten '+_vwkBr.toFixed(2).replace('.',',')+' € als Betriebsausgabe anlegen?\n\n(Vorsteuer 0 — bei USt-freien Einnahmen nicht abziehbar)')){
             if(!db.ausgaben) db.ausgaben = [];
@@ -3542,7 +3552,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // mit ust_frei/gvl_verwaltungskosten — vorher stand das Feld nur im Fließtext und die
   // KI gab es nicht aus (ust_frei kam als undefined an → Flag blieb "aus", kein
   // Verwaltungskosten-Dialog). Jetzt setzt die KI das Flag selbst beim Analysieren.
-  if(el) el.textContent = '854';
+  // Build 855: Tippfehler "Rükgängig" -> "Rückgängig" im Undo-Button korrigiert.
+  // Build 856: GVL-Verwaltungskosten-Doppelbuchung verhindert — Dialog prueft jetzt auch
+  // auf bereits existierende Ausgabe gleicher Beleg-Nr; Undo loescht die zugehoerige
+  // Ausgabe mit. Behebt Doppel nach Rueckgaengig+Neu-Bestaetigen.
+  if(el) el.textContent = '856';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11243,15 +11257,15 @@ function undoAction(actionId){
         // Junctions in dbv2.abrechnung_termin_links. Diese müssen beim
         // Rückgängig auch entfernt werden, sonst hängt die Abrechnung weiter
         // im Jahresabschluss / in der USt-VA / in der Match-Engine.
-        if(action.undoData.dokId && dbv2 && dbv2.abrechnungen){
-          var entferntIds = [];
-          dbv2.abrechnungen = dbv2.abrechnungen.filter(function(v2a){
-            if(v2a.pdf_datei_id === action.undoData.dokId){
-              entferntIds.push(v2a.id);
-              return false;
-            }
-            return true;
+        // Build 856: zugehörige GVL-Verwaltungskosten-Ausgabe mitlöschen, sonst bleibt
+        // sie nach Rückgängig liegen und ein Neu-Bestätigen erzeugt eine Doppelbuchung.
+        // (Im Snapshot-Pfad oben ohnehin abgedeckt; dies ist der feldweise Fallback.)
+        if(action.undoData.dokId && db.ausgaben){
+          db.ausgaben = db.ausgaben.filter(function(x){
+            return !(x.ausgabe_kat_raw==='gvl_verwaltung' && x._gvlBelegDok===action.undoData.dokId);
           });
+        }
+        if(action.undoData.dokId && dbv2 && dbv2.abrechnungen){
           // Build 776: betroffene Termin-IDs aus den Junctions SAMMELN bevor
           // wir sie löschen — damit wir gleich ALLE Termine zurücksetzen können.
           var _betroffeneTerminIds = [];
@@ -11489,7 +11503,7 @@ function rUndoLog(){
       +(detail?'<div style="font-size:11px;color:#6b7280;margin-top:3px">'+esc(detail)+'</div>':'')
       +'<div style="font-size:10px;color:#9ca3af;margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
       +'</div></div>'
-      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rükgängig</button>'
+      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:#fef2f2;color:#c2410c;border:1.5px solid #fca5a5;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rückgängig</button>'
       +'</div>';
   }).join('');
 }
