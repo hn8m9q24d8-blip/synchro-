@@ -3538,7 +3538,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Tims Analyse war korrekt: 849 löste ein obsoletes Problem (Re-Import zur Reparatur)
   // und schwächte dafür die Säule. Sofort-Stempel (851), dritte Scan-Quelle (852) und
   // GS-Nr-Duplikatschutz (851) bleiben als zusätzliche Sicherungen erhalten.
-  if(el) el.textContent = '853';
+  // Build 854: GVL-Privatkopie-Prompt liefert jetzt ein explizites Ausgabe-JSON-Beispiel
+  // mit ust_frei/gvl_verwaltungskosten — vorher stand das Feld nur im Fließtext und die
+  // KI gab es nicht aus (ust_frei kam als undefined an → Flag blieb "aus", kein
+  // Verwaltungskosten-Dialog). Jetzt setzt die KI das Flag selbst beim Analysieren.
+  if(el) el.textContent = '854';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12831,6 +12835,9 @@ function dokAnalyseDoc(d, key, cb){
     +'     So erfassen (Vorgabe Steuerberatung): ust_frei=true. titel="GVL Privatkopie (USt-frei)". brutto = netto = die USt-FREIE VERGÜTUNG (obere Zeile "Vergütung", z.B. 4.373,53) — NICHT der Auszahlungsbetrag! mwst=0. auszahlung="Auszahlungsbetrag".\n'
     +'     Zusätzlich auslesen: gvl_verwaltungskosten_netto = abgezogene Verwaltungskosten (netto), gvl_verwaltungskosten_ust = die darauf ausgewiesene 19% USt.\n'
     +'     PFLICHT-PROBE: brutto − gvl_verwaltungskosten_netto − gvl_verwaltungskosten_ust = auszahlung. Geht das nicht auf → Zeilen erneut lesen, nichts schätzen.\n'
+    +'     ⚠ Das Ausgabe-JSON MUSS bei diesem Fall diese Felder enthalten (sonst wird es falsch gebucht!):\n'
+    +'        {"typ":"abrechn","studio":"GVL","titel":"GVL Privatkopie (USt-frei)","gutschrift_nr":"202527501","datum":"2026-05-11","brutto":4373.53,"netto":4373.53,"mwst":0,"auszahlung":3334.26,"ust_frei":true,"gvl_verwaltungskosten_netto":873.34,"gvl_verwaltungskosten_ust":165.93}\n'
+    +'     (Die Zahlen sind nur ein Beispiel — nimm die echten Werte aus dem Beleg. Wichtig ist, dass ust_frei, gvl_verwaltungskosten_netto und gvl_verwaltungskosten_ust IMMER mit ausgegeben werden.)\n'
     +'\n'
     +'Bei "dispo" — PFLICHTFELDER:\n'
     +'  titel: Produktionstitel (z.B. "Women\'s Hell", "Dark", "Bridgerton")\n'
