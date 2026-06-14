@@ -674,14 +674,9 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="buch-menu-arrow">›</div>
     </div>
 
-    <div onclick="switchView('zahlungen')" class="buch-menu-row">
-      <div class="buch-menu-icon" style="background:#fce4ec;color:#c62828">€</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Zahlungseingänge</div>
-        <div class="buch-menu-sub">Importierte Holvi-Zahlungen</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
-    </div>
+    <!-- Build 861: Kachel "Zahlungseingänge" entfernt (rZahlungsEingaenge war defekt:
+         ReferenceError auf undefinierte Variable 'zahl'; funktional redundant mit
+         Kontoabgleich + Bank-Abgleich, reiner Legacy-Lesepfad auf db.zahlungen). -->
 
     <!-- Mini-Übersicht -->
     <div id="buch-quick-stat" style="background:var(--blue);border-radius:14px;padding:18px;margin-top:6px;color:#fff">
@@ -731,13 +726,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 </div>
 
 <!-- ══════ ZAHLUNGSEINGÄNGE ════════════════════════════════════ -->
-<div id="view-zahlungen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
-  <div class="app-header" style="background:#c62828;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Zahlungseingänge</div><div style="color:rgba(255,255,255,.75);font-size:12px">Importierte Holvi-Zahlungen</div></div>
-  </div>
-  <div class="scroll" id="zahlungseingaenge-list" style="padding:16px;padding-bottom:100px"></div>
-</div>
+<!-- Build 861: view-zahlungen entfernt (siehe Kachel-Kommentar oben) -->
 
 <!-- ══════ HOLVI KONTOABGLEICH ══════════════════════════ -->
 <div id="view-holvi-abgleich" class="view" style="overflow:hidden;display:flex;flex-direction:column">
@@ -3574,7 +3563,13 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // gruppiert (zahlungsgruppen: gegenpartei/valuta/betrag -> beleg_ids), Einzel-Gutschriften
   // mit Brutto/Satz/USt/Auszahlung + Sigma je Eingang, Monats-Zusammenfassung 7/19/SH/frei,
   // Ausgaben-Detail. jsPDF A4 + iOS-Share. Validiert cent-genau gegen Steuerberater-Aufstellung.
-  if(el) el.textContent = '859';
+  // Build 860: Σ-Glyph im VA-PDF-Export durch "Summe" ersetzt — jsPDF/Helvetica kennt
+  // kein Σ und rendert es als "£". Betraf die Summenzeile je Zahlungseingang.
+  // Build 861: Kachel + View "Zahlungseingänge" (rZahlungsEingaenge) entfernt — Funktion
+  // war defekt (ReferenceError auf undefinierte Variable 'zahl', crashte beim Öffnen) und
+  // funktional redundant: Holvi-Eingänge laufen über Kontoabgleich + Bank-Abgleich/Match-
+  // Engine (dbv2). Toter Legacy-Lesepfad auf db.zahlungen entfernt (Kachel/View/Fn/Route).
+  if(el) el.textContent = '861';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11032,7 +11027,7 @@ function switchView(v){
   var navMap = {
     'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
     'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch','undo':'buch','holvi-abgleich':'buch',
-    'rechnungen':'buch','zahlungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
+    'rechnungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
     'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil','jahresabschluss':'profil'
@@ -11060,7 +11055,6 @@ function switchView(v){
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
   else if(v==='gagenabrechnungen'){rZahlungen();}
   else if(v==='rechnungen'){rRechnungen();}
-  else if(v==='zahlungen'){rZahlungsEingaenge();}
   else if(v==='stammdaten'){} // static
   else if(v==='standardgagen'){rStandardgagen();}
   else if(v==='pers-daten'){rPersDaten();}
@@ -18360,10 +18354,10 @@ function _ustExportPDF(){
       doc.text(euro(aus), R, y, {align:'right'});
       bSumBr+=br; bSumUst+=u; bSumAus+=aus; y+=4.5;
     });
-    // Σ Block
+    // Summe Block
     doc.setDrawColor(220); doc.line(L+60,y-1,R,y-1);
     doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-    doc.text('Σ', L+60, y+2);
+    doc.text('Summe', L+60, y+2);
     doc.text(euro(bSumBr), L+92, y+2, {align:'right'});
     doc.text(euro(Math.round(bSumUst*100)/100), L+132, y+2, {align:'right'});
     doc.text(euro(bSumAus), R, y+2, {align:'right'});
@@ -20488,36 +20482,9 @@ function zahlSetYear(y){
   rZahlungen();
 }
 
-function rZahlungsEingaenge(){
-  var el = document.getElementById('zahlungseingaenge-list');(function(a,b){
-    return (b.datum||'') > (a.datum||'') ? 1 : -1;
-  });
-  if(!zahl.length){
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">💶</div>'
-      +'<div class="empty-title">Keine Zahlungseingänge</div>'
-      +'<div class="empty-sub">Holvi-Kontoauszug importieren um Zahlungen hier zu sehen</div></div>';
-    return;
-  }
-  var gesamt = zahl.reduce(function(s,z){return s+(parseFloat(z.betrag)||0);},0);
-  var html = '<div style="background:#c62828;border-radius:12px;padding:14px 16px;margin-bottom:14px;color:#fff">'
-    +'<div style="font-size:11px;opacity:.8;margin-bottom:4px">GESAMT EINGEGANGEN</div>'
-    +'<div style="font-size:26px;font-weight:900">'+fmtEur(gesamt)+'</div>'
-    +'<div style="font-size:11px;opacity:.8;margin-top:4px">'+zahl.length+' Zahlung'+(zahl.length>1?'en':'')+'</div>'
-    +'</div>';
-  zahl.forEach(function(z){
-    var t = z.terminId ? (db.termine||[]).find(function(x){return x.id===z.terminId;}) : null;
-    html += '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px">'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-      +'<div style="font-size:14px;font-weight:800">'+fmtEur(z.betrag)+'</div>'
-      +'<div style="font-size:11px;color:#888">'+(z.datum?z.datum.split('-').reverse().join('.'):'')+'</div>'
-      +'</div>'
-      +'<div style="font-size:11px;color:#555;margin-bottom:2px">'+esc(z.studio||z.gegenpartei||'')+'</div>'
-      +(t?'<div style="font-size:11px;color:#15803d;font-weight:700">✓ '+esc(t.titel||t.studio||'')+'</div>':'')
-      +(z.nachricht?'<div style="font-size:10px;color:#999;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(z.nachricht.slice(0,60))+'</div>':'')
-      +'</div>';
-  });
-  el.innerHTML = html;
-}
+// Build 861: rZahlungsEingaenge() entfernt — war defekt (las undefinierte Variable
+// 'zahl' → ReferenceError) und funktional redundant (Holvi-Eingänge laufen über
+// Kontoabgleich + Bank-Abgleich/Match-Engine, dbv2). Reiner Legacy-Lesepfad.
 
 function rZahlungen(){
   var el = document.getElementById('zahlungen-list');
