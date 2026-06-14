@@ -3567,7 +3567,14 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 857: Auszahlungs-Check beruecksichtigt bei steuerfreien GVL-Belegen die
   // einbehaltenen Verwaltungskosten (Auszahlung = Brutto - Einbehalt). Behebt die
   // falsche Warnung bei 202527501 (Diff 1039,27 = Verwaltungskosten).
-  if(el) el.textContent = '857';
+  // Build 858: USt-VA-EXPORT auf dbv2 umgestellt (Cutover-Rest) — las vorher Legacy
+  // db.termine/db.abrechnungen und zeigte bei dbv2-Belegen/GVL ohne Termin ueberall 0,00.
+  // Jetzt gleiche Quelle wie die Anzeige, inkl. steuerfreie-Umsaetze-Zeile + Art-Spalte.
+  // Build 859: VA-Export komplett neu als PDF im Steuerberater-Stil — nach BANK-EINGANG
+  // gruppiert (zahlungsgruppen: gegenpartei/valuta/betrag -> beleg_ids), Einzel-Gutschriften
+  // mit Brutto/Satz/USt/Auszahlung + Sigma je Eingang, Monats-Zusammenfassung 7/19/SH/frei,
+  // Ausgaben-Detail. jsPDF A4 + iOS-Share. Validiert cent-genau gegen Steuerberater-Aufstellung.
+  if(el) el.textContent = '859';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18238,77 +18245,187 @@ function ausgabeSpeichern(){
 
 // ── UST EXPORT (CSV + HTML für PDF-Print) ────────────────────
 function ustExport(){
+  // Build 859: VA-Export als PDF im Steuerberater-Stil — nach BANK-EINGANG gruppiert
+  // (zahlungsgruppen: gegenpartei/valuta/betrag → beleg_ids), darunter die Einzel-
+  // Gutschriften mit Brutto/Satz/USt/Auszahlung, Σ je Eingang. Quelle = dbv2 (Ist).
+  if(!window.jspdf || !window.jspdf.jsPDF){ showToast('PDF-Bibliothek nicht geladen — Internet?'); return; }
+  try { _ustExportPDF(); }
+  catch(e){ console.error('VA-PDF-Fehler:', e); showToast('PDF-Fehler: '+e.message); }
+}
+
+function _ustExportPDF(){
   var ym = _ustYear+'-'+String(_ustMonth+1).padStart(2,'0');
-  var urEinn = db.profil&&db.profil.ust!=null ? db.profil.ust : 0.07;
-  var einnTermine = (db.termine||[]).filter(function(t){return t.datum&&t.datum.startsWith(ym);});
-  var ausgaben = (db.ausgaben||[]).filter(function(a){return a.datum&&a.datum.startsWith(ym);});
+  var monName = MONTH_NAMES[_ustMonth]+' '+_ustYear;
+  var _snap = function(s){ return Math.abs(s-0.19)<0.02 ? 0.19 : 0.07; };
 
-  // Export nutzt dieselbe Berechnung wie die USt-Anzeige (Ist-Versteuerung aus Abrechnungen)
-  // NICHT aus kommgage berechnen — nur bestätigte Abrechnungen mit Zahlungseingang zählen
-  // einnZeilen durch dieselbe Loop-Logik aufbauen wie in rUstVoranmeldung
-  var _snapUstExp = function(satz){ if(Math.abs(satz-0.19)<0.02) return 0.19; if(Math.abs(satz-0.07)<0.015) return 0.07; return 0.07; /* nur 0/7/19% gültig */ };
-  var einnZeilenExp = [];
-  var _gezDokExp = {}, _gezTermExp = {};
-  (db.termine||[]).forEach(function(t){
-    var zd=null;
-    if(t.abId){ var _a=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}); if(_a&&_a.zahlungDatum) zd=_a.zahlungDatum; }
-    if(!zd&&t.zahlungDatum) zd=t.zahlungDatum;
-    if(!zd){ var _z=(db.zahlungen||[]).find(function(z){return z.terminId===t.id||(z.terminIds&&z.terminIds.indexOf(t.id)>=0);}); if(_z) zd=_z.datum; }
-    if(!zd||!zd.startsWith(ym)) return;
-    if(t.dokIds&&t.dokIds.length){
-      t.dokIds.forEach(function(did){
-        if(_gezDokExp[did]) return;
-        var dk=(db.dokumente||[]).find(function(d){return d.id===did&&d.bestaetigt;});
-        if(!dk) return;
-        if(dk.typ==='monats_abrechn'||dk.typ==='abrechn'){
-          _gezDokExp[did]=true;
-          var br=parseFloat(dk.brutto)||0, mw=parseFloat(dk.mwst)||0;
-          if(br) einnZeilenExp.push({label:esc(dk.studio||'')+(dk.gutschrift_nr?' · '+dk.gutschrift_nr:''),netto:br,ust:mw,zahlDatum:zd});
-        }
-      });
-      return;
-    }
-    if(_gezTermExp[t.id]) return;
-    _gezTermExp[t.id]=true;
-    var ab=t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
-    if(ab&&ab.brutto&&!ab.aufgeteilt&&!ab._nurMarker){
-      var br=parseFloat(ab.brutto)||0, mw=parseFloat(ab.mwst)||0;
-      if(br) einnZeilenExp.push({label:esc(t.titel||t.studio||'')+(ab.gutschrift_nr?' · '+ab.gutschrift_nr:''),netto:br,ust:mw,zahlDatum:zd});
-    }
-  });
-  var einnNetto=einnZeilenExp.reduce(function(s,e){return s+e.netto;},0);
-  var einnUst=Math.round(einnZeilenExp.reduce(function(s,e){return s+e.ust;},0)*100)/100;
-  var vorstUst=0; ausgaben.forEach(function(a){vorstUst+=parseFloat(a.vorsteuer)||0;});
-  var zahllast=einnUst-vorstUst;
+  var v2abs=(typeof dbv2!=='undefined' && dbv2.abrechnungen)||[];
+  var abById={}; v2abs.forEach(function(a){ abById[a.id]=a; });
+  var abrIdx={}; ((dbv2&&dbv2.abrechner)||[]).forEach(function(r){ abrIdx[r.id]=r; });
+  var prodIdx={}; ((dbv2&&dbv2.produktionen)||[]).forEach(function(pr){ prodIdx[pr.id]=pr; });
+  var grpById=(dbv2&&dbv2.zahlungsgruppen)||[];
 
-  var html='<html><head><meta charset="UTF-8"><title>USt-Voranmeldung '+MONTH_NAMES[_ustMonth]+' '+_ustYear+'</title>'
-    +'<style>body{font-family:Arial,sans-serif;font-size:12px;margin:24px}h1{font-size:16px}table{width:100%;border-collapse:collapse;margin-bottom:16px}'
-    +'th{background:#7c3aed;color:#fff;padding:6px 8px;text-align:left}td{padding:5px 8px;border-bottom:1px solid #eee}'
-    +'.total{font-weight:bold;background:#f3f4f6}.zahllast{font-size:18px;font-weight:900;color:#7c3aed}</style></head><body>'
-    +'<h1>USt-Voranmeldung – '+MONTH_NAMES[_ustMonth]+' '+_ustYear+' (Ist-Versteuerung)</h1>'
-    +'<p>Erstellt: '+(new Date().toLocaleDateString('de-DE'))+'  · Nur Zahlungseingänge in diesem Monat</p>'
-    +'<h2>Einnahmen mit Zahlungseingang</h2><table><tr><th>Zahldatum</th><th>Abrechnung</th><th>Brutto</th><th>USt</th></tr>';
-  einnZeilenExp.forEach(function(e){
-    html+='<tr><td>'+fd(e.zahlDatum)+'</td><td>'+e.label+'</td><td>'+fmtEur(e.netto)+'</td><td>'+fmtEur(e.ust)+'</td></tr>';
+  // 1) Belege dieses Monats (nach Zufluss), nicht überholt
+  var monBelege=v2abs.filter(function(a){
+    return a.zahlungs_datum && a.zahlungs_datum.slice(0,7)===ym && !a._ueberholt_durch;
   });
-  html+='<tr class="total"><td colspan="2">Summe</td><td>'+fmtEur(einnNetto)+'</td><td>'+fmtEur(einnUst)+'</td></tr></table>';
-  html+='<h2>Ausgaben / Vorsteuer</h2><table><tr><th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th>Brutto</th><th>Vorsteuer</th></tr>';
-  ausgaben.forEach(function(a){
-    html+='<tr><td>'+fd(a.datum)+'</td><td>'+esc(a.beschr||'')+'</td><td>'+esc(a.kat||'')+'</td><td>'+fmtEur(a.brutto)+'</td><td>'+fmtEur(a.vorsteuer)+'</td></tr>';
-  });
-  html+='<tr class="total"><td colspan="3">Summe Vorsteuer</td><td></td><td>'+fmtEur(vorstUst)+'</td></tr></table>';
-  html+='<div style="background:#f3e8ff;border-radius:8px;padding:16px;margin-top:8px">'
-    +'<table style="margin:0"><tr><td>USt aus Einnahmen:</td><td style="text-align:right;font-weight:700">+'+fmtEur(einnUst)+'</td></tr>'
-    +'<tr><td>Vorsteuer aus Ausgaben:</td><td style="text-align:right;font-weight:700">−'+fmtEur(vorstUst)+'</td></tr>'
-    +'<tr><td><strong>Zahllast ans Finanzamt:</strong></td><td style="text-align:right" class="zahllast">'+fmtEur(zahllast)+'</td></tr></table></div>'
-    +'</body></html>';
+  var belegUst=function(a){
+    var u=parseFloat(a.ust_betrag)||0;
+    if(String(a.klasse)==='4' && !u) u=Math.round((parseFloat(a.brutto)||0)*0.07*100)/100;
+    if(a.steuerfrei) u=0;
+    return u;
+  };
 
-  var blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url; a.download='USt-Voranmeldung-'+_ustYear+'-'+String(_ustMonth+1).padStart(2,'0')+'.html';
-  a.click(); URL.revokeObjectURL(url);
-  showToast('Export heruntergeladen');
+  // 2) Nach Bank-Eingang (Zahlungsgruppe) gruppieren; Belege ohne Gruppe einzeln
+  var bloecke=[]; var benutzt={};
+  grpById.forEach(function(g){
+    if(!g.valuta || g.valuta.slice(0,7)!==ym) return;
+    var bs=(g.beleg_ids||[]).map(function(id){return abById[id];})
+      .filter(function(a){return a && !a._ueberholt_durch && a.zahlungs_datum && a.zahlungs_datum.slice(0,7)===ym;});
+    if(!bs.length) return;
+    bs.forEach(function(a){ benutzt[a.id]=true; });
+    bloecke.push({ valuta:g.valuta, betrag:g.betrag, gegen:g.gegenpartei||'', belege:bs });
+  });
+  // Belege ohne Gruppe → Einzelblock (z.B. GVL vor Bank-Match)
+  monBelege.forEach(function(a){
+    if(benutzt[a.id]) return;
+    var r=abrIdx[a.abrechner_id]; var nm=r?(r.name||r.anzeigename||''):'';
+    bloecke.push({ valuta:a.zahlungs_datum, betrag:parseFloat(a.auszahlung)||0, gegen:nm||'(ohne Bank-Match)', belege:[a], _ungrouped:true });
+  });
+  bloecke.sort(function(x,y){ return x.valuta<y.valuta?-1:(x.valuta>y.valuta?1:0); });
+
+  // 3) Monatssummen
+  var sum7=0,sum19=0,sumSH=0,sumFrei=0;
+  monBelege.forEach(function(a){
+    var u=belegUst(a);
+    if(a.steuerfrei){ sumFrei+=parseFloat(a.brutto)||0; }
+    else if(String(a.klasse)==='4'){ sumSH+=u; }
+    else if(_snap(a.ust_satz||0)===0.19){ sum19+=u; }
+    else { sum7+=u; }
+  });
+  var ausgaben=(db.ausgaben||[]).filter(function(a){return a.datum&&a.datum.startsWith(ym);});
+  var vorst=0; ausgaben.forEach(function(a){ vorst+=parseFloat(a.vorsteuer)||0; });
+  var ustGes=Math.round((sum7+sum19+sumSH)*100)/100;
+  var zahllast=Math.round((ustGes-vorst)*100)/100;
+
+  // ─── PDF aufbauen ───
+  var jsPDF=window.jspdf.jsPDF;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var L=15, R=195, W=R-L, y=18;
+  var p=db.profil||{};
+  var euro=function(n){ return (n<0?'-':'')+Math.abs(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; };
+  var dd=function(iso){ if(!iso)return''; var pp=iso.slice(0,10).split('-'); return pp[2]+'.'+pp[1]+'.'+pp[0]; };
+  var newPageIf=function(need){ if(y+need>282){ doc.addPage(); y=18; } };
+
+  // Kopf
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('USt-Voranmeldung — '+monName, L, y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(110);
+  var kopf=(p.name||'')+(p.steuernr?'  ·  Steuer-Nr. '+p.steuernr:'')+'  ·  Ist-Versteuerung §20 UStG';
+  doc.text(kopf, L, y); y+=4;
+  doc.text('Erstellt '+new Date().toLocaleDateString('de-DE')+'  ·  nur Zahlungseingänge in diesem Monat (Geldfluss-Datum)', L, y); y+=7;
+  doc.setTextColor(0);
+
+  // Blöcke je Bank-Eingang
+  bloecke.forEach(function(b){
+    newPageIf(20);
+    // Eingang-Kopfzeile
+    doc.setDrawColor(124,58,237); doc.setLineWidth(0.4);
+    doc.line(L,y,R,y); y+=4;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+    doc.text('Bank-Eingang '+dd(b.valuta)+'  ·  '+euro(b.betrag||0), L, y);
+    doc.setFont('helvetica','normal'); doc.setTextColor(90);
+    doc.text('von '+(b.gegen||''), R, y, {align:'right'}); doc.setTextColor(0); y+=4.5;
+    // Spaltenkopf
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(120);
+    doc.text('Gutschrift / Rg.', L, y);
+    doc.text('Brutto', L+92, y, {align:'right'});
+    doc.text('Satz', L+108, y, {align:'right'});
+    doc.text('USt', L+132, y, {align:'right'});
+    doc.text('Auszahlung', R, y, {align:'right'});
+    doc.setTextColor(0); y+=1; doc.setDrawColor(220); doc.setLineWidth(0.2); doc.line(L,y,R,y); y+=3.5;
+    // Belegzeilen
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    var bSumBr=0,bSumUst=0,bSumAus=0;
+    b.belege.forEach(function(a){
+      newPageIf(6);
+      var br=parseFloat(a.brutto)||0, u=belegUst(a), aus=parseFloat(a.auszahlung)||0;
+      var satz = a.steuerfrei?'steuerfrei':(String(a.klasse)==='4'?'7% K4':(_snap(a.ust_satz||0)===0.19?'19%':'7%'));
+      var bn = a.beleg_nr || '—';
+      var _pr = prodIdx[a.produktion_id];
+      var prod = _pr ? (_pr.name||_pr.titel||'') : '';
+      doc.text(bn + (prod?'  ·  '+prod:''), L, y, {maxWidth:88});
+      doc.text(euro(br), L+92, y, {align:'right'});
+      doc.text(satz, L+108, y, {align:'right'});
+      doc.text(a.steuerfrei?'0,00 €':euro(u), L+132, y, {align:'right'});
+      doc.text(euro(aus), R, y, {align:'right'});
+      bSumBr+=br; bSumUst+=u; bSumAus+=aus; y+=4.5;
+    });
+    // Σ Block
+    doc.setDrawColor(220); doc.line(L+60,y-1,R,y-1);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+    doc.text('Σ', L+60, y+2);
+    doc.text(euro(bSumBr), L+92, y+2, {align:'right'});
+    doc.text(euro(Math.round(bSumUst*100)/100), L+132, y+2, {align:'right'});
+    doc.text(euro(bSumAus), R, y+2, {align:'right'});
+    doc.setFont('helvetica','normal'); y+=8;
+  });
+
+  if(!bloecke.length){
+    doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(150);
+    doc.text('Keine Zahlungseingänge in '+monName+'.', L, y); doc.setTextColor(0); y+=8;
+  }
+
+  // ─── Monats-Zusammenfassung ───
+  newPageIf(48);
+  y+=2; doc.setFillColor(243,232,255); doc.roundedRect(L,y,W,42,2,2,'F'); y+=7;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Zusammenfassung '+monName, L+5, y); y+=7;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+  var rowZ=function(label,val,bold){
+    doc.setFont('helvetica',bold?'bold':'normal');
+    doc.text(label, L+5, y); doc.text(val, R-5, y, {align:'right'}); y+=5.5;
+  };
+  rowZ('USt 7 %', euro(Math.round(sum7*100)/100));
+  if(sum19>0) rowZ('USt 19 %', euro(Math.round(sum19*100)/100));
+  rowZ('Studio Hamburg (7 %, K4)', euro(Math.round(sumSH*100)/100));
+  if(sumFrei>0) rowZ('Steuerfreie Umsätze (Bemessungsgrundlage)', euro(Math.round(sumFrei*100)/100));
+  rowZ('Vorsteuer aus Ausgaben', '-'+euro(Math.round(vorst*100)/100));
+  doc.setDrawColor(124,58,237); doc.setLineWidth(0.3); doc.line(L+5,y-1,R-5,y-1); y+=1;
+  doc.setTextColor(124,58,237);
+  rowZ('Zahllast ans Finanzamt', euro(zahllast), true);
+  doc.setTextColor(0);
+
+  // Ausgaben-Detail (falls vorhanden)
+  if(ausgaben.length){
+    newPageIf(14+ausgaben.length*5);
+    y+=4; doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('Ausgaben / Vorsteuer', L, y); y+=5;
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(120);
+    doc.text('Datum', L, y); doc.text('Beschreibung', L+22, y);
+    doc.text('Brutto', L+130, y, {align:'right'}); doc.text('Vorsteuer', R, y, {align:'right'});
+    doc.setTextColor(0); y+=1; doc.setDrawColor(220); doc.line(L,y,R,y); y+=3.5;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    ausgaben.forEach(function(a){
+      newPageIf(6);
+      doc.text(dd(a.datum), L, y);
+      doc.text(String(a.beschr||''), L+22, y, {maxWidth:100});
+      doc.text(euro(parseFloat(a.brutto)||0), L+130, y, {align:'right'});
+      doc.text(euro(parseFloat(a.vorsteuer)||0), R, y, {align:'right'});
+      y+=4.5;
+    });
+  }
+
+  // ─── Speichern / iOS-Share ───
+  var fileName='USt-Voranmeldung-'+ym+'.pdf';
+  try {
+    var blob=doc.output('blob');
+    var file=new File([blob],fileName,{type:'application/pdf'});
+    var payload={files:[file]};
+    if(navigator.canShare && navigator.canShare(payload) && navigator.share){
+      navigator.share(payload).then(function(){ showToast('✓ Geteilt'); })
+        .catch(function(err){ if(err&&err.name==='AbortError') return; _downloadPDFFallback(doc,fileName); });
+    } else { _downloadPDFFallback(doc,fileName); }
+  } catch(e){ _downloadPDFFallback(doc,fileName); }
 }
 
 // ── ABRECHNUNGEN ─────────────────────────────────────────────
