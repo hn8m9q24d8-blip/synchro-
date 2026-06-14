@@ -3569,7 +3569,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // war defekt (ReferenceError auf undefinierte Variable 'zahl', crashte beim Öffnen) und
   // funktional redundant: Holvi-Eingänge laufen über Kontoabgleich + Bank-Abgleich/Match-
   // Engine (dbv2). Toter Legacy-Lesepfad auf db.zahlungen entfernt (Kachel/View/Fn/Route).
-  if(el) el.textContent = '861';
+  // Build 862: GVL-Bank-Eingänge laufen jetzt durch den universellen Match-Resolver
+  // (vorher hart auf 'deferred' → kein Anker). GVL-Sammelzahlung matcht als GS-NR-SAMMEL
+  // gegen die Auszahlungs-Summe der GVL-Belege (deckt Verwaltungskosten-Einbehalt + USt-
+  // frei) und stempelt zahlungs_datum=Geldeingang auf alle Belege → fließt korrekt in die
+  // USt-VA (steuerfreie 501 separat). Typ-agnostischer Anker, gilt für alle künftigen GVL.
+  if(el) el.textContent = '862';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -22224,7 +22229,13 @@ function _mev6Resolve(e){
     return { typ:'KLASSE4', konfidenz:'deferred', belege:[], sumAusz:0, delta:null,
              ustNote:(km.cands&&km.cands.length?('mehrdeutig: '+km.cands.length+' K4-Belege'):'kein passender K4-Beleg') };
   }
-  if(k) return { typ:k, konfidenz:(k==='KLASSE2'||k==='GVL'?'deferred':'—'), belege:[], sumAusz:0, delta:null, ustNote:'' };
+  // Build 862: GVL NICHT mehr vorab abfangen — fällt jetzt durch den universellen
+  // GS-Resolver (GVL-Beleg-Nr-Extraktion seit Build 846 vorhanden). Match gegen
+  // Auszahlungs-Summe (deckt Verwaltungskosten-Einbehalt + USt-frei ab); verankert
+  // beide Belege per zahlungs_datum auf den Geldeingang. Das alte 'deferred' war
+  // eine Schutz-Abzweigung aus der Zeit VOR der Extraktion und nur noch blockierend.
+  // PRIVAT/BANK (typ '—') und KLASSE2 (deferred) bleiben weiterhin abgefangen.
+  if(k && k!=='GVL') return { typ:k, konfidenz:(k==='KLASSE2'?'deferred':'—'), belege:[], sumAusz:0, delta:null, ustNote:'' };
 
   var belege=_mev6Belege();
   var byNr={}; belege.forEach(function(ab){ if(ab.beleg_nr) (byNr[ab.beleg_nr]=byNr[ab.beleg_nr]||[]).push(ab); });
