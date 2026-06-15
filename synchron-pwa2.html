@@ -3574,7 +3574,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // gegen die Auszahlungs-Summe der GVL-Belege (deckt Verwaltungskosten-Einbehalt + USt-
   // frei) und stempelt zahlungs_datum=Geldeingang auf alle Belege → fließt korrekt in die
   // USt-VA (steuerfreie 501 separat). Typ-agnostischer Anker, gilt für alle künftigen GVL.
-  if(el) el.textContent = '862';
+  // Build 863: Mahnwesen → dbv2. Renderer, Badge (Startup + Laufzeit) und Mahn-Mail lesen
+  // jetzt dbv2-Belege; "bezahlt" = zahlungs_datum-Anker (Match-Engine) statt db.termine.
+  // status. Eine Forderung = ein Beleg (Sammel erzeugt eine statt mehrerer Mahnungen);
+  // K4/GVL ausgenommen. Damit ist die alte Holvi-Bestätigung als Bezahlt-Quelle abgelöst —
+  // letzter Finanz-Legacy-Renderer auf dbv2; die parallele Bank-Karten-Ansicht wird ersetzbar.
+  if(el) el.textContent = '863';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -19157,104 +19162,102 @@ function _updateHolviAbgleichBadge(){
   if(badge){ badge.textContent=offen||''; badge.style.display=offen>0?'inline':'none'; }
 }
 
+// Build 863: Mahnwesen liest dbv2 statt db.termine. Eine Forderung = ein Beleg.
+// Bezahlt-Status kommt aus dem Match-Engine-Anker (zahlungs_datum), NICHT mehr aus
+// db.termine.status — damit ist die alte Holvi-Bestätigung als Bezahlt-Quelle abgelöst
+// (letzter Finanz-Legacy-Renderer). Sammel-Belege erzeugen jetzt EINE Mahnung statt
+// mehrerer. K4 (Studio-HH-Payroll) und GVL (Ausschüttung) sind keine Mahnfälle.
+var _MAHN_FAELLIG_TAGE = 30;
+function _mahnFaelligDatum(ab){
+  return ab.ausstellungs_datum || ab._print_datum
+       || (ab.leistungs_monat ? ab.leistungs_monat + '-01' : '');
+}
+function _mahnBelegStudio(ab){
+  var abr = (dbv2.abrechner||[]).find(function(x){return x.id===ab.abrechner_id;});
+  return abr ? abr.name : (ab.gegenpartei||ab.studio||'');
+}
+// Gemeinsame Filterquelle für Liste UND Badge — garantiert identische Zahl.
+function _mahnOffeneBelege(){
+  var heuteMs = new Date(today()).getTime();
+  return (dbv2.abrechnungen||[]).filter(function(ab){
+    if(ab._ueberholt_durch) return false;             // überholter Korrektur-Vorgänger
+    if(ab.zahlungs_datum) return false;               // bezahlt (dbv2-Anker)
+    if((parseFloat(ab.brutto)||0) <= 0) return false; // Storno / Null-Beleg
+    if(ab.klasse === '4') return false;               // Studio-HH-Payroll, kein Mahnfall
+    if(/gvl/i.test(_mahnBelegStudio(ab))) return false;// GVL-Ausschüttung, kein Mahnfall
+    var fd0 = _mahnFaelligDatum(ab);
+    if(!fd0) return false;
+    return (new Date(fd0).getTime() + _MAHN_FAELLIG_TAGE*86400000) < heuteMs;
+  });
+}
+
 function rMahnwesen(){
   var el = document.getElementById('mahn-scroll');
   if(!el) return;
 
-  var heute = today();
-  var FAELLIG_TAGE = 30;
+  var heuteMs = new Date(today()).getTime();
+  var offen = _mahnOffeneBelege();
+  _updateMahnBadge(offen.length);
 
-  // Termine die überfällig sind:
-  // - haben eine Abrechnung (abId oder abrechn-Dok)
-  // - sind NICHT bezahlt
-  // - Abrechnungsdatum + 30 Tage < heute
-  var ueberfaellig = (db.termine||[]).filter(function(t){
-    if(t.status === 'bezahlt') return false;
-    if(t.status === 'storno') return false;
-
-    // Abrechnungsdatum ermitteln
-    var abDatum = null;
-    if(t.abId){
-      var ab = (db.abrechnungen||[]).find(function(a){ return a.id===t.abId; });
-      if(ab && ab.datum) abDatum = ab.datum;
-    }
-    if(!abDatum){
-      var dok = (db.dokumente||[]).find(function(d){
-        return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
-      });
-      if(dok && dok.datum) abDatum = dok.datum;
-    }
-    // Fallback: wenn kein abDatum aber abgerechnet → t.datum nehmen
-    if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum;
-    if(!abDatum) return false; // Keine Abrechnung → nicht fällig
-
-    // Fälligkeit prüfen
-    var abDate = new Date(abDatum);
-    var faelligAm = new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000);
-    return faelligAm < new Date(heute);
-  });
-
-  // Badge aktualisieren
-  _updateMahnBadge(ueberfaellig.length);
-
-  if(!ueberfaellig.length){
+  if(!offen.length){
     el.innerHTML = '<div class="empty-state">'
       +'<div class="empty-icon">✅</div>'
       +'<div class="empty-title">Alles bezahlt</div>'
-      +'<div class="empty-sub">Keine überfälligen Zahlungen</div>'
+      +'<div class="empty-sub">Keine überfälligen Forderungen</div>'
       +'</div>';
     return;
   }
 
-  // Nach Überfälligkeit sortieren (älteste zuerst)
-  ueberfaellig.sort(function(a,b){
-    return (a.datum||'') < (b.datum||'') ? -1 : 1;
-  });
+  // Älteste Fälligkeit zuerst
+  offen.sort(function(a,b){ return _mahnFaelligDatum(a) < _mahnFaelligDatum(b) ? -1 : 1; });
 
   var html = '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
-    +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+ueberfaellig.length+' überfällige Zahlung'+(ueberfaellig.length>1?'en':'')+'</div>'
+    +'<div style="font-size:13px;font-weight:800;color:#c2410c;margin-bottom:3px">⚠ '+offen.length+' überfällige Forderung'+(offen.length>1?'en':'')+'</div>'
     +'<div style="font-size:11px;color:#92400e">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
     +'</div>';
 
-  ueberfaellig.forEach(function(t){
+  offen.forEach(function(ab){
     try {
-    var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-    var dok = (db.dokumente||[]).find(function(d){
-      return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
-    });
-    var abDatum = (ab&&ab.datum) || (dok&&dok.datum) || '';
-    // Wenn kein abDatum: Termin-Datum als Fallback
-    var _effAbDatum = abDatum || t.datum || '';
-    var abDate = _effAbDatum ? new Date(_effAbDatum) : null;
-    var faelligAm = abDate && !isNaN(abDate.getTime()) ? new Date(abDate.getTime() + FAELLIG_TAGE*24*60*60*1000) : null;
-    var tageSeit = faelligAm ? Math.floor((new Date(heute)-faelligAm)/(1000*60*60*24)) : 0;
-    var gutschriftNr = (ab&&ab.gutschrift_nr) || (dok&&dok.gutschrift_nr) || '';
-    var brutto = (ab&&ab.brutto) || (dok&&dok.brutto) || parseFloat(t.brutto_termin)||0;
+      var studio = _mahnBelegStudio(ab);
+      var links  = (dbv2.abrechnung_termin_links||[]).filter(function(l){return l.abrechnung_id===ab.id;});
+      var titel=[], ersterTerminId=null;
+      links.forEach(function(l){
+        if(!ersterTerminId) ersterTerminId = l.termin_id;
+        var t=(db.termine||[]).find(function(x){return x.id===l.termin_id;});
+        if(t && t.titel && titel.indexOf(t.titel)<0) titel.push(t.titel);
+      });
+      var fd0 = _mahnFaelligDatum(ab);
+      var faelligAm = new Date(new Date(fd0).getTime() + _MAHN_FAELLIG_TAGE*86400000);
+      var tageSeit = Math.floor((heuteMs - faelligAm.getTime())/86400000);
+      var brutto = parseFloat(ab.brutto)||0;
+      var titelTxt = titel.length
+        ? (titel[0] + (titel.length>1 ? ' + '+(titel.length-1)+' weitere' : ''))
+        : (ab.beleg_nr ? 'Beleg '+ab.beleg_nr : (studio||'Forderung'));
 
-    var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
-    var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
+      var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
+      var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
 
-    html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
-      +'<div>'
-      +'<div style="font-size:14px;font-weight:900">'+esc(t.titel||t.studio||'')+'</div>'
-      +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+'</div>'
-      +(gutschriftNr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(gutschriftNr)+'</div>':'')
-      +'</div>'
-      +'<div style="text-align:right">'
-      +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
-      +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
-      +'</div>'
-      +'</div>'
-      +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
-      +'Abrechnung: '+fd(abDatum)+' · Fällig seit: '+(faelligAm&&!isNaN(faelligAm.getTime())?fd(faelligAm.toISOString().split('T')[0]):'?')
-      +'</div>'
-      +'<div style="display:flex;gap:8px">'
-      +'<button type="button" onclick="mahnEmail(\''+t.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
-      +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>'
-      +'</div>'
-      +'</div>';
-    } catch(e){ html += '<div style="font-size:11px;color:#999;margin-bottom:8px">⚠ Fehler bei Termin: '+esc(t.titel||t.datum||'?')+'</div>'; }
+      html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+        +'<div>'
+        +'<div style="font-size:14px;font-weight:900">'+esc(titelTxt)+'</div>'
+        +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(studio)+(fd0?' · '+fd(fd0):'')+'</div>'
+        +(ab.beleg_nr?'<div style="font-size:10px;color:#999;margin-top:1px">Gutschrift-Nr.: '+esc(ab.beleg_nr)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right">'
+        +(brutto?'<div style="font-size:14px;font-weight:900;color:#1a6ea8">'+fmtEur(brutto)+'</div>':'')
+        +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
+        +'</div>'
+        +'</div>'
+        +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
+        +'Abrechnung: '+fd(fd0)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
+        +'</div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
+        +(ersterTerminId?'<button type="button" onclick="openDetail(\''+ersterTerminId+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>':'')
+        +'</div>'
+        +'</div>';
+    } catch(e){ html += '<div style="font-size:11px;color:#999;margin-bottom:8px">⚠ Fehler bei Beleg: '+esc(ab.beleg_nr||ab.id||'?')+'</div>'; }
   });
 
   el.innerHTML = html;
@@ -19273,24 +19276,30 @@ function _updateMahnBadge(count){
   }
 }
 
-function mahnEmail(terminId){
-  var t = (db.termine||[]).find(function(x){return x.id===terminId;});
-  if(!t) return;
-  var ab = t.abId ? (db.abrechnungen||[]).find(function(a){return a.id===t.abId;}) : null;
-  var dok = (db.dokumente||[]).find(function(d){
-    return d.terminId===t.id && (d.typ==='abrechn'||d.typ==='monats_abrechn') && d.bestaetigt;
+function mahnEmail(belegId){
+  // Build 863: beleg-basiert (dbv2). belegId = dbv2.abrechnungen[].id
+  var ab = (dbv2.abrechnungen||[]).find(function(x){return x.id===belegId;});
+  if(!ab) return;
+  var studio = _mahnBelegStudio(ab);
+  var links = (dbv2.abrechnung_termin_links||[]).filter(function(l){return l.abrechnung_id===ab.id;});
+  var titel=[], aufnahmen=[];
+  links.forEach(function(l){
+    var t=(db.termine||[]).find(function(x){return x.id===l.termin_id;});
+    if(t){ if(t.titel && titel.indexOf(t.titel)<0) titel.push(t.titel); if(t.datum) aufnahmen.push(t.datum); }
   });
-  var gutschriftNr = (ab&&ab.gutschrift_nr)||(dok&&dok.gutschrift_nr)||'';
-  var abDatum = (ab&&ab.datum)||(dok&&dok.datum)||'';
-  var brutto = (ab&&ab.brutto)||(dok&&dok.brutto)||0;
+  aufnahmen.sort();
+  var gutschriftNr = ab.beleg_nr || '';
+  var abDatum = ab.ausstellungs_datum || ab._print_datum || '';
+  var brutto = parseFloat(ab.brutto)||0;
   var profil = db.profil||{};
+  var titelTxt = titel.length ? titel.join(', ') : (gutschriftNr?'Gutschrift '+gutschriftNr:'-');
 
-  var subject = 'Zahlungserinnerung: Gagenabrechnung '+(gutschriftNr||fd(abDatum))+' - '+(t.titel||t.studio||'');
+  var subject = 'Zahlungserinnerung: Gagenabrechnung '+(gutschriftNr||fd(abDatum))+(titel.length?' - '+titel[0]:'');
   var body = 'Sehr geehrte Damen und Herren,\n\n'
     +'hiermit moechte ich hoeflich an die Begleichung meiner ausstehenden Gage erinnern:\n\n'
-    +'  Produktion: '+(t.titel||'-')+'\n'
-    +'  Studio: '+(t.studio||'-')+'\n'
-    +'  Aufnahmedatum: '+fd(t.datum)+'\n'
+    +'  Produktion: '+titelTxt+'\n'
+    +'  Studio: '+(studio||'-')+'\n'
+    +(aufnahmen.length?'  Aufnahmedatum: '+fd(aufnahmen[0])+(aufnahmen.length>1?' (+ '+(aufnahmen.length-1)+' weitere)':'')+'\n':'')
     +(gutschriftNr?'  Gutschrift-Nr.: '+gutschriftNr+'\n':'')
     +(abDatum?'  Abrechnungsdatum: '+fd(abDatum)+'\n':'')
     +(brutto?'  Betrag: '+fmtEur(brutto)+'\n':'')
@@ -19299,7 +19308,7 @@ function mahnEmail(terminId){
     +'Bitte ueberweisen Sie den ausstehenden Betrag baldmoeglichst auf das Ihnen bekannte Konto.\n\n'
     +'Mit freundlichen Gruessen\n'+(profil.name||'');
 
-  var studioEmail = _findStudioEmail(t.studio||'');
+  var studioEmail = _findStudioEmail(studio||'');
   var mailtoBase = studioEmail ? 'mailto:'+studioEmail : 'mailto:';
   window.location.href = mailtoBase+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   showToast(studioEmail ? '✉ Mahnmail an '+studioEmail : '✉ Mahnmail-Entwurf geöffnet — Empfänger ergänzen');
@@ -19717,26 +19726,8 @@ function runIntegrityCheckAndShow(){
 }
 
 function updateMahnBadgeOnLoad(){
-  var heute = today();
-  var count = (db.termine||[]).filter(function(t){
-    if(t.status==='bezahlt'||t.status==='storno') return false;
-    var abDatum = null;
-    if(t.abId){
-      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-      if(ab&&ab.datum) abDatum=ab.datum;
-    }
-    if(!abDatum){
-      var dok=(db.dokumente||[]).find(function(d){
-        return d.terminId===t.id&&(d.typ==='abrechn'||d.typ==='monats_abrechn')&&d.bestaetigt;
-      });
-      if(dok&&dok.datum) abDatum=dok.datum;
-    }
-    if(!abDatum && (t.abgerechnet||t.gutschrift_nr||t.brutto_termin)) abDatum = t.datum;
-    if(!abDatum) return false;
-    var faellig=new Date(new Date(abDatum).getTime()+30*24*60*60*1000);
-    return faellig < new Date(heute);
-  }).length;
-  _updateMahnBadge(count);
+  // Build 863: identische dbv2-Quelle wie die Mahnliste — Badge & Liste immer konsistent.
+  _updateMahnBadge(_mahnOffeneBelege().length);
 }
 
 function abMahnEmail(tid){
