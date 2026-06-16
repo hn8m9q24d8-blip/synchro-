@@ -3224,6 +3224,23 @@ function v2AbrechnungById(abId){
   return dbv2.abrechnungen.find(function(a){return a.id === abId;}) || null;
 }
 
+// Build 865: Zahl-Status eines Termins aus dbv2 ableiten (statt db.termine.status).
+//  'bezahlt'     = mind. ein verknüpfter Beleg hat einen zahlungs_datum-Anker
+//  'abgerechnet' = Beleg(e) verknüpft, aber noch keiner verankert
+//  'offen'       = kein Beleg verknüpft (noch nicht abgerechnet)
+function _terminZahlStatus(terminId){
+  var links = v2JunctionsForTermin(terminId);
+  if(!links.length) return 'offen';
+  var bezahlt=false, abgerechnet=false;
+  links.forEach(function(l){
+    var ab = v2AbrechnungById(l.abrechnung_id);
+    if(!ab || ab._ueberholt_durch) return;
+    abgerechnet = true;
+    if(ab.zahlungs_datum) bezahlt = true;
+  });
+  return bezahlt ? 'bezahlt' : (abgerechnet ? 'abgerechnet' : 'offen');
+}
+
 // Primärer Lese-Zugriff: Gibt pro Termin die "Sicht" zurück, die UIs brauchen.
 // Struktur: {
 //   istAbgerechnet: bool,
@@ -3579,7 +3596,16 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // status. Eine Forderung = ein Beleg (Sammel erzeugt eine statt mehrerer Mahnungen);
   // K4/GVL ausgenommen. Damit ist die alte Holvi-Bestätigung als Bezahlt-Quelle abgelöst —
   // letzter Finanz-Legacy-Renderer auf dbv2; die parallele Bank-Karten-Ansicht wird ersetzbar.
-  if(el) el.textContent = '863';
+  // Build 864: Zahlungsdauer-Statistik (Analyse → Zahlung) auf dbv2 umgestellt — las
+  // vorher db.termine.status/zahlungDatum (Legacy, wird nicht mehr gepflegt → "keine
+  // Daten" trotz gesetzter Anker). Jetzt pro Beleg: ausstellungs_datum → zahlungs_datum,
+  // gruppiert nach Abrechner, Jahr-Filter nach Zahlungseingang. Letzter Statistik-
+  // Renderer auf dem alten Termin-Status-Pfad.
+  // Build 865: "BEZAHLT/OFFEN/ABGR." in Einnahmen-Hero UND Verdienstübersicht lasen
+  // t.status (Legacy, nicht mehr gepflegt → BEZAHLT 0,00). Beide nutzen jetzt
+  // _terminZahlStatus() = dbv2-Ableitung (verknüpfter Beleg mit zahlungs_datum-Anker →
+  // bezahlt). Rein automatisch aus den Match-Ankern, kein manuelles Setzen mehr nötig.
+  if(el) el.textContent = '865';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11570,7 +11596,7 @@ function rVerdienst(){
     termine.forEach(function(t){
       var n=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
       net+=n;
-      if(t.status==='bezahlt') bezahlt+=n; else offen+=n;
+      if(_terminZahlStatus(t.id)==='bezahlt') bezahlt+=n; else offen+=n;
     });
     return{net:net,offen:offen,bezahlt:bezahlt};
   }
@@ -11644,27 +11670,34 @@ function rVerdienst(){
 }
 
 function rZahlungsStatistik(jahr){
-  // Nur Termine mit Termin-Datum UND Zahlungsdatum
-  var termine = (db.termine||[]).filter(function(t){
-    return t.datum && t.zahlungDatum && t.status==='bezahlt';
+  // Build 864: liest dbv2-Belege (zahlungs_datum-Anker der Match-Engine) statt
+  // db.termine.status. Zahlungsdauer = ausstellungs_datum (Rechnungsdatum) bis
+  // zahlungs_datum (Geldeingang), gruppiert nach Abrechner. Jahr-Filter nach
+  // Zahlungseingang (Zufluss), konsistent mit Ist-Versteuerung.
+  var belege = (dbv2.abrechnungen||[]).filter(function(ab){
+    if(ab._ueberholt_durch) return false;
+    if(!ab.zahlungs_datum) return false;             // nur bezahlte
+    if((parseFloat(ab.brutto)||0) <= 0) return false;// Storno/Null verzerrt nicht
+    return true;
   });
 
-  if(!termine.length) return '';
+  if(!belege.length) return '';
 
-  // Optional: nur Jahr filtern
   if(jahr){
-    termine = termine.filter(function(t){
-      return t.datum.startsWith(String(jahr));
+    belege = belege.filter(function(ab){
+      return String(ab.zahlungs_datum).startsWith(String(jahr));
     });
   }
 
-  if(!termine.length) return '';
+  if(!belege.length) return '';
 
   // Pro Studio: Zahlungsdauer berechnen
   var studioMap = {};
-  termine.forEach(function(t){
-    var studio = t.studio||'Unbekannt';
-    var tage = Math.round((new Date(t.zahlungDatum)-new Date(t.datum))/(1000*60*60*24));
+  belege.forEach(function(ab){
+    var studio = _mahnBelegStudio(ab) || 'Unbekannt';
+    var start = ab.ausstellungs_datum || ab._print_datum || ab.leistungs_datum_von;
+    if(!start) return;
+    var tage = Math.round((new Date(ab.zahlungs_datum)-new Date(start))/(1000*60*60*24));
     if(tage < 0 || tage > 365) return; // Ausreißer ignorieren
     if(!studioMap[studio]) studioMap[studio] = [];
     studioMap[studio].push(tage);
@@ -11703,7 +11736,7 @@ function rZahlungsStatistik(jahr){
       +'</div>';
   });
 
-  html += '<div style="font-size:10px;color:#9ca3af;margin-top:4px;padding-bottom:8px">Berechnet aus Termin-Datum bis Zahlungseingang</div>'
+  html += '<div style="font-size:10px;color:#9ca3af;margin-top:4px;padding-bottom:8px">Berechnet aus Rechnungsdatum bis Zahlungseingang</div>'
     +'</div>';
 
   return html;
@@ -20506,13 +20539,14 @@ function rZahlungen(){
 
   function calcNet(t){ return (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0); }
 
-  // Totals for hero
+  // Totals for hero — Build 865: bezahlt/abgerechnet aus dbv2-Ankern statt t.status
   var totalAll=0,offenAll=0,bezahltAll=0,abgAll=0;
   (db.termine||[]).filter(function(t){return t.datum&&t.datum.startsWith(String(_zahlYear));}).forEach(function(t){
     var net=calcNet(t);
     totalAll+=net;
-    if(t.status==='bezahlt') bezahltAll+=net;
-    else if(t.status==='abrechnung') abgAll+=net;
+    var st=_terminZahlStatus(t.id);
+    if(st==='bezahlt') bezahltAll+=net;
+    else if(st==='abgerechnet') abgAll+=net;
     else offenAll+=net;
   });
   var totEl=document.getElementById('zahl-total');
