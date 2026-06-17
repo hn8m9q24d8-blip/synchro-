@@ -3605,7 +3605,14 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // t.status (Legacy, nicht mehr gepflegt → BEZAHLT 0,00). Beide nutzen jetzt
   // _terminZahlStatus() = dbv2-Ableitung (verknüpfter Beleg mit zahlungs_datum-Anker →
   // bezahlt). Rein automatisch aus den Match-Ankern, kein manuelles Setzen mehr nötig.
-  if(el) el.textContent = '865';
+  // Build 866: Jahresabschluss-Übersicht zeigte verankerte Termine gelb ("abgr.") statt
+  // grün — las t.status (Legacy) für die bezahlt-Ampel. Jetzt _terminZahlStatus (dbv2).
+  // Konsistent mit Termin-Ampel (827), Mahnwesen (863), Statistik (864), Header (865).
+  // Build 867: Alte Bank-Karten-Ansicht (rHolviAbgleich) abgeschaltet — Legacy-Karten +
+  // "Bestätigen"-Schreibpfad (t.status/db.zahlungen) raus. Bank-Abgleich läuft nur noch
+  // über die Match-Engine v6 (dbv2-Anker); die View bleibt Schaltzentrale für Match-Engine
+  // + Phase-7-Vergleich. Beseitigt die widersprüchliche DIFFERENZ/PASST-Parallelwelt.
+  if(el) el.textContent = '867';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10408,7 +10415,9 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       var hatV2Link = !!v2LinksByTid[t.id];
       var hatLegacy = !!(t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin);
       var hatAb     = hatV2Link || hatLegacy;
-      var bezahltT  = t.status==='bezahlt';
+      // Build 866: bezahlt-Ampel aus dbv2-Anker (verknüpfter Beleg mit zahlungs_datum)
+      // statt t.status — sonst blieb ein verankerter Termin gelb (z.B. Barsoi).
+      var bezahltT  = _terminZahlStatus(t.id)==='bezahlt';
       var ampel     = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
       // Betrag: bevorzugt v2-Junction-Brutto-Anteil, sonst Legacy
       var v2Lnks = (dbv2.abrechnung_termin_links||[]).filter(function(l){return l.termin_id===t.id;});
@@ -18957,147 +18966,23 @@ function rHolviAbgleich(){
     return;
   }
 
-  var offen=liste.filter(function(e){return !e.bestaetigt;}).length;
-  if(sub) sub.textContent=offen+' offen · '+liste.length+' gesamt';
+  if(sub) sub.textContent=liste.length+' Bank-Eingänge';
   _updateHolviAbgleichBadge();
 
   var html='';
   html+='<button onclick="MEV6run()" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #2563eb;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer">\uD83D\uDD0D Match-Engine v6 \u00b7 Abgleich &amp; Anker</button>';
   html+='<button onclick="MEV7run()" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #059669;background:#ecfdf5;color:#047857;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer">\uD83D\uDCCA Phase 7 \u00b7 USt-Vergleich (dbv2 vs Gold)</button>';
 
-  // Offene zuerst, dann bestätigte
-  var sorted=liste.slice().sort(function(a,b){
-    if(a.bestaetigt&&!b.bestaetigt) return 1;
-    if(!a.bestaetigt&&b.bestaetigt) return -1;
-    return (a.datum||'')<(b.datum||'')?-1:1;
-  });
-
-  sorted.forEach(function(z){
-    var match=_holviAbgleichMatch(z);
-    var kf=z.bestaetigt?'OK':match.konfidenz;
-
-    var bgCol=z.bestaetigt?'#f0fdf4':
-      kf==='AUTO'?'#f0fdf4':
-      kf==='PRÜFEN'?'#fffbeb':
-      kf==='ABWEICHUNG'?'#fff7ed':'#f9fafb';
-    var borderCol=z.bestaetigt?'#86efac':
-      kf==='AUTO'?'#86efac':
-      kf==='PRÜFEN'?'#fde68a':
-      kf==='ABWEICHUNG'?'#fed7aa':'#e5e7eb';
-    var statusLabel=z.bestaetigt?'<span style="background:#16a34a;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">✓ BESTÄTIGT</span>':
-      kf==='AUTO'?'<span style="background:#16a34a;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">🟢 PASST</span>':
-      kf==='PRÜFEN'?'<span style="background:#d97706;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">🟡 PRÜFEN</span>':
-      kf==='ABWEICHUNG'?'<span style="background:#ea580c;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">🟠 DIFFERENZ</span>':
-      '<span style="background:#6b7280;color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800">⚪ OFFEN</span>';
-
-    html+='<div style="background:'+bgCol+';border:1.5px solid '+borderCol+';border-radius:14px;padding:14px;margin-bottom:12px;'+(z.bestaetigt?'opacity:0.7':'')+'">'      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'      +'<div>'      +'<div style="font-size:16px;font-weight:900">'+fmtEur(z.betrag)+'</div>'      +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(z.gegenpartei)+'</div>'      +'<div style="font-size:10px;color:#999;margin-top:1px">'+fd(z.datum)+(z.nachricht?' · '+esc(z.nachricht.slice(0,50)):'')+'</div>'      +'</div>'      +'<div style="text-align:right">'+statusLabel+'</div>'      +'</div>';
-
-    // Zugeordnete Termine
-    if(match.termine.length){
-      html+='<div style="background:rgba(255,255,255,.7);border-radius:8px;padding:8px 10px;margin-bottom:8px">';
-      match.termine.forEach(function(t){
-        var ab = _abForTermin(t);
-        var ausz=ab?parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0:0;
-        var gnrLabel=ab&&ab.gutschrift_nr?ab.gutschrift_nr:(t.gutschrift_nr||'');
-        var _tid=t.id;
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer" onclick="_holviGotoTermin(\''+_tid+'\')">'          +'<div>'          +'<div style="font-size:12px;font-weight:700;color:#1d4ed8">'+esc(t.titel||t.studio||'?')+'</div>'          +'<div style="font-size:10px;color:#888">'+fd(t.datum)+(gnrLabel?' · '+esc(gnrLabel):'')+'</div>'          +'</div>'          +'<div style="font-size:12px;font-weight:800;color:'+(ausz>0?'#15803d':'#9ca3af')+'">'+( ausz>0?fmtEur(ausz):'—')+'</div>'          +'</div>';
-      });
-      // Summe
-      if(match.termine.length>1){
-        var diffCol=Math.abs(match.sumAusz-z.betrag)<=0.50?'#15803d':'#ea580c';
-        html+='<div style="display:flex;justify-content:space-between;padding-top:6px;margin-top:2px;border-top:2px solid rgba(0,0,0,.1)">'          +'<div style="font-size:11px;font-weight:700;color:#555">'+(match.monatsDoc&&match.monatsDoc._viaBerechnung?'Berechnete Auszahlung':(match.monatsDoc&&match.monatsDoc._viaGesamtAuszahlung?'Gesamt-Auszahlung':'Summe'))+' ('+match.termine.length+' Termine)</div>'          +'<div style="font-size:12px;font-weight:900;color:'+diffCol+'">'+fmtEur(match.sumAusz)+' / '+fmtEur(z.betrag)+'</div>'          +'</div>';
-      }
-      html+='</div>';
-
-      // Build 703: Diagnose bei Differenz — zeigt welche Monatsdocs existieren und was fehlt
-      if(!z.bestaetigt && !match.monatsDoc && Math.abs(match.sumAusz-z.betrag)>0.50){
-        var _sd=match.studioDocs||[];
-        html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px">'
-          +'<div style="font-weight:800;color:#92400e;margin-bottom:4px">🔍 Warum Differenz?</div>'
-          +'<div style="color:#78350f;line-height:1.5">Kein Monatsdokument mit Auszahlung <strong>'+fmtEur(z.betrag)+'</strong> gefunden. Stattdessen: Summe der Einzel-Bruttos der Termine ('+fmtEur(match.sumAusz)+').</div>';
-
-        // Build 709: Wenn Termine gematcht aber Summe 0 → teilAb-Werte zeigen (Daten-Problem)
-        if(match.termine.length>0 && match.sumAusz===0){
-          html+='<div style="color:#78350f;margin-top:8px;font-weight:700">Werte der gematchten teilAbs:</div>';
-          match.termine.forEach(function(t){
-            var _ab = _abForTermin(t);
-            if(_ab){
-              html+='<div style="margin-top:3px;padding:3px 6px;background:#fff;border-radius:4px;font-size:10px">'
-                +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+'<br>'
-                +'brutto: <strong>'+fmtEur(parseFloat(_ab.brutto)||0)+'</strong> · '
-                +'mwst: '+fmtEur(parseFloat(_ab.mwst)||0)+' · '
-                +'SV: '+fmtEur(Math.abs(parseFloat(_ab.kv)||0)+Math.abs(parseFloat(_ab.rv)||0)+Math.abs(parseFloat(_ab.pv)||0))+' · '
-                +'ausz: '+fmtEur(parseFloat(_ab.auszahlung)||0)
-                +(_ab._nurMarker?' · <span style="color:#7c3aed;font-weight:700">MARKER (Tochter)</span>':'')
-                +'</div>';
-            } else {
-              // Build 711: Deep-Scan nach Orphan-Records
-              // Sucht nach Abrechnungen an diesem Datum oder mit dieser GNR,
-              // die NICHT korrekt mit dem Termin verknüpft sind
-              var _orphans = (db.abrechnungen||[]).filter(function(a){
-                if(a._nurMarker) return false;
-                if(a.datum === t.datum && _studioPasst(a.studio||'', t.studio||'')) return true;
-                if(t.gutschrift_nr && a.gutschrift_nr && _gnrPasst(a.gutschrift_nr, t.gutschrift_nr)) return true;
-                return false;
-              });
-              html+='<div style="margin-top:3px;padding:3px 6px;background:#fff;border-radius:4px;font-size:10px;color:#dc2626">'
-                +'<strong>'+esc(t.titel||t.studio||'?')+'</strong> '+fd(t.datum)+' — KEINE ABRECHNUNG verknüpft'
-                +'<br>t.abId: <code>'+esc(t.abId||'null')+'</code> · t.id: <code>'+esc(t.id||'?').slice(-8)+'</code>';
-              if(_orphans.length){
-                html+='<div style="margin-top:3px;color:#92400e">'+_orphans.length+' Orphan-Record'+(_orphans.length===1?'':'s')+' an Datum/GNR gefunden:</div>';
-                _orphans.slice(0,3).forEach(function(o){
-                  html+='<div style="margin-top:2px;color:#555">→ id '+esc((o.id||'').slice(-8))+' · terminId <code>'+esc((o.terminId||'null').slice(-8))+'</code> · brutto '+fmtEur(parseFloat(o.brutto)||0)+(o.gutschrift_nr?' · '+esc(o.gutschrift_nr):'')+'</div>';
-                });
-              } else {
-                html+='<div style="margin-top:3px;color:#92400e">Keine Orphan-Records an Datum/GNR</div>';
-              }
-              html+='</div>';
-            }
-          });
-        }
-
-        html+='<div style="color:#78350f;margin-top:6px"><strong>'+_sd.length+'</strong> '+esc(z.gegenpartei)+'-Dokument'+(_sd.length===1?'':'e')+' in der App:</div>';
-        if(_sd.length===0){
-          html+='<div style="color:#92400e;font-weight:700;margin-top:4px">→ Monats-Abrechnung muss noch eingepflegt werden</div>';
-        } else {
-          var _exakt=_sd.filter(function(d){return Math.abs(d.auszahlung-z.betrag)<=0.50;});
-          _sd.slice(0,5).forEach(function(d){
-            var _ok=Math.abs(d.auszahlung-z.betrag)<=0.50;
-            html+='<div style="margin-top:3px;padding:3px 6px;background:'+(_ok?'#d1fae5':'#fff')+';border-radius:4px;'+(_ok?'border:1px solid #86efac':'')+'">'
-              +'<span style="font-weight:700">'+fmtEur(d.auszahlung)+'</span> · '+fd(d.datum)+(d.gutschrift_nr?' · '+esc(d.gutschrift_nr):'')+(d.beschr?' · '+esc(d.beschr.slice(0,30)):'')
-              +(_ok?' <span style="color:#15803d;font-weight:800">✓ passt</span>':'')
-              +'</div>';
-          });
-          if(_exakt.length===0){
-            html+='<div style="color:#92400e;font-weight:700;margin-top:6px">→ Kein Dokument mit passender Auszahlung. Eventuell neu einpflegen.</div>';
-          }
-        }
-        html+='</div>';
-      }
-    } else if(!z.bestaetigt){
-      html+='<div style="font-size:11px;color:#9ca3af;padding:6px 0;margin-bottom:6px">Keine passenden Termine gefunden — bitte Abrechnungen einpflegen</div>';
-    }
-
-    // Buttons
-    if(!z.bestaetigt){
-      var _zid=z.id;
-      html+='<div style="display:flex;gap:8px">'
-        +'<button type="button" onclick="holviAbgleichBestaetigen(\''+_zid+'\')" '
-        +'style="flex:1;background:'+(kf==='AUTO'?'#16a34a':'#374151')+';color:#fff;border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation">'
-        +(kf==='AUTO'?'✓ Bestätigen':'✓ Trotzdem bestätigen')+'</button>'
-        +'</div>';
-    } else {
-      html+='<div style="font-size:10px;color:#16a34a;font-weight:700">✓ Bezahlt · Zahlungsdatum gesetzt</div>';
-    }
-
-    html+='</div>';
-  });
-
-  // Neue Excel laden Button wenn alles bestätigt
-  if(offen===0&&liste.length>0){
-    html+='<div style="text-align:center;padding:20px 0;color:#16a34a;font-size:13px;font-weight:700">🎉 Alle Zahlungen bestätigt!</div>';
-    html+='<div style="text-align:center"><button type="button" onclick="holviAbgleichReset()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">🗑 Zurücksetzen</button></div>';
-  }
+  // Build 867: Legacy-Karten-Liste + Bestätigen-Schreibpfad entfernt. Der Bank-Abgleich
+  // läuft vollständig über die Match-Engine v6 (Anker in dbv2). Diese View ist nur noch
+  // Schaltzentrale (Match-Engine + Phase-7-Vergleich oben). holviAbgleichBestaetigen
+  // (schrieb Legacy t.status/db.zahlungen) wird nicht mehr aufgerufen — toter Code.
+  html+='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:14px;font-size:12px;color:#075985;line-height:1.6">'
+    +'<div style="font-weight:800;margin-bottom:4px">'+liste.length+' Bank-Eingänge geladen</div>'
+    +'Tippe oben auf <strong>Match-Engine v6</strong>, um Eingänge automatisch zuzuordnen und die Zahlungs-Anker zu schreiben. '
+    +'Bezahlt-Status, Mahnwesen und Statistiken lesen direkt aus diesen Ankern.'
+    +'</div>';
+  html+='<div style="text-align:center;margin-top:14px"><button type="button" onclick="holviAbgleichReset()" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer">🗑 Auszug zurücksetzen</button></div>';
 
   el.innerHTML=html;
 }
