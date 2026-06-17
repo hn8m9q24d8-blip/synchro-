@@ -3635,7 +3635,13 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // db.profil.vorsteuerMonatlich=true stellt auf monatlichen Abzug zurueck.
   // Build 877: VA-PDF-Farben ans App-Schema angepasst — lila Box→Creme (239,230,208),
   // lila Linien/Zahllast-Text→App-Blau (43,111,212).
-  if(el) el.textContent = '877';
+  // Build 878: VA-PDF-Layout — Zusammenfassungs-Box-Höhe dynamisch (Zahllast wurde von
+  // Linie/Box-Kante angeschnitten), mehr Abstand Trennlinie↔Zahllast; Ausgaben-
+  // Beschreibung mit echtem Zeilenumbruch (splitTextToSize) + Pfeil-Symbole→'-'.
+  // Build 879: Einnahmen&Analyse — Tabs Studio/Monat/Produktion lasen noch t.status
+  // (Legacy → alles 'offen', widersprach dem dbv2-Hero). Jetzt durchgaengig
+  // _terminZahlStatus (dbv2-Anker). Vervollstaendigt den 865/866-Cutover dieser Ansicht.
+  if(el) el.textContent = '879';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18463,8 +18469,10 @@ function _ustExportPDF(){
   }
 
   // ─── Monats-Zusammenfassung ───
-  newPageIf(48);
-  y+=2; doc.setFillColor(239,230,208); doc.roundedRect(L,y,W,42,2,2,'F'); y+=7;
+  var nzAll = 1 + (sum19>0?1:0) + 1 + (sumFrei>0?1:0) + ((_vstMonatlich||vorst>0)?1:0) + 1;
+  var boxH = 14 + nzAll*5.5 + 6;
+  newPageIf(boxH+6);
+  y+=2; doc.setFillColor(239,230,208); doc.roundedRect(L,y,W,boxH,2,2,'F'); y+=7;
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
   doc.text('Zusammenfassung '+monName, L+5, y); y+=7;
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
@@ -18478,7 +18486,7 @@ function _ustExportPDF(){
   if(sumFrei>0) rowZ('Steuerfreie Umsätze (Bemessungsgrundlage)', euro(Math.round(sumFrei*100)/100));
   if(_vstMonatlich) rowZ('Vorsteuer aus Ausgaben', '-'+euro(Math.round(vorst*100)/100));
   else if(vorst>0)  rowZ('Vorsteuer (z. Jahresende, hier nicht abgezogen)', euro(Math.round(vorst*100)/100));
-  doc.setDrawColor(43,111,212); doc.setLineWidth(0.3); doc.line(L+5,y-1,R-5,y-1); y+=1;
+  doc.setDrawColor(43,111,212); doc.setLineWidth(0.3); doc.line(L+5,y,R-5,y); y+=4.5;
   doc.setTextColor(43,111,212);
   rowZ('Zahllast ans Finanzamt', euro(zahllast), true);
   doc.setTextColor(0);
@@ -18494,12 +18502,16 @@ function _ustExportPDF(){
     doc.setTextColor(0); y+=1; doc.setDrawColor(220); doc.line(L,y,R,y); y+=3.5;
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
     ausgaben.forEach(function(a){
-      newPageIf(6);
+      // Pfeil-Symbole (→ ⇒ ↦ …) kann jsPDF/Helvetica nicht → durch "-" ersetzen
+      var beschr=String(a.beschr||'').replace(/[\u2190-\u21FF\u2794-\u27BF]/g,'-');
+      var lines=doc.splitTextToSize(beschr, 88);
+      var blockH=Math.max(4.5, lines.length*4);
+      newPageIf(blockH+2);
       doc.text(dd(a.datum), L, y);
-      doc.text(String(a.beschr||''), L+22, y, {maxWidth:100});
+      doc.text(lines, L+22, y);
       doc.text(euro(parseFloat(a.brutto)||0), L+130, y, {align:'right'});
       doc.text(euro(parseFloat(a.vorsteuer)||0), R, y, {align:'right'});
-      y+=4.5;
+      y+=blockH;
     });
   }
 
@@ -20572,8 +20584,9 @@ function rZahlungen(){
       var net=calcNet(t);
       groups[keyLow].termine.push(t);
       groups[keyLow].net+=net;
-      if(t.status==='bezahlt') groups[keyLow].bezahlt+=net;
-      else if(t.status==='abrechnung') groups[keyLow].abgerechnet+=net;
+      var stG=_terminZahlStatus(t.id);
+      if(stG==='bezahlt') groups[keyLow].bezahlt+=net;
+      else if(stG==='abgerechnet') groups[keyLow].abgerechnet+=net;
       else groups[keyLow].offen+=net;
     });
     var html='';
@@ -20622,12 +20635,14 @@ function rZahlungen(){
         +'<div id="'+gid+'">'
         +g.termine.map(function(t){
           var tnet=calcNet(t);
-          var sc=t.status==='bezahlt'?'#22c55e':t.status==='abrechnung'?'#f97316':'#ef4444';
+          var stT=_terminZahlStatus(t.id);
+          var sc=stT==='bezahlt'?'#22c55e':stT==='abgerechnet'?'#f97316':'#ef4444';
+          var scLbl=stT==='bezahlt'?'bezahlt':stT==='abgerechnet'?'abgerechnet':'offen';
           return '<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\');},400);" style="padding:9px 16px 9px 30px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;cursor:pointer;touch-action:manipulation">'
             +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||'')+'</div>'
             +'<div style="font-size:11px;color:#9ca3af">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div></div>'
             +'<div style="text-align:right;flex-shrink:0;margin-left:8px"><div style="font-size:13px;font-weight:700">'+fmtEur(tnet)+'</div>'
-            +'<div style="font-size:11px;color:'+sc+'">'+tlabel2(t.status)+'</div></div></div>';
+            +'<div style="font-size:11px;color:'+sc+'">'+scLbl+'</div></div></div>';
         }).join('')
         +'</div></div>';
     });
@@ -20643,8 +20658,9 @@ function rZahlungen(){
       var key=p[0]+'-'+p[1];
       if(!months[key]) months[key]={net:0,offen:0,bezahlt:0,abgerechnet:0,count:0,month:mi};
       var net=calcNet(t); months[key].net+=net; months[key].count++;
-      if(t.status==='bezahlt') months[key].bezahlt+=net;
-      else if(t.status==='abrechnung') months[key].abgerechnet+=net;
+      var stM=_terminZahlStatus(t.id);
+      if(stM==='bezahlt') months[key].bezahlt+=net;
+      else if(stM==='abgerechnet') months[key].abgerechnet+=net;
       else months[key].offen+=net;
     });
     var now=new Date(); var isCurrentYear=_zahlYear===now.getFullYear();
@@ -20694,7 +20710,7 @@ function rZahlungen(){
       key=keyLow;
       var net=calcNet(t);
       prods[key].termine.push(t); prods[key].net+=net;
-      if(t.status==='bezahlt') prods[key].bezahlt+=net; else prods[key].offen+=net;
+      if(_terminZahlStatus(t.id)==='bezahlt') prods[key].bezahlt+=net; else prods[key].offen+=net;
     });
     var sortedP=Object.keys(prods).sort(function(a,b){return prods[b].net-prods[a].net;});
     var html='';
@@ -20712,11 +20728,13 @@ function rZahlungen(){
         +'<div id="'+gid+'">'
         +g.termine.map(function(t){
           var tnet=calcNet(t);
-          var sc=t.status==='bezahlt'?'#22c55e':t.status==='abrechnung'?'#f97316':'#ef4444';
+          var stP=_terminZahlStatus(t.id);
+          var sc=stP==='bezahlt'?'#22c55e':stP==='abgerechnet'?'#f97316':'#ef4444';
+          var scLbl=stP==='bezahlt'?'bezahlt':stP==='abgerechnet'?'abgerechnet':'offen';
           return '<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\');},400);" style="padding:9px 16px 9px 26px;background:#fafafa;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;cursor:pointer;touch-action:manipulation">'
             +'<div style="font-size:12px;color:#374151">'+fd(t.datum)+(t.uhrzeit?' · '+t.uhrzeit:'')+'</div>'
             +'<div style="text-align:right"><div style="font-size:13px;font-weight:700">'+fmtEur(tnet)+'</div>'
-            +'<div style="font-size:11px;color:'+sc+'">'+tlabel2(t.status)+'</div></div></div>';
+            +'<div style="font-size:11px;color:'+sc+'">'+scLbl+'</div></div></div>';
         }).join('')
         +'</div></div>';
     });
