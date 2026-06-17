@@ -3618,7 +3618,14 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 869: Mahn-Mail gekuerzt (Tims Fassung) — ohne Eigenfehler-Satz, knappe Nachfrage.
   // Build 870: Mahn-Mail mit echten Umlauten (ä/ö/ü) statt ue/ae/oe — mailto URL-codiert,
   // moderne iOS-Mail zeigt Umlaute korrekt.
-  if(el) el.textContent = '870';
+  // Build 871: Studio-Email-Matching für Mahnmail rechtsform-/sonderzeichen-tolerant —
+  // findet Eintrag auch bei abweichendem Rechtsform-Zusatz; längster Key gewinnt.
+  // Build 872: Mahntext 'bisher' → 'leider keinen Zahlungseingang'.
+  // Build 873: 'Gemahnt'-Markierung im Mahnwesen. Knopf '✓ Gemahnt' stempelt heutiges
+  // Datum ins Mahn-Log (db.mahnLog, keyed by Gutschrift-Nr — stabil ueber Re-Analyse).
+  // Kachel zeigt 'Gemahnt am …' bzw. 'N× gemahnt · zuletzt …'. Keine Auto-Markierung beim
+  // Mailversand (mailto liefert keine Rueckmeldung). Sortierung/Optik unveraendert.
+  if(el) el.textContent = '873';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -15572,15 +15579,28 @@ function _getStudioEmails(){
 }
 
 function _findStudioEmail(studio){
+  // Build 871: tolerantes Matching. Normalisiert Rechtsformen/Sonderzeichen weg
+  // (GmbH, Co, KG, &, Bindestriche), damit "Splendid Synchron GmbH & Co. KG" den
+  // Eintrag "Splendid Synchron" findet. Bei mehreren Treffern gewinnt der längste
+  // (spezifischste) Key — bei Unsicherheit lieber kein Treffer als falsche Adresse.
   var emails = _getStudioEmails();
-  var studioLow = (studio||'').toLowerCase();
-  var keys = Object.keys(emails);
-  for(var i=0; i<keys.length; i++){
-    if(studioLow.indexOf(keys[i].toLowerCase())>=0 || keys[i].toLowerCase().indexOf(studioLow)>=0){
-      return emails[keys[i]];
-    }
+  function norm(s){
+    return (s||'').toLowerCase()
+      .replace(/[.,&+\/()\-]/g,' ')
+      .replace(/\b(gmbh|mbh|co|kg|ohg|ug|ag|e\s?k|haftungsbeschraenkt)\b/g,' ')
+      .replace(/\s+/g,' ').trim();
   }
-  return null;
+  var sN = norm(studio);
+  if(!sN) return null;
+  var best = null, bestLen = 0;
+  Object.keys(emails).forEach(function(k){
+    var kN = norm(k);
+    if(!kN) return;
+    if(sN.indexOf(kN)>=0 || kN.indexOf(sN)>=0){
+      if(kN.length > bestLen){ bestLen = kN.length; best = emails[k]; }
+    }
+  });
+  return best;
 }
 
 function _getStudioPasswords(){
@@ -19100,6 +19120,25 @@ function _mahnBelegStudio(ab){
   var abr = (dbv2.abrechner||[]).find(function(x){return x.id===ab.abrechner_id;});
   return abr ? abr.name : (ab.gegenpartei||ab.studio||'');
 }
+// Build 873: Mahn-Protokoll. Stabil unter Gutschrift-Nr (ab.id-Fallback) in db.mahnLog,
+// NICHT am dbv2-Beleg — übersteht Re-Analyse/Konsolidierung. Wert = Array von Datums-
+// stempeln (jeder Knopfdruck ein Eintrag) → ergibt Datum UND Zähler.
+function _mahnLogKey(ab){ return ab.beleg_nr || ab.id || ''; }
+function _mahnLogGet(ab){
+  var k=_mahnLogKey(ab);
+  return (k && db.mahnLog && db.mahnLog[k]) ? db.mahnLog[k] : [];
+}
+function mahnAlsGemahnt(belegId){
+  var ab=(dbv2.abrechnungen||[]).find(function(x){return x.id===belegId;});
+  if(!ab) return;
+  var k=_mahnLogKey(ab); if(!k) return;
+  if(!db.mahnLog) db.mahnLog={};
+  if(!db.mahnLog[k]) db.mahnLog[k]=[];
+  db.mahnLog[k].push(today());
+  save(db);
+  showToast('📨 Als gemahnt markiert · '+fd(today()));
+  rMahnwesen();
+}
 // Gemeinsame Filterquelle für Liste UND Badge — garantiert identische Zahl.
 function _mahnOffeneBelege(){
   var heuteMs = new Date(today()).getTime();
@@ -19160,6 +19199,10 @@ function rMahnwesen(){
 
       var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
       var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
+      var _mlog = _mahnLogGet(ab);
+      var _mlogLabel = _mlog.length
+        ? '📨 '+(_mlog.length>1 ? _mlog.length+'× gemahnt · zuletzt '+fd(_mlog[_mlog.length-1]) : 'Gemahnt am '+fd(_mlog[0]))
+        : '';
 
       html += '<div style="background:'+bgCol+';border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:10px">'
         +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
@@ -19176,8 +19219,10 @@ function rMahnwesen(){
         +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
         +'Abrechnung: '+fd(fd0)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
         +'</div>'
+        +(_mlogLabel?'<div style="font-size:10px;color:#15803d;font-weight:700;margin-bottom:8px">'+_mlogLabel+'</div>':'')
         +'<div style="display:flex;gap:8px">'
         +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
+        +'<button type="button" onclick="mahnAlsGemahnt(\''+ab.id+'\')" style="background:#dcfce7;color:#15803d;border:none;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✓ Gemahnt</button>'
         +(ersterTerminId?'<button type="button" onclick="openDetail(\''+ersterTerminId+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>':'')
         +'</div>'
         +'</div>';
@@ -19221,7 +19266,7 @@ function mahnEmail(belegId){
   var subject = 'Zahlungseingang Gagenabrechnung '+(gutschriftNr||fd(abDatum))+(titel.length?' - '+titel[0]:'');
   var body = 'Sehr geehrte Damen und Herren,\n\n'
     +'bei der Durchsicht meiner Abrechnungen ist mir aufgefallen, dass ich zu '
-    +'folgender Produktion bisher keinen Zahlungseingang feststellen kann:\n\n'
+    +'folgender Produktion leider keinen Zahlungseingang feststellen kann:\n\n'
     +'  Produktion: '+titelTxt+'\n'
     +'  Studio: '+(studio||'-')+'\n'
     +(aufnahmen.length?'  Aufnahmedatum: '+fd(aufnahmen[0])+(aufnahmen.length>1?' (+ '+(aufnahmen.length-1)+' weitere)':'')+'\n':'')
