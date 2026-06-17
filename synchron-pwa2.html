@@ -3616,7 +3616,9 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // raeumt ein, dass der Fehler auch beim Absender liegen koennte (Zahlung evtl. nur
   // nicht zugeordnet). Bittet um Klaerung/Pruefung statt auf §271a-Frist zu pochen.
   // Build 869: Mahn-Mail gekuerzt (Tims Fassung) — ohne Eigenfehler-Satz, knappe Nachfrage.
-  if(el) el.textContent = '869';
+  // Build 870: Mahn-Mail mit echten Umlauten (ä/ö/ü) statt ue/ae/oe — mailto URL-codiert,
+  // moderne iOS-Mail zeigt Umlaute korrekt.
+  if(el) el.textContent = '870';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -19226,9 +19228,9 @@ function mahnEmail(belegId){
     +(gutschriftNr?'  Gutschrift-Nr.: '+gutschriftNr+'\n':'')
     +(abDatum?'  Abrechnungsdatum: '+fd(abDatum)+'\n':'')
     +(brutto?'  Betrag: '+fmtEur(brutto)+'\n':'')
-    +'\nKoennten Sie mir bei der Klaerung weiterhelfen und kurz pruefen, ob bzw. '
+    +'\nKönnten Sie mir bei der Klärung weiterhelfen und kurz prüfen, ob bzw. '
     +'wann der Betrag angewiesen wurde?\n\n'
-    +'Vielen Dank und viele Gruesse\n'+(profil.name||'');
+    +'Vielen Dank und viele Grüße\n'+(profil.name||'');
 
   var studioEmail = _findStudioEmail(studio||'');
   var mailtoBase = studioEmail ? 'mailto:'+studioEmail : 'mailto:';
