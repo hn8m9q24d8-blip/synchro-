@@ -3629,7 +3629,13 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Pfeil), nach Klick gruen + Label 'Gemahnt am …' erscheint. Erneutes Tippen zaehlt hoch.
   // Build 875: Gemahnt-Button Tap = markieren / Long-Press (500ms) = letzten Eintrag
   // zuruecknehmen (Korrektur bei Fehlklick). Scroll-Schutz, kein Doppel-Trigger.
-  if(el) el.textContent = '875';
+  // Build 876: USt-VA rechnet Vorsteuer per Default NICHT monatlich ab (Jahresende-
+  // Sammeleinreichung via Rex) — Zahllast = reine USt. Ausgaben bleiben erfasst + im PDF
+  // gelistet mit Hinweis 'z. Jahresende, hier nicht abgezogen'. Schalter
+  // db.profil.vorsteuerMonatlich=true stellt auf monatlichen Abzug zurueck.
+  // Build 877: VA-PDF-Farben ans App-Schema angepasst — lila Box→Creme (239,230,208),
+  // lila Linien/Zahllast-Text→App-Blau (43,111,212).
+  if(el) el.textContent = '877';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18048,7 +18054,10 @@ function rUstVoranmeldung(){
   });
 
   // ── SALDO ─────────────────────────────────────────────────
-  var zahllast = einnUst - vorstUst;
+  // Build 876: Vorsteuer wird per Default NICHT monatlich abgezogen (Jahresende-Modus,
+  // Sammel-Einreichung über Rex). Schalter db.profil.vorsteuerMonatlich = true → wie früher.
+  var _vstMonatlich = !!(db.profil && db.profil.vorsteuerMonatlich);
+  var zahllast = _vstMonatlich ? (einnUst - vorstUst) : einnUst;
 
   // ── RENDER ───────────────────────────────────────────────
   var html = '';
@@ -18065,7 +18074,7 @@ function rUstVoranmeldung(){
     +'<div style="flex:1;font-size:12px"><div style="color:#999;margin-bottom:2px">USt aus Einnahmen</div>'
     +(_einnRaten&&_einnRaten.length>1 ? _einnRaten.map(function(r){return '<div style="font-size:11px"><strong style="color:#c2410c">+'+fmtEur(Math.round((_einnGruppen[r]&&_einnGruppen[r].sumUst||0)*100)/100)+'</strong> <span style="color:#aaa">'+r+'%</span></div>';}).join('') : '<strong style="color:#c2410c">+'+fmtEur(einnUst)+'</strong>')
     +'</div>'
-    +'<div style="flex:1;font-size:12px;text-align:right"><div style="color:#999;margin-bottom:2px">Vorsteuer Ausgaben</div><strong style="color:#15803d">−'+fmtEur(vorstUst)+'</strong></div>'
+    +'<div style="flex:1;font-size:12px;text-align:right"><div style="color:#999;margin-bottom:2px">Vorsteuer Ausgaben'+(_vstMonatlich?'':' · z. Jahresende')+'</div><strong style="color:#15803d">'+(_vstMonatlich?'−'+fmtEur(vorstUst):fmtEur(vorstUst))+'</strong></div>'
     +'</div></div>';
 
   // Gruppierung nach USt-Satz für Anzeige
@@ -18381,7 +18390,9 @@ function _ustExportPDF(){
   var ausgaben=(db.ausgaben||[]).filter(function(a){return a.datum&&a.datum.startsWith(ym);});
   var vorst=0; ausgaben.forEach(function(a){ vorst+=parseFloat(a.vorsteuer)||0; });
   var ustGes=Math.round((sum7+sum19+sumSH)*100)/100;
-  var zahllast=Math.round((ustGes-vorst)*100)/100;
+  // Build 876: Vorsteuer per Default nicht monatlich abgezogen (Jahresende-Sammeleinreichung).
+  var _vstMonatlich = !!(db.profil && db.profil.vorsteuerMonatlich);
+  var zahllast=Math.round((ustGes-(_vstMonatlich?vorst:0))*100)/100;
 
   // ─── PDF aufbauen ───
   var jsPDF=window.jspdf.jsPDF;
@@ -18405,7 +18416,7 @@ function _ustExportPDF(){
   bloecke.forEach(function(b){
     newPageIf(20);
     // Eingang-Kopfzeile
-    doc.setDrawColor(124,58,237); doc.setLineWidth(0.4);
+    doc.setDrawColor(43,111,212); doc.setLineWidth(0.4);
     doc.line(L,y,R,y); y+=4;
     doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
     doc.text('Bank-Eingang '+dd(b.valuta)+'  ·  '+euro(b.betrag||0), L, y);
@@ -18453,7 +18464,7 @@ function _ustExportPDF(){
 
   // ─── Monats-Zusammenfassung ───
   newPageIf(48);
-  y+=2; doc.setFillColor(243,232,255); doc.roundedRect(L,y,W,42,2,2,'F'); y+=7;
+  y+=2; doc.setFillColor(239,230,208); doc.roundedRect(L,y,W,42,2,2,'F'); y+=7;
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
   doc.text('Zusammenfassung '+monName, L+5, y); y+=7;
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
@@ -18465,9 +18476,10 @@ function _ustExportPDF(){
   if(sum19>0) rowZ('USt 19 %', euro(Math.round(sum19*100)/100));
   rowZ('Studio Hamburg (7 %, K4)', euro(Math.round(sumSH*100)/100));
   if(sumFrei>0) rowZ('Steuerfreie Umsätze (Bemessungsgrundlage)', euro(Math.round(sumFrei*100)/100));
-  rowZ('Vorsteuer aus Ausgaben', '-'+euro(Math.round(vorst*100)/100));
-  doc.setDrawColor(124,58,237); doc.setLineWidth(0.3); doc.line(L+5,y-1,R-5,y-1); y+=1;
-  doc.setTextColor(124,58,237);
+  if(_vstMonatlich) rowZ('Vorsteuer aus Ausgaben', '-'+euro(Math.round(vorst*100)/100));
+  else if(vorst>0)  rowZ('Vorsteuer (z. Jahresende, hier nicht abgezogen)', euro(Math.round(vorst*100)/100));
+  doc.setDrawColor(43,111,212); doc.setLineWidth(0.3); doc.line(L+5,y-1,R-5,y-1); y+=1;
+  doc.setTextColor(43,111,212);
   rowZ('Zahllast ans Finanzamt', euro(zahllast), true);
   doc.setTextColor(0);
 
