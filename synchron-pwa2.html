@@ -3612,7 +3612,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // "Bestätigen"-Schreibpfad (t.status/db.zahlungen) raus. Bank-Abgleich läuft nur noch
   // über die Match-Engine v6 (dbv2-Anker); die View bleibt Schaltzentrale für Match-Engine
   // + Phase-7-Vergleich. Beseitigt die widersprüchliche DIFFERENZ/PASST-Parallelwelt.
-  if(el) el.textContent = '867';
+  // Build 868: Mahn-Mail freundlicher/kollegialer formuliert — Nachfrage statt Mahnung,
+  // raeumt ein, dass der Fehler auch beim Absender liegen koennte (Zahlung evtl. nur
+  // nicht zugeordnet). Bittet um Klaerung/Pruefung statt auf §271a-Frist zu pochen.
+  // Build 869: Mahn-Mail gekuerzt (Tims Fassung) — ohne Eigenfehler-Satz, knappe Nachfrage.
+  if(el) el.textContent = '869';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -19212,19 +19216,19 @@ function mahnEmail(belegId){
   var profil = db.profil||{};
   var titelTxt = titel.length ? titel.join(', ') : (gutschriftNr?'Gutschrift '+gutschriftNr:'-');
 
-  var subject = 'Zahlungserinnerung: Gagenabrechnung '+(gutschriftNr||fd(abDatum))+(titel.length?' - '+titel[0]:'');
+  var subject = 'Zahlungseingang Gagenabrechnung '+(gutschriftNr||fd(abDatum))+(titel.length?' - '+titel[0]:'');
   var body = 'Sehr geehrte Damen und Herren,\n\n'
-    +'hiermit moechte ich hoeflich an die Begleichung meiner ausstehenden Gage erinnern:\n\n'
+    +'bei der Durchsicht meiner Abrechnungen ist mir aufgefallen, dass ich zu '
+    +'folgender Produktion bisher keinen Zahlungseingang feststellen kann:\n\n'
     +'  Produktion: '+titelTxt+'\n'
     +'  Studio: '+(studio||'-')+'\n'
     +(aufnahmen.length?'  Aufnahmedatum: '+fd(aufnahmen[0])+(aufnahmen.length>1?' (+ '+(aufnahmen.length-1)+' weitere)':'')+'\n':'')
     +(gutschriftNr?'  Gutschrift-Nr.: '+gutschriftNr+'\n':'')
     +(abDatum?'  Abrechnungsdatum: '+fd(abDatum)+'\n':'')
     +(brutto?'  Betrag: '+fmtEur(brutto)+'\n':'')
-    +'\nGemaess § 271a BGB ist die Zahlung innerhalb von 30 Tagen nach Rechnungsstellung '
-    +'faellig. Diese Frist ist leider verstrichen.\n\n'
-    +'Bitte ueberweisen Sie den ausstehenden Betrag baldmoeglichst auf das Ihnen bekannte Konto.\n\n'
-    +'Mit freundlichen Gruessen\n'+(profil.name||'');
+    +'\nKoennten Sie mir bei der Klaerung weiterhelfen und kurz pruefen, ob bzw. '
+    +'wann der Betrag angewiesen wurde?\n\n'
+    +'Vielen Dank und viele Gruesse\n'+(profil.name||'');
 
   var studioEmail = _findStudioEmail(studio||'');
   var mailtoBase = studioEmail ? 'mailto:'+studioEmail : 'mailto:';
