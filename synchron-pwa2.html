@@ -3625,7 +3625,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Datum ins Mahn-Log (db.mahnLog, keyed by Gutschrift-Nr — stabil ueber Re-Analyse).
   // Kachel zeigt 'Gemahnt am …' bzw. 'N× gemahnt · zuletzt …'. Keine Auto-Markierung beim
   // Mailversand (mailto liefert keine Rueckmeldung). Sortierung/Optik unveraendert.
-  if(el) el.textContent = '873';
+  // Build 874: Gemahnt-Button zustandsabhaengig — ungemahnt grau/unauffaellig (📤 Brief-
+  // Pfeil), nach Klick gruen + Label 'Gemahnt am …' erscheint. Erneutes Tippen zaehlt hoch.
+  // Build 875: Gemahnt-Button Tap = markieren / Long-Press (500ms) = letzten Eintrag
+  // zuruecknehmen (Korrektur bei Fehlklick). Scroll-Schutz, kein Doppel-Trigger.
+  if(el) el.textContent = '875';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -19139,6 +19143,34 @@ function mahnAlsGemahnt(belegId){
   showToast('📨 Als gemahnt markiert · '+fd(today()));
   rMahnwesen();
 }
+// Build 875: Tap = markieren, Long-Press (500 ms) = letzten Eintrag zurücknehmen.
+// Scroll-Schutz: Wischen bricht ab. Kein onclick (touchend übernimmt) → keine Doppelung.
+var _mahnPressTimer=null, _mahnPressLong=false, _mahnPressMoved=false;
+function _mahnPressStart(id){
+  _mahnPressLong=false; _mahnPressMoved=false;
+  _mahnPressTimer=setTimeout(function(){
+    if(!_mahnPressMoved){ _mahnPressLong=true; if(navigator.vibrate)navigator.vibrate(20); mahnGemahntUndo(id); }
+  }, 500);
+}
+function _mahnPressMove(){ _mahnPressMoved=true; if(_mahnPressTimer){ clearTimeout(_mahnPressTimer); _mahnPressTimer=null; } }
+function _mahnPressEnd(id, ev){
+  if(_mahnPressTimer){ clearTimeout(_mahnPressTimer); _mahnPressTimer=null; }
+  if(_mahnPressMoved) return;            // war ein Scroll
+  if(ev && ev.cancelable) ev.preventDefault();  // unterdrückt synthetischen click
+  if(!_mahnPressLong) mahnAlsGemahnt(id);
+}
+function mahnGemahntUndo(belegId){
+  var ab=(dbv2.abrechnungen||[]).find(function(x){return x.id===belegId;});
+  if(!ab) return;
+  var k=_mahnLogKey(ab); if(!k) return;
+  if(db.mahnLog && db.mahnLog[k] && db.mahnLog[k].length){
+    db.mahnLog[k].pop();
+    if(!db.mahnLog[k].length) delete db.mahnLog[k];
+    save(db);
+    showToast('↩ Mahn-Markierung zurückgenommen');
+    rMahnwesen();
+  }
+}
 // Gemeinsame Filterquelle für Liste UND Badge — garantiert identische Zahl.
 function _mahnOffeneBelege(){
   var heuteMs = new Date(today()).getTime();
@@ -19200,6 +19232,7 @@ function rMahnwesen(){
       var dringlichkeit = tageSeit <= 14 ? '#f97316' : tageSeit <= 30 ? '#ef4444' : '#7f1d1d';
       var bgCol = tageSeit <= 14 ? '#fff7ed' : '#fef2f2';
       var _mlog = _mahnLogGet(ab);
+      var _gemahnt = _mlog.length > 0;
       var _mlogLabel = _mlog.length
         ? '📨 '+(_mlog.length>1 ? _mlog.length+'× gemahnt · zuletzt '+fd(_mlog[_mlog.length-1]) : 'Gemahnt am '+fd(_mlog[0]))
         : '';
@@ -19222,7 +19255,7 @@ function rMahnwesen(){
         +(_mlogLabel?'<div style="font-size:10px;color:#15803d;font-weight:700;margin-bottom:8px">'+_mlogLabel+'</div>':'')
         +'<div style="display:flex;gap:8px">'
         +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
-        +'<button type="button" onclick="mahnAlsGemahnt(\''+ab.id+'\')" style="background:#dcfce7;color:#15803d;border:none;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✓ Gemahnt</button>'
+        +'<button type="button" ontouchstart="_mahnPressStart(\''+ab.id+'\')" ontouchmove="_mahnPressMove()" ontouchend="_mahnPressEnd(\''+ab.id+'\',event)" oncontextmenu="return false" style="background:'+(_gemahnt?'#dcfce7':'#f3f4f6')+';color:'+(_gemahnt?'#15803d':'#9ca3af')+';border:none;border-radius:8px;padding:9px 13px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none" title="'+(_gemahnt?'Gemahnt am '+fd(_mlog[_mlog.length-1])+' — lang drücken zum Zurücknehmen':'Tippen: als gemahnt markieren')+'">📤</button>'
         +(ersterTerminId?'<button type="button" onclick="openDetail(\''+ersterTerminId+'\');switchView(\'termine\')" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>':'')
         +'</div>'
         +'</div>';
