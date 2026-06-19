@@ -808,6 +808,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div onclick="ustNavMonth(-1)" style="background:#f5f5f5;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:16px">&#x2039;</div>
       <div onclick="ustNavMonth(1)" style="background:#f5f5f5;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:16px">&#x203A;</div>
       <div onclick="ustExport()" style="background:#7c3aed;color:#fff;font-size:12px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer">Export</div>
+      <div onclick="vorsteuerJahrExport()" style="background:#2b6fd4;color:#fff;font-size:12px;font-weight:700;padding:7px 10px;border-radius:8px;cursor:pointer" title="Jahres-Vorsteuer für Steuerberater">VSt-Jahr</div>
     </div>
   </div>
   <div id="ust-scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(env(safe-area-inset-bottom)+90px)"></div>
@@ -3641,7 +3642,24 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 879: Einnahmen&Analyse — Tabs Studio/Monat/Produktion lasen noch t.status
   // (Legacy → alles 'offen', widersprach dem dbv2-Hero). Jetzt durchgaengig
   // _terminZahlStatus (dbv2-Anker). Vervollstaendigt den 865/866-Cutover dieser Ansicht.
-  if(el) el.textContent = '879';
+  // Build 880: Jahres-Vorsteuer-Aufstellung (Button 'VSt-Jahr' im USt-Header) — alle
+  // Betriebsausgaben des Jahres nach Monat gruppiert + Vorsteuer-Gesamtsumme, als PDF
+  // für Rex zur USt-Jahreserklärung (da Vorsteuer monatlich nicht abgezogen wird).
+  // Build 881: Eigenrechnungs-Differenz-Fix. Manuell eingetragene Eigenrechnungen
+  // (Gutschrift z.B. 05/2026, KONTERFEI Voice Over) hatten kein klasse='3' und MwSt
+  // in ab.mwst statt ab.ust_betrag → unechte Differenz in Hoehe der MwSt. Jetzt an
+  // Datensignatur (brutto=netto+mwst) erkannt; MwSt fuer Vergleich rausgerechnet.
+  // Build 882: Buchhaltungs-Quick-Box ('Aktuelles Jahr' Offen/Bezahlt) las noch
+  // t.status → Bezahlt blieb 0. Jetzt _terminZahlStatus (dbv2). Wie Build 879.
+  // Build 883: Cutover-Abschluss der ANZEIGE-Leser. Letzte 5 t.status-Leser, die
+  // sichtbare Werte/Farben falsch machten, auf _terminZahlStatus (dbv2): Jahres-
+  // abschluss-Bezahlt-Zahl, renderAbRow-Ampel, rAbrechnungen-Summen + -Farbe,
+  // updateBadge-Zaehler. Verbleibende t.status-Leser sind Schreiber/Import/Migration/
+  // Match-Logik/toter Code (kein Anzeige-Effekt) + Rechnungen (eigenes Objekt).
+  // Build 884: Daten-Check Regel 5b entfernt — obsolete Legacy-Sync-Pruefung
+  // (dbv2-Zahlstatus vs. t.status), die nach dem Cutover fuer jeden bezahlten
+  // Termin falsch-positiv ausloeste. Echte Konsistenzregeln (1-5) bleiben.
+  if(el) el.textContent = '884';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4041,7 +4059,7 @@ function tCard(t){
     +'</div>';
 }
 function updateBadge(){
-  var pend=db.termine.filter(function(t){return t.status==='offen'||!t.status;}).length;
+  var pend=db.termine.filter(function(t){return _terminZahlStatus(t.id)==='offen';}).length;
   var badge=document.getElementById('badge-termine');
   if(badge){badge.textContent=pend||'';badge.style.display=pend?'flex':'none';}
 }
@@ -4505,8 +4523,14 @@ function openDetail(id){
       // unechte Differenz in Höhe der USt.
       var abBruttoRaw = ab ? (parseFloat(ab.brutto)||0) : 0;
       var abBrutto    = abBruttoRaw;
-      if(ab && ab.klasse === '3' && ab.ust_betrag){
-        abBrutto = Math.round((abBruttoRaw - parseFloat(ab.ust_betrag||0)) * 100) / 100;
+      // Build 881: Eigenrechnung an Datensignatur erkennen (MwSt aufgeschlagen:
+      // brutto = netto + mwst), nicht nur am klasse-Flag — manuell eingetragene
+      // Eigenrechnungen haben oft kein klasse='3' und MwSt in ab.mwst statt ab.ust_betrag.
+      var _ustValG = ab ? parseFloat(ab.ust_betrag||ab.mwst||0) : 0;
+      var _istEigenRgG = ab && _ustValG>0 && ab.netto &&
+        Math.abs(abBruttoRaw-(parseFloat(ab.netto)+_ustValG))<0.05;
+      if(ab && (ab.klasse === '3' || _istEigenRgG) && _ustValG){
+        abBrutto = Math.round((abBruttoRaw - _ustValG) * 100) / 100;
       }
       var abTakes  = ab ? (parseInt(ab.takes)||0) : 0;
       var abGG     = ab ? (parseFloat(ab.grundgage)||0) : 0;
@@ -4622,10 +4646,14 @@ function openDetail(id){
     // Einzel-Anteile kommen direkt aus der Junction.
     {
     var abBruttoRaw2 = parseFloat(ab.brutto)||0;
-    // Build 799: Klasse 3 → Brutto inkl. USt → für Vergleich USt rausrechnen
+    // Build 799/881: Eigenrechnung → Brutto inkl. USt → für Vergleich USt rausrechnen.
+    // Erkennung an Signatur (brutto = netto + mwst) ODER klasse='3'.
     var abBrutto = abBruttoRaw2;
-    if(ab.klasse === '3' && ab.ust_betrag){
-      abBrutto = Math.round((abBruttoRaw2 - parseFloat(ab.ust_betrag||0)) * 100) / 100;
+    var _ustVal2 = parseFloat(ab.ust_betrag||ab.mwst||0);
+    var _istEigenRg2 = _ustVal2>0 && ab.netto &&
+      Math.abs(abBruttoRaw2-(parseFloat(ab.netto)+_ustVal2))<0.05;
+    if((ab.klasse === '3' || _istEigenRg2) && _ustVal2){
+      abBrutto = Math.round((abBruttoRaw2 - _ustVal2) * 100) / 100;
     }
     // Build 737: Wenn Sammel-GS und kein Brutto-Anteil im PDF erkennbar → neutral statt rot
     var bruttoAnteilFehlt = ab._v2IstTeilVonSammel && (ab.brutto==null);
@@ -4679,7 +4707,7 @@ function openDetail(id){
         '<div class="ir-key" style="color:'+matchCol+';font-weight:800">'
         + (bruttoAnteilFehlt
             ? 'Brutto-Anteil'
-            : (ab.klasse === '3'
+            : ((ab.klasse === '3' || _istEigenRg2)
                 ? 'Brutto (inkl. USt)'
                 : 'Brutto = App-Netto'))
         + '</div>'+
@@ -10646,7 +10674,7 @@ function rJahresabschluss(){
   // Statistik aus Terminen
   var total = termine.length;
   var abgerechnet = termine.filter(function(t){ return t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin; }).length;
-  var bezahlt = termine.filter(function(t){ return t.status==='bezahlt'; }).length;
+  var bezahlt = termine.filter(function(t){ return _terminZahlStatus(t.id)==='bezahlt'; }).length;
   var offen = total - abgerechnet;
 
   var html = '';
@@ -10920,7 +10948,7 @@ function rJahresabschluss(){
   } else {
     termine.forEach(function(t){
       var hatAb = !!(t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin);
-      var bezahltT = t.status==='bezahlt';
+      var bezahltT = _terminZahlStatus(t.id)==='bezahlt';
       var ampel = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
       // Betrag NUR aus db.abrechnungen — nie Dispo-Werte
       var abrechn = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
@@ -11601,7 +11629,7 @@ function rBuchQuick(){
   all.forEach(function(t){
     var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
     total+=net;
-    if(t.status==='bezahlt') bezahlt+=net; else offen+=net;
+    if(_terminZahlStatus(t.id)==='bezahlt') bezahlt+=net; else offen+=net;
   });
   var el=document.getElementById('buch-quick-total');
   var eo=document.getElementById('buch-quick-offen');
@@ -18528,8 +18556,96 @@ function _ustExportPDF(){
   } catch(e){ _downloadPDFFallback(doc,fileName); }
 }
 
-// ── ABRECHNUNGEN ─────────────────────────────────────────────
-var _abYear=new Date().getFullYear();
+// Build 880: Jahres-Vorsteuer-Aufstellung (alle Betriebsausgaben des Jahres mit
+// Vorsteuer-Summe) — Export für den Steuerberater zur USt-Jahreserklärung, da die
+// Vorsteuer monatlich nicht abgezogen wird (Jahresende-Sammeleinreichung).
+function vorsteuerJahrExport(){
+  if(!window.jspdf || !window.jspdf.jsPDF){ showToast('PDF-Bibliothek nicht geladen — Internet?'); return; }
+  try { _vorsteuerJahrPDF(); }
+  catch(e){ showToast('PDF-Fehler: '+(e&&e.message||e)); }
+}
+function _vorsteuerJahrPDF(){
+  var jahr=String(_ustYear);
+  var ausgaben=(db.ausgaben||[]).filter(function(a){return a.datum && String(a.datum).slice(0,4)===jahr;})
+    .sort(function(a,b){return a.datum<b.datum?-1:(a.datum>b.datum?1:0);});
+  var jsPDF=window.jspdf.jsPDF;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var L=15, R=195, W=R-L, y=18;
+  var p=db.profil||{};
+  var euro=function(n){ return (n<0?'-':'')+Math.abs(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; };
+  var dd=function(iso){ if(!iso)return''; var pp=iso.slice(0,10).split('-'); return pp[2]+'.'+pp[1]+'.'+pp[0]; };
+  var newPageIf=function(need){ if(y+need>282){ doc.addPage(); y=18; } };
+  var MN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('Vorsteuer-Aufstellung '+jahr, L, y); y+=7;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90);
+  doc.text((p.name||'')+(p.steuernr?'  ·  Steuer-Nr. '+p.steuernr:'')+'  ·  Ist-Versteuerung §20 UStG', L, y); y+=5;
+  doc.text('Erstellt '+new Date().toLocaleDateString('de-DE')+'  ·  alle Betriebsausgaben mit Vorsteuer (Ausgabedatum)', L, y); y+=8;
+  doc.setTextColor(0);
+
+  if(!ausgaben.length){
+    doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(150);
+    doc.text('Keine Ausgaben in '+jahr+' erfasst.', L, y); doc.setTextColor(0);
+  } else {
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(120);
+    doc.text('Datum', L, y); doc.text('Beschreibung', L+22, y);
+    doc.text('Brutto', L+130, y, {align:'right'}); doc.text('Vorsteuer', R, y, {align:'right'});
+    doc.setTextColor(0); y+=1; doc.setDrawColor(220); doc.line(L,y,R,y); y+=3.5;
+    var byM={};
+    ausgaben.forEach(function(a){ var m=parseInt(String(a.datum).slice(5,7))-1; (byM[m]=byM[m]||[]).push(a); });
+    var jahrBrutto=0, jahrVst=0;
+    for(var m=0;m<12;m++){
+      var list=byM[m]; if(!list||!list.length) continue;
+      var mB=0,mV=0;
+      newPageIf(10);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(43,111,212);
+      doc.text(MN[m], L, y); doc.setTextColor(0); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); y+=4.5;
+      list.forEach(function(a){
+        var beschr=String(a.beschr||'').replace(/[\u2190-\u21FF\u2794-\u27BF]/g,'-');
+        var lines=doc.splitTextToSize(beschr, 88);
+        var blockH=Math.max(4.5, lines.length*4);
+        newPageIf(blockH+2);
+        var br=parseFloat(a.brutto)||0, vs=parseFloat(a.vorsteuer)||0;
+        mB+=br; mV+=vs;
+        doc.text(dd(a.datum), L, y);
+        doc.text(lines, L+22, y);
+        doc.text(euro(br), L+130, y, {align:'right'});
+        doc.text(euro(vs), R, y, {align:'right'});
+        y+=blockH;
+      });
+      newPageIf(7);
+      doc.setDrawColor(230); doc.line(L+22,y-1,R,y-1);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      doc.text('Summe '+MN[m], L+22, y+2.5);
+      doc.text(euro(Math.round(mB*100)/100), L+130, y+2.5, {align:'right'});
+      doc.text(euro(Math.round(mV*100)/100), R, y+2.5, {align:'right'});
+      doc.setFont('helvetica','normal'); y+=8;
+      jahrBrutto+=mB; jahrVst+=mV;
+    }
+    newPageIf(24);
+    y+=2; doc.setFillColor(239,230,208); doc.roundedRect(L,y,W,20,2,2,'F'); y+=8;
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Vorsteuer gesamt '+jahr, L+5, y);
+    doc.setTextColor(43,111,212);
+    doc.text(euro(Math.round(jahrVst*100)/100), R-5, y, {align:'right'});
+    doc.setTextColor(0); y+=6.5;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90);
+    doc.text('Brutto-Ausgaben gesamt: '+euro(Math.round(jahrBrutto*100)/100), L+5, y);
+    doc.setTextColor(0);
+  }
+
+  var fileName='Vorsteuer-'+jahr+'.pdf';
+  try {
+    var blob=doc.output('blob');
+    var file=new File([blob],fileName,{type:'application/pdf'});
+    var payload={files:[file]};
+    if(navigator.canShare && navigator.canShare(payload) && navigator.share){
+      navigator.share(payload).then(function(){ showToast('✓ Geteilt'); })
+        .catch(function(err){ if(err&&err.name==='AbortError') return; _downloadPDFFallback(doc,fileName); });
+    } else { _downloadPDFFallback(doc,fileName); }
+  } catch(e){ _downloadPDFFallback(doc,fileName); }
+}
 
 function abSetYear(y){
   _abYear=y;
@@ -18571,8 +18687,9 @@ function rAbrechnungen(){
     var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
     groups[keyLow].termine.push(t);
     groups[keyLow].net+=net;
-    if(t.status==='bezahlt') groups[keyLow].bezahlt+=net;
-    else if(t.status==='abrechnung') groups[keyLow].abgerechnet+=net;
+    var _stA=_terminZahlStatus(t.id);
+    if(_stA==='bezahlt') groups[keyLow].bezahlt+=net;
+    else if(_stA==='abgerechnet') groups[keyLow].abgerechnet+=net;
     else groups[keyLow].offen+=net;
   });
 
@@ -18659,7 +18776,8 @@ function rAbrechnungen(){
       +'<div id="'+gid+'" style="">'
       +g.termine.map(function(t){
         var tnet=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
-        var sc=t.status==='bezahlt'?'#5d8a3c':t.status==='abrechnung'?'#e65100':'#c0392b';
+        var _stF=_terminZahlStatus(t.id);
+        var sc=_stF==='bezahlt'?'#5d8a3c':_stF==='abgerechnet'?'#e65100':'#c0392b';
         var hasDot=t.abId?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e65100;margin-left:4px;vertical-align:middle"></span>':'';
         return '<div onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\');},400);" style="padding:9px 16px 9px 28px;background:#fafafa;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'
           +'<div style="flex:1;min-width:0">'
@@ -19412,30 +19530,12 @@ function runIntegrityCheck(silent){
     }
   });
 
-  // 5b. ab.bezahlt=true aber t.status nicht bezahlt → auto-fix
-  (db.termine||[]).forEach(function(t){
-    if(t.status==='bezahlt') return;
-    if(t.abId){
-      var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-      if(ab&&ab.bezahlt&&ab.zahlungDatum){
-        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): Abrechnung bezahlt aber Termin-Status nicht — bitte manuell prüfen');
-      }
-    }
-    if(t.dokIds){
-      t.dokIds.forEach(function(did){
-        if(t.status==='bezahlt'&&t.zahlungDatum) return;
-        var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
-        var zahlDat = dok&&dok.zahlungDatum;
-        if(!zahlDat){
-          var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
-          if(mz) zahlDat=mz.datum;
-        }
-        if(zahlDat && t.status!=='bezahlt'){
-          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): Zahlung vorhanden aber Status nicht bezahlt — bitte manuell prüfen');
-        }
-      });
-    }
-  });
+  // 5b. ENTFERNT (Build 884): Diese Regel verglich den dbv2-Zahlstatus (ab.bezahlt/
+  // zahlungs_datum bzw. dok.zahlungDatum) mit dem Legacy-Feld t.status und warnte bei
+  // Abweichung. Nach dem dbv2-Cutover (Builds 827–883) wird t.status bewusst nicht
+  // mehr als Lese-/Status-Quelle gepflegt — die Abweichung ist also der erwartete
+  // Normalzustand jedes bezahlten Termins und keine echte Inkonsistenz mehr. Der
+  // Zahlstatus wird ausschliesslich aus dbv2 (_terminZahlStatus) abgeleitet.
   var urSatz = (db.profil&&db.profil.ust!=null) ? db.profil.ust : 0.07;
   var jahre = [...new Set((db.termine||[]).map(function(t){
     return t.datum?t.datum.slice(0,4):null;
@@ -19482,22 +19582,11 @@ function runIntegrityCheck(silent){
       sumTerminGagen += (parseFloat(t.kommgage)||0)+billT*(parseFloat(t.rate)||0);
     });
 
-    // Bezahlte Termine ohne Zahlungsdatum
-    var bezahltOhneDatum=(db.termine||[]).filter(function(t){
-      if(!(t.datum||'').startsWith(jahr)) return false;
-      if(t.status!=='bezahlt') return false;
-      var hatDatum=t.zahlungDatum;
-      if(!hatDatum&&t.dokIds){
-        t.dokIds.forEach(function(did){
-          var mz=(db.zahlungen||[]).find(function(z){return z.monatsAbrechnId===did;});
-          if(mz) hatDatum=true;
-        });
-      }
-      return !hatDatum;
-    }).length;
-    if(bezahltOhneDatum>0){
-      warnings.push('⚠ '+jahr+': '+bezahltOhneDatum+' Termin'+(bezahltOhneDatum>1?'e':'')+' als bezahlt markiert ohne Zahlungsdatum → USt-Voranmeldung unvollständig');
-    }
+    // ENTFERNT (Build 884): Pruefung "bezahlte Termine ohne Zahlungsdatum" basierte
+    // auf t.status==='bezahlt' und ist im dbv2-Modell gegenstandslos — dort ist
+    // "bezahlt" per Definition an ein vorhandenes zahlungs_datum gekoppelt
+    // (_terminZahlStatus liefert 'bezahlt' nur mit Anker), ein bezahlter Termin
+    // ohne Datum kann also nicht existieren.
   });
 
   // ── NEUE INTELLIGENTE PRÜFUNGEN ──────────────────────────────
