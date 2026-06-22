@@ -3659,7 +3659,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 884: Daten-Check Regel 5b entfernt — obsolete Legacy-Sync-Pruefung
   // (dbv2-Zahlstatus vs. t.status), die nach dem Cutover fuer jeden bezahlten
   // Termin falsch-positiv ausloeste. Echte Konsistenzregeln (1-5) bleiben.
-  if(el) el.textContent = '884';
+  // Build 885: Daten-Check-Kategorien disjunkt — 'Fehlender Brutto-Anteil' wurde
+  // doppelt gelistet (Datenstruktur UND Finanzzahlen), weil die Filter 'Fehlender'
+  // und 'Brutto' beide matchten. Jetzt Prioritaet Struktur→Finanz→Sonstiges.
+  // Build 886: Mehrfach-Gutschrift-Split. PDFs mit mehreren eigenstaendigen Einzel-
+  // Gutschriften (SESAM-Stil, z.B. Oxygen Dr. Stone 4× GS 601-604) wurden bisher zu
+  // EINER Abrechnung aggregiert, weil der Session-Split nur bei typ=monats_abrechn lief.
+  // Jetzt auch bei typ=abrechn — Schutz (>1 Session, alle mit brutto+auszahlung) un-
+  // veraendert; Arena/VSI-Monats-Sammler + Einzelbelege verhalten sich exakt wie zuvor.
+  if(el) el.textContent = '886';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13724,9 +13732,13 @@ function dokAnalyseDoc(d, key, cb){
       } else {
         d.gvl_takes_detail = null;
       }
-      // Sessions für Monats-Abrechnung
-      if(d.typ==='monats_abrechn' && j.sessions && Array.isArray(j.sessions)){
-        // Prüfen ob jede Session eigene vollständige Finanzdaten hat (FFS-Stil, mehrere Seiten)
+      // Sessions für Monats-Abrechnung UND Mehrfach-Gutschrift-Belege (Build 886)
+      // Bisher lief der Split-Pfad NUR bei monats_abrechn. Jetzt auch bei normaler
+      // 'abrechn', wenn ein PDF mehrere eigenständige Einzel-Gutschriften enthält
+      // (SESAM-Stil, z.B. Oxygen Dr. Stone: 4× GAGE/Gutschrift 601–604 in einer Datei).
+      // Schutz unverändert: Split nur wenn >1 Session UND jede eigene Finanzen hat.
+      if((d.typ==='monats_abrechn' || d.typ==='abrechn') && j.sessions && Array.isArray(j.sessions)){
+        // Prüfen ob jede Session eigene vollständige Finanzdaten hat (FFS-/SESAM-Stil, mehrere Seiten)
         // In dem Fall: aufteilen in separate abrechn-Dokumente statt monats_abrechn
         // Split NUR wenn jede Session eigene vollständige Finanzdaten hat (FFS-Stil: brutto_termin UND auszahlung)
         // VSI-Stil: Sessions haben brutto_termin aber kein eigenes auszahlung → bleibt monats_abrechn!
@@ -13892,8 +13904,14 @@ function dokAnalyseDoc(d, key, cb){
           rDokumente();
           // Navigation übernimmt cb() aus dokAnalyseOne — kein eigenes setTimeout nötig
           showToast('✓ '+j.sessions.length+' Abrechnungen erkannt — bitte einzeln bestätigen');
+        } else if(d.typ==='abrechn'){
+          // Build 886: 'abrechn' mit Sessions, aber NICHT splittbar (z.B. eine Gutschrift
+          // mit mehreren Drehtagen ohne pro-Tag-Auszahlung). Verhalten identisch zum alten
+          // Pfad: solche Belege liefen früher in den äußeren else-Zweig → sessions verwerfen.
+          // Schützt die Architektur — nur echte Monats-Sammler bleiben monats_abrechn.
+          d.sessions = null;
         } else {
-          // Arena-Stil: bleibt monats_abrechn mit sessions
+          // Arena-Stil: echter Monats-Sammler bleibt monats_abrechn mit sessions
           d.sessions = j.sessions;
           // Bereits belegte TerminIds sammeln — eigenes Dokument ausschliessen
           // (bei Neu-Analyse sonst alte terminIds blockieren → falsche Verknüpfungen)
@@ -19811,10 +19829,14 @@ function runIntegrityCheckAndShow(){
       +'<div style="font-size:12px;color:#555;margin-top:4px">Datenstruktur &amp; Finanzzahlen ok</div>'
       +'</div>';
   } else {
-    // Kategorien trennen
-    var strukturFehler = warnings.filter(function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0||w.indexOf('Doppelte')>=0||w.indexOf('Fehlender')>=0; });
-    var finanzFehler = warnings.filter(function(w){ return w.indexOf('MwSt')>=0||w.indexOf('Zahlung')>=0||w.indexOf('zahlungsdatum')>=0||w.indexOf('bezahlt')>=0||w.indexOf('Brutto')>=0||w.indexOf('Jahresabschluss')>=0||w.indexOf('Tabelle')>=0||w.indexOf('SV-Summe')>=0||w.indexOf('Monats-GS')>=0; });
-    var sonstige = warnings.filter(function(w){ return strukturFehler.indexOf(w)<0&&finanzFehler.indexOf(w)<0; });
+    // Kategorien trennen — DISJUNKT (Build 885): jede Warnung genau eine Kategorie,
+    // Priorität Struktur → Finanz → Sonstiges. Sonst landete z.B. "Fehlender
+    // Brutto-Anteil" in beiden (Match auf 'Fehlender' UND 'Brutto').
+    var _istStruktur = function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0||w.indexOf('Doppelte')>=0||w.indexOf('Fehlender')>=0; };
+    var _istFinanz = function(w){ return w.indexOf('MwSt')>=0||w.indexOf('Zahlung')>=0||w.indexOf('zahlungsdatum')>=0||w.indexOf('bezahlt')>=0||w.indexOf('Brutto')>=0||w.indexOf('Jahresabschluss')>=0||w.indexOf('Tabelle')>=0||w.indexOf('SV-Summe')>=0||w.indexOf('Monats-GS')>=0; };
+    var strukturFehler = warnings.filter(_istStruktur);
+    var finanzFehler = warnings.filter(function(w){ return !_istStruktur(w) && _istFinanz(w); });
+    var sonstige = warnings.filter(function(w){ return !_istStruktur(w) && !_istFinanz(w); });
 
     function renderKat(titel, liste, farbe){
       if(!liste.length) return '';
