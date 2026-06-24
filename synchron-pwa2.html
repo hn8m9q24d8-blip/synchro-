@@ -3667,7 +3667,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // EINER Abrechnung aggregiert, weil der Session-Split nur bei typ=monats_abrechn lief.
   // Jetzt auch bei typ=abrechn — Schutz (>1 Session, alle mit brutto+auszahlung) un-
   // veraendert; Arena/VSI-Monats-Sammler + Einzelbelege verhalten sich exakt wie zuvor.
-  if(el) el.textContent = '886';
+  if(el) el.textContent = '887';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12964,6 +12964,7 @@ function dokAnalyseDoc(d, key, cb){
     +'  "abrechn" = EINZEL-Gagenabrechnung/Gutschrift für GENAU EINEN Aufnahmetag\n'
     +'  "monats_abrechn" = Monats-Sammelabrechnung mit TABELLE die MEHRERE VERSCHIEDENE Aufnahmedaten auflistet\n'
     +'  WICHTIG: Eine Abrechnung mit NUR EINEM Aufnahmedatum ("von:/bis:" gleich) ist IMMER "abrechn", NIEMALS "monats_abrechn"!\n'
+    +'  KLARSTELLUNG (häufiger Fehler!): Wenn die Tabelle (Spalte "Am"/Datum) MEHRERE VERSCHIEDENE Drehtage auflistet, ist es IMMER "monats_abrechn" — AUCH wenn es nur EINE gemeinsame "Auszahlung"/"Auszahlungsbetrag" und nur EINE Gutschrifts-Nr. gibt. Lege dann je VERSCHIEDENEM Datum EINE session an (gleiche gutschrift_nr fuer alle ist korrekt). Beispiel Interopa "Monats-Gutschrift 2449/202606": Drehtage 21.05.+27.05.+03.06. in der Tabelle → typ="monats_abrechn", 3 sessions (je Datum eine).\n'
     +'  "Bisherige Jahressummen" unten auf der Seite = KUMULATIVWERTE, IGNORIEREN für Typerkennung und Beträge!\n'
     +'  "ausgabe" = Quittung/Rechnung, "sonstig" = sonstiges\n'
     +'  BESONDERS: Honorarvereinbarung / Honorarrechnung / Honorarabrechnung / Honorarnote, bei der '+_uname+' selbst als Zahlungsempfänger genannt ist (oft mit Unterschrift "Zahlungsempfänger"), gilt als "abrechn"! Diese Belege enthalten meist: Honorar netto, USt 7%, Gesamtbetrag, Bank/IBAN des Sprechers. Studio-Feld = Auftraggeber (z.B. "AS Hörspiel GmbH"). Brutto = Gesamtbetrag inkl. USt. gutschrift_nr = Beleg-/Vereinbarungs-Nr. (z.B. "AS-OD-26-30").\n'
@@ -13746,6 +13747,16 @@ function dokAnalyseDoc(d, key, cb){
           return s.brutto_termin && s.auszahlung;
         });
 
+        // Build 887: Root-Fix Multi-Termin-Verknüpfung. Eine von der KI als 'abrechn'
+        // fehlklassifizierte Monats-Sammel erkennen: mehrere Sessions mit VERSCHIEDENEN
+        // Drehtagen, aber ohne eigene pro-Tag-Auszahlung (Interopa/VSI-Stil: gemeinsame
+        // Auszahlung + eine Gutschrifts-Nr.). Solche Belege wurden im abrechn-Zweig bisher
+        // verworfen (sessions=null) → nur 1 Termin verknüpft. Jetzt: wie monats_abrechn
+        // behandeln (EINE Abrechnung, Finanzen auf GNR-Ebene, ALLE Drehtage als Junctions).
+        var _distinctDatenMK = {};
+        (j.sessions||[]).forEach(function(s){ if(s.datum) _distinctDatenMK[s.datum]=1; });
+        var _istFehlklassMonats = !alleHabenFinanzen && j.sessions.length > 1 && Object.keys(_distinctDatenMK).length > 1;
+
         if(alleHabenFinanzen){
           d.typ = 'abrechn';
           d.sessions = null;
@@ -13904,14 +13915,20 @@ function dokAnalyseDoc(d, key, cb){
           rDokumente();
           // Navigation übernimmt cb() aus dokAnalyseOne — kein eigenes setTimeout nötig
           showToast('✓ '+j.sessions.length+' Abrechnungen erkannt — bitte einzeln bestätigen');
-        } else if(d.typ==='abrechn'){
+        } else if(d.typ==='abrechn' && !_istFehlklassMonats){
           // Build 886: 'abrechn' mit Sessions, aber NICHT splittbar (z.B. eine Gutschrift
           // mit mehreren Drehtagen ohne pro-Tag-Auszahlung). Verhalten identisch zum alten
           // Pfad: solche Belege liefen früher in den äußeren else-Zweig → sessions verwerfen.
           // Schützt die Architektur — nur echte Monats-Sammler bleiben monats_abrechn.
+          // Build 887: greift nur noch für ECHTE Einzelabrechnungen (1 Datum / 1 Session).
+          // Fehlklassifizierte Monats-Sammler (_istFehlklassMonats) fallen jetzt in den else-Zweig.
           d.sessions = null;
         } else {
           // Arena-Stil: echter Monats-Sammler bleibt monats_abrechn mit sessions
+          // Build 887: ODER eine von der KI fehlklassifizierte abrechn-Monats-Sammel
+          // (mehrere Drehtage, gemeinsame Auszahlung) → zu monats_abrechn hochstufen, damit
+          // ALLE Drehtage verknüpft werden. Finanzen bleiben auf GNR-Ebene (kein Split).
+          if(d.typ==='abrechn'){ d.typ = 'monats_abrechn'; }
           d.sessions = j.sessions;
           // Bereits belegte TerminIds sammeln — eigenes Dokument ausschliessen
           // (bei Neu-Analyse sonst alte terminIds blockieren → falsche Verknüpfungen)
