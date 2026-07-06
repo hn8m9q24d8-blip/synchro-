@@ -271,7 +271,11 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .group-lbl{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);font-weight:600;margin:18px 2px 8px}
 
 /* NAV */
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:50;height:62px;background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;padding:0 4px;padding-bottom:env(safe-area-inset-bottom)}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:50;height:62px;background:var(--card);border-top:none;display:flex;align-items:center;justify-content:space-around;padding:0 4px;padding-bottom:env(safe-area-inset-bottom)}
+/* Build 915: Hinoki-Kante — die App steht auf einem Brett */
+.bottom-nav::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;pointer-events:none;
+  background:repeating-linear-gradient(90deg,#EFE3CF 0 2px,#E9DCC6 2px 3px,#F2E7D4 3px 9px,#EBDFC9 9px 10px,#F4EAD9 10px 22px);
+  box-shadow:0 .5px 0 rgba(140,110,70,.25) inset, 0 -1px 2px rgba(140,110,70,.12)}
 .nav-btn{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:6px 8px;border-radius:var(--r);transition:all .15s;min-width:56px;user-select:none;position:relative}
 .nav-btn:active{transform:scale(.9)}
 .nav-icon{font-size:22px;transition:all .15s}
@@ -3768,7 +3772,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Urushi-Lack auf der Primaerhandlung: FAB, .btn-primary, Sync-Hauptbutton
   // (dunkler Verlauf + Lichtkante + Glanzfenster). Hinoki vertagt, Origami
   // kommt mit Onboarding. Reines CSS + eine Style-Zuweisung, keine Logik.
-  if(el) el.textContent = '914';
+  // Build 915 (Textur I b): Hinoki-Kante uebernommen — 3px Zypressen-Maserung
+  // als Oberkante der Tab-Leiste (repeating-gradient + warme Schattenkante),
+  // ersetzt die Hairline dort. Nur diese eine CSS-Regel.
+  if(el) el.textContent = '915';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
