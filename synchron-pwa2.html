@@ -377,11 +377,48 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 .takes-drum-line::before,.takes-drum-line::after{content:'';position:absolute;left:8px;right:8px;height:1.5px;background:rgba(26,110,168,.2);}
 .takes-drum-line::before{top:-18px;}
 .takes-drum-line::after{bottom:-18px;}
+
+/* ── BUILD 910: Heute-Screen + Zen-Nav ── */
+.zen{padding:24px 4px 22px;text-align:center;border-bottom:1px solid var(--hair);margin:0 16px 16px}
+.zen .circle{width:56px;height:56px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2);position:relative}
+.zen .circle::after{content:'';position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#EDF1EC,#DDE5DC)}
+.zen .zt{font-family:var(--serif);font-size:17px;color:var(--ink);margin-bottom:4px}
+.zen .zs{font-size:12.5px;color:var(--ink2)}
+.zen .zs .n{color:var(--accent);font-weight:600}
+.hday{display:flex;gap:13px;padding:12px 0;border-bottom:1px solid var(--hair);align-items:baseline}
+.hday:last-child{border-bottom:none}
+.hday .dd{font-size:11.5px;color:var(--ink2);width:48px;flex:none;font-weight:500}
+.hday .dt{font-size:13.5px;font-weight:500;color:var(--ink)}
+.hday .dr{font-size:11.5px;color:var(--ink2);margin-top:1px}
+.nav-btn svg{stroke:var(--ink4);display:block}
+.nav-btn.active svg{stroke:var(--accent)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
-<div id="view-termine" class="view active">
+<div id="view-heute" class="view active">
+  <div class="app-header"><div class="header-left">
+    <div class="header-title" id="heute-greet">Guten Tag</div>
+    <div class="header-sub" id="heute-date"></div>
+  </div></div>
+  <div class="scroll" style="padding-left:16px;padding-right:16px">
+    <div class="zen" style="margin:0 0 16px">
+      <div class="circle"></div>
+      <div class="zt" id="heute-zen-title">Alles ist erfasst.</div>
+      <div class="zs" id="heute-zen-sub"></div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left"><div><div class="sr-label">Beleg hinzufügen</div><div class="sr-sub" id="heute-belege-sub">Foto oder PDF — KI liest den Rest</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('holvi-abgleich')"><div class="sr-left"><div><div class="sr-label">Zahlungen prüfen</div><div class="sr-sub" id="heute-zahlungen-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left"><div><div class="sr-label">Mein Jahr</div><div class="sr-sub" id="heute-jahr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
+    </div>
+    <div class="group-lbl">Nächste Drehtage</div>
+    <div class="settings-group" style="padding:2px 16px" id="heute-drehtage"></div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<div id="view-termine" class="view">
   <div class="app-header">
     <div class="header-left">
       <div class="header-title">Termine</div>
@@ -464,7 +501,6 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <div class="settings-row" onclick="exportData()"><div class="sr-left"><div><div class="sr-label">Sicherung exportieren</div><div class="sr-sub">JSON — dein ganzer Datenbestand</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="document.getElementById('backup-import-input').click()"><div class="sr-left"><div><div class="sr-label">Sicherung importieren</div></div></div><div class="sr-right">›</div></div>
       <input type="file" id="backup-import-input" accept=".json" style="display:none" onchange="importData(this)">
-      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div><div class="sr-label">Jahresabschluss</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div><div class="sr-label">Sozialabgaben</div><div class="sr-sub">KV · RV · PV</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div><div class="sr-label">Jahresübersicht exportieren</div></div></div><div class="sr-right">CSV</div></div>
     </div>
@@ -554,7 +590,8 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- ══════ GVL ARTSYS ════════════════════════════════════ -->
 <div id="view-gvl" class="view">
   <div class="app-header">
-    <div class="header-left">
+    <div class="header-left" style="display:flex;align-items:center;gap:10px">
+      <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;line-height:1;flex-shrink:0;padding:2px 4px 2px 0">‹</div>
       <div class="header-title">GVL · ARTSYS</div>
       <div class="header-sub" id="gvl-sub">Jahresübersicht für Meldung</div>
     </div>
@@ -633,84 +670,44 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- ══════ BUCHHALTUNG ══════════════════════════════════ -->
 <!-- ══════ BUCHHALTUNG ══════════════════════════════════ -->
 <div id="view-buchhaltung" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue);height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('profil')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Buchhaltung</div><div style="color:rgba(255,255,255,.75);font-size:12px">Gagen &amp; Finanzen</div></div>
-  </div>
-  <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:10px">
+  <div class="app-header"><div class="header-left">
+    <div class="header-title">Buch</div>
+    <div class="header-sub">Dein stiller Überblick</div>
+  </div></div>
+  <div class="view-scroll" style="padding:4px 16px 100px">
 
-    <div onclick="switchView('holvi-abgleich')" class="buch-menu-row" id="holvi-menu-row">
-      <div class="buch-menu-icon" style="background:#f0fdf4;color:#166534">🏦</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Kontoabgleich <span id="holvi-abgleich-badge" style="display:none;background:#16a34a;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
-        <div class="buch-menu-sub">Holvi-Zahlungen bestätigen</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
+    <div class="qstats" style="display:flex;border:1px solid var(--hair);border-radius:16px;background:var(--card);overflow:hidden;margin-bottom:14px">
+      <div style="flex:1;padding:13px 6px;text-align:center;border-right:1px solid var(--hair)"><div style="font-size:14px;font-weight:600" id="buch-quick-total">–</div><div style="font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.04em">Jahr netto</div></div>
+      <div style="flex:1;padding:13px 6px;text-align:center;border-right:1px solid var(--hair)"><div style="font-size:14px;font-weight:600;color:var(--accent)" id="buch-quick-bezahlt">–</div><div style="font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.04em">bezahlt</div></div>
+      <div style="flex:1;padding:13px 6px;text-align:center"><div style="font-size:14px;font-weight:600" id="buch-quick-offen">–</div><div style="font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.04em">offen</div></div>
     </div>
 
-    <div onclick="switchView('mahnwesen')" class="buch-menu-row" id="mahn-menu-row">
-      <div class="buch-menu-icon" style="background:#fef2f2;color:#c2410c">⚠</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Mahnwesen <span id="mahn-menu-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
-        <div class="buch-menu-sub">Überfällige Zahlungen ab 30 Tagen</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
+    <div class="group-lbl" style="margin-top:4px">Bewegung</div>
+    <div class="settings-group">
+      <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left"><div><div class="sr-label">Belege</div><div class="sr-sub" id="buch-belege-sub">Upload · KI-Pipeline · Archiv</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('holvi-abgleich')" id="holvi-menu-row"><div class="sr-left"><div><div class="sr-label">Zahlungen <span id="holvi-abgleich-badge" style="display:none;background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:600;margin-left:4px"></span></div><div class="sr-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('mahnwesen')" id="mahn-menu-row"><div class="sr-left"><div><div class="sr-label">Offene Honorare <span id="mahn-menu-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:600;margin-left:4px"></span></div><div class="sr-sub">ausstehende Belege · Erinnerung</div></div></div><div class="sr-right">›</div></div>
     </div>
 
-    <div onclick="switchView('undo')" class="buch-menu-row">
-      <div class="buch-menu-icon" style="background:#f5f3ff;color:#6d28d9">↩</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Rückgängig</div>
-        <div class="buch-menu-sub">Letzte 20 Aktionen einsehen &amp; widerrufen</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
+    <div class="group-lbl">Übersicht</div>
+    <div class="settings-group">
+      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left"><div><div class="sr-label">Jahresübersicht</div><div class="sr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('ust-voranmeldung')"><div class="sr-left"><div><div class="sr-label">USt-Voranmeldung</div><div class="sr-sub">Ist-Versteuerung §20</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div><div class="sr-label">Jahresabschluss</div><div class="sr-sub">für die Steuerberaterin</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gvl')"><div class="sr-left"><div><div class="sr-label">GVL</div><div class="sr-sub">Verteilungen · Export</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left"><div><div class="sr-label">Gagenabrechnungen</div><div class="sr-sub">SV-Meldungen · Studio Hamburg</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('rechnungen')"><div class="sr-left"><div><div class="sr-label">Rechnungen</div><div class="sr-sub">eigene Rechnungen (K3)</div></div></div><div class="sr-right">›</div></div>
     </div>
 
-    <div onclick="runIntegrityCheckAndShow()" class="buch-menu-row">
-      <div class="buch-menu-icon" style="background:#fefce8;color:#854d0e">🔍</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Daten-Check <span id="integrity-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:4px"></span></div>
-        <div class="buch-menu-sub">Summen &amp; Verknüpfungen prüfen</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
-    </div>
-
-    <div onclick="switchView('gagenabrechnungen')" class="buch-menu-row">
-      <div class="buch-menu-icon" style="background:#e8f5e9;color:#2e7d32">GS</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Gagen­abrechnungen / SV-Meld.</div>
-        <div class="buch-menu-sub">Abrechnungsgruppen der Studios</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
-    </div>
-
-    <div onclick="switchView('rechnungen')" class="buch-menu-row">
-      <div class="buch-menu-icon" style="background:#fff3e0;color:#e65100">RE</div>
-      <div class="buch-menu-body">
-        <div class="buch-menu-title">Rechnungen</div>
-        <div class="buch-menu-sub">Rechnung auf Knopfdruck erstellen</div>
-      </div>
-      <div class="buch-menu-arrow">›</div>
-    </div>
-
-    <!-- Build 861: Kachel "Zahlungseingänge" entfernt (rZahlungsEingaenge war defekt:
-         ReferenceError auf undefinierte Variable 'zahl'; funktional redundant mit
-         Kontoabgleich + Bank-Abgleich, reiner Legacy-Lesepfad auf db.zahlungen). -->
-
-    <!-- Mini-Übersicht -->
-    <div id="buch-quick-stat" style="background:var(--blue);border-radius:14px;padding:18px;margin-top:6px;color:#fff">
-      <div style="font-size:12px;opacity:.8;margin-bottom:8px">Aktuelles Jahr</div>
-      <div style="font-size:32px;font-weight:900;letter-spacing:-1px" id="buch-quick-total">€ 0</div>
-      <div style="display:flex;justify-content:space-between;margin-top:12px">
-        <div><div style="font-size:11px;opacity:.7">Offen</div><div id="buch-quick-offen" style="font-weight:700;color:#ffcdd2">€ 0</div></div>
-        <div style="text-align:right"><div style="font-size:11px;opacity:.7">Bezahlt</div><div id="buch-quick-bezahlt" style="font-weight:700;color:#c8e6c9">€ 0</div></div>
-      </div>
+    <div class="group-lbl">Werkzeuge</div>
+    <div class="settings-group">
+      <div class="settings-row" onclick="switchView('undo')"><div class="sr-left"><div><div class="sr-label">Rückgängig</div><div class="sr-sub">letzte Aktionen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="runIntegrityCheckAndShow()"><div class="sr-left"><div><div class="sr-label">Daten-Check</div><div class="sr-sub">Konsistenz prüfen</div></div></div><div class="sr-right">›</div></div>
     </div>
 
   </div>
 </div>
 
-<!-- ══════ UNDO VIEW ════════════════════════════════════ -->
 <div id="view-undo" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="background:#6d28d9;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
     <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
@@ -731,7 +728,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- ══════ JAHRESABSCHLUSS ════════════════════════════════════ -->
 <div id="view-jahresabschluss" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="background:#78350f;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('profil')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div style="flex:1">
       <div style="color:#fff;font-size:18px;font-weight:900">Jahresabschluss</div>
       <div style="color:rgba(255,255,255,.75);font-size:12px" id="jahres-sub">Steuerübersicht</div>
@@ -775,9 +772,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- ══════ DOKUMENTE VIEW ══════════════════════════════════ -->
 <div id="view-dokumente" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header">
-    <div class="header-left">
-      <div class="header-title">Dokumente</div>
-      <div class="header-sub" id="dok-badge">0 Dok.</div>
+    <div class="header-left" style="display:flex;align-items:center;gap:10px">
+      <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;line-height:1;flex-shrink:0;padding:2px 4px 2px 0">‹</div>
+      <div><div class="header-title">Belege</div>
+      <div class="header-sub" id="dok-badge">0 Dok.</div></div>
     </div>
   </div>
   <!-- Action buttons row -->
@@ -1283,11 +1281,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- NAV -->
 <nav class="bottom-nav">
-  <div class="nav-btn active" id="nav-termine" onclick="switchView('termine')"><div class="nav-icon">📅</div><div class="nav-label">Termine</div></div>
-  <div class="nav-btn" id="nav-dokumente" onclick="switchView('dokumente')"><div class="nav-icon">📋</div><div class="nav-label">Dokumente</div></div>
-  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><div class="nav-icon">💶</div><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:2px;right:4px;background:#ef4444;color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:900;min-width:14px;text-align:center;line-height:16px"></div></div>
-  <div class="nav-btn" id="nav-gvl" onclick="switchView('gvl')"><div class="nav-icon">🎭</div><div class="nav-label">GVL</div></div>
-  <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+  <div class="nav-btn active" id="nav-heute" onclick="switchView('heute')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg><div class="nav-label">Heute</div></div>
+  <div class="nav-btn" id="nav-termine" onclick="switchView('termine')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><div class="nav-label">Termine</div></div>
+  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/></svg><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:0;right:2px;background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:600;min-width:15px;text-align:center;line-height:15px"></div></div>
+  <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></svg><div class="nav-label">Profil</div></div>
 </nav>
 </div>
 
@@ -3715,7 +3712,18 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // profil-avatar/-name/-beruf, backup-import-input und saemtliche onclick-
   // Handler 1:1 erhalten (verifiziert). Jahresabschluss/Sozialabgaben bleiben
   // bis zum Nav-Umbau (910) hier. Keine JS-Aenderung ausser dieser Zeile.
-  if(el) el.textContent = '909';
+  // Build 910 (Design D3, Struktur): Nav 5→4 (Heute · Termine · Buch · Profil,
+  // SVG-Line-Icons statt Emojis). Neuer Heute-Screen rHeute() — rein lesende
+  // Aggregation: Zen-Status (Vormonat-Zahllast aus _mev7Buckets/_mev7Vorsteuer,
+  // exakt die Phase-7-Quellen der USt-View), offene Eingaenge (_holviOffenCount),
+  // unbestaetigte Pipeline, naechste 3 Drehtage. Buch-Hub neu: Bewegung/Übersicht/
+  // Werkzeuge; Kontoabgleich→„Zahlungen“, Mahnwesen→„Offene Honorare“; USt-VA
+  // entgraben (eigene Row), Jahresabschluss aus Profil ins Buch umgezogen (Row+
+  // Zurueckpfeil). Dokumente/GVL: Tab weg, via Buch erreichbar, Zurueck→Buch.
+  // Badge-Politik A: updateBuchBadge() = Pipeline + offene Eingaenge, einziger
+  // nav-buch-badge-Schreiber; _updateMahnBadge nur noch Row-Badge. KEINE
+  // Datenpfad-/Berechnungslogik geaendert — nur Navigation, Markup, Aggregat-Anzeige.
+  if(el) el.textContent = '910';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9589,12 +9597,83 @@ function toggleSonderChips(){}
 var KALENDER_2025=[];
 var KALENDER_2026=[];
 
+// ── HEUTE (Build 910, read-only Aggregation) ──────────────
+function rHeute(){
+  var now=new Date();
+  var g=document.getElementById('heute-greet');
+  if(g){
+    var h=now.getHours(), p=db.profil||{}, vn=(p.name||'').trim().split(/\s+/)[0]||'';
+    var gr = h<11 ? 'Guten Morgen' : (h<18 ? 'Guten Tag' : 'Guten Abend');
+    g.textContent = gr + (vn ? ', '+vn : '');
+  }
+  var d=document.getElementById('heute-date');
+  if(d){ try{ d.textContent = now.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }catch(e){ d.textContent=''; } }
+
+  // Zen-Status: Zahllast des Vormonats aus Phase-7-Quellen (dieselben wie die USt-View).
+  var zt=document.getElementById('heute-zen-title');
+  var zs=document.getElementById('heute-zen-sub');
+  var offenBank=0, offenDok=0;
+  try{ if(typeof _holviOffenCount==='function') offenBank=_holviOffenCount(); }catch(e){}
+  try{ offenDok=_dokUnanalysedCount(); }catch(e){}
+  var mNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var ustTxt='';
+  try{
+    var pm=new Date(now.getFullYear(),now.getMonth()-1,1);
+    var key=pm.getFullYear()+'-'+String(pm.getMonth()+1).padStart(2,'0');
+    var by=_mev7Buckets();
+    if(by[key] && by[key].n>0){
+      var brutto=by[key].u7+by[key].u19+by[key].k4;
+      var vst=0; try{ var v=_mev7Vorsteuer(); vst=v&&v[key]?v[key]:0; }catch(e){}
+      var last=Math.round((brutto-vst)*100)/100;
+      ustTxt=mNames[pm.getMonth()]+' ans Finanzamt: <span class="n">'+fmtEur(last)+'</span>';
+    }
+  }catch(e){}
+  if(zt&&zs){
+    if(offenBank===0&&offenDok===0){
+      zt.textContent='Alles ist erfasst.';
+      zs.innerHTML = ustTxt || 'Nichts wartet auf dich.';
+    }else{
+      zt.textContent='Fast alles erfasst.';
+      var parts=[];
+      if(offenDok>0) parts.push(offenDok+' Beleg'+(offenDok!==1?'e':'')+' unbestätigt');
+      if(offenBank>0) parts.push(offenBank+' Eingang'+(offenBank!==1?'änge':'')+' offen');
+      zs.innerHTML = parts.join(' · ') + (ustTxt ? '<br>'+ustTxt : '');
+    }
+  }
+  var bs=document.getElementById('heute-belege-sub');
+  if(bs) bs.textContent = offenDok>0 ? offenDok+' unbestätigt in der Pipeline' : 'Foto oder PDF — KI liest den Rest';
+  var zb=document.getElementById('heute-zahlungen-sub');
+  if(zb) zb.textContent = offenBank>0 ? offenBank+' Eingänge ohne Zuordnung' : 'Bankeingänge abgleichen';
+
+  // Naechste Drehtage (max 3, ab heute)
+  var dt=document.getElementById('heute-drehtage');
+  if(dt){
+    var ti=today();
+    var next=(db.termine||[]).filter(function(t){return t.datum && t.datum>=ti;})
+      .sort(function(a,b){return a.datum<b.datum?-1:1;}).slice(0,3);
+    var wd=['So','Mo','Di','Mi','Do','Fr','Sa'];
+    if(!next.length){
+      dt.innerHTML='<div style="padding:16px 0;font-size:12.5px;color:var(--ink2);text-align:center">Keine anstehenden Termine.</div>';
+    }else{
+      dt.innerHTML=next.map(function(t){
+        var dd='';
+        try{ var td=new Date(t.datum+'T00:00:00'); dd=wd[td.getDay()]+' '+td.getDate()+'.'; }catch(e){}
+        var sub=[t.rolle,t.studio].filter(Boolean).join(' · ');
+        return '<div class="hday"><span class="dd">'+esc(dd)+'</span><div><div class="dt">'+esc(t.titel||'—')+'</div>'+(sub?'<div class="dr">'+esc(sub)+'</div>':'')+'</div></div>';
+      }).join('');
+    }
+  }
+  try{ updateBuchBadge(); }catch(e){}
+}
+
 // ── INIT ──────────────────────────────────────────────────────
 (function(){
   buchMonth=new Date();
 
   if(!db.rechnungen) db.rechnungen=[];
   rTermine();updateBadge();
+  try{ rHeute(); }catch(e){}
+  try{ updateBuchBadge(); }catch(e){}
 
   // Scan zone drag & drop
   var zone=document.getElementById('scan-zone');
@@ -10674,17 +10753,18 @@ function switchView(v){
   if(view) view.classList.add('active');
   // bottom nav highlight
   var navMap = {
-    'termine':'termine','sync':'sync','dispos':'dispos','buch':'buch','gvl':'gvl','profil':'profil',
-    'buchhaltung':'buch','verdienstübersicht':'profil','abrechnungen':'profil','ust-voranmeldung':'buch','dokumente':'dokumente','mahnwesen':'buch','undo':'buch','holvi-abgleich':'buch',
+    'heute':'heute','termine':'termine','sync':'termine','dispos':'termine','buch':'buch','gvl':'buch','profil':'profil',
+    'buchhaltung':'buch','verdienstübersicht':'buch','abrechnungen':'buch','ust-voranmeldung':'buch','dokumente':'buch','mahnwesen':'buch','undo':'buch','holvi-abgleich':'buch',
     'rechnungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
-    'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil','jahresabschluss':'profil'
+    'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil','jahresabschluss':'buch'
   };
   var navBtn = document.getElementById('nav-'+(navMap[v]||v));
   if(navBtn) navBtn.classList.add('active');
   // render
-  if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}var si=document.getElementById('termine-search');if(si)si.value='';var clr2=document.getElementById('termine-search-clear');if(clr2)clr2.style.display='none';_lastSucheQuery='';rTermine();updateBadge();}
+  if(v==='heute'){rHeute();}
+  else if(v==='termine'){if(!calSelectedDate){calSelectedDate=today();calViewDate=new Date();}var si=document.getElementById('termine-search');if(si)si.value='';var clr2=document.getElementById('termine-search-clear');if(clr2)clr2.style.display='none';_lastSucheQuery='';rTermine();updateBadge();}
   else if(v==='sync'){initSyncView();}
   else if(v==='dispos'){rDispos();}
   else if(v==='gvl'){rGVL();}
@@ -18929,16 +19009,34 @@ function rMahnwesen(){
 }
 
 function _updateMahnBadge(count){
+  // Build 910: schreibt nur noch das Row-Badge im Buch-Hub.
+  // nav-buch-badge gehoert jetzt exklusiv updateBuchBadge() (Badge-Politik A).
   var badge = document.getElementById('mahn-menu-badge');
-  var navBuchBadge = document.getElementById('nav-buch-badge');
   if(badge){
     badge.textContent = count > 0 ? count : '';
     badge.style.display = count > 0 ? 'inline' : 'none';
   }
-  if(navBuchBadge){
-    navBuchBadge.textContent = count > 0 ? count : '';
-    navBuchBadge.style.display = count > 0 ? 'inline-flex' : 'none';
-  }
+  try{ updateBuchBadge(); }catch(e){}
+}
+
+// Build 910 — Badge-Politik A: EIN aggregiertes Signal am Buch-Tab.
+// Quellen (beide bestehend, read-only): unbestaetigte KI-Pipeline (gleiche
+// Zaehlung wie dok-badge in rDokumente) + offene Bankeingaenge (_holviOffenCount,
+// ehrliche 894er-Zaehlung). Einziger Schreiber von nav-buch-badge.
+function _dokUnanalysedCount(){
+  try{
+    return (db.dokumente||[]).filter(function(d){ return !d._stubAfterDeleteAll; })
+      .filter(function(d){ return !d.typ||d.typ==='offen'; }).length;
+  }catch(e){ return 0; }
+}
+function updateBuchBadge(){
+  var el=document.getElementById('nav-buch-badge');
+  if(!el) return;
+  var n=0;
+  try{ n+=_dokUnanalysedCount(); }catch(e){}
+  try{ if(typeof _holviOffenCount==='function') n+=_holviOffenCount(); }catch(e){}
+  el.textContent = n>0 ? n : '';
+  el.style.display = n>0 ? 'inline-flex' : 'none';
 }
 
 function mahnEmail(belegId){
