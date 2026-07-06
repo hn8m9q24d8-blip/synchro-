@@ -427,10 +427,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <div class="icon-btn" id="ical-sync-btn" onclick="icalSyncFromWorker()" title="Kalender sync">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a7560" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A857C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </div>
       <div class="icon-btn" onclick="openTerminSheet()">
-        <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="#8a7560" stroke-width="2" stroke-linecap="round"/></svg>
+        <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="#8A857C" stroke-width="2" stroke-linecap="round"/></svg>
       </div>
     </div>
   </div>
@@ -440,38 +440,38 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
       <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="#9ca3af" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
       <input id="termine-search" type="text" placeholder="Produktion, Studio, Rolle suchen…"
         oninput="termineSuche(this.value)"
-        style="width:100%;box-sizing:border-box;padding:9px 32px 9px 32px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none">
+        style="width:100%;box-sizing:border-box;padding:9px 32px 9px 32px;border:1px solid var(--hair);border-radius:12px;font-size:14px;font-family:inherit;background:var(--card);outline:none;-webkit-appearance:none">
       <div id="termine-search-clear" onclick="termineSearchClear()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;background:#9ca3af;border-radius:50%;cursor:pointer;align-items:center;justify-content:center">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
     </div>
-    <div id="merkliste-filter-btn" onclick="toggleMerklisteFilter()" style="flex-shrink:0;width:38px;height:38px;border-radius:12px;border:1.5px solid #e5e7eb;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;touch-action:manipulation">☆</div>
+    <div id="merkliste-filter-btn" onclick="toggleMerklisteFilter()" style="flex-shrink:0;width:38px;height:38px;border-radius:12px;border:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;color:var(--ink3);touch-action:manipulation">☆</div>
   </div>
   <!-- Apple-style Month Calendar -->
   <div id="cal-block" style="flex-shrink:0;padding:0 16px 6px;display:flex;align-items:center;justify-content:space-between">
     <div onclick="calNavMonth(-1)" class="arrow-btn">‹</div>
     <div style="display:flex;align-items:center;gap:10px">
-      <div id="cal-month-label" onclick="calNavToday()" style="font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.3px;cursor:pointer;-webkit-tap-highlight-color:transparent"></div>
-      <div onclick="calNavToday()" id="cal-heute-btn" style="font-size:11px;font-weight:700;color:var(--blue);background:#e8f4fd;border:1.5px solid #b3d7f0;border-radius:20px;padding:3px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent">Heute</div>
+      <div id="cal-month-label" onclick="calNavToday()" style="font-family:var(--serif);font-size:18px;font-weight:500;color:var(--ink);letter-spacing:.01em;cursor:pointer;-webkit-tap-highlight-color:transparent"></div>
+      <div onclick="calNavToday()" id="cal-heute-btn" style="font-size:11px;font-weight:600;color:var(--accent);background:var(--card);border:1px solid var(--hair);border-radius:20px;padding:3px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent">Heute</div>
     </div>
     <div onclick="calNavMonth(1)" class="arrow-btn">›</div>
   </div>
   <!-- Weekday headers -->
   <div id="cal-weekdays" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px;margin-bottom:2px">
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">M</div>
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">D</div>
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">M</div>
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">D</div>
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">F</div>
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--ink4)">S</div>
-    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--red)">S</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">M</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">D</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">M</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">D</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">F</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">S</div>
+    <div style="text-align:center;font-size:11px;font-weight:500;color:var(--ink3)">S</div>
   </div>
   <div id="week-strip" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px 6px;gap:1px 0"></div>
   <div class="scroll" id="termine-scroll">
     <div class="empty-state" id="termine-empty" style="display:none">
-      <div class="empty-icon">📅</div>
-      <div class="empty-title">Noch keine Termine</div>
-      <div class="empty-sub">Tippe auf + um deinen<br>ersten Termin einzutragen.</div>
+      <div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>
+      <div class="empty-title" style="font-family:var(--serif);font-weight:500">Noch keine Termine</div>
+      <div class="empty-sub">Tippe oben auf + und trage<br>deinen ersten Termin ein.</div>
     </div>
     <div id="termine-list"></div>
   </div>
@@ -542,9 +542,9 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div class="scroll" id="sync-scroll" style="padding-top:0;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0">
 
     <div style="padding:16px 16px 8px">
-      <div onclick="runCalendarSync()" id="sync-main-btn" style="background:var(--blue);border-radius:var(--r);border:2px solid var(--blue);box-shadow:0 4px 0 rgba(43,111,212,.35);padding:16px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:all .15s;user-select:none" ontouchstart="this.style.transform='translateY(3px)';this.style.boxShadow='none'" ontouchend="this.style.transform='';this.style.boxShadow='0 4px 0 rgba(43,111,212,.35)'">
+      <div onclick="runCalendarSync()" id="sync-main-btn" style="background:var(--ink);border-radius:14px;border:none;padding:15px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:opacity .15s;user-select:none" ontouchstart="this.style.opacity='.55'" ontouchend="this.style.opacity=''">
         <svg width="20" height="20" fill="none" viewBox="0 0 16 16"><path d="M14 8A6 6 0 1 1 8 2a6 6 0 0 0 5.2 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M11 5l2.2-2.2L15 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span id="sync-btn-label" style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.2px">Kalender jetzt synchronisieren</span>
+        <span id="sync-btn-label" style="font-size:14px;font-weight:600;color:var(--paper);letter-spacing:.02em">Kalender jetzt synchronisieren</span>
       </div>
       <div id="sync-last" style="text-align:center;font-size:11px;color:var(--ink4);margin-top:8px"></div>
     </div>
@@ -553,30 +553,28 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     <!-- iCal Import -->
     <div style="margin:4px 16px 0;height:1px;background:var(--border)"></div>
     <div style="padding:14px 16px 8px">
-      <div style="font-size:11px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">&#x1F4C5; iCal Kalender importieren</div>
+      <div class="group-lbl" style="margin:0 0 10px">iCal-Kalender importieren</div>
       <input id="ics-import-input" type="file" accept="*/*" style="display:none" onchange="icsImport(this)">
-      <div onclick="icsImportFromClipboard()" style="background:var(--green);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 4px 0 #1a7a4a;user-select:none;margin-bottom:8px" ontouchstart="this.style.transform='translateY(3px)';this.style.boxShadow='none'" ontouchend="this.style.transform='';this.style.boxShadow='0 4px 0 #1a7a4a'">
-        <div style="font-size:26px">&#x1F4C5;</div>
+      <div onclick="icsImportFromClipboard()" style="background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none;margin-bottom:8px" ontouchstart="this.style.opacity='.55'" ontouchend="this.style.opacity=''">
         <div style="flex:1">
-          <div style="font-size:14px;font-weight:800;color:#fff">.ics Datei importieren</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:1px">Kalender vom Disponenten einlesen</div>
+          <div style="font-size:14px;font-weight:500;color:var(--ink)">.ics-Datei importieren</div>
+          <div style="font-size:11.5px;color:var(--ink2);margin-top:2px">Kalender vom Disponenten einlesen</div>
         </div>
-        <div style="font-size:18px;color:rgba(255,255,255,.5)">&#x203A;</div>
+        <div style="font-size:16px;color:var(--ink3)">&#x203A;</div>
       </div>
     </div>
 
     <!-- Ordner prüfen -->
     <div style="margin:4px 16px 0;height:1px;background:var(--border)"></div>
     <div style="padding:14px 16px 0">
-      <div style="font-size:11px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">&#x1F4C2; Buchhaltungsordner pr&#xFC;fen</div>
+      <div class="group-lbl" style="margin:0 0 10px">Buchhaltungsordner pr&#xFC;fen</div>
       <input id="sync-folder-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="syncFolderGotFiles(this)">
-      <div onclick="document.getElementById('sync-folder-input').click()" id="sync-folder-btn" style="background:#be185d;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 4px 0 #9d174d;user-select:none;margin-bottom:8px" ontouchstart="this.style.transform='translateY(3px)';this.style.boxShadow='none'" ontouchend="this.style.transform='';this.style.boxShadow='0 4px 0 #9d174d'">
-        <div style="font-size:26px">&#x1F4C2;</div>
+      <div onclick="document.getElementById('sync-folder-input').click()" id="sync-folder-btn" style="background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none;margin-bottom:8px" ontouchstart="this.style.opacity='.55'" ontouchend="this.style.opacity=''">
         <div style="flex:1">
-          <div id="sync-folder-label" style="font-size:14px;font-weight:800;color:#fff">Ordner ausw&#xe4;hlen &amp; pr&#xFC;fen</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:1px">iCloud Drive &#x2192; Synchron Buchhaltung</div>
+          <div id="sync-folder-label" style="font-size:14px;font-weight:500;color:var(--ink)">Ordner ausw&#xe4;hlen &amp; pr&#xFC;fen</div>
+          <div style="font-size:11.5px;color:var(--ink2);margin-top:2px">iCloud Drive &#x2192; Synchron Buchhaltung</div>
         </div>
-        <div style="font-size:18px;color:rgba(255,255,255,.5)">&#x203A;</div>
+        <div style="font-size:16px;color:var(--ink3)">&#x203A;</div>
       </div>
       <div id="sync-folder-result" style="font-size:12px;color:var(--ink4);text-align:center;padding:4px 0 8px"></div>
     </div>
@@ -597,7 +595,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
     </div>
     <div style="display:flex;gap:8px">
       <div class="icon-btn" onclick="exportGVLExcel()" title="Excel exportieren">
-        <svg width="15" height="15" fill="none" viewBox="0 0 15 15"><path d="M2 3h11v9H2zM5 3v9M10 3v9M2 7.5h11" stroke="#8a7560" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <svg width="15" height="15" fill="none" viewBox="0 0 15 15"><path d="M2 3h11v9H2zM5 3v9M10 3v9M2 7.5h11" stroke="#8A857C" stroke-width="1.4" stroke-linecap="round"/></svg>
       </div>
     </div>
   </div>
@@ -3723,7 +3721,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Badge-Politik A: updateBuchBadge() = Pipeline + offene Eingaenge, einziger
   // nav-buch-badge-Schreiber; _updateMahnBadge nur noch Row-Badge. KEINE
   // Datenpfad-/Berechnungslogik geaendert — nur Navigation, Markup, Aggregat-Anzeige.
-  if(el) el.textContent = '910';
+  // Build 911 (Design D4): Termine + Sync zen. Kalendergrid beruhigt (Entscheidung
+  // ① bleibt erhalten): Heute=Kiefer-Kreis, Auswahl=Sumi, Termin-Punkte=Sage,
+  // Sonntag leise (ink3), Gewichte 600, Monatslabel Serif, Heute-Pill Hairline.
+  // Suchfeld/Merkliste-Button Hairline-Karten. Sync-View: Bonbon-Buttons (Indigo/
+  // Gruen/Pink mit Toy-Schatten) → Sumi-Hauptbutton + Hairline-Karten, Emojis raus,
+  // Labels als group-lbl. Termine-Empty-State: Enso-Kreis statt Emoji. Icon-Strokes
+  // Alt-Braun → Stone. Reine Darstellung: rWeekStrip-Farblogik + statisches Markup,
+  // keine Datenlogik.
+  if(el) el.textContent = '911';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3842,12 +3848,12 @@ function rWeekStrip(){
     el.onclick=(function(i){return function(){calSelectDay(i);};})(iso);
     el.style.cssText='height:36px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:3px;cursor:pointer;-webkit-tap-highlight-color:transparent';
     var numBg='transparent';
-    var numColor=isSun?'var(--red)':'var(--ink)';
+    var numColor=isSun?'var(--ink3)':'var(--ink)';
     var numWeight='500';
-    if(isToday&&isSel){numBg='var(--blue)';numColor='#fff';numWeight='900';}
-    else if(isToday){numBg='var(--red)';numColor='#fff';numWeight='900';}
-    else if(isSel){numBg='var(--blue)';numColor='#fff';numWeight='800';}
-    var dotColor=(isSel||isToday)?'#fff':'var(--blue)';
+    if(isToday&&isSel){numBg='var(--accent)';numColor='#fff';numWeight='600';}
+    else if(isToday){numBg='var(--accent)';numColor='#fff';numWeight='600';}
+    else if(isSel){numBg='var(--ink)';numColor='var(--paper)';numWeight='600';}
+    var dotColor=(isSel||isToday)?'#fff':'var(--accent2)';
     var dot=hasEv?'<div style="width:5px;height:5px;border-radius:50%;background:'+dotColor+';margin-top:2px"></div>':'';
     el.innerHTML='<div style="width:26px;height:26px;border-radius:50%;background:'+numBg+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:'+numWeight+';color:'+numColor+'">'+day+'</div>'+dot;
     s.appendChild(el);
@@ -22742,7 +22748,7 @@ function _mev6PeekHtml(r,idx){
       <div class="header-sub">Termine &middot; Dispos &middot; Dokumente</div>
     </div>
     <div onclick="switchView('termine')" class="icon-btn">
-      <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M10 4L4 10M4 4l6 6" stroke="#8a7560" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M10 4L4 10M4 4l6 6" stroke="#8A857C" stroke-width="2" stroke-linecap="round"/></svg>
     </div>
   </div>
   <div style="padding:12px 16px 8px;flex-shrink:0">
