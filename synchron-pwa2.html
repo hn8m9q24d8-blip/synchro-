@@ -707,33 +707,33 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 </div>
 
 <div id="view-undo" class="view" style="overflow:hidden;display:flex;flex-direction:column">
-  <div class="app-header" style="background:#6d28d9;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Rückgängig</div><div style="color:rgba(255,255,255,.75);font-size:12px">Letzte 20 Aktionen</div></div>
+  <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Rückgängig</div><div style="color:var(--ink2);font-size:12px">Letzte 20 Aktionen</div></div>
   </div>
   <div class="scroll" id="undo-log-list" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ SOZIALABGABEN ════════════════════════════════════ -->
 <div id="view-sozialabgaben" class="view" style="overflow:hidden;display:flex;flex-direction:column">
-  <div class="app-header" style="background:#1d6fa8;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('profil')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Sozialabgaben</div><div style="color:rgba(255,255,255,.75);font-size:12px">KV / RV / PV Jahresübersicht</div></div>
+  <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('profil')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Sozialabgaben</div><div style="color:var(--ink2);font-size:12px">KV / RV / PV Jahresübersicht</div></div>
   </div>
   <div class="scroll" id="sozial-content" style="padding:16px;padding-bottom:100px"></div>
 </div>
 
 <!-- ══════ JAHRESABSCHLUSS ════════════════════════════════════ -->
 <div id="view-jahresabschluss" class="view" style="overflow:hidden;display:flex;flex-direction:column">
-  <div class="app-header" style="background:#78350f;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+  <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div style="flex:1">
-      <div style="color:#fff;font-size:18px;font-weight:900">Jahresabschluss</div>
-      <div style="color:rgba(255,255,255,.75);font-size:12px" id="jahres-sub">Steuerübersicht</div>
+      <div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Jahresabschluss</div>
+      <div style="color:var(--ink2);font-size:12px" id="jahres-sub">Steuerübersicht</div>
     </div>
     <div style="display:flex;gap:8px">
-      <button type="button" id="jahres-prev" onclick="jahresJahrWechsel(-1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:4px 10px;font-size:16px;cursor:pointer">‹</button>
-      <button type="button" id="jahres-next" onclick="jahresJahrWechsel(1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:4px 10px;font-size:16px;cursor:pointer">›</button>
+      <button type="button" id="jahres-prev" onclick="jahresJahrWechsel(-1)" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);border-radius:8px;padding:4px 10px;font-size:16px;cursor:pointer">‹</button>
+      <button type="button" id="jahres-next" onclick="jahresJahrWechsel(1)" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);border-radius:8px;padding:4px 10px;font-size:16px;cursor:pointer">›</button>
     </div>
   </div>
   <div class="scroll" id="jahres-content" style="padding:16px;padding-bottom:100px"></div>
@@ -744,13 +744,13 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ HOLVI KONTOABGLEICH ══════════════════════════ -->
 <div id="view-holvi-abgleich" class="view" style="overflow:hidden;display:flex;flex-direction:column">
-  <div class="app-header" style="background:#166534;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+  <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div style="flex:1">
-      <div style="color:#fff;font-size:18px;font-weight:900">Kontoabgleich</div>
-      <div style="color:rgba(255,255,255,.75);font-size:12px" id="holvi-abgleich-sub">Holvi-Zahlungen prüfen &amp; bestätigen</div>
+      <div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Zahlungen</div>
+      <div style="color:var(--ink2);font-size:12px" id="holvi-abgleich-sub">Holvi-Zahlungen prüfen &amp; bestätigen</div>
     </div>
-    <label style="color:#fff;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.2);border-radius:8px;padding:7px 14px;white-space:nowrap">
+    <label style="color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:7px 14px;white-space:nowrap">
       ＋ Import
       <input type="file" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="bankImportRoute(this)">
     </label>
@@ -760,9 +760,9 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ MAHNWESEN ════════════════════════════════════ -->
 <div id="view-mahnwesen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
-  <div class="app-header" style="background:#c2410c;height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:900">Mahnwesen</div><div style="color:rgba(255,255,255,.75);font-size:12px">Überfällige Zahlungen</div></div>
+  <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
+    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div><div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Offene Honorare</div><div style="color:var(--ink2);font-size:12px">ausstehende Belege · Erinnerung</div></div>
   </div>
   <div class="scroll" id="mahn-scroll" style="padding:16px;padding-bottom:100px"></div>
 </div>
@@ -828,10 +828,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ VERDIENSTÜBERSICHT ══════════════════════════ -->
 <div id="view-verdienstübersicht" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue);display:flex;align-items:center;gap:0;padding:0 16px;height:56px">
-    <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
-    <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Verdienstübersicht</div>
-    <div onclick="rVerdienst()" style="color:#fff;font-size:13px;font-weight:600;cursor:pointer">Heute</div>
+  <div class="app-header" style="display:flex;align-items:center;gap:0;padding:0 16px;height:56px">
+    <div onclick="switchView('buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
+    <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Jahresübersicht</div>
+    <div onclick="rVerdienst()" style="color:var(--accent);font-size:13px;font-weight:600;cursor:pointer">Heute</div>
   </div>
   <!-- Year selector -->
   <div style="background:#e3f0fa;display:flex;align-items:center;justify-content:center;gap:20px;padding:10px;flex-shrink:0">
@@ -846,9 +846,9 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ ABRECHNUNGEN ══════════════════════════════════ -->
 <div id="view-abrechnungen" class="view" style="flex-direction:column;display:none">
-  <div class="app-header" style="background:var(--blue);display:flex;align-items:center;padding:0 16px;height:56px">
-    <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 12px 0 0;line-height:1">&#8249;</div>
-    <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Eingang &amp; Abgleich</div>
+  <div class="app-header" style="display:flex;align-items:center;padding:0 16px;height:56px">
+    <div onclick="switchView('buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">&#8249;</div>
+    <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Eingang &amp; Abgleich</div>
   </div>
   <div style="background:#fff;padding:12px 16px;display:flex;gap:8px;flex-shrink:0;border-bottom:2px solid #eee">
     <div onclick="switchView('holvi-abgleich')" style="flex:1;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px;text-align:center;cursor:pointer">
@@ -944,10 +944,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ RECHNUNGEN ════════════════════════════════════ -->
 <div id="view-rechnungen" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue);display:flex;align-items:center;padding:0 16px;height:56px">
-    <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
-    <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Rechnungen</div>
-    <div onclick="openRechnungSheet(null)" style="color:#fff;font-size:26px;cursor:pointer;font-weight:300;line-height:1">+</div>
+  <div class="app-header" style="display:flex;align-items:center;padding:0 16px;height:56px">
+    <div onclick="switchView('buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
+    <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Rechnungen</div>
+    <div onclick="openRechnungSheet(null)" style="color:var(--ink);font-size:26px;cursor:pointer;font-weight:300;line-height:1">+</div>
   </div>
   <!-- Summen-Banner -->
   <div style="background:#37474f;padding:14px 16px;flex-shrink:0">
@@ -967,9 +967,9 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- ══════ ZAHLUNGEN (Neue Übersicht) ═══════════════════ -->
 <div id="view-gagenabrechnungen" class="view" style="overflow:hidden;flex-direction:column">
   <!-- Header -->
-  <div class="app-header" style="background:#1a2332;display:flex;align-items:center;padding:0 16px;height:56px;flex-shrink:0">
-    <div onclick="switchView('buchhaltung')" style="font-size:26px;color:#fff;cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
-    <div style="flex:1;color:#fff;font-size:18px;font-weight:800">Einnahmen & Analyse</div>
+  <div class="app-header" style="display:flex;align-items:center;padding:0 16px;height:56px;flex-shrink:0">
+    <div onclick="switchView('buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
+    <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Einnahmen & Analyse</div>
     <div id="zahl-year-tabs" style="display:flex;gap:4px"></div>
   </div>
   <!-- Hero Banner -->
@@ -1141,10 +1141,10 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 </div>
 
 <div id="view-stammdaten" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue)">
+  <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:12px">
-      <div onclick="switchView('profil')" style="font-size:22px;color:#fff;cursor:pointer;padding:4px 8px 4px 0">‹</div>
-      <div class="header-title" style="color:#fff">Stammdaten</div>
+      <div onclick="switchView('profil')" style="font-size:22px;color:var(--ink2);cursor:pointer;padding:4px 8px 4px 0">‹</div>
+      <div class="header-title">Stammdaten</div>
     </div>
   </div>
   <div class="view-scroll" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
@@ -1168,12 +1168,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ PERSÖNLICHE DATEN ═════════════════════════════ -->
 <div id="view-pers-daten" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue)">
+  <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:12px">
-      <div onclick="switchView('stammdaten')" style="font-size:22px;color:#fff;cursor:pointer;padding:4px 8px 4px 0">‹</div>
-      <div class="header-title" style="color:#fff">Persönliche Daten</div>
+      <div onclick="switchView('stammdaten')" style="font-size:22px;color:var(--ink2);cursor:pointer;padding:4px 8px 4px 0">‹</div>
+      <div class="header-title">Persönliche Daten</div>
     </div>
-    <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
+    <div onclick="saveProfil()" style="color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
   <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
@@ -1201,12 +1201,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ BANKVERBINDUNG ════════════════════════════════ -->
 <div id="view-bankverbindung" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue)">
+  <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:12px">
-      <div onclick="switchView('stammdaten')" style="font-size:22px;color:#fff;cursor:pointer;padding:4px 8px 4px 0">‹</div>
-      <div class="header-title" style="color:#fff">Rechnungs-Bankverbindung</div>
+      <div onclick="switchView('stammdaten')" style="font-size:22px;color:var(--ink2);cursor:pointer;padding:4px 8px 4px 0">‹</div>
+      <div class="header-title">Rechnungs-Bankverbindung</div>
     </div>
-    <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
+    <div onclick="saveProfil()" style="color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
   <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;font-size:12px;color:#0c4a6e;line-height:1.5">
@@ -1225,12 +1225,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ SOZIALVERSICHERUNG ════════════════════════════ -->
 <div id="view-sozialversicherung" class="view">
-  <div class="app-header" style="background:var(--blue)">
+  <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:12px">
-      <div onclick="switchView('stammdaten')" style="font-size:22px;color:#fff;cursor:pointer;padding:4px 8px 4px 0">‹</div>
-      <div class="header-title" style="color:#fff">Sozialversicherung</div>
+      <div onclick="switchView('stammdaten')" style="font-size:22px;color:var(--ink2);cursor:pointer;padding:4px 8px 4px 0">‹</div>
+      <div class="header-title">Sozialversicherung</div>
     </div>
-    <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
+    <div onclick="saveProfil()" style="color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
   <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
@@ -1251,12 +1251,12 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 <!-- ══════ FINANZAMT ══════════════════════════════════════ -->
 <div id="view-finanzamt" class="view" style="overflow:hidden">
-  <div class="app-header" style="background:var(--blue)">
+  <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:12px">
-      <div onclick="switchView('stammdaten')" style="font-size:22px;color:#fff;cursor:pointer;padding:4px 8px 4px 0">‹</div>
-      <div class="header-title" style="color:#fff">Finanzamt</div>
+      <div onclick="switchView('stammdaten')" style="font-size:22px;color:var(--ink2);cursor:pointer;padding:4px 8px 4px 0">‹</div>
+      <div class="header-title">Finanzamt</div>
     </div>
-    <div onclick="saveProfil()" style="color:#fff;font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
+    <div onclick="saveProfil()" style="color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">Speichern</div>
   </div>
   <div class="view-scroll" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:12px">
     <div class="info-card">
@@ -3729,7 +3729,20 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Labels als group-lbl. Termine-Empty-State: Enso-Kreis statt Emoji. Icon-Strokes
   // Alt-Braun → Stone. Reine Darstellung: rWeekStrip-Farblogik + statisches Markup,
   // keine Datenlogik.
-  if(el) el.textContent = '911';
+  // Build 912 (Design D5): Buch-Unteransichten. Alle 14 farbigen Sub-View-Header
+  // (Violett/Blau/Braun/Gruen/Orange/Dunkel) → Standard-Washi-Header mit Serif-
+  // Titel, ink2-Pfeil, Hairline-Pills. View-Titel an Hub angeglichen: Mahnwesen→
+  // „Offene Honorare“, Kontoabgleich→„Zahlungen“, Verdienstübersicht→„Jahres-
+  // übersicht“. rVerdienst-Body: Blau-Balken→Cream2, Serif-Summe, Ampeln Ziegel/
+  // Kiefer. Reine Darstellung, keine Berechnungslogik.
+  // Build 913 (Design D4b, aus Test-Feedback 911): Terminkarten + Ampeln zen.
+  // Statusstreifen bezahlt/ausstehend/offen/storno → Kiefer/Ocker/Ziegel/ink4.
+  // Ampel-Dots (Dispo/Abrechn./Zahlung) → Ziegel/Ocker/Kiefer auf Hairline.
+  // Betrags-/Differenz-/GVL-Zeilen gedaempft, Deko-Emojis (💶📝⭐📅🔍) raus,
+  // Memo/Stern als stille Chips, Multi-Select-Haken Sumi. Beide JS-Empty-States
+  // (Tag leer, Suche leer) → Enso-Stil. Nur Farb-/Markup-Strings im Renderer,
+  // keine Status- oder Vergleichslogik geaendert.
+  if(el) el.textContent = '913';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3808,7 +3821,7 @@ function termineSuche(q){
   if(header) header.textContent = results.length + ' Ergebnis' + (results.length!==1?'se':'');
 
   if(!results.length){
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
+    list.innerHTML = '<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title" style="font-family:var(--serif);font-weight:500">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
     return;
   }
   // _showMonth=true damit Monat in der Karte angezeigt wird
@@ -3951,7 +3964,7 @@ function rTermine(){
       header.textContent=dp?dayNames[dp.getDay()]+', '+fd(calSelectedDate):'';
     }
     if(!dayItems.length){
-      list.innerHTML='<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">Keine Termine</div><div class="empty-sub">An diesem Tag keine Einträge.</div></div>';
+      list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title" style="font-family:var(--serif);font-weight:500">Keine Termine</div><div class="empty-sub">An diesem Tag keine Einträge.</div></div>';
       return;
     }
     list.innerHTML=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
@@ -4001,7 +4014,7 @@ function tCard(t){
   var dn=d?dayNames[d.getDay()]:'';
   var dayNum=d?d.getDate():'';
   var past=t.datum&&t.datum<today();
-  var sc=t.status==='bezahlt'?'#43a047':t.status==='storno'?'#aaa':t.status==='ausstehend'?'#fb8c00':'#e53935';
+  var sc=t.status==='bezahlt'?'var(--accent)':t.status==='storno'?'var(--ink4)':t.status==='ausstehend'?'var(--orange)':'var(--red)';
   var docs=(db.dokumente||[]).filter(function(dk){return dk.terminId===t.id;});
   var dispoDok=docs.find(function(dk){return dk.typ==='dispo';});
   var _dispoDokLinked = t.dokIds && t.dokIds.some(function(did){
@@ -4078,20 +4091,20 @@ function tCard(t){
   var ampelDots='';
   if(hasDispo||hasAbrechnung||hasZahlung){
     ampelDots='<div style="display:flex;gap:4px;margin-top:4px;align-items:center">';
-    ampelDots+='<div style="width:8px;height:8px;border-radius:50%;background:'+(hasDispo?'#e53935':'#e5e7eb')+'"></div>';
-    ampelDots+='<div style="width:8px;height:8px;border-radius:50%;background:'+(hasAbrechnung?'#f5c518':'#e5e7eb')+'"></div>';
-    ampelDots+='<div style="width:8px;height:8px;border-radius:50%;background:'+(hasZahlung?'#22c55e':'#e5e7eb')+'"></div>';
+    ampelDots+='<div style="width:7px;height:7px;border-radius:50%;background:'+(hasDispo?'var(--red)':'var(--hair)')+'"></div>';
+    ampelDots+='<div style="width:7px;height:7px;border-radius:50%;background:'+(hasAbrechnung?'var(--orange)':'var(--hair)')+'"></div>';
+    ampelDots+='<div style="width:7px;height:7px;border-radius:50%;background:'+(hasZahlung?'var(--accent)':'var(--hair)')+'"></div>';
     ampelDots+='</div>';
   }
 
   var badges='';
-  if(t.memo) badges+='<span style="background:#fff7ed;color:#c2410c;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px;margin-right:2px">📝</span>';
-  if(t._merkliste) badges+='<span style="background:#fefce8;color:#92400e;font-size:9px;font-weight:800;padding:2px 5px;border-radius:7px">⭐</span>';
+  if(t.memo) badges+='<span style="background:var(--cream2);color:var(--ink2);font-size:9px;font-weight:600;padding:2px 6px;border-radius:7px;margin-right:2px">✎ Memo</span>';
+  if(t._merkliste) badges+='<span style="background:var(--yellow2);color:#8a6a3f;font-size:9px;font-weight:600;padding:2px 6px;border-radius:7px">★</span>';
 
   // Zusatzinfos aus Dokumenten
   var extraLines='';
   if((staffel||folge) && !t._hideGVL){
-    extraLines+='<div style="font-size:11px;color:#6d28d9;margin-top:3px;font-weight:600">';
+    extraLines+='<div style="font-size:11px;color:var(--ink2);margin-top:3px;font-weight:500">';
     if(staffel) extraLines+=esc(staffel);
     if(staffel&&folge) extraLines+=' · ';
     if(folge) extraLines+=esc(folge);
@@ -4117,24 +4130,24 @@ function tCard(t){
     }
     // Bei Sammel zeigen wir den Brutto-Anteil, bei Einzel die Auszahlung (wie gehabt)
     var anzeigeWert = ab._v2IstTeilVonSammel ? ab.brutto : (ab.auszahlung || ab.brutto);
-    extraLines+='<div style="font-size:11px;color:'+(diffOk?'#15803d':'#c2410c')+';margin-top:2px;font-weight:700">💶 '+fmtEur(anzeigeWert)+anteilLabel+(diffOk?' ✓':' ⚠')+'</div>';
+    extraLines+='<div style="font-size:11px;color:'+(diffOk?'var(--accent)':'var(--orange)')+';margin-top:2px;font-weight:600">'+fmtEur(anzeigeWert)+anteilLabel+(diffOk?' ✓':' ⚠')+'</div>';
     // Build 734: Differenz-Hinweis fürs Mahnwesen — nur bei Einzelzeile, nicht bei Sammel-GS
     if(!diffOk && !ab._v2IstTeilVonSammel && !(ab._aufgeteiltN>0) && !t.differenz_geklaert){
       var diffSign = diffBetrag>0 ? '+' : '';
-      extraLines+='<div style="font-size:11px;color:#b91c1c;margin-top:2px;font-weight:800;background:#fee2e2;padding:2px 6px;border-radius:6px;display:inline-block">⚠ Differenz '+diffSign+fmtEur(diffBetrag)+' · prüfen / mahnen</div>';
+      extraLines+='<div style="font-size:11px;color:var(--red);margin-top:2px;font-weight:600;background:var(--red2);padding:2px 6px;border-radius:6px;display:inline-block">⚠ Differenz '+diffSign+fmtEur(diffBetrag)+' · prüfen / mahnen</div>';
     }
   }
 
   // Build 829: Mit-grün-Tag (nur_anzeige) → Hinweis statt Betrag
   if(v2view && v2view.quelle==='v2' && v2view.junction && v2view.junction.nur_anzeige){
-    extraLines+='<div style="font-size:11px;color:#15803d;margin-top:2px;font-weight:600">↳ mitabgerechnet</div>';
+    extraLines+='<div style="font-size:11px;color:var(--accent);margin-top:2px;font-weight:600">↳ mitabgerechnet</div>';
   }
 
   var monthNames2=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
   var monthShort=d?monthNames2[d.getMonth()]:'';
   return '<div class="t-card'+(past?' t-past':'')+'" onclick="openDetail(\''+t.id+'\')" style="'+multiStyle+'">'
     +'<div class="t-status-bar" style="background:'+sc+'"></div>'
-    +(isMultiSelected?'<div style="position:absolute;top:8px;right:8px;width:26px;height:26px;background:#c2410c;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.3)">✓</div>':'')
+    +(isMultiSelected?'<div style="position:absolute;top:8px;right:8px;width:26px;height:26px;background:var(--ink);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--paper);font-size:15px;font-weight:600;z-index:10">✓</div>':'')
     +'<div class="t-date"><div class="t-day-num">'+dayNum+'</div><div class="t-day-name">'+dn+'</div>'+(t._showMonth?'<div style="font-size:9px;font-weight:700;color:#888;margin-top:1px">'+monthShort+'</div><div style="font-size:9px;color:#aaa;line-height:1">'+( d?d.getFullYear():'' )+'</div>':'')+'</div>'
     +'<div class="t-body">'
     +'<div class="t-title">'+esc(t.titel)+'</div>'
@@ -11301,18 +11314,18 @@ function rVerdienst(){
   }
 
   function block(title, sub, g, extraClass){
-    return '<div style="border-bottom:1px solid #e8e8e8'+(extraClass?';'+extraClass:'')+';">'
-      +'<div style="background:#d9ecf7;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">'
-      +'<div><div style="font-weight:800;font-size:15px;color:#1a4a6b">'+title+'</div>'
+    return '<div style="border-bottom:1px solid var(--hair)'+(extraClass?';'+extraClass:'')+';">'
+      +'<div style="background:var(--cream2);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">'
+      +'<div><div style="font-weight:600;font-size:14px;color:var(--ink)">'+title+'</div>'
       +(sub?'<div style="font-size:11px;color:#666;margin-top:1px">'+sub+'</div>':'')
       +'</div><span style="font-size:16px;color:#999">▼</span></div>'
       +'<div style="padding:20px 20px 18px">'
-      +'<div style="font-size:36px;font-weight:300;text-align:center;margin-bottom:18px;letter-spacing:-1px">'+fmtEur(g.net)+'</div>'
+      +'<div style="font-family:var(--serif);font-size:30px;font-weight:500;text-align:center;margin-bottom:18px;letter-spacing:.01em">'+fmtEur(g.net)+'</div>'
       +'<div style="display:flex;justify-content:space-between">'
-      +'<div><div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#888;margin-bottom:3px">offen <span style="color:#e53935;font-size:15px">⏱</span></div>'
-      +'<div style="font-size:16px;font-weight:800;color:#e53935">'+fmtEur(g.offen)+'</div></div>'
-      +'<div style="text-align:right"><div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;font-size:12px;color:#888;margin-bottom:3px"><span style="color:#43a047;font-size:15px">✓</span> bezahlt</div>'
-      +'<div style="font-size:16px;font-weight:800;color:#43a047">'+fmtEur(g.bezahlt)+'</div></div>'
+      +'<div><div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#888;margin-bottom:3px">offen <span style="color:var(--red);font-size:14px">⏱</span></div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--red)">'+fmtEur(g.offen)+'</div></div>'
+      +'<div style="text-align:right"><div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;font-size:12px;color:#888;margin-bottom:3px"><span style="color:var(--accent);font-size:14px">✓</span> bezahlt</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--accent)">'+fmtEur(g.bezahlt)+'</div></div>'
       +'</div></div></div>';
   }
 
