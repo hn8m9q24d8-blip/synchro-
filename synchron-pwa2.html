@@ -3662,7 +3662,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // EINER Abrechnung aggregiert, weil der Session-Split nur bei typ=monats_abrechn lief.
   // Jetzt auch bei typ=abrechn — Schutz (>1 Session, alle mit brutto+auszahlung) un-
   // veraendert; Arena/VSI-Monats-Sammler + Einzelbelege verhalten sich exakt wie zuvor.
-  if(el) el.textContent = '904';
+  if(el) el.textContent = '906';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3795,8 +3795,31 @@ function rWeekStrip(){
 }
 
 // ── TERMINE ───────────────────────────────────────────────────
+// Build 906: Backup-Erinnerung — localStorage ist fluechtig (iOS kann PWA-Speicher
+// nach ~7 Tagen Inaktivitaet loeschen). Banner ab 7 Tagen ohne Export.
+function _backupBanner(){
+  var el=document.getElementById('backup-banner');
+  var last='';
+  try{last=localStorage.getItem('letztes_backup')||'';}catch(e){}
+  var tage=999;
+  if(last){ tage=Math.floor((Date.now()-new Date(last).getTime())/86400000); }
+  var hatDaten=(db.termine&&db.termine.length)||(db.dokumente&&db.dokumente.length);
+  if(!hatDaten || tage<7){ if(el) el.remove(); return; }
+  var txt=last?('Letztes Backup vor '+tage+' Tagen.'):'Noch kein Backup erstellt.';
+  if(!el){
+    el=document.createElement('div'); el.id='backup-banner';
+    var host=document.getElementById('termine-list');
+    if(host&&host.parentNode) host.parentNode.insertBefore(el,host);
+  }
+  el.innerHTML='<div style="margin:0 16px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:10px">'
+    +'<span style="font-size:17px">💾</span>'
+    +'<span style="flex:1;font-size:12.5px;color:#7c2d12;font-weight:600">'+txt+' Deine Daten leben nur auf diesem Gerät.</span>'
+    +'<button onclick="exportData()" style="flex:none;background:#c2410c;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">Jetzt sichern</button>'
+    +'</div>';
+}
 function rTermine(){
   rWeekStrip();
+  _backupBanner();
   var now=new Date();
   var ti=today();
   var list=document.getElementById('termine-list');
@@ -7516,6 +7539,8 @@ function exportData(){
   a.href=URL.createObjectURL(blob);
   a.download='synchron-backup-'+(new Date().toISOString().slice(0,10))+'.json';
   a.click();
+  try{localStorage.setItem('letztes_backup', new Date().toISOString());}catch(e){}
+  var bb=document.getElementById('backup-banner'); if(bb) bb.remove();
   showToast('📦 Export erstellt · db + dbv2 · API-Key nicht exportiert');
 }
 function importData(inp){
@@ -22460,11 +22485,14 @@ function MEV6run(){
         ? '<div style="margin-top:6px"><button onclick="_mev6MarkPrivat('+idx+',false)" style="background:none;border:none;color:#2563eb;font-weight:700;font-size:11px;cursor:pointer;touch-action:manipulation">↩ wieder aufnehmen</button></div>'
         : '<div style="margin-top:6px"><button onclick="_mev6MarkPrivat('+idx+',true)" style="background:#f3f4f6;border:none;color:#374151;font-weight:700;font-size:11px;border-radius:7px;padding:5px 10px;cursor:pointer;touch-action:manipulation">privat / ignorieren</button></div>');
     }
-    body+='<div style="border-left:3px solid '+c+';background:#fafafa;border-radius:6px;padding:8px 10px;margin-bottom:6px">'
+    var _ign=!!e.ignoriert;
+    var _rc=_ign?'#c6c1b6':c, _bg=_ign?'#f6f4ef':'#fafafa', _tc=_ign?'#8a857c':c;
+    var _typHtml=_ign?'✓ als privat markiert':(r.typ+(r.konfidenz!=='—'?(' ('+r.konfidenz+(typeof r.konfidenz==='number'?'%':'')+')'):'')+deltaTxt);
+    body+='<div style="border-left:3px solid '+_rc+';background:'+_bg+';border-radius:6px;padding:8px 10px;margin-bottom:6px'+(_ign?';opacity:.72':'')+'">'
       +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#555">'
         +'<span>'+(e.datum||'?')+' · '+(e.gegenpartei||'').substr(0,30)+'</span>'
         +'<span style="font-weight:700">'+(parseFloat(e.betrag)||0).toFixed(2)+' €</span></div>'
-      +'<div style="font-size:11px;font-weight:800;color:'+c+';margin:3px 0">'+r.typ+(r.konfidenz!=='—'?(' ('+r.konfidenz+(typeof r.konfidenz==='number'?'%':'')+')'):'')+deltaTxt+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+_tc+';margin:3px 0">'+_typHtml+'</div>'
       +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+' 📅</div>'):'')
       +_mev6PeekHtml(r,idx)
       +(r.ustNote?('<div style="font-size:10px;color:#777;margin-top:2px">'+r.ustNote+'</div>'):'')
