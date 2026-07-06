@@ -1715,6 +1715,25 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <div class="toast" id="toast"></div>
 
 <script>
+// Build 907 (Team-Audit #4): Globaler Fehler-Fänger — zeigt Laufzeitfehler sichtbar
+// als Banner statt still zu scheitern ("nichts passiert beim Tippen").
+window.addEventListener('error', function(ev){
+  try{
+    if(!document.body) return;
+    var m=(ev&&ev.message)||'Unbekannter Fehler';
+    var b=document.getElementById('_errbanner');
+    if(!b){ b=document.createElement('div'); b.id='_errbanner';
+      b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:999999;background:#7f1d1d;color:#fff;font:13px -apple-system,system-ui,sans-serif;padding:12px 16px 16px;line-height:1.4;box-shadow:0 -4px 20px rgba(0,0,0,.35)';
+      document.body.appendChild(b);
+    }
+    b.innerHTML='<span style="float:right;cursor:pointer;font-weight:800;padding:0 4px" onclick="this.parentNode.remove()">&times;</span>'
+      +'<b>\u26A0 Fehler:</b> '+String(m).replace(/</g,'&lt;').slice(0,180);
+  }catch(e){}
+});
+// Build 907 (Team-Audit #1): Persistenten Speicher anfordern — reduziert das Risiko,
+// dass iOS/Safari den lokalen Datenbestand bei Speicherdruck/Inaktivität löscht.
+try{ if(navigator.storage && navigator.storage.persist){ navigator.storage.persist(); } }catch(e){}
+
 
 
 const DBK='synchron_v4';
@@ -3662,7 +3681,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // EINER Abrechnung aggregiert, weil der Session-Split nur bei typ=monats_abrechn lief.
   // Jetzt auch bei typ=abrechn — Schutz (>1 Session, alle mit brutto+auszahlung) un-
   // veraendert; Arena/VSI-Monats-Sammler + Einzelbelege verhalten sich exakt wie zuvor.
-  if(el) el.textContent = '906';
+  if(el) el.textContent = '907';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
