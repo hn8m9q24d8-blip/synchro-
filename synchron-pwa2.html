@@ -260,8 +260,10 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .settings-row:last-child{border-bottom:none}
 .sr-left{display:flex;align-items:center;gap:12px}
 .sr-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
-.sr-label{font-size:14px;color:var(--ink);font-weight:700}
+.sr-label{font-size:14px;color:var(--ink);font-weight:500}
+.sr-sub{font-size:11.5px;color:var(--ink2);margin-top:1px}
 .sr-right{font-size:12px;color:var(--ink4);font-weight:600}
+.group-lbl{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);font-weight:600;margin:18px 2px 8px}
 
 /* NAV */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:50;height:62px;background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;padding:0 4px;padding-bottom:env(safe-area-inset-bottom)}
@@ -441,45 +443,50 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 <!-- ══════ DOKUMENTE ════════════════════════════════════ -->
 <div id="view-profil" class="view">
   <div class="app-header"><div class="header-title">Profil</div></div>
-  <div class="scroll">
+  <div class="scroll" style="padding-left:16px;padding-right:16px">
     <div class="profile-avatar" id="profil-avatar" onclick="switchView('stammdaten')" style="cursor:pointer">—</div>
     <div class="profile-name" id="profil-name" onclick="switchView('stammdaten')" style="cursor:pointer">Mein Profil</div>
     <div class="profile-sub" id="profil-beruf">Synchronsprecher</div>
+
+    <div class="group-lbl">Einrichtung</div>
     <div class="settings-group">
-
-      <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div class="sr-icon" style="background:#e0e7ff">👤</div><div class="sr-label">Stammdaten (Name, Adresse, Steuer, Bank)</div></div><div class="sr-right" id="stammdaten-status">→</div></div>
-      <div class="settings-row" onclick="openAuftraggeberSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fff7ed">📇</div><div class="sr-label">Auftraggeber-Adressbuch</div></div><div class="sr-right" id="auftraggeber-status">→</div></div>
-      <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div class="sr-icon" style="background:#fef3c7">🔑</div><div class="sr-label">Anthropic API-Key</div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
-      <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div class="sr-icon" style="background:#dcfce7">🏦</div><div class="sr-label">Studio-Hamburg-Bankzuordnung</div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
-      <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">📅</div><div class="sr-label">iCal Sync URL</div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
-      <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🔒</div><div class="sr-label">PDF-Passwörter (Studios)</div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
-      <div class="settings-row" onclick="openStudioEmailSheet()"><div class="sr-left"><div class="sr-icon" style="background:#eff6ff">✉</div><div class="sr-label">E-Mail-Adressen (Studios)</div></div><div class="sr-right" id="studio-email-status">Nicht gesetzt</div></div>
-
+      <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left"><div><div class="sr-label">Stammdaten</div><div class="sr-sub">Name · Adresse · Steuer · Bank</div></div></div><div class="sr-right" id="stammdaten-status">›</div></div>
+      <div class="settings-row" onclick="openAuftraggeberSheet()"><div class="sr-left"><div><div class="sr-label">Auftraggeber</div><div class="sr-sub">Adressbuch für Rechnungen</div></div></div><div class="sr-right" id="auftraggeber-status">›</div></div>
+      <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left"><div><div class="sr-label">KI-Schlüssel</div><div class="sr-sub">Anthropic API — liest deine Belege</div></div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left"><div><div class="sr-label">Kalender-Sync</div><div class="sr-sub">iCal-URL</div></div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openStudioEmailSheet()"><div class="sr-left"><div><div class="sr-label">E-Mail-Adressen</div><div class="sr-sub">Studios</div></div></div><div class="sr-right" id="studio-email-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left"><div><div class="sr-label">PDF-Passwörter</div><div class="sr-sub">Studios</div></div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="openBankIbansSheet()"><div class="sr-left"><div><div class="sr-label">Bankzuordnung</div><div class="sr-sub">Studio Hamburg</div></div></div><div class="sr-right" id="bank-ibans-status">Nicht gesetzt</div></div>
     </div>
+
+    <div class="group-lbl">Sicherung &amp; Berichte</div>
     <div class="settings-group">
-      <div class="settings-row" onclick="exportData()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">💾</div><div class="sr-label">JSON-Backup exportieren</div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="document.getElementById('backup-import-input').click()"><div class="sr-left"><div class="sr-icon" style="background:#e8f4fd">📂</div><div class="sr-label">JSON-Backup importieren</div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="exportData()"><div class="sr-left"><div><div class="sr-label">Sicherung exportieren</div><div class="sr-sub">JSON — dein ganzer Datenbestand</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="document.getElementById('backup-import-input').click()"><div class="sr-left"><div><div class="sr-label">Sicherung importieren</div></div></div><div class="sr-right">›</div></div>
       <input type="file" id="backup-import-input" accept=".json" style="display:none" onchange="importData(this)">
-      <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div class="sr-icon" style="background:#e0f2fe">🛡</div><div class="sr-label">Sozialabgaben (KV/RV/PV)</div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div class="sr-icon" style="background:#fef9c3">📋</div><div class="sr-label">Jahresabschluss</div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div class="sr-icon" style="background:#f0fdf4">📊</div><div class="sr-label">Jahresübersicht exportieren</div></div><div class="sr-right">CSV</div></div>
-      <div class="settings-row" onclick="diagnoseGutschriften()"><div class="sr-left"><div class="sr-icon" style="background:#eef2ff">🔍</div><div class="sr-label">Diagnose: Gutschriften-Status</div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="v2KonsolidiereBatch()"><div class="sr-left"><div class="sr-icon" style="background:#ecfdf5">🔧</div><div class="sr-label">Reparieren: fehlende dbv2-Einträge</div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div class="sr-icon" style="background:#fce7f3">🗑</div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
+      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div><div class="sr-label">Jahresabschluss</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('sozialabgaben')"><div class="sr-left"><div><div class="sr-label">Sozialabgaben</div><div class="sr-sub">KV · RV · PV</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="exportCSV()"><div class="sr-left"><div><div class="sr-label">Jahresübersicht exportieren</div></div></div><div class="sr-right">CSV</div></div>
     </div>
-    <div style="background:var(--card);border-radius:14px;border:1px solid var(--border);padding:16px;margin-bottom:12px;font-size:12px;color:var(--ink3);line-height:1.6">
-      <strong style="display:block;margin-bottom:6px;color:var(--ink);font-size:13px">📲 Als iPhone-App installieren</strong>
-      In Safari öffnen → Teilen-Symbol → „Zum Home-Bildschirm".<br>
-      Danach öffnet sich die App wie eine native App, ohne Browser-Leiste.
+
+    <div class="group-lbl">Werkzeuge</div>
+    <div class="settings-group">
+      <div class="settings-row" onclick="diagnoseGutschriften()"><div class="sr-left"><div><div class="sr-label">Diagnose</div><div class="sr-sub">Gutschriften-Status</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="v2KonsolidiereBatch()"><div class="sr-left"><div><div class="sr-label">Reparieren</div><div class="sr-sub">fehlende dbv2-Einträge</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
-    <div style="background:var(--card);border-radius:14px;border:1px solid var(--border);padding:16px;margin-bottom:12px;font-size:12px;color:var(--ink3);line-height:1.6">
-      <strong style="display:block;margin-bottom:6px;color:var(--ink);font-size:13px">📬 E-Mails mit Gagenscheinen</strong>
-      Öffne die Mail → Anhang antippen → Teilen → „In Synchron öffnen" (oder Datei speichern und dann in der App hochladen).<br>
-      Direkter Gmail-Zugriff ist aus Sicherheitsgründen im Browser nicht möglich – der Upload-Weg ist der sichere Weg.
+
+    <div class="settings-group" style="padding:16px;font-size:12px;color:var(--ink2);line-height:1.65">
+      <div class="group-lbl" style="margin:0 0 6px">Als iPhone-App installieren</div>
+      In Safari öffnen → Teilen-Symbol → „Zum Home-Bildschirm“. Danach öffnet sich die App wie eine native App, ohne Browser-Leiste.
     </div>
-    <div style="text-align:center;padding:8px 0;font-size:11px;color:var(--ink4)">
+    <div class="settings-group" style="padding:16px;font-size:12px;color:var(--ink2);line-height:1.65">
+      <div class="group-lbl" style="margin:0 0 6px">E-Mails mit Gagenscheinen</div>
+      Mail öffnen → Anhang antippen → Teilen → „In Synchron öffnen“ — oder Datei speichern und in der App hochladen. Direkter Postfach-Zugriff ist im Browser nicht möglich; der Upload-Weg ist der sichere Weg.
+    </div>
+    <div style="text-align:center;padding:10px 0 4px;font-size:11px;color:var(--ink3);line-height:1.7">
       Alle Daten lokal auf deinem Gerät · Kein Server · Kein Abo<br>
-      <span style="color:var(--leaf);font-weight:600">Synchron App v2.0</span>
+      <span style="color:var(--accent);font-weight:600">Synchron</span>
     </div>
     <div style="height:8px"></div>
   </div>
@@ -3702,7 +3709,13 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Kiefer) statt gestrichen — Konsistenz-Ampeln bleiben unterscheidbar.
   // NUR CSS + diese Zeile; keine JS-Logik, keine Datenpfade. Inline-Hex in
   // JS-generierten Views (Kontoabgleich, USt, Details) folgt screenweise D4-D6.
-  if(el) el.textContent = '908';
+  // Build 909 (Design D2): Profil-Reskin. Statisches view-profil-Markup neu:
+  // Emojis/Icon-Kacheln raus, 3 Gruppen (Einrichtung / Sicherung & Berichte /
+  // Werkzeuge) mit Zen-Labels, Titel+Subzeile statt Langtext. Alle 7 Status-IDs,
+  // profil-avatar/-name/-beruf, backup-import-input und saemtliche onclick-
+  // Handler 1:1 erhalten (verifiziert). Jahresabschluss/Sozialabgaben bleiben
+  // bis zum Nav-Umbau (910) hier. Keine JS-Aenderung ausser dieser Zeile.
+  if(el) el.textContent = '909';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
