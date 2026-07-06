@@ -54,6 +54,7 @@
   --purple:#7D7A9C;--purple2:#EFEEF5;
   --card:var(--paper2);
   --border:var(--hair);
+  --washi:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
   --sans:'Inter',-apple-system,'Helvetica Neue',sans-serif;
   --serif:'Shippori Mincho','Hiragino Mincho ProN',Georgia,serif;
   --shadow:none;
@@ -251,7 +252,11 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .doc-status.done{background:var(--green2);color:var(--green)}
 
 /* PROFIL */
-.profile-avatar{width:72px;height:72px;border-radius:50%;background:var(--accent);border:none;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:26px;font-weight:500;color:var(--paper);margin:0 auto 12px;box-shadow:none}
+.profile-avatar{width:72px;height:72px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:26px;font-weight:500;color:var(--paper);margin:0 auto 12px;position:relative;
+  background:radial-gradient(circle at 32% 26%,#6B7D6F 0%,var(--accent) 55%,#39473D 100%);
+  box-shadow:0 12px 18px -12px rgba(40,55,45,.5), inset 0 -6px 12px rgba(25,38,30,.35), inset 0 4px 8px rgba(235,242,236,.28)}
+.profile-avatar::before{content:'';position:absolute;inset:0;border-radius:50%;background-image:var(--washi);background-size:150px;opacity:.12;mix-blend-mode:multiply;pointer-events:none}
+.profile-avatar::after{content:'';position:absolute;left:19%;top:12%;width:26%;height:15%;border-radius:50%;background:rgba(240,246,240,.4);filter:blur(3px);pointer-events:none}
 .profile-name{font-size:22px;font-weight:600;color:var(--ink);text-align:center;margin-bottom:3px;letter-spacing:-.5px}
 .profile-sub{font-size:12px;color:var(--ink4);text-align:center;margin-bottom:20px;font-weight:600}
 .settings-group{background:var(--card);border-radius:var(--r);border:1px solid var(--border);box-shadow:none;overflow:hidden;margin-bottom:12px}
@@ -276,7 +281,10 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .nav-badge{position:absolute;top:2px;right:6px;background:var(--red);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center;display:none}
 
 /* FAB */
-.fab{position:fixed;right:20px;bottom:calc(var(--safe-bottom) + 74px);width:56px;height:56px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600;box-shadow:var(--shadow-lg);cursor:pointer;z-index:40;transition:all .15s;user-select:none}
+.fab{position:fixed;right:20px;bottom:calc(var(--safe-bottom) + 74px);width:56px;height:56px;border-radius:50%;color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600;cursor:pointer;z-index:40;transition:all .15s;user-select:none;position:fixed;overflow:hidden;
+  background:linear-gradient(180deg,#2A2823 0%,#1C1B19 42%,#141311 100%);
+  box-shadow:0 14px 22px -12px rgba(20,18,14,.55), inset 0 1px 0 rgba(255,255,255,.14)}
+.fab::before{content:'';position:absolute;left:14%;right:38%;top:6%;height:34%;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,0));pointer-events:none}
 .fab:active{opacity:.55}
 .fab.hidden{display:none}
 
@@ -317,7 +325,10 @@ body{font-family:var(--sans);background:var(--cream);height:100%;overflow:hidden
 .form-input::placeholder{color:var(--ink4)}
 select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23b8a898' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.btn-primary{width:100%;padding:15px;background:var(--green);color:#fff;border:none;border-radius:var(--r);font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.2px;box-shadow:none}
+.btn-primary{width:100%;padding:15px;color:var(--paper);border:none;border-radius:var(--r);font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.2px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,#2A2823 0%,#1C1B19 42%,#141311 100%);
+  box-shadow:0 12px 20px -14px rgba(20,18,14,.5), inset 0 1px 0 rgba(255,255,255,.13)}
+.btn-primary::before{content:'';position:absolute;left:6%;right:42%;top:2px;height:38%;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,0));pointer-events:none}
 .btn-primary:active{opacity:.55}
 .btn-secondary{width:100%;padding:13px;background:var(--card);color:var(--ink2);border:1px solid var(--border);border-radius:var(--r);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;margin-top:8px;box-shadow:none}
 .btn-secondary:active{opacity:.55}
@@ -378,10 +389,17 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 .takes-drum-line::before{top:-18px;}
 .takes-drum-line::after{bottom:-18px;}
 
+/* ── BUILD 914: Textur-Schicht I (Washi · Clay · Urushi) ── */
+body::after{content:'';position:fixed;inset:0;background-image:var(--washi);background-size:240px;
+  opacity:.05;mix-blend-mode:multiply;pointer-events:none;z-index:2147483000}
+
 /* ── BUILD 910: Heute-Screen + Zen-Nav ── */
 .zen{padding:24px 4px 22px;text-align:center;border-bottom:1px solid var(--hair);margin:0 16px 16px}
-.zen .circle{width:56px;height:56px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2);position:relative}
-.zen .circle::after{content:'';position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#EDF1EC,#DDE5DC)}
+.zen .circle{width:62px;height:62px;margin:0 auto 14px;border-radius:50%;border:none;position:relative;
+  background:radial-gradient(circle at 34% 28%,#E7D4C0 0%,var(--warm) 46%,#B8906F 78%,#9E7A5C 100%);
+  box-shadow:0 16px 22px -14px rgba(90,64,42,.45), inset 0 -7px 14px rgba(120,86,58,.25), inset 0 5px 9px rgba(255,250,243,.55)}
+.zen .circle::before{content:'';position:absolute;inset:0;border-radius:50%;background-image:var(--washi);background-size:150px;opacity:.14;mix-blend-mode:multiply}
+.zen .circle::after{content:'';position:absolute;left:20%;top:13%;width:26%;height:16%;border-radius:50%;background:rgba(255,252,246,.5);filter:blur(3px)}
 .zen .zt{font-family:var(--serif);font-size:17px;color:var(--ink);margin-bottom:4px}
 .zen .zs{font-size:12.5px;color:var(--ink2)}
 .zen .zs .n{color:var(--accent);font-weight:600}
@@ -542,7 +560,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
   <div class="scroll" id="sync-scroll" style="padding-top:0;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0">
 
     <div style="padding:16px 16px 8px">
-      <div onclick="runCalendarSync()" id="sync-main-btn" style="background:var(--ink);border-radius:14px;border:none;padding:15px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:opacity .15s;user-select:none" ontouchstart="this.style.opacity='.55'" ontouchend="this.style.opacity=''">
+      <div onclick="runCalendarSync()" id="sync-main-btn" style="background:linear-gradient(180deg,#2A2823 0%,#1C1B19 42%,#141311 100%);box-shadow:0 12px 20px -14px rgba(20,18,14,.5),inset 0 1px 0 rgba(255,255,255,.13);border-radius:14px;border:none;padding:15px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:opacity .15s;user-select:none" ontouchstart="this.style.opacity='.55'" ontouchend="this.style.opacity=''">
         <svg width="20" height="20" fill="none" viewBox="0 0 16 16"><path d="M14 8A6 6 0 1 1 8 2a6 6 0 0 0 5.2 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M11 5l2.2-2.2L15 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span id="sync-btn-label" style="font-size:14px;font-weight:600;color:var(--paper);letter-spacing:.02em">Kalender jetzt synchronisieren</span>
       </div>
@@ -3742,7 +3760,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Memo/Stern als stille Chips, Multi-Select-Haken Sumi. Beide JS-Empty-States
   // (Tag leer, Suche leer) → Enso-Stil. Nur Farb-/Markup-Strings im Renderer,
   // keine Status- oder Vergleichslogik geaendert.
-  if(el) el.textContent = '913';
+  // Build 914 (Textur I, aus Moodboard): Washi-Korn als globale Luft (fixes
+  // 5%-Overlay, data-URI-SVG, pointer-events:none — keine Requests, offline
+  // identisch). Zen-Kreis auf Heute → Clay-Stein (Radialverlauf, Innen-
+  // schatten, Glanzfenster, Korn). Profil-Avatar → Kiefer-Keramik gleicher
+  // Bauart; rProfil setzt kein Inline-Flachgruen mehr (nur Style-Zeile).
+  // Urushi-Lack auf der Primaerhandlung: FAB, .btn-primary, Sync-Hauptbutton
+  // (dunkler Verlauf + Lichtkante + Glanzfenster). Hinoki vertagt, Origami
+  // kommt mit Onboarding. Reines CSS + eine Style-Zuweisung, keine Logik.
+  if(el) el.textContent = '914';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10688,7 +10714,7 @@ function rProfil(){
   var hb=document.getElementById('profil-beruf'); if(hb) hb.textContent=p.beruf||'Synchronsprecher';
   var ha=document.getElementById('profil-avatar');
   if(ha){
-    if(p.name){ ha.textContent=p.name.trim().split(/\s+/).map(function(w){return (w[0]||'');}).slice(0,2).join('').toUpperCase(); ha.style.background='#4A5A4E'; ha.style.color='#fff'; }
+    if(p.name){ ha.textContent=p.name.trim().split(/\s+/).map(function(w){return (w[0]||'');}).slice(0,2).join('').toUpperCase(); ha.style.background=''; ha.style.color=''; }
     else { ha.textContent='—'; }
   }
   updateApiNotice();
