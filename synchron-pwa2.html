@@ -410,11 +410,9 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 .hday .dd{font-size:11.5px;color:var(--ink2);width:48px;flex:none;font-weight:500}
 .hday .dt{font-size:13.5px;font-weight:500;color:var(--ink)}
 .hday .dr{font-size:11.5px;color:var(--ink2);margin-top:1px}
-.nav-btn svg{display:block;color:var(--ink3)}
-.nav-btn svg .uki-k{stroke:var(--uki-s);fill:none}
-.nav-btn svg .uki-f{fill:currentColor;opacity:.5}
-.nav-btn.active svg{color:var(--accent)}
-.nav-btn.active svg .uki-f{opacity:.62}
+.nav-btn svg{display:block}
+.nav-btn svg .nav-ink{stroke:var(--ink3);fill:none;stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
+.nav-btn.active svg .nav-ink{stroke:var(--accent)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -430,6 +428,30 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <filter id="enso-soft" filterUnits="userSpaceOnUse" x="-10" y="-10" width="116" height="116"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="1.8"/></filter>
       <filter id="uki-sumi" filterUnits="objectBoundingBox" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency=".05 .14" numOctaves="4" seed="3" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="3.2" result="d"/><feTurbulence type="fractalNoise" baseFrequency=".3 .5" numOctaves="3" seed="11" result="dry"/><feComponentTransfer in="dry" result="dA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1 1"/></feComponentTransfer><feComposite in="d" in2="dA" operator="in" result="torn"/><feGaussianBlur in="d" stdDeviation=".6" result="br"/><feComponentTransfer in="br" result="bl"><feFuncA type="linear" slope=".2"/></feComponentTransfer><feMerge><feMergeNode in="bl"/><feMergeNode in="torn"/></feMerge></filter>
       <filter id="uki-flat" filterUnits="objectBoundingBox" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency=".16" numOctaves="2" seed="8" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="2.2"/></filter>
+      <!-- Build 937: Tusche-Rezeptur (Handwerk-Moodboard) skalierungsfest: Verzerrung + Kasure-Stanzmaske + Wolken-Modulation + Nijimi-Halo -->
+      <filter id="tusche" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%">
+        <feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/>
+        <feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/>
+        <feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/>
+        <feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer>
+        <feComposite in="disp" in2="dryA" operator="in" result="torn"/>
+        <feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/>
+        <feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer>
+        <feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/>
+        <feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/>
+        <feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
+        <feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge>
+      </filter>
+      <filter id="tusche-s" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%">
+        <feTurbulence type="fractalNoise" baseFrequency=".18 .5" numOctaves="3" seed="5" result="warp"/>
+        <feDisplacementMap in="SourceGraphic" in2="warp" scale="1.4" result="disp"/>
+        <feTurbulence type="fractalNoise" baseFrequency=".7 1.1" numOctaves="2" seed="13" result="dry1"/>
+        <feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 1 1 1 1 1 1 1"/></feComponentTransfer>
+        <feComposite in="disp" in2="dryA" operator="in" result="torn"/>
+        <feGaussianBlur in="disp" stdDeviation=".35" result="bleedRaw"/>
+        <feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.25"/></feComponentTransfer>
+        <feMerge><feMergeNode in="bleed"/><feMergeNode in="torn"/></feMerge>
+      </filter>
     </defs></svg>
     <div class="zen" style="margin:0 0 16px">
       <div class="circle" id="heute-enso"></div>
@@ -438,9 +460,9 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div style="font-size:9px;color:var(--ink4);margin-top:6px;letter-spacing:.04em">Build <span id="heute-build-nr">…</span></div>
     </div>
     <div class="settings-group">
-      <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left"><div><div class="sr-label">Beleg hinzufügen</div><div class="sr-sub" id="heute-belege-sub">Foto oder PDF — KI liest den Rest</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('holvi-abgleich')"><div class="sr-left"><div><div class="sr-label">Zahlungen prüfen</div><div class="sr-sub" id="heute-zahlungen-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left"><div><div class="sr-label">Mein Jahr</div><div class="sr-sub" id="heute-jahr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 3.2 15 3l3.9 4.1-.2 13.7H6.4z"/><path d="M14.9 3.2l0 4 3.9.1"/><path d="M6.4 4l12.4 16.5" stroke-dasharray="1.4 2.8" opacity=".6"/></g></svg><div><div class="sr-label">Beleg hinzufügen</div><div class="sr-sub" id="heute-belege-sub">Foto oder PDF — KI liest den Rest</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('holvi-abgleich')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14.8c2.4.2 2.6-2.9 5-2.9s2.6 3 5 3 2.5-3 5-3 2.6 3 3 3"/><path d="M3.2 18.8c2.4 0 2.5-2.9 4.9-2.9s2.6 3 5 3 2.5-3 4.9-3 2.7 3 3.1 3" opacity=".5"/></g></svg><div><div class="sr-label">Zahlungen prüfen</div><div class="sr-sub" id="heute-zahlungen-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-7"/><path d="M4 20h16" opacity=".5"/></g></svg><div><div class="sr-label">Mein Jahr</div><div class="sr-sub" id="heute-jahr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
     </div>
     <div class="group-lbl">Nächste Drehtage</div>
     <div class="settings-group" style="padding:2px 16px" id="heute-drehtage"></div>
@@ -1287,10 +1309,10 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
 <!-- NAV -->
 <nav class="bottom-nav">
-  <div class="nav-btn active" id="nav-heute" onclick="switchView('heute')"><svg width="23" height="23" viewBox="0 0 24 24"><path class="uki-f" d="M6.5 10.2 13 4.6l6.5 5.6V20.5h-13z"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></g></svg><div class="nav-label">Heute</div></div>
-  <div class="nav-btn" id="nav-termine" onclick="switchView('termine')"><svg width="23" height="23" viewBox="0 0 24 24"><rect class="uki-f" x="5.2" y="6.2" width="16" height="16" rx="3"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></g></svg><div class="nav-label">Termine</div></div>
-  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><svg width="23" height="23" viewBox="0 0 24 24"><path class="uki-f" d="M5.2 6.2a2 2 0 0 1 2-2h13v18h-13a2 2 0 0 0-2 2z"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/></g></svg><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:0;right:2px;background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:600;min-width:15px;text-align:center;line-height:15px"></div></div>
-  <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><svg width="23" height="23" viewBox="0 0 24 24"><circle class="uki-f" cx="13" cy="9.5" r="3.6"/><path class="uki-f" d="M6 21c1.2-3.4 4-5 7-5s5.8 1.6 7 5z"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></g></svg><div class="nav-label">Profil</div></div>
+  <div class="nav-btn active" id="nav-heute" onclick="switchView('heute')"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)"><g class="nav-ink" stroke-width="1.35"><path d="M3.5 10.8 12 4l8.5 6.8"/><path d="M6 10.2V20h12v-9.8"/></g></svg><div class="nav-label">Heute</div></div>
+  <div class="nav-btn" id="nav-termine" onclick="switchView('termine')"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)"><g class="nav-ink" stroke-width="1.35"><rect x="4.2" y="5.4" width="15.6" height="15" rx="2.6"/><path d="M4.2 10h15.6M9 3.4v3.4M15 3.4v3.4"/></g></svg><div class="nav-label">Termine</div></div>
+  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)"><g class="nav-ink" stroke-width="1.35"><path d="M12 6.2C10 4.9 7.6 4.6 5 4.9v13c2.6-.3 5 0 7 1.3"/><path d="M12 6.2c2-1.3 4.4-1.6 7-1.3v13c-2.6-.3-5 0-7 1.3z"/></g></svg><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:0;right:2px;background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:600;min-width:15px;text-align:center;line-height:15px"></div></div>
+  <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)"><g class="nav-ink" stroke-width="1.35"><circle cx="12" cy="8.4" r="3.5"/><path d="M5.5 20c1.3-3.6 4-5.2 6.5-5.2S17.2 16.4 18.5 20"/></g></svg><div class="nav-label">Profil</div></div>
 </nav>
 </div>
 
@@ -3868,7 +3890,21 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Ø Zahlungsdauer echt aus dbv2 ausstellungs->zahlungs_datum) und Jahres-
   // Verlauf-Sparkline. Alle Zahlen aus den bestehenden Berechnungen (calcNet,
   // _terminZahlStatus, dbv2) — nichts erfunden. Detail-Listen bleiben erhalten.
-  if(elH) elH.textContent = '936';
+  // Build 937 (Empty-State-Bilder: Tusche statt Ukiyo-e): die Farbholzschnitt-
+  // Drucke rendern auf iOS leer (Filter-Skalierung). Neue _tusche()-Bibliothek
+  // mit gefuellten Silhouetten im Handwerk-Moodboard-Stil (Kasure-Koernung +
+  // Nijimi-Halo), skalierungsfester 'tusche'-Filter (objectBoundingBox).
+  // _ukiyo() leitet auf _tusche() um -> alle 11 Empty-States neu, ohne die
+  // Aufrufstellen zu aendern. Motive: Mikrofon, Klappe, Skript, Kalenderblatt,
+  // Welle, Kuvert, Lampion, Rechnung, Stern.
+  // Build 938: Tusche-Mini-Icons vor den drei Heute-Zeilen (Beleg=Blatt mit
+  // Faltlinie, Zahlungen=Seigaiha-Wellen, Mein Jahr=Bambus-Balken) im Handwerk-
+  // Look, mit neuem skalierungsfestem tusche-s-Mini-Filter.
+  // Build 939: Nav-Icons leichter & japanischer. Weg von gefuellten Flaechen +
+  // dicken Konturen (Set II wirkte schwer/europaeisch) -> duenne handgezogene
+  // Tusche-Linien (stroke 1.35, tusche-s-Filter), keine Fuellung. Aktiv=Kiefer,
+  // inaktiv=Stone ueber Strichfarbe.
+  if(elH) elH.textContent = '939';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9768,8 +9804,62 @@ var KALENDER_2025=[];
 var KALENDER_2026=[];
 
 // ── HEUTE (Build 910, read-only Aggregation) ──────────────
+// Build 937: Tusche-Silhouetten (Handwerk-Rezeptur) als Empty-State-Bilder.
+// Gefuellte schwarze Silhouette + Kasure-Koernung + Nijimi-Halo ueber den
+// skalierungsfesten 'tusche'-Filter. Monochrom, kraeftig, wie das Moodboard.
+function _tusche(name){
+  var I='fill="#201E1A" stroke="none"';           // fillink
+  var L='stroke="#201E1A" fill="none" stroke-linecap="round" stroke-linejoin="round"';
+  var b='';
+  if(name==='mikrofon'||name==='sprecher'){
+    b='<path '+I+' opacity=".93" d="M100 24c-20 0-31 15-31 40 0 27 13 50 31 56 18-6 31-29 31-56 0-25-11-40-31-40zm0 8c17 0 26 12 26 33 0 24-11 44-26 51-15-7-26-27-26-51 0-21 9-33 26-33z"/>'
+      +'<path '+I+' opacity=".9" d="M96 122h8v14h-8z"/><path '+L+' stroke-width="3" d="M78 138h44"/>'
+      +'<path '+L+' stroke-width="2.4" opacity=".55" stroke-dasharray="5 3 2 4" d="M138 52c8 1 14 4 18 9M140 66c7 0 12 2 16 5"/>';
+  } else if(name==='klappe'){
+    b='<path '+I+' opacity=".92" d="M52 66h96v54H52z"/>'
+      +'<path '+I+' opacity=".92" d="M50 46l98-12 3 18-98 12z"/>'
+      +'<path fill="#F7F5F1" stroke="none" d="M64 40l12 16-14 2-11-15zM94 36l12 16-14 2-11-15zM124 32l12 16-14 2-11-15z"/>'
+      +'<path '+L+' stroke="#E6DDC6" stroke-width="2.4" opacity=".7" stroke-dasharray="8 5 5 5" d="M70 92h58"/>';
+  } else if(name==='skript'){
+    b='<path '+I+' opacity=".14" d="M60 30h84v92H60z"/>'
+      +'<path '+L+' stroke-width="3" d="M60 30c-9 0-15 8-15 18s6 18 15 18M144 30c9 0 15 8 15 18s-6 18-15 18"/>'
+      +'<path '+L+' stroke-width="3" d="M60 30h84v92H60zM60 30v92"/>'
+      +'<path '+L+' stroke-width="2.4" opacity=".55" stroke-dasharray="7 3 4 4" d="M74 50h56M74 66h56M74 82h40M74 98h50"/>';
+  } else if(name==='drehtag'){
+    b='<path '+I+' opacity=".9" d="M56 40h92v20H56z"/>'
+      +'<path '+L+' stroke-width="3" d="M56 40h92v84H56zM56 60h92M80 40V28M124 40V28"/>'
+      +'<path '+I+' opacity=".85" d="M96 82a14 14 0 1 0 28 0a14 14 0 1 0 -28 0z"/>';
+  } else if(name==='welle'){
+    b='<path '+L+' stroke-width="5" d="M20 78c16 0 16-6 24-6s8 26 16 26 10-52 18-52 10 72 18 72 10-56 18-56 10 20 18 20 10-6 18-6 16 0 26 0"/>';
+  } else if(name==='kuvert'){
+    b='<path '+I+' opacity=".14" d="M50 46h100v72H50z"/>'
+      +'<path '+L+' stroke-width="3" d="M50 46h100v72H50z"/>'
+      +'<path '+L+' stroke-width="3" d="M50 50l50 40 50-40"/>'
+      +'<path '+L+' stroke-width="2.6" d="M100 78v18M91 84h18M91 92h18"/>';
+  } else if(name==='lampion'){
+    b='<path '+I+' opacity=".9" d="M100 40c-24 0-38 18-38 42s14 42 38 42 38-18 38-42-14-42-38-42z"/>'
+      +'<path fill="#F7F5F1" stroke="none" stroke-width="2" d="M76 60c16-5 32-5 48 0M74 82h52M76 104c16 5 32 5 48 0" opacity=".55"/>'
+      +'<path '+L+' stroke-width="3" d="M100 26v14M88 26h24M100 124v10M88 134h24"/>';
+  } else if(name==='rechnung'){
+    b='<path '+I+' opacity=".14" d="M62 28h80v104l-13-8-13 8-14-8-13 8-14-8-13 8z"/>'
+      +'<path '+L+' stroke-width="3" d="M62 28h80v104l-13-8-13 8-14-8-13 8-14-8-13 8z"/>'
+      +'<path '+L+' stroke-width="2.4" opacity=".6" d="M76 50h52M76 66h52M76 82h34"/>'
+      +'<path '+L+' stroke-width="3" d="M76 104h52"/>';
+  } else if(name==='merkliste'){
+    b='<path '+I+' opacity=".9" d="M100 34l16 33 36 5-26 25 6 36-32-17-32 17 6-36-26-25 36-5z"/>';
+  } else {  // fallback: sprecher-Mikro
+    return _tusche('mikrofon');
+  }
+  return '<svg viewBox="0 0 200 150" style="width:150px;height:auto;display:block;margin:0 auto 6px" aria-hidden="true">'
+    +'<g filter="url(#tusche)">'+b+'</g></svg>';
+}
 // Build 924: Ukiyo-e-Drucke als Empty-State-Illustrationen (Moodboard IV).
 function _ukiyo(name){
+  // Build 937: auf Tusche-Silhouetten umgeleitet (Handwerk-Look). Namensmapping.
+  var map={sprecher:'mikrofon',drehtag:'drehtag',skript:'skript',welle:'welle',
+    kuvert:'kuvert',rechnung:'rechnung',merkliste:'merkliste',lampion:'lampion',klappe:'klappe'};
+  return _tusche(map[name]||'mikrofon');
+  /* ALT (Ukiyo-e) — deaktiviert:
   var K='stroke="#2A2620" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"';
   var body='';
   if(name==='sprecher'){
@@ -9800,9 +9890,8 @@ function _ukiyo(name){
     body='<g filter="url(#uki-flat)"><circle cx="112" cy="72" r="40" fill="#E6DDC6" transform="translate(3 2)"/></g>'
       +'<g filter="url(#uki-sumi)"><circle cx="110" cy="70" r="40" '+K+'/><circle cx="110" cy="70" r="40" '+K+' stroke-width="1.2" stroke-dasharray="2 4" opacity=".5"/><path '+K+' stroke-width="3" d="M150 70c16 0 26 2 34 6M184 62v16"/></g>';
   }
-  return '<svg viewBox="0 0 220 150" style="width:150px;height:auto;display:block;margin:0 auto 4px" aria-hidden="true">'
-    +'<rect width="220" height="150" fill="#ABA396" opacity=".14" rx="8"/>'+body
-    +'<rect x="198" y="128" width="14" height="14" rx="3" fill="#B14A3F" opacity=".9" transform="rotate(-6 205 135)"/></svg>';
+  return '';
+  */
 }
 // Build 918: Enso R1 als lebender Fortschrittsbogen. Der Strich wird in JS
 // aus Winkelsegmenten erzeugt: Bogenlaenge = Fortschritt. Oeffnung waechst mit
