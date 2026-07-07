@@ -722,7 +722,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="settings-row" onclick="switchView('ust-voranmeldung')"><div class="sr-left"><div><div class="sr-label">USt-Voranmeldung</div><div class="sr-sub">Ist-Versteuerung §20</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div><div class="sr-label">Jahresabschluss</div><div class="sr-sub">für die Steuerberaterin</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('gvl')"><div class="sr-left"><div><div class="sr-label">GVL</div><div class="sr-sub">Verteilungen · Export</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left"><div><div class="sr-label">Gagenabrechnungen</div><div class="sr-sub">SV-Meldungen · Studio Hamburg</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left"><div><div class="sr-label">Mein Jahr</div><div class="sr-sub">Einnahmen · Studios · Auswertung</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('rechnungen')"><div class="sr-left"><div><div class="sr-label">Rechnungen</div><div class="sr-sub">eigene Rechnungen (K3)</div></div></div><div class="sr-right">›</div></div>
     </div>
 
@@ -1001,34 +1001,24 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Mein Jahr</div>
     <div id="zahl-year-tabs" style="display:flex;gap:4px"></div>
   </div>
-  <!-- Hero Banner -->
-  <div style="background:linear-gradient(160deg,#2A2823 0%,#1C1B19 100%);padding:18px 16px 15px;flex-shrink:0">
-    <div style="color:#B7AE9E;font-size:10px;font-weight:600;letter-spacing:2px;margin-bottom:6px">KALKULIERT · DISPO</div>
-    <div style="font-family:var(--serif);font-size:34px;font-weight:500;color:#F7F5F1;letter-spacing:-.5px;margin-bottom:3px" id="zahl-total">€ 0,00</div>
-    <div style="color:#8A857C;font-size:10px;margin-bottom:10px">Aus Kalender-Dispo · Steuerzahlen im Jahresabschluss</div>
-    <div style="display:flex;gap:0">
-      <div style="flex:1">
-        <div style="color:#C99;font-size:9px;font-weight:600;letter-spacing:.5px;margin-bottom:2px">OFFEN</div>
-        <div id="zahl-offen" style="color:#D5A8A3;font-size:15px;font-weight:600">€ 0,00</div>
-      </div>
-      <div style="flex:1">
-        <div style="color:#C9A96A;font-size:9px;font-weight:600;letter-spacing:.5px;margin-bottom:2px">ABGR. · DISPO</div>
-        <div id="zahl-abgerechnet" style="color:#CBB08A;font-size:15px;font-weight:600">€ 0,00</div>
-      </div>
-      <div style="flex:1;text-align:right">
-        <div style="color:#98A896;font-size:9px;font-weight:600;letter-spacing:.5px;margin-bottom:2px">BEZAHLT</div>
-        <div id="zahl-bezahlt" style="color:#A9BBA4;font-size:15px;font-weight:600">€ 0,00</div>
-      </div>
+  <!-- Build 936: Hero hell + Serif-Anker + Zeitraum-Pills (Mockup-Look) -->
+  <div style="background:var(--card);padding:6px 20px 4px;flex-shrink:0;border-bottom:1px solid var(--hair)">
+    <div id="zahl-year-pills" style="display:flex;gap:7px;padding:4px 0 12px;flex-wrap:wrap"></div>
+    <div style="text-align:center;padding:10px 0 6px">
+      <div style="font-family:var(--serif);font-size:38px;font-weight:500;color:var(--ink);letter-spacing:-1px" id="zahl-total">€ 0,00</div>
+      <div id="zahl-total-label" style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--ink2);margin-top:3px">Honorar</div>
+    </div>
+    <!-- Segment-Switcher -->
+    <div style="display:flex;border:1px solid var(--hair);border-radius:11px;overflow:hidden;margin:8px 0 12px">
+      <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;text-align:center;font-size:11px;font-weight:600;padding:8px 2px;color:#fff;background:var(--accent);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Studio</div>
+      <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Monat</div>
+      <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Produktion</div>
+      <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Analyse</div>
+      <div id="zt-zahldauer" onclick="zahlTab('zahldauer')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation">Dauer</div>
     </div>
   </div>
-  <!-- Tabs -->
-  <div style="display:flex;background:#fff;border-bottom:2px solid var(--hair);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch">
-    <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px;cursor:pointer;touch-action:manipulation;white-space:nowrap">Studio</div>
-    <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Monat</div>
-    <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Produktion</div>
-    <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Analyse</div>
-    <div id="zt-zahldauer" onclick="zahlTab('zahldauer')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Zahlung</div>
-  </div>
+  <!-- versteckte Alt-Elemente fuer Kompatibilitaet der Setter -->
+  <div style="display:none"><span id="zahl-offen"></span><span id="zahl-abgerechnet"></span><span id="zahl-bezahlt"></span></div>
   <!-- Build 934: Holvi/USt/Monatsblatt-Toolbar entfernt (Werkzeuge anderweitig erreichbar: Heute/Buch->Zahlungen, Buch->USt). Screen = reine Auswertung. -->
   <div id="zahlungen-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(env(safe-area-inset-bottom) + 90px)"></div>
 </div>
@@ -3868,7 +3858,17 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Serif-Summe, Ampel-Toene->Zen (Ziegel/Ocker/Sage). Tabs Blau->Kiefer.
   // Analyse/Monat-Charts: alle Fremdfarben (Indigo/Blau/Lila/Pink) -> Zen.
   // Rechenlogik unangetastet, nur Anzeige.
-  if(elH) elH.textContent = '934';
+  // Build 935: Buch-Einstieg 'Gagenabrechnungen' -> 'Mein Jahr' umbenannt, damit
+  // Menuepunkt und Screen-Header gleich heissen (der Screen wurde in 934 zu
+  // 'Mein Jahr' — der Einstieg trug noch den alten Namen, daher unauffindbar).
+  // Build 936 (Mein Jahr — Auswertungs-Screen im Mockup-Look): Hero hell mit
+  // grosser Serif-Summe + Zeitraum-Pills (echte Jahre), Segment-Switcher
+  // (Studio/Monat/Produktion/Analyse/Dauer) statt Tab-Leiste. Studio-Segment
+  // mit Bambus-Ranking der Top-Studios, zwei Mini-Stat-Karten (Ø/Monat echt,
+  // Ø Zahlungsdauer echt aus dbv2 ausstellungs->zahlungs_datum) und Jahres-
+  // Verlauf-Sparkline. Alle Zahlen aus den bestehenden Berechnungen (calcNet,
+  // _terminZahlStatus, dbv2) — nichts erfunden. Detail-Listen bleiben erhalten.
+  if(elH) elH.textContent = '936';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11028,7 +11028,7 @@ function switchView(v){
   else if(v==='mahnwesen'){var mv=document.getElementById('view-mahnwesen');if(mv)mv.classList.add('active');setTimeout(function(){var _mel=document.getElementById('mahn-scroll');if(_mel)rMahnwesen();else setTimeout(rMahnwesen,200);},100);}
   else if(v==='undo'){rUndoLog();}
   else if(v==='abrechnungen'){switchView('gagenabrechnungen');return;}
-  else if(v==='gagenabrechnungen'){rZahlungen();}
+  else if(v==='gagenabrechnungen'){ rZahlungen(); if(typeof zahlTab==='function') zahlTab(_zahlTab||'studio'); }
   else if(v==='rechnungen'){rRechnungen();}
   else if(v==='stammdaten'){} // static
   else if(v==='standardgagen'){rStandardgagen();}
@@ -20449,10 +20449,9 @@ function zahlTab(tab){
     var el = document.getElementById('zt-'+t);
     if(!el) return;
     var active = t===tab;
-    el.style.color = active ? 'var(--accent)' : 'var(--ink3)';
-    el.style.borderBottom = active ? '2px solid var(--accent)' : 'none';
-    el.style.marginBottom = active ? '-2px' : '0';
-    el.style.fontWeight = active ? '600' : '600';
+    el.style.background = active ? 'var(--accent)' : 'transparent';
+    el.style.color = active ? '#fff' : 'var(--ink2)';
+    el.style.fontWeight = active ? '600' : '500';
   });
   // Build 934: zahl-toolbar entfernt — keine Werkzeug-Kacheln mehr auf dem Auswertungs-Screen.
   if(tab==='zahldauer'){
@@ -20486,11 +20485,11 @@ function rZahlungen(){
   years.sort(function(a,b){return b-a;});
   if(!years.length) years=[new Date().getFullYear()];
   if(years.indexOf(_zahlYear)<0) _zahlYear=years[0];
-  var ytEl = document.getElementById('zahl-year-tabs');
+  var ytEl = document.getElementById('zahl-year-pills');
   if(ytEl){
     ytEl.innerHTML = years.map(function(y){
       var act = y===_zahlYear;
-      return '<div onclick="zahlSetYear('+y+')" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;cursor:pointer;touch-action:manipulation;background:'+(act?'rgba(255,255,255,.25)':'rgba(255,255,255,.08)')+';color:'+(act?'#fff':'rgba(255,255,255,.55)')+'">'+y+'</div>';
+      return '<div onclick="zahlSetYear('+y+')" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:100px;cursor:pointer;touch-action:manipulation;background:'+(act?'var(--ink)':'transparent')+';color:'+(act?'#fff':'var(--ink2)')+';border:1px solid '+(act?'var(--ink)':'var(--hair)')+'">'+y+'</div>';
     }).join('');
   }
 
@@ -20511,6 +20510,8 @@ function rZahlungen(){
   var abgEl=document.getElementById('zahl-abgerechnet');
   var bzEl=document.getElementById('zahl-bezahlt');
   if(totEl) totEl.textContent=fmtEur(totalAll);
+  var lblEl=document.getElementById('zahl-total-label');
+  if(lblEl) lblEl.textContent='Kalkuliert '+_zahlYear+' · '+fmtEur(bezahltAll)+' bezahlt';
   if(ofEl) ofEl.textContent=fmtEur(offenAll);
   if(abgEl) abgEl.textContent=fmtEur(abgAll);
   if(bzEl) bzEl.textContent=fmtEur(bezahltAll);
@@ -20543,8 +20544,66 @@ function rZahlungen(){
       else if(stG==='abgerechnet') groups[keyLow].abgerechnet+=net;
       else groups[keyLow].offen+=net;
     });
+    // ── Build 936: Mockup-Kopfzone (Bambus-Bars Top-Studios + Mini-Stats + Verlauf) ──
     var html='';
     var sortedKeys=Object.keys(groups).sort(function(a,b){return groups[b].net-groups[a].net;});
+    // Bambus-Ranking Top-Studios
+    var topN=sortedKeys.slice(0,6);
+    var barMax=topN.length?groups[topN[0]].net:1;
+    html+='<div style="padding:14px 16px 4px">';
+    topN.forEach(function(key){
+      var g=groups[key]; var w=Math.max(6,Math.round((g.net/barMax)*100));
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:5px 0">'
+        +'<div style="width:82px;flex:none;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.displayKey||key)+'</div>'
+        +'<div style="flex:1;height:9px;border-radius:5px;background:var(--hair);position:relative;overflow:hidden">'
+        +'<div style="position:absolute;inset:0;width:'+w+'%;border-radius:5px;background:linear-gradient(180deg,#B9C6AF,#93A88A 60%,#7E9376)"></div>'
+        +'<div style="position:absolute;inset:0;width:'+w+'%;background:repeating-linear-gradient(90deg,transparent 0 18px,rgba(70,90,64,.4) 18px 19.5px)"></div>'
+        +'</div>'
+        +'<div style="width:56px;flex:none;text-align:right;font-size:11px;color:var(--ink2)">'+fmtEur(g.net).replace('€\u00a0','')+'</div>'
+        +'</div>';
+    });
+    html+='</div>';
+    // Mini-Stat-Karten: Ø/Monat + Ø Zahlungsdauer (echt)
+    var monthsWithData={};
+    all.forEach(function(t){ if(t.datum) monthsWithData[t.datum.slice(0,7)]=1; });
+    var nMonths=Math.max(1,Object.keys(monthsWithData).length);
+    var avgMonat=totalAll/nMonths;
+    // Ø Zahlungsdauer aus dbv2 (ausstellungs_datum -> zahlungs_datum), Jahr nach Zahlung
+    var dTage=[], schnellstStudio='', schnellstAvg=1e9, stud2={};
+    (dbv2.abrechnungen||[]).forEach(function(ab){
+      if(ab._ueberholt_durch||!ab.zahlungs_datum||!ab.ausstellungs_datum) return;
+      if(!String(ab.zahlungs_datum).startsWith(String(_zahlYear))) return;
+      var d1=new Date(ab.ausstellungs_datum), d2=new Date(ab.zahlungs_datum);
+      if(isNaN(d1)||isNaN(d2)) return;
+      var tage=Math.round((d2-d1)/86400000); if(tage<0) return;
+      dTage.push(tage);
+      var an=(ab.abrechner_name||ab.studio||'?');
+      if(!stud2[an]) stud2[an]={sum:0,n:0}; stud2[an].sum+=tage; stud2[an].n++;
+    });
+    var avgDauer = dTage.length ? Math.round(dTage.reduce(function(a,b){return a+b;},0)/dTage.length) : null;
+    Object.keys(stud2).forEach(function(k){ var a=stud2[k].sum/stud2[k].n; if(a<schnellstAvg){schnellstAvg=a;schnellstStudio=k;} });
+    html+='<div style="display:flex;gap:8px;padding:12px 16px 6px">'
+      +'<div style="flex:1;border:1px solid var(--hair);border-radius:12px;padding:11px 12px">'
+      +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3)">Ø / Monat</div>'
+      +'<div style="font-family:var(--serif);font-size:19px;margin-top:2px">'+fmtEur(avgMonat)+'</div>'
+      +'<div style="font-size:9.5px;color:var(--sage);margin-top:1px">'+nMonths+' Monate mit Terminen</div></div>'
+      +'<div style="flex:1;border:1px solid var(--hair);border-radius:12px;padding:11px 12px">'
+      +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3)">Ø Zahlungsdauer</div>'
+      +'<div style="font-family:var(--serif);font-size:19px;margin-top:2px">'+(avgDauer!=null?avgDauer+' Tage':'—')+'</div>'
+      +'<div style="font-size:9.5px;color:var(--sage);margin-top:1px">'+(schnellstStudio?esc(schnellstStudio)+' am schnellsten':'&nbsp;')+'</div></div>'
+      +'</div>';
+    // Verlauf über das Jahr (Sparkline aus Monatssummen)
+    var mTrend=[];
+    for(var mj=0;mj<12;mj++){ var mk=_zahlYear+'-'+String(mj+1).padStart(2,'0');
+      mTrend.push(all.filter(function(t){return t.datum&&t.datum.startsWith(mk);}).reduce(function(su,t){return su+calcNet(t);},0)); }
+    var mMax=Math.max.apply(null,mTrend)||1;
+    html+='<div style="padding:10px 16px 4px"><div style="font-size:11px;font-weight:600;color:var(--ink2);margin-bottom:6px">Verlauf über das Jahr</div>'
+      +'<div style="display:flex;align-items:flex-end;gap:3px;height:46px">';
+    mTrend.forEach(function(v){ var h=Math.max(v>0?4:0,Math.round((v/mMax)*44));
+      html+='<div style="flex:1;height:'+h+'px;border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--sage),var(--accent));opacity:.85"></div>'; });
+    html+='</div></div>';
+    html+='<div style="height:1px;background:var(--hair);margin:10px 0 0"></div>';
+    // ── ab hier die bestehende ausklappbare Studio-Liste ──
     sortedKeys.forEach(function(key){
       var g=groups[key];
       g.termine.sort(function(a,b){return a.datum<b.datum?-1:1;});
