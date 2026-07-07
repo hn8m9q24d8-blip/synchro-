@@ -464,8 +464,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="settings-row" onclick="switchView('holvi-abgleich')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14.8c2.4.2 2.6-2.9 5-2.9s2.6 3 5 3 2.5-3 5-3 2.6 3 3 3"/><path d="M3.2 18.8c2.4 0 2.5-2.9 4.9-2.9s2.6 3 5 3 2.5-3 4.9-3 2.7 3 3.1 3" opacity=".5"/></g></svg><div><div class="sr-label">Zahlungen prüfen</div><div class="sr-sub" id="heute-zahlungen-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-7"/><path d="M4 20h16" opacity=".5"/></g></svg><div><div class="sr-label">Mein Jahr</div><div class="sr-sub" id="heute-jahr-sub">Einnahmen · Studios · Auswertung</div></div></div><div class="sr-right">›</div></div>
     </div>
-    <div class="group-lbl">Nächste Drehtage</div>
-    <div class="settings-group" style="padding:2px 16px" id="heute-drehtage"></div>
+    <!-- Build 946: "Nächste Drehtage" entfernt — Heute = reiner Erledigungs-Screen. Tagesvorschau lebt im Termine-Tab. -->
     <div style="height:8px"></div>
   </div>
 </div>
@@ -477,9 +476,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="header-sub" id="termine-sub"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <div class="icon-btn" id="ical-sync-btn" onclick="icalSyncFromWorker()" title="Kalender sync">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A857C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-      </div>
+      <!-- Build 943: iCal-Sync-Knopf entfernt — Auto-Sync beim Start uebernimmt (autoSyncBootFetch). Funktion icalSyncFromWorker bleibt definiert. -->
       <div class="icon-btn" onclick="openTerminSheet()">
         <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="#8A857C" stroke-width="2" stroke-linecap="round"/></svg>
       </div>
@@ -733,25 +730,25 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl" style="margin-top:4px">Bewegung</div>
     <div class="settings-group">
-      <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left"><div><div class="sr-label">Belege</div><div class="sr-sub" id="buch-belege-sub">Upload · KI-Pipeline · Archiv</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('holvi-abgleich')" id="holvi-menu-row"><div class="sr-left"><div><div class="sr-label">Zahlungen <span id="holvi-abgleich-badge" style="display:none;background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:600;margin-left:4px"></span></div><div class="sr-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('mahnwesen')" id="mahn-menu-row"><div class="sr-left"><div><div class="sr-label">Offene Honorare <span id="mahn-menu-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:600;margin-left:4px"></span></div><div class="sr-sub">ausstehende Belege · Erinnerung</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 3.4 15 3.2l3.9 4.1-.2 13.5H6.4z"/><path d="M14.9 3.4v4l3.9.1"/><path d="M9 12h6M9 15.5h6" opacity=".55"/></g></svg><div><div class="sr-label">Belege</div><div class="sr-sub" id="buch-belege-sub">Upload · KI-Pipeline · Archiv</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('holvi-abgleich')" id="holvi-menu-row"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14.8c2.4.2 2.6-2.9 5-2.9s2.6 3 5 3 2.5-3 5-3 2.6 3 3 3"/><path d="M3.2 18.8c2.4 0 2.5-2.9 4.9-2.9s2.6 3 5 3 2.5-3 4.9-3 2.7 3 3.1 3" opacity=".5"/></g></svg><div><div class="sr-label">Zahlungen <span id="holvi-abgleich-badge" style="display:none;background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:600;margin-left:4px"></span></div><div class="sr-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('mahnwesen')" id="mahn-menu-row"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a6 6 0 0 0-6 6c0 5-2 6-2 6h16s-2-1-2-6a6 6 0 0 0-6-6z"/><path d="M10.5 20a1.8 1.8 0 0 0 3 0"/></g></svg><div><div class="sr-label">Offene Honorare <span id="mahn-menu-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:600;margin-left:4px"></span></div><div class="sr-sub">ausstehende Belege · Erinnerung</div></div></div><div class="sr-right">›</div></div>
     </div>
 
     <div class="group-lbl">Übersicht</div>
     <div class="settings-group">
-      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left"><div><div class="sr-label">Jahresübersicht</div><div class="sr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('ust-voranmeldung')"><div class="sr-left"><div><div class="sr-label">USt-Voranmeldung</div><div class="sr-sub">Ist-Versteuerung §20</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left"><div><div class="sr-label">Jahresabschluss</div><div class="sr-sub">für die Steuerberaterin</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('gvl')"><div class="sr-left"><div><div class="sr-label">GVL</div><div class="sr-sub">Verteilungen · Export</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left"><div><div class="sr-label">Mein Jahr</div><div class="sr-sub">Einnahmen · Studios · Auswertung</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('rechnungen')"><div class="sr-left"><div><div class="sr-label">Rechnungen</div><div class="sr-sub">eigene Rechnungen (K3)</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="5.4" width="15.6" height="15" rx="2.6"/><path d="M4.2 10h15.6M9 3.4v3.4M15 3.4v3.4"/></g></svg><div><div class="sr-label">Jahresübersicht</div><div class="sr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('ust-voranmeldung')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h9l3 3v14H6z"/><path d="M9 12l2 2 4-4"/><path d="M9 17h6" opacity=".55"/></g></svg><div><div class="sr-label">USt-Voranmeldung</div><div class="sr-sub">Ist-Versteuerung §20</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 9h8M8 12.5h8M8 16h5" opacity=".7"/><path d="M14.5 19.5l2 2 3.5-3.5"/></g></svg><div><div class="sr-label">Jahresabschluss</div><div class="sr-sub">für die Steuerberaterin</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gvl')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 3"/></g></svg><div><div class="sr-label">GVL</div><div class="sr-sub">Verteilungen · Export</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-7"/><path d="M4 20h16" opacity=".5"/></g></svg><div><div class="sr-label">Mein Jahr</div><div class="sr-sub">Einnahmen · Studios · Auswertung</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('rechnungen')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11v18l-2.2-1.4-2.1 1.4-2.2-1.4-2.1 1.4-2.2-1.4z"/><path d="M9 8h6M9 11.5h6M9 15h3" opacity=".6"/></g></svg><div><div class="sr-label">Rechnungen</div><div class="sr-sub">eigene Rechnungen (K3)</div></div></div><div class="sr-right">›</div></div>
     </div>
 
     <div class="group-lbl">Werkzeuge</div>
     <div class="settings-group">
-      <div class="settings-row" onclick="switchView('undo')"><div class="sr-left"><div><div class="sr-label">Rückgängig</div><div class="sr-sub">letzte Aktionen</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="runIntegrityCheckAndShow()"><div class="sr-left"><div><div class="sr-label">Daten-Check</div><div class="sr-sub">Konsistenz prüfen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('undo')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4.5 11 9 15"/><path d="M4.5 11H15a4.5 4.5 0 0 1 0 9h-3"/></g></svg><div><div class="sr-label">Rückgängig</div><div class="sr-sub">letzte Aktionen</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="runIntegrityCheckAndShow()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l7 2.5v5c0 5-3.5 8-7 9.5C8.5 19 5 16 5 11v-5z"/><path d="M9 11.5l2 2 4-4"/></g></svg><div><div class="sr-label">Daten-Check</div><div class="sr-sub">Konsistenz prüfen</div></div></div><div class="sr-right">›</div></div>
     </div>
 
   </div>
@@ -3918,7 +3915,27 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // KALENDER_2025/2026) wird nicht mehr aufgerufen. Knopf bleibt vorerst zum Testen.
   // Build 942 (Testphase): iCal-Auto-Fetch-Drossel auf 0 — jeder App-Start holt
   // den Live-Feed. Zum Testen des neuen Dispotermins. Spaeter zurueck auf 8h.
-  if(elH) elH.textContent = '942';
+  // Build 943: Auto-Sync bestaetigt — iCal-Sync-Knopf aus dem Termine-Header
+  // entfernt (Auto-Fetch beim Start uebernimmt). Drossel zurueck auf 8h nach
+  // der Testphase. Funktion icalSyncFromWorker bleibt im Code (definiert, nicht
+  // mehr verlinkt) fuer moeglichen spaeteren Gebrauch.
+  // Build 944: Auto-Sync-Timing auf 18:00-Schwelle umgestellt (Disponenten-
+  // Deadline fuer den Folgetag). Fetch beim ersten Start ab 18:00, dann nicht
+  // wieder bis zur naechsten 18:00-Grenze. Selbstheilend, falls ein Abend
+  // ausgelassen wird. (PWA kann nicht autonom aufwachen — Start-getriggert.)
+  // Build 945: Auto-Sync bei jeder App-Oeffnung (Drossel raus). Async via
+  // requestIdleCallback -> kein Start-Delay; kostet kein API-Guthaben (reiner
+  // iCal-Feed-Fetch). Toast weiterhin nur bei neuen Terminen, Fehler still.
+  // Build 946: "Nächste Drehtage" vom Heute-Screen entfernt. Heute ist jetzt
+  // reiner Erledigungs-Screen (Ensō-Fortschritt + Beleg/Zahlungen/Mein Jahr).
+  // Die Tages-/Terminvorschau lebt im Termine-Tab; Redundanz + "Heute zeigt
+  // Zukunft"-Etikettenschwindel beseitigt. Markup + rHeute-Render-Block raus.
+  // Build 947: Tusche-Symbole vor allen Buch-Eintraegen (wie Heute-Zeilen),
+  // tusche-s-Filter, dünne Linien. Belege=Blatt, Zahlungen=Wellen, Offene
+  // Honorare=Glocke, Jahresübersicht=Kalender, USt=Dokument+Haken, Jahres-
+  // abschluss=Mappe+Siegel, GVL=Rad, Mein Jahr=Bambus, Rechnungen=Quittung,
+  // Rückgängig=Rückpfeil, Daten-Check=Schild+Haken.
+  if(elH) elH.textContent = '947';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9666,9 +9683,10 @@ function autoSyncBootFetch(){
   try{
     var url=(db.profil&&db.profil.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
     if(!url) return;                                   // keine URL -> still nichts
-    var THROTTLE=0;                                    // Build 942: Testphase — jeder Start fetcht
-    var last=parseInt(localStorage.getItem('ical_last_fetch')||'0',10);
-    if(THROTTLE>0 && last && (Date.now()-last)<THROTTLE) return;
+    // Build 945: Fetch bei JEDER App-Oeffnung. Laeuft async in requestIdleCallback
+    // (nach dem ersten Zeichnen) -> kein spuerbarer Start-Delay. Kostet kein
+    // Anthropic-API-Guthaben (nur iCal-Feed, ein simpler fetch, wenige KB).
+    // Keine Zeitdrossel mehr; Zeitstempel wird weiter gesetzt (fuer evtl. Anzeige).
     fetch(url)
       .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
       .then(function(text){
@@ -10026,23 +10044,7 @@ function rHeute(){
   if(zb) zb.textContent = offenBank>0 ? offenBank+' Eingänge ohne Zuordnung' : 'Bankeingänge abgleichen';
 
   // Naechste Drehtage (max 3, ab heute)
-  var dt=document.getElementById('heute-drehtage');
-  if(dt){
-    var ti=today();
-    var next=(db.termine||[]).filter(function(t){return t.datum && t.datum>=ti;})
-      .sort(function(a,b){return a.datum<b.datum?-1:1;}).slice(0,3);
-    var wd=['So','Mo','Di','Mi','Do','Fr','Sa'];
-    if(!next.length){
-      dt.innerHTML='<div style="padding:16px 0;font-size:12.5px;color:var(--ink2);text-align:center">Keine anstehenden Termine.</div>';
-    }else{
-      dt.innerHTML=next.map(function(t){
-        var dd='';
-        try{ var td=new Date(t.datum+'T00:00:00'); dd=wd[td.getDay()]+' '+td.getDate()+'.'; }catch(e){}
-        var sub=[t.rolle,t.studio].filter(Boolean).join(' · ');
-        return '<div class="hday"><span class="dd">'+esc(dd)+'</span><div><div class="dt">'+esc(t.titel||'—')+'</div>'+(sub?'<div class="dr">'+esc(sub)+'</div>':'')+'</div></div>';
-      }).join('');
-    }
-  }
+  // Build 946: Drehtage-Render entfernt (Sektion raus).
   try{ updateBuchBadge(); }catch(e){}
 }
 
