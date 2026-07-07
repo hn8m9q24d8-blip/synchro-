@@ -55,6 +55,7 @@
   --card:var(--paper2);
   --border:var(--hair);
   --washi:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+  --uki-b:#ABA396; --uki-g:#8E9B77; --uki-c:#E6DDC6; --uki-z:#C56F52; --uki-o:#C9A96A; --uki-s:#2A2620; --uki-shu:#B14A3F;
   --sans:'Inter',-apple-system,'Helvetica Neue',sans-serif;
   --serif:'Shippori Mincho','Hiragino Mincho ProN',Georgia,serif;
   --shadow:none;
@@ -409,8 +410,11 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 .hday .dd{font-size:11.5px;color:var(--ink2);width:48px;flex:none;font-weight:500}
 .hday .dt{font-size:13.5px;font-weight:500;color:var(--ink)}
 .hday .dr{font-size:11.5px;color:var(--ink2);margin-top:1px}
-.nav-btn svg{stroke:var(--ink4);display:block}
-.nav-btn.active svg{stroke:var(--accent)}
+.nav-btn svg{display:block;color:var(--ink3)}
+.nav-btn svg .uki-k{stroke:var(--uki-s);fill:none}
+.nav-btn svg .uki-f{fill:currentColor;opacity:.5}
+.nav-btn.active svg{color:var(--accent)}
+.nav-btn.active svg .uki-f{opacity:.62}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -424,6 +428,9 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
       <filter id="enso-rough" filterUnits="userSpaceOnUse" x="-10" y="-10" width="116" height="116"><feTurbulence type="fractalNoise" baseFrequency=".12 .4" numOctaves="3" seed="4"/><feDisplacementMap in="SourceGraphic" scale="3.2"/></filter>
       <filter id="enso-soft" filterUnits="userSpaceOnUse" x="-10" y="-10" width="116" height="116"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="1.8"/></filter>
+      <filter id="uki-sumi" filterUnits="userSpaceOnUse" x="-24" y="-24" width="268" height="198"><feTurbulence type="fractalNoise" baseFrequency=".05 .14" numOctaves="4" seed="3" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="3.2" result="d"/><feTurbulence type="fractalNoise" baseFrequency=".3 .5" numOctaves="3" seed="11" result="dry"/><feComponentTransfer in="dry" result="dA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1 1"/></feComponentTransfer><feComposite in="d" in2="dA" operator="in" result="torn"/><feGaussianBlur in="d" stdDeviation=".6" result="br"/><feComponentTransfer in="br" result="bl"><feFuncA type="linear" slope=".2"/></feComponentTransfer><feMerge><feMergeNode in="bl"/><feMergeNode in="torn"/></feMerge></filter>
+      <filter id="uki-flat" filterUnits="userSpaceOnUse" x="-24" y="-24" width="268" height="198"><feTurbulence type="fractalNoise" baseFrequency=".16" numOctaves="2" seed="8" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="2.2"/></filter>
+      <filter id="uki-ics" filterUnits="userSpaceOnUse" x="-4" y="-4" width="32" height="32"><feTurbulence type="fractalNoise" baseFrequency=".18 .5" numOctaves="2" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale=".9"/></filter>
     </defs></svg>
     <div class="zen" style="margin:0 0 16px">
       <div class="circle" id="heute-enso"></div>
@@ -492,7 +499,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div id="week-strip" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,1fr);padding:0 12px 6px;gap:1px 0"></div>
   <div class="scroll" id="termine-scroll">
     <div class="empty-state" id="termine-empty" style="display:none">
-      <div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>
+      <div id="termine-empty-art"></div>
       <div class="empty-title" style="font-family:var(--serif);font-weight:500">Noch keine Termine</div>
       <div class="empty-sub">Tippe oben auf + und trage<br>deinen ersten Termin ein.</div>
     </div>
@@ -1302,10 +1309,10 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
 <!-- NAV -->
 <nav class="bottom-nav">
-  <div class="nav-btn active" id="nav-heute" onclick="switchView('heute')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg><div class="nav-label">Heute</div></div>
-  <div class="nav-btn" id="nav-termine" onclick="switchView('termine')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><div class="nav-label">Termine</div></div>
-  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/></svg><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:0;right:2px;background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:600;min-width:15px;text-align:center;line-height:15px"></div></div>
-  <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></svg><div class="nav-label">Profil</div></div>
+  <div class="nav-btn active" id="nav-heute" onclick="switchView('heute')"><svg width="23" height="23" viewBox="0 0 24 24" filter="url(#uki-ics)"><path class="uki-f" d="M6.5 10.2 13 4.6l6.5 5.6V20.5h-13z"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></g></svg><div class="nav-label">Heute</div></div>
+  <div class="nav-btn" id="nav-termine" onclick="switchView('termine')"><svg width="23" height="23" viewBox="0 0 24 24" filter="url(#uki-ics)"><rect class="uki-f" x="5.2" y="6.2" width="16" height="16" rx="3"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></g></svg><div class="nav-label">Termine</div></div>
+  <div class="nav-btn" id="nav-buch" onclick="switchView('buch')" style="position:relative"><svg width="23" height="23" viewBox="0 0 24 24" filter="url(#uki-ics)"><path class="uki-f" d="M5.2 6.2a2 2 0 0 1 2-2h13v18h-13a2 2 0 0 0-2 2z"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/></g></svg><div class="nav-label">Buch</div><div id="nav-buch-badge" style="display:none;position:absolute;top:0;right:2px;background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:9px;font-weight:600;min-width:15px;text-align:center;line-height:15px"></div></div>
+  <div class="nav-btn" id="nav-profil" onclick="switchView('profil')"><svg width="23" height="23" viewBox="0 0 24 24" filter="url(#uki-ics)"><circle class="uki-f" cx="13" cy="9.5" r="3.6"/><path class="uki-f" d="M6 21c1.2-3.4 4-5 7-5s5.8 1.6 7 5z"/><g class="uki-k" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></g></svg><div class="nav-label">Profil</div></div>
 </nav>
 </div>
 
@@ -3822,7 +3829,21 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Platzhalter) → SVG-Line-Icons, Undo-Log-Icons neutral, Plattform-/Film-
   // Icons → Text, Mahn-Symbole → ✉/⚠, danach generischer Praefix-Strip
   // (36 Deko-Emojis + Variation-Selectors). Funktionszeichen unangetastet.
-  if(el) el.textContent = '923';
+  // Build 924: Ukiyo-e-Drucke (Moodboard IV) in 9 Empty-States mit echtem Home.
+  // Globale Filter uki-sumi/uki-flat + Palette-Vars + _ukiyo()-Bibliothek.
+  // Termine leer=Sprecher, Suche=Drehtag, Tag-leer=Drehtag, Merkliste=Mond,
+  // Dispos=Skript, Gagen=Kuvert, Zahlungen/Einnahmen=Welle, Rechnungen=Rechnung.
+  // Statischer Termine-Slot per Init. Reine Anzeige, kein State.
+  var _te=document.getElementById('termine-empty-art'); if(_te&&!_te.innerHTML) _te.innerHTML=_ukiyo('sprecher');
+  // Build 925: GVL-Empty=Lampion, Belege-Empty=Klappe nachgezogen (beide
+  // mehrteiliges Markup). _ukiyo um lampion+klappe ergaenzt. Damit tragen alle
+  // 11 Empty-States der App einen Ukiyo-e-Druck. Reine Anzeige.
+  // Build 926 (Icon-Handschrift Set II, Test an der Nav): die 4 Nav-Icons als
+  // Holzschnitt — versetzte Farbflaeche (currentColor, schaltet mit aktiv/
+  // inaktiv über .uki-f) + Sumi-Kontur (.uki-k), dezenter Registerversatz +1px,
+  // Mini-Kasure-Filter uki-ics. Aktiv=Kiefer, inaktiv=Stone. NUR Nav — erst am
+  // Geraet pruefen, ob Set II bei 23px traegt, bevor ~40 Listen-Slots folgen.
+  if(el) el.textContent = '926';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3901,7 +3922,7 @@ function termineSuche(q){
   if(header) header.textContent = results.length + ' Ergebnis' + (results.length!==1?'se':'');
 
   if(!results.length){
-    list.innerHTML = '<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title" style="font-family:var(--serif);font-weight:500">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
+    list.innerHTML = '<div class="empty-state">'+_ukiyo('drehtag')+'<div class="empty-title" style="font-family:var(--serif);font-weight:500">Nichts gefunden</div><div class="empty-sub">Keine Termine für „'+q+'"</div></div>';
     return;
   }
   // _showMonth=true damit Monat in der Karte angezeigt wird
@@ -3994,7 +4015,7 @@ function rTermine(){
     var merkItems=all.filter(function(t){return t._merkliste;});
     if(header) header.textContent='★ Merkliste ('+merkItems.length+')';
     if(!merkItems.length){
-      list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Merkliste leer</div><div class="empty-sub">Termine mit ★ markieren um sie hier zu sehen.</div></div>';
+      list.innerHTML='<div class="empty-state">'+_ukiyo('merkliste')+'<div class="empty-title">Merkliste leer</div><div class="empty-sub">Termine mit ★ markieren um sie hier zu sehen.</div></div>';
     } else {
       list.innerHTML=merkItems.map(function(t){return tCard(t);}).join('');
     }
@@ -4044,7 +4065,7 @@ function rTermine(){
       header.textContent=dp?dayNames[dp.getDay()]+', '+fd(calSelectedDate):'';
     }
     if(!dayItems.length){
-      list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title" style="font-family:var(--serif);font-weight:500">Keine Termine</div><div class="empty-sub">An diesem Tag keine Einträge.</div></div>';
+      list.innerHTML='<div class="empty-state">'+_ukiyo('drehtag')+'<div class="empty-title" style="font-family:var(--serif);font-weight:500">Keine Termine</div><div class="empty-sub">An diesem Tag keine Einträge.</div></div>';
       return;
     }
     list.innerHTML=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
@@ -4066,7 +4087,7 @@ function rTermine(){
     // Show next 5 upcoming
     var upcoming=all.filter(function(t){return t.datum>=ti;}).slice(0,5);
     if(!upcoming.length){
-      list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Noch keine Termine</div><div class="empty-sub">Tippe auf + um deinen ersten Termin einzutragen.</div></div>';
+      list.innerHTML='<div class="empty-state">'+_ukiyo('sprecher')+'<div class="empty-title">Noch keine Termine</div><div class="empty-sub">Tippe auf + um deinen ersten Termin einzutragen.</div></div>';
     }else{
       list.innerHTML='<div class="section-label" style="margin:12px 16px 4px">Nächste Termine</div>'+upcoming.map(function(t){return tCard(t);}).join('');
     }
@@ -8679,7 +8700,7 @@ function rDispos(){
   if(!grid)return;
   var docs=(db.dokumente||[]).filter(function(d){return d.typ==='dispo'||!d.typ;});
   if(!docs.length){
-    grid.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Keine Dispos</div><div class="empty-sub">Scanne oder lade eine Dispo hoch.</div></div>';
+    grid.innerHTML='<div class="empty-state">'+_ukiyo('skript')+'<div class="empty-title">Keine Dispos</div><div class="empty-sub">Scanne oder lade eine Dispo hoch.</div></div>';
     return;
   }
   grid.innerHTML=docs.map(function(d){
@@ -8887,7 +8908,7 @@ function rGVL(){
 
   if(!keys.length){
     list.innerHTML='<div style="text-align:center;padding:32px 16px;color:#aaa;font-size:13px">'
-      +'<div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>'
+      +_ukiyo('lampion')
       +'Noch keine GVL-Daten für '+y+'.<br>'
       +'<span style="font-size:11px">Dispos analysieren und bestätigen → Staffel/Folge/Takes werden automatisch erkannt.</span>'
       +'</div>';
@@ -9697,6 +9718,42 @@ var KALENDER_2025=[];
 var KALENDER_2026=[];
 
 // ── HEUTE (Build 910, read-only Aggregation) ──────────────
+// Build 924: Ukiyo-e-Drucke als Empty-State-Illustrationen (Moodboard IV).
+function _ukiyo(name){
+  var K='stroke="#2A2620" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"';
+  var body='';
+  if(name==='sprecher'){
+    body='<g filter="url(#uki-flat)"><path d="M40 150c6-40 20-58 46-58s40 18 46 58z" fill="#8E9B77" transform="translate(3 2)"/><ellipse cx="88.5" cy="53.5" rx="22" ry="26" fill="#E6DDC6" transform="translate(2.5 1.5)"/></g>'
+      +'<g filter="url(#uki-sumi)"><ellipse cx="86" cy="52" rx="22" ry="26" '+K+'/><path '+K+' d="M70 44c4 6 6 14 4 22M102 44c-4 6-6 14-4 22"/><path fill="#2A2620" d="M78 50a3 4 0 1 0 6 0a3 4 0 1 0 -6 0zM90 50a3 4 0 1 0 6 0a3 4 0 1 0 -6 0z"/><path '+K+' d="M82 66c2 3 6 3 8 0"/><path '+K+' d="M40 148c6-40 20-58 46-58s40 18 46 58"/><path '+K+' stroke-width="3.2" d="M148 26c12-2 20 6 20 20s-8 24-22 24"/><path '+K+' stroke-width="3.4" d="M156 70v40M140 112h32"/><ellipse cx="156" cy="50" rx="12" ry="16" '+K+'/></g>';
+  } else if(name==='drehtag'){
+    body='<g filter="url(#uki-flat)"><rect x="63" y="36" width="92" height="94" rx="3" fill="#E6DDC6" transform="translate(3 2)"/><rect x="63" y="36" width="92" height="22" fill="#C56F52" opacity=".55" transform="translate(3 2)"/></g>'
+      +'<g filter="url(#uki-sumi)"><rect x="58" y="32" width="92" height="96" rx="3" '+K+'/><path '+K+' stroke-width="2" d="M58 56h92"/><path '+K+' stroke-width="3" d="M80 32v-10M128 32v-10"/><path fill="#2A2620" opacity=".7" d="M96 84a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z"/></g>';
+  } else if(name==='skript'){
+    body='<g filter="url(#uki-flat)"><rect x="62" y="30" width="86" height="100" rx="3" fill="#E6DDC6" transform="translate(4 3)"/></g>'
+      +'<g filter="url(#uki-sumi)"><rect x="60" y="28" width="86" height="102" rx="3" '+K+'/><path '+K+' stroke-width="1.6" d="M74 48h58M74 62h58M74 76h44M74 90h58M74 104h36" opacity=".7"/><path '+K+' stroke-width="1.2" d="M103 28v102" opacity=".4"/></g>';
+  } else if(name==='welle'){
+    body='<g filter="url(#uki-flat)"><path d="M20 76c14 0 14-4 20-4s6 20 12 20 8-40 14-40 8 56 14 56 8-44 14-44 8 16 14 16 8-4 14-4 14 0 22 0" stroke="#D89A7E" stroke-width="10" fill="none" opacity=".4" transform="translate(3 3)"/></g>'
+      +'<g filter="url(#uki-sumi)"><path '+K+' stroke-width="3" d="M18 76c14 0 14-4 20-4s6 20 12 20 8-40 14-40 8 56 14 56 8-44 14-44 8 16 14 16 8-4 14-4 14 0 22 0"/><path '+K+' stroke-width="1" opacity=".3" d="M18 76h184"/></g>';
+  } else if(name==='kuvert'){
+    body='<g filter="url(#uki-flat)"><rect x="52" y="46" width="116" height="74" rx="3" fill="#E6DDC6" transform="translate(3 2)"/></g>'
+      +'<g filter="url(#uki-sumi)"><rect x="50" y="44" width="116" height="74" rx="3" '+K+'/><path '+K+' stroke-width="2" d="M50 48l58 40 58-40"/><circle cx="108" cy="88" r="12" '+K+' stroke-width="2"/><path '+K+' stroke-width="1.6" opacity=".7" d="M108 82v12M104 86h8M104 92h8"/></g>';
+  } else if(name==='rechnung'){
+    body='<g filter="url(#uki-flat)"><rect x="66" y="30" width="88" height="98" rx="2" fill="#E6DDC6" transform="translate(3 2)"/></g>'
+      +'<g filter="url(#uki-sumi)"><path '+K+' d="M66 30h88v104l-12-8-12 8-12-8-12 8-12-8-12 8-4-3z"/><path '+K+' stroke-width="1.6" opacity=".65" d="M80 52h60M80 68h60M80 84h40"/><path '+K+' stroke-width="2" d="M80 104h60"/></g>';
+  } else if(name==='lampion'){
+    body='<g filter="url(#uki-flat)"><ellipse cx="110" cy="72" rx="34" ry="42" fill="#C56F52" transform="translate(3 2)"/></g>'
+      +'<g filter="url(#uki-sumi)"><ellipse cx="108" cy="70" rx="34" ry="42" '+K+'/><path '+K+' stroke-width="1.6" opacity=".7" d="M78 56c20-6 40-6 60 0M76 70h64M78 84c20 6 40 6 60 0"/><path '+K+' stroke-width="3" d="M108 28v-8M96 24h24M108 112v10M96 122h24"/></g>';
+  } else if(name==='klappe'){
+    body='<g filter="url(#uki-flat)"><rect x="52" y="60" width="116" height="60" rx="3" fill="#E6DDC6" transform="translate(3 2)"/></g>'
+      +'<g filter="url(#uki-sumi)"><rect x="50" y="58" width="116" height="60" rx="3" '+K+'/><path '+K+' d="M50 44l116-14 4 20-116 14z"/><path fill="#2A2620" opacity=".85" d="M62 40l16-2 6 14-16 2zM94 36l16-2 6 14-16 2zM126 32l16-2 6 14-16 2z"/></g>';
+  } else if(name==='merkliste'){
+    body='<g filter="url(#uki-flat)"><circle cx="112" cy="72" r="40" fill="#E6DDC6" transform="translate(3 2)"/></g>'
+      +'<g filter="url(#uki-sumi)"><circle cx="110" cy="70" r="40" '+K+'/><circle cx="110" cy="70" r="40" '+K+' stroke-width="1.2" stroke-dasharray="2 4" opacity=".5"/><path '+K+' stroke-width="3" d="M150 70c16 0 26 2 34 6M184 62v16"/></g>';
+  }
+  return '<svg viewBox="0 0 220 150" style="width:150px;height:auto;display:block;margin:0 auto 4px" aria-hidden="true">'
+    +'<rect width="220" height="150" fill="#ABA396" opacity=".14" rx="8"/>'+body
+    +'<rect x="198" y="128" width="14" height="14" rx="3" fill="#B14A3F" opacity=".9" transform="rotate(-6 205 135)"/></svg>';
+}
 // Build 918: Enso R1 als lebender Fortschrittsbogen. Der Strich wird in JS
 // aus Winkelsegmenten erzeugt: Bogenlaenge = Fortschritt. Oeffnung waechst mit
 // der Zahl offener Posten (6 Grad pro Posten, gedeckelt bei 115), bei 0 offenen
@@ -9840,7 +9897,7 @@ function rStandardgagen(){
   if(!list)return;
   var gps=db.gagenprofile||[];
   if(!gps.length){
-    list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Keine Standardgagen</div><div class="empty-sub">Tippe + um ein Gagenprofil anzulegen.</div></div>';
+    list.innerHTML='<div class="empty-state">'+_ukiyo('kuvert')+'<div class="empty-title">Keine Standardgagen</div><div class="empty-sub">Tippe + um ein Gagenprofil anzulegen.</div></div>';
     return;
   }
   list.innerHTML=gps.map(function(gp){
@@ -12014,7 +12071,7 @@ function rDokumente(){
 
   if(!docs.length){
     el.innerHTML = _archivToggleHtml + '<div style="text-align:center;padding:48px 20px;color:#999">'
-      +'<div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>'
+      +_ukiyo('klappe')
       +'<div style="font-weight:700;font-size:15px;margin-bottom:6px">Keine Dokumente</div>'
       +'<div style="font-size:13px">Füge Dispos, Abrechnungen und Belege hier hinzu.<br>Die KI ordnet sie automatisch zu.</div>'
       +'</div>';
@@ -19665,7 +19722,7 @@ function rRechnungen(){
   if(cntEl) cntEl.textContent=rechnungen.filter(function(r){return r.status==='offen';}).length+' Rechnungen';
 
   if(!rechnungen.length){
-    el.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>'
+    el.innerHTML='<div class="empty-state">'+_ukiyo('rechnung')
       +'<div class="empty-title">Noch keine Rechnungen</div>'
       +'<div class="empty-sub">Tippe auf + um deine erste Rechnung zu erstellen.</div></div>';
     return;
@@ -20351,7 +20408,7 @@ function zahlTab(tab){
   if(tb) tb.style.display = tab==='studio' ? 'flex' : 'none';
   if(tab==='zahldauer'){
     var el2 = document.getElementById('zahlungen-list');
-    if(el2) el2.innerHTML = rZahlungsStatistik(_zahlYear)||'<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Noch keine Daten</div><div class="empty-sub">Zahlungseingänge importieren um die Statistik zu sehen</div></div>';
+    if(el2) el2.innerHTML = rZahlungsStatistik(_zahlYear)||'<div class="empty-state">'+_ukiyo('welle')+'<div class="empty-title">Noch keine Daten</div><div class="empty-sub">Zahlungseingänge importieren um die Statistik zu sehen</div></div>';
   } else {
     rZahlungen();
   }
@@ -20417,7 +20474,7 @@ function rZahlungen(){
   });
 
   if(!all.length){
-    el.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Keine Einnahmen</div><div class="empty-sub">Keine Termine mit Gage für '+_zahlYear+'</div></div>';
+    el.innerHTML='<div class="empty-state">'+_ukiyo('welle')+'<div class="empty-title">Keine Einnahmen</div><div class="empty-sub">Keine Termine mit Gage für '+_zahlYear+'</div></div>';
     return;
   }
 
