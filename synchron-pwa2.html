@@ -3854,7 +3854,23 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // nach SVG-Runterskalierung (220->150) auf iOS/WebKit leer. uki-sumi/uki-flat
   // auf objectBoundingBox umgestellt (skalierungsfest) — Motiv + Farbe + Kontur
   // sind wieder da. Reine Filter-Region, keine Pfad-/Logikaenderung.
-  if(el) el.textContent = '928';
+  // Build 929: Auto-Import neuer Drehtage beim App-Start (ohne Nachfrage,
+  // wie gewuenscht). Reuse der erprobten confirmSyncAll-Schreiblogik; Boot-Find
+  // prueft db.termine UND db._calImported -> idempotent bei jedem Start,
+  // geloeschte Termine bleiben geloescht (Python-Sim: Start2/Start3 leer).
+  // Stiller Toast bei >0. Kein neuer Schreibpfad, nur Auto-Trigger.
+  // Build 930: Auto-Sync aus dem kritischen Boot-Pfad entkoppelt. Laeuft jetzt
+  // per requestIdleCallback (Fallback setTimeout 400ms) NACH dem ersten Zeichnen
+  // -> App ist am Start sofort bedienbar, der Import ruckelt nichts. An Tagen
+  // ohne neue Termine ist es ohnehin nur ein Mengenvergleich (Millisekunden).
+  // Badge nach Import aufgefrischt. Kein Datenpfad-Aenderung ggu. 929.
+  // Build 931 (Detail-View verschlankt + Farbkonzept): Stammdaten-Header
+  // klickbar -> Bearbeiten-Modus (toggleStammEdit); leere Felder ausgeblendet
+  // ausser im Bearbeiten-Modus; Episode nur bei Serien (Film blendet sie aus).
+  // GVL: 'Bearbeiten'-Link + 'nachtragen'-Button raus, ganze Karte klickbar,
+  // Rand Lila->Kiefer. FARBFIX: Takes-Zaehler Blau->Kiefer, GVL-Chips Lila->
+  // Kiefer, TV-Preset Blau->neutral, Kino-Preset Lila->Clay. Kein Datenpfad.
+  if(el) el.textContent = '931';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4287,6 +4303,7 @@ function updateBadge(){
 // ── TERMIN DETAIL ─────────────────────────────────────────────
 var _openDetailLock = false; // Verhindert Ghost-Taps auf iOS
 
+function toggleStammEdit(){ window._stammEdit=!window._stammEdit; var c=ctid; if(c){ openDetail(c); } }
 function openDetail(id){
   if(_openDetailLock) return; // Ghost-Tap verhindern
   var t=db.termine.find(function(x){return x.id===id;});
@@ -4633,13 +4650,17 @@ function openDetail(id){
     +'</div>';
 
   // ── STAMMDATEN ─────────────────────────────────────────────
+  // Episode nur bei Serien (Film = keine Episode). Leere Felder ausblenden,
+  // ausser man tippt auf den Header -> _stammEdit-Modus zeigt alle Felder.
+  var istFilm = (t.gvl_folge===0 || (t.gvl_takes_detail&&t.gvl_takes_detail.length&&t.gvl_takes_detail.every(function(x){return x.folge===0;})));
   var stamm='<div class="info-card">'
-    +'<div class="info-card-header"><span>Stammdaten</span></div>'
-    +_inlineField(id,'regie','Regie',t.regie||'')
-    +_inlineField(id,'sender','Sender',t.sender||'')
-    +_inlineField(id,'atelier','Atelier',t.atelier||t.notizen||'')
-    +_inlineField(id,'episode','Episode',t.episode||'')
-    +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time')
+    +'<div class="info-card-header" onclick="toggleStammEdit()" style="cursor:pointer"><span>Stammdaten</span>'
+    +'<span style="font-size:10px;color:var(--ink3);font-weight:500">'+(window._stammEdit?'fertig':'bearbeiten ›')+'</span></div>'
+    +_inlineField(id,'regie','Regie',t.regie||'','text',true)
+    +_inlineField(id,'sender','Sender',t.sender||'','text',true)
+    +_inlineField(id,'atelier','Atelier',t.atelier||t.notizen||'','text',true)
+    +(istFilm?'':_inlineField(id,'episode','Episode',t.episode||'','text',true))
+    +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time',true)
     +'<div class="info-row"><div class="ir-key">Status</div><div class="ir-val">'+tlabel(t.status)+'</div></div>'
     +'</div>';
 
@@ -4660,9 +4681,9 @@ function openDetail(id){
   var gvlHtml='';
   var gvlDispo=dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
   if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
-    gvlHtml='<div class="info-card" style="border-left:4px solid var(--purple)">'
+    gvlHtml='<div class="info-card" style="border-left:3px solid var(--accent)" onclick="gvlTerminBearbeiten(\''+id+'\')">'
       +'<div class="info-card-header"><span>GVL-Übersicht</span>'
-      +'<span class="ic-edit" onclick="gvlTerminBearbeiten(\''+id+'\')" style="color:var(--purple)">✎ Bearbeiten</span></div>'
+      +'<span style="font-size:10px;color:var(--ink3);font-weight:500">bearbeiten ›</span></div>'
       +'<div style="padding:0 16px 14px">';
     if(gvlDispo){
       if(gvlDispo.gvl_staffel_header) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(gvlDispo.gvl_staffel_header)+'</div></div>';
@@ -4693,7 +4714,7 @@ function openDetail(id){
         var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
         var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
         var chipLabel = isFilmEntry ? 'Film' : ('S'+sNr+' F'+fNr);
-        gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:700;color:var(--purple)">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:900;color:var(--purple)">'+td.takes+'</div>'+'</div>';
+        gvlHtml+='<div style="background:var(--card);border:1px solid var(--accent2);border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:600;color:var(--accent)">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:700;color:var(--accent)">'+td.takes+'</div>'+'</div>';
       });
       gvlHtml+='</div>';
       gvlHtml+='<div style="font-size:10px;color:#888">Gesamt: <b>'+(t.gvl_takes||'')+'</b> Takes</div>';
@@ -4701,7 +4722,7 @@ function openDetail(id){
       if(t.gvl_staffel) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(t.gvl_staffel)+'</div></div>';
       if(t.gvl_folge)   gvlHtml+='<div class="info-row"><div class="ir-key">Folge</div><div class="ir-val">'+esc(t.gvl_folge)+'</div></div>';
       if(t.gvl_takes)   gvlHtml+='<div class="info-row"><div class="ir-key">Takes</div><div class="ir-val">'+esc(String(t.gvl_takes))+'</div></div>';
-      gvlHtml+='<div style="margin-top:6px"><button type="button" onclick="gvlTerminBearbeiten(\''+id+'\')" style="width:100%;background:var(--purple2);color:var(--purple);border:1.5px solid #c4b5fd;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Folgen & Takes nachtragen</button></div>';
+      // Button entfernt (Build 931): ganze Karte ist klickbar -> gvlTerminBearbeiten
     }
     gvlHtml+='</div></div>';
   }
@@ -4711,17 +4732,17 @@ function openDetail(id){
     +'<div class="info-card-header"><span>Takes</span></div>'
     +'<div style="display:flex;align-items:center;justify-content:center;gap:20px;padding:16px 0">'
     +'<div onclick="decrementTake()" style="width:44px;height:44px;border-radius:50%;background:var(--ink6);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent">−</div>'
-    +'<div id="takes-count" onclick="takesDirectEdit()" style="font-size:48px;font-weight:900;color:var(--blue);min-width:60px;text-align:center;cursor:pointer;border-radius:10px;padding:0 8px" title="Antippen zum Eingeben">'+total+'</div>'
-    +'<div onclick="incrementTake()" style="width:44px;height:44px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent">+</div>'
+    +'<div id="takes-count" onclick="takesDirectEdit()" style="font-size:48px;font-weight:800;color:var(--accent);min-width:60px;text-align:center;cursor:pointer;border-radius:10px;padding:0 8px" title="Antippen zum Eingeben">'+total+'</div>'
+    +'<div onclick="incrementTake()" style="width:44px;height:44px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent">+</div>'
     +'</div>'
     +'</div>'
     +'<div style="padding:0 16px 8px;display:flex;gap:8px">'
-    +'<div onclick="setGagePreset(\''+id+'\',80,4)" style="flex:1;background:var(--blue2);border:1.5px solid '+(parseFloat(t.kommgage)===80&&parseFloat(t.rate)===4?'var(--ai)':'#d5dae6')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--ai)">TV</div><div style="font-size:11px;color:#555;margin-top:1px">80€ / 4,00€</div></div>'
+    +'<div onclick="setGagePreset(\''+id+'\',80,4)" style="flex:1;background:var(--cream2);border:1.5px solid '+(parseFloat(t.kommgage)===80&&parseFloat(t.rate)===4?'var(--ink2)':'var(--hair)')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
+    +'<div style="font-size:11px;font-weight:600;color:var(--ink)">TV</div><div style="font-size:11px;color:var(--ink2);margin-top:1px">80€ / 4,00€</div></div>'
     +'<div onclick="setGagePreset(\''+id+'\',85,4.2)" style="flex:1;background:var(--green2);border:2px solid '+(parseFloat(t.kommgage)===85&&parseFloat(t.rate)===4.2?'var(--accent)':'var(--accent2)')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--accent)">Streaming</div><div style="font-size:11px;color:#555;margin-top:1px">85€ / 4,20€</div></div>'
-    +'<div onclick="setGagePreset(\''+id+'\',100,5)" style="flex:1;background:#fdf4ff;border:1.5px solid '+(parseFloat(t.kommgage)===100&&parseFloat(t.rate)===5?'var(--purple)':'#d8b4fe')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--purple)">Kino</div><div style="font-size:11px;color:#555;margin-top:1px">100€ / 5,00€</div></div>'
+    +'<div style="font-size:11px;font-weight:600;color:var(--accent)">Streaming</div><div style="font-size:11px;color:var(--ink2);margin-top:1px">85€ / 4,20€</div></div>'
+    +'<div onclick="setGagePreset(\''+id+'\',100,5)" style="flex:1;background:#f2ece3;border:1.5px solid '+(parseFloat(t.kommgage)===100&&parseFloat(t.rate)===5?'var(--warm)':'#e0d3c0')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
+    +'<div style="font-size:11px;font-weight:600;color:#a67c52">Kino</div><div style="font-size:11px;color:var(--ink2);margin-top:1px">100€ / 5,00€</div></div>'
     +'<div onclick="openSonderGageSheet(\''+id+'\')" style="flex:1;background:var(--yellow2);border:1.5px solid '+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?'#8a6a3f':'var(--warm)')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
     +'<div style="font-size:11px;font-weight:700;color:#8a6a3f">Sonder</div>'
     +'<div style="font-size:11px;color:#555;margin-top:1px">'+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?(t.kommgage+'€'):'individuell')+'</div></div>'
@@ -5541,9 +5562,11 @@ function saveMergeChanges(){
   }
 }
 
-function _inlineField(terminId, field, label, val, inputType){
-  // Rendert ein tippbares Feld — beim Tippen wird es zum Input
+function _inlineField(terminId, field, label, val, inputType, hideEmpty){
+  // Rendert ein tippbares Feld — beim Tippen wird es zum Input.
+  // hideEmpty: leere Felder werden nur im Stammdaten-Bearbeiten-Modus gezeigt.
   inputType = inputType||'text';
+  if(hideEmpty && !(val&&String(val).trim()) && !window._stammEdit) return '';
   var safeVal = (val||'').toString().replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
   return '<div class="info-row" style="cursor:pointer" onclick="inlineEditActivate(this,\''+terminId+'\',\''+field+'\',\''+inputType+'\')">'
     +'<div class="ir-key">'+label+'</div>'
@@ -9584,6 +9607,24 @@ function initSyncView(){
   }
 }
 
+// Build 929: Auto-Import beim App-Start. Nutzt die bestehende, erprobte
+// confirmSyncAll-Schreiblogik; prueft gegen db.termine UND db._calImported
+// (doppelte Sperre) -> idempotent, geloeschte Termine kehren nicht zurueck
+// (per Python-Sim verifiziert). Still: nur Toast bei >0 neuen, kein UI-Wechsel.
+function autoSyncOnBoot(){
+  try{
+    var cal=(KALENDER_2025||[]).concat(KALENDER_2026||[]);
+    if(!cal.length) return;
+    var imp=new Set((db.termine||[]).map(function(t){return t.calEventId;}).filter(Boolean));
+    (db._calImported||[]).forEach(function(id){ imp.add(id); });
+    var neu=cal.filter(function(t){ return t.calEventId && !imp.has(t.calEventId); });
+    if(!neu.length) return;
+    syncCandidates=neu;
+    confirmSyncAll();                 // bestehende Commit-Logik (setzt calEventId + markCalImported)
+    updateBadge();
+    showToast(neu.length+' neue'+(neu.length===1?'r Drehtag':' Drehtage')+' importiert');
+  }catch(e){}
+}
 function runCalendarSync(){
   var btn=document.getElementById('sync-main-btn');
   var lbl=document.getElementById('sync-btn-label');
@@ -22000,6 +22041,9 @@ function suchHL(text,q){
   // Normal startup — Build 927: Start auf Heute (Variante A), nicht Termine
   switchView('heute');
   updateBadge();
+  // Build 930: Auto-Sync ENTKOPPELT vom Boot-Pfad — App ist sofort interaktiv,
+  // Import laeuft im naechsten Idle-Frame nach (kein Ruckeln am Start).
+  (window.requestIdleCallback||function(f){setTimeout(f,400);})(function(){ autoSyncOnBoot(); });
   updateMahnBadgeOnLoad();
   _updateHolviAbgleichBadge();
   // Build 733: V2-Sync beim App-Start — räumt Altlasten auf
