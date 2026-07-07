@@ -462,7 +462,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div class="settings-group">
       <div class="settings-row" onclick="switchView('dokumente')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 3.2 15 3l3.9 4.1-.2 13.7H6.4z"/><path d="M14.9 3.2l0 4 3.9.1"/><path d="M6.4 4l12.4 16.5" stroke-dasharray="1.4 2.8" opacity=".6"/></g></svg><div><div class="sr-label">Beleg hinzufügen</div><div class="sr-sub" id="heute-belege-sub">Foto oder PDF — KI liest den Rest</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('holvi-abgleich')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14.8c2.4.2 2.6-2.9 5-2.9s2.6 3 5 3 2.5-3 5-3 2.6 3 3 3"/><path d="M3.2 18.8c2.4 0 2.5-2.9 4.9-2.9s2.6 3 5 3 2.5-3 4.9-3 2.7 3 3.1 3" opacity=".5"/></g></svg><div><div class="sr-label">Zahlungen prüfen</div><div class="sr-sub" id="heute-zahlungen-sub">Bankeingänge abgleichen</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-7"/><path d="M4 20h16" opacity=".5"/></g></svg><div><div class="sr-label">Mein Jahr</div><div class="sr-sub" id="heute-jahr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gagenabrechnungen')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" filter="url(#tusche-s)" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V4M19 20v-7"/><path d="M4 20h16" opacity=".5"/></g></svg><div><div class="sr-label">Mein Jahr</div><div class="sr-sub" id="heute-jahr-sub">Einnahmen · Studios · Auswertung</div></div></div><div class="sr-right">›</div></div>
     </div>
     <div class="group-lbl">Nächste Drehtage</div>
     <div class="settings-group" style="padding:2px 16px" id="heute-drehtage"></div>
@@ -3904,7 +3904,21 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // dicken Konturen (Set II wirkte schwer/europaeisch) -> duenne handgezogene
   // Tusche-Linien (stroke 1.35, tusche-s-Filter), keine Fuellung. Aktiv=Kiefer,
   // inaktiv=Stone ueber Strichfarbe.
-  if(elH) elH.textContent = '939';
+  // Build 940: Heute-Zeile 'Mein Jahr' fuehrte zum alten Screen
+  // (verdienstübersicht, Monatskacheln), der Buch-Einstieg 'Mein Jahr' zum
+  // umgebauten (gagenabrechnungen). Gleicher Name, zwei Ziele -> verwirrend.
+  // Heute-Zeile jetzt ebenfalls -> gagenabrechnungen, Unterzeile angeglichen.
+  // Alter verdienstübersicht bleibt vorerst ueber Buch->Jahresuebersicht
+  // erreichbar (Zusammenfuehrung spaeter zu entscheiden).
+  // Build 941: Auto-Sync beim Start holt jetzt den ECHTEN iCal-Feed (Live-Fetch
+  // wie der Knopf icalSyncFromWorker), still im Hintergrund via requestIdleCallback,
+  // gedrosselt auf alle 8h (localStorage 'ical_last_fetch'). Kein App-Start-Delay
+  // (async, nach erstem Zeichnen). Toast nur bei >0 neuen Terminen; keine URL ->
+  // still nichts; Fehler still. Alter statischer Pfad autoSyncOnBoot (Code-Arrays
+  // KALENDER_2025/2026) wird nicht mehr aufgerufen. Knopf bleibt vorerst zum Testen.
+  // Build 942 (Testphase): iCal-Auto-Fetch-Drossel auf 0 — jeder App-Start holt
+  // den Live-Feed. Zum Testen des neuen Dispotermins. Spaeter zurueck auf 8h.
+  if(elH) elH.textContent = '942';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9645,6 +9659,37 @@ function initSyncView(){
 // confirmSyncAll-Schreiblogik; prueft gegen db.termine UND db._calImported
 // (doppelte Sperre) -> idempotent, geloeschte Termine kehren nicht zurueck
 // (per Python-Sim verifiziert). Still: nur Toast bei >0 neuen, kein UI-Wechsel.
+function autoSyncBootFetch(){
+  // Build 941: Auto-Sync beim Start holt den ECHTEN iCal-Feed (wie der Knopf),
+  // still im Hintergrund, gedrosselt auf alle 8h. Ersetzt den alten statischen
+  // Array-Pfad (autoSyncOnBoot), der nur Code-Arrays las statt des Live-Feeds.
+  try{
+    var url=(db.profil&&db.profil.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
+    if(!url) return;                                   // keine URL -> still nichts
+    var THROTTLE=0;                                    // Build 942: Testphase — jeder Start fetcht
+    var last=parseInt(localStorage.getItem('ical_last_fetch')||'0',10);
+    if(THROTTLE>0 && last && (Date.now()-last)<THROTTLE) return;
+    fetch(url)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+      .then(function(text){
+        localStorage.setItem('ical_last_fetch', String(Date.now()));
+        var events=icsParse(text);
+        if(!events||!events.length) return;            // still, kein Toast
+        var existing={};
+        (db.termine||[]).forEach(function(t){ if(t.calEventId) existing[t.calEventId]=true; });
+        var neu=events.filter(function(e){ return e.calEventId&&!existing[e.calEventId]; });
+        if(!neu.length) return;                        // nichts Neues -> still
+        if(!db.termine) db.termine=[];
+        neu.forEach(function(e){ if(!e.id) e.id=uid(); db.termine.push(e); });
+        db.termine.sort(function(a,b){ return (a.datum||'').localeCompare(b.datum||''); });
+        save(db);
+        if(typeof rTermine==='function') rTermine();
+        updateBadge();
+        showToast('✓ '+neu.length+' neue'+(neu.length===1?'r Drehtag':' Drehtage')+' importiert');
+      })
+      .catch(function(){ /* still: kein Fehler-Toast bei jedem Start */ });
+  }catch(e){}
+}
 function autoSyncOnBoot(){
   try{
     var cal=(KALENDER_2025||[]).concat(KALENDER_2026||[]);
@@ -22153,7 +22198,7 @@ function suchHL(text,q){
   updateBadge();
   // Build 930: Auto-Sync ENTKOPPELT vom Boot-Pfad — App ist sofort interaktiv,
   // Import laeuft im naechsten Idle-Frame nach (kein Ruckeln am Start).
-  (window.requestIdleCallback||function(f){setTimeout(f,400);})(function(){ autoSyncOnBoot(); });
+  (window.requestIdleCallback||function(f){setTimeout(f,400);})(function(){ autoSyncBootFetch(); });
   updateMahnBadgeOnLoad();
   _updateHolviAbgleichBadge();
   // Build 733: V2-Sync beim App-Start — räumt Altlasten auf
