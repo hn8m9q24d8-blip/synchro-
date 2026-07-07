@@ -642,7 +642,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <!-- Hinweis ARTSYS -->
     <div class="info-card" style="background:var(--blue2);border-color:rgba(30,64,175,.2);margin-bottom:12px">
       <div style="display:flex;gap:10px;align-items:flex-start">
-        <div style="font-size:20px">📋</div>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ai)" stroke-width="1.6" stroke-linecap="round" style="flex:none"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--blue);margin-bottom:4px">ARTSYS-Meldung</div>
           <div style="font-size:12px;color:var(--ink3);line-height:1.5">
@@ -651,7 +651,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
             Dispobilder dienen als Nachweis bei Rückfragen.
           </div>
           <div onclick="window.open('https://www.gvl.de/','_blank')" style="margin-top:8px;display:inline-flex;align-items:center;gap:4px;background:var(--blue);color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
-            🔗 gvl.de öffnen
+            gvl.de öffnen
           </div>
         </div>
       </div>
@@ -659,7 +659,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <!-- Sendedaten-Abgleich -->
     <div class="info-card" style="margin-bottom:12px">
-      <div class="info-card-header">📡 Sendedaten-Abgleich</div>
+      <div class="info-card-header">Sendedaten-Abgleich</div>
       <div style="font-size:12px;color:var(--ink3);line-height:1.5;margin-bottom:10px">
         Lade die GVL-Sendedaten-CSV herunter (gvl.de → Mein Bereich → Sendedaten) und importiere sie hier. Die App gleicht automatisch ab welche deiner Produktionen bereits gesendet wurden.
       </div>
@@ -667,10 +667,10 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div style="display:flex;gap:8px">
         <div onclick="document.getElementById('gvl-sendedata-input').click()" style="flex:1;padding:10px;background:var(--cream);border:1.5px dashed var(--border);border-radius:10px;text-align:center;cursor:pointer;font-size:12px;color:var(--ink3)">
           <input type="file" id="gvl-sendedata-input" accept=".csv,.txt,.xls,.xlsx" style="display:none" onchange="importGVLSendedaten(this.files[0])">
-          📂 GVL-CSV importieren
+          GVL-CSV importieren
         </div>
         <div onclick="showGVLSendeAbgleich()" style="flex:1;padding:10px;background:var(--blue2);border:1.5px solid rgba(30,64,175,.2);border-radius:10px;text-align:center;cursor:pointer;font-size:12px;color:var(--blue);font-weight:600">
-          🔍 Abgleich anzeigen
+          Abgleich anzeigen
         </div>
       </div>
     </div>
@@ -801,27 +801,27 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   </div>
   <!-- Action buttons row -->
   <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream)">
-        <div onclick="dokDeleteAll()" style="background:#fff0f0;border:1.5px solid #e3c4c0;color:var(--red);font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">&#x1F5D1; Alle</div>
+        <div onclick="dokDeleteAll()" style="background:var(--red2);border:1px solid #e3c4c0;color:var(--red);font-size:12px;font-weight:600;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">Leeren</div>
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
-    <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:var(--ai);color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;touch-action:manipulation">&#x2601;&#xFE0F; Ordner</button>
-    <div onclick="document.getElementById('dok-upload-input').click()" style="background:var(--card);border:1.5px solid var(--border);color:var(--ink);font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="PDFs und Einzeldateien">+ Dateien / PDF</div>
-    <div onclick="importedFilesReset()" style="margin-left:auto;background:#fefce8;border:1.5px solid #efe3c8;color:#8a6a3f;font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">&#x1F504; Reset</div>
+    <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);font-size:12px;font-weight:600;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">Ordner</button>
+    <div onclick="document.getElementById('dok-upload-input').click()" style="background:linear-gradient(180deg,#2A2823 0%,#1C1B19 42%,#141311 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.13);color:var(--paper);font-size:12px;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="PDFs und Einzeldateien">＋ Dateien / PDF</div>
+    <div onclick="importedFilesReset()" style="margin-left:auto;background:var(--card);border:1px solid var(--hair);color:var(--ink2);font-size:12px;font-weight:600;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">Reset</div>
   </div>
   <!-- Search bar -->
-  <div style="padding:8px 12px;background:#fff;flex-shrink:0;border-bottom:1px solid #fce7f3">
-    <div style="display:flex;align-items:center;background:var(--cream2);border-radius:10px;padding:8px 12px;gap:8px">
-      <div style="font-size:14px;color:#999">&#x1F50D;</div>
-      <input id="dok-search" type="text" placeholder="Studio, Produktion, Datum..." oninput="rDokumente()" style="flex:1;border:none;background:transparent;font-size:13px;outline:none;color:#333">
+  <div style="padding:8px 12px;background:var(--cream);flex-shrink:0;border-bottom:1px solid var(--hair)">
+    <div style="display:flex;align-items:center;background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:8px 12px;gap:8px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.8" stroke-linecap="round" style="flex:none"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="dok-search" type="text" placeholder="Studio, Produktion, Datum..." oninput="rDokumente()" style="flex:1;border:none;background:transparent;font-size:13px;outline:none;color:var(--ink)">
       <div id="dok-search-clear" onclick="document.getElementById('dok-search').value='';rDokumente()" style="font-size:16px;color:#ccc;cursor:pointer;display:none">&#xD7;</div>
     </div>
   </div>
   <!-- Filter tabs -->
-  <div style="display:flex;border-bottom:2px solid #fce7f3;flex-shrink:0;background:#fff;overflow-x:auto">
-    <div id="dok-tab-alle" onclick="dokSetTab('alle')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border-bottom:2px solid var(--red);color:var(--red)">Alle</div>
-    <div id="dok-tab-dispo" onclick="dokSetTab('dispo')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Dispos</div>
-    <div id="dok-tab-abrechn" onclick="dokSetTab('abrechn')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Abrechnungen</div>
-    <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#999">Ausgaben</div>
+  <div style="display:flex;border-bottom:1px solid var(--hair);flex-shrink:0;background:var(--cream);overflow-x:auto">
+    <div id="dok-tab-alle" onclick="dokSetTab('alle')" style="padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;border-bottom:2px solid var(--accent);color:var(--ink)">Alle</div>
+    <div id="dok-tab-dispo" onclick="dokSetTab('dispo')" style="padding:10px 14px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;color:var(--ink3)">Dispos</div>
+    <div id="dok-tab-abrechn" onclick="dokSetTab('abrechn')" style="padding:10px 14px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;color:var(--ink3)">Abrechnungen</div>
+    <div id="dok-tab-ausgabe" onclick="dokSetTab('ausgabe')" style="padding:10px 14px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;color:var(--ink3)">Ausgaben</div>
 
   </div>
   <div id="dokumente-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(env(safe-area-inset-bottom) + 90px)"></div>
@@ -879,11 +879,11 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div style="font-size:11px;font-weight:700;color:var(--accent);margin-top:2px">Holvi CSV Import</div>
     </div>
     <div onclick="switchView('ust-voranmeldung')" style="flex:1;background:#fdf2ff;border:1.5px solid #d8b4fe;border-radius:10px;padding:10px;text-align:center;cursor:pointer">
-      <div style="font-size:20px">🧾</div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/><path d="M9 8h6M9 12h6"/></svg>
       <div style="font-size:11px;font-weight:700;color:var(--purple);margin-top:2px">USt-Voranmeldung</div>
     </div>
     <div onclick="switchView('dokumente')" style="flex:1;background:#fff0f6;border:1.5px solid #fbcfe8;border-radius:10px;padding:10px;text-align:center;cursor:pointer">
-      <div style="font-size:20px">📂</div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       <div style="font-size:11px;font-weight:700;color:var(--red);margin-top:2px">Dokumente</div>
     </div>
     <div onclick="abMonatOpen()" style="flex:1;background:var(--yellow2);border:1.5px solid var(--warm);border-radius:10px;padding:10px;text-align:center;cursor:pointer">
@@ -934,7 +934,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <div id="ab-holvi-sheet" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:201;background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;max-height:80vh;overflow-y:auto">
   <div style="text-align:center;margin-bottom:14px;position:relative">
     <div style="width:40px;height:4px;background:#ccc;border-radius:2px;margin:0 auto 12px"></div>
-    <strong style="font-size:17px">🏦 Kontoauszug importieren</strong>
+    <strong style="font-size:17px">Kontoauszug importieren</strong>
     <div onclick="abHolviClose()" style="position:absolute;top:0;right:0;font-size:22px;cursor:pointer;color:#999">x</div>
   </div>
   <div style="background:var(--yellow2);border:1px solid var(--warm);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.6">
@@ -943,7 +943,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   </div>
   <input id="ab-holvi-file" type="file" accept=".csv,.xls,.xlsx,text/csv" style="display:none" onchange="holviImport(this)">
   <div onclick="document.getElementById('ab-holvi-file').click()" style="border:2px dashed var(--accent2);border-radius:12px;padding:24px;text-align:center;cursor:pointer;background:var(--green2);margin-bottom:14px">
-    <div style="font-size:28px">📂</div>
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     <div style="font-size:13px;font-weight:700;color:var(--accent);margin-top:6px">CSV oder Excel hochladen</div>
     <div style="font-size:11px;color:var(--ink2);margin-top:4px">Holvi · Haspa · Sparkasse · andere Banken</div>
   </div>
@@ -1021,18 +1021,18 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Monat</div>
     <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Produktion</div>
     <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;min-width:56px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Analyse</div>
-    <div id="zt-zahldauer" onclick="zahlTab('zahldauer')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">⏱ Zahlung</div>
+    <div id="zt-zahldauer" onclick="zahlTab('zahldauer')" style="flex:1;min-width:64px;padding:11px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;touch-action:manipulation;white-space:nowrap">Zahlung</div>
   </div>
   <!-- Schnellzugriff-Buttons (nur bei Studio-Tab) -->
   <div id="zahl-toolbar" style="background:#f8f9fa;padding:8px 12px;display:flex;gap:8px;flex-shrink:0;border-bottom:1px solid var(--hair)">
     <div onclick="switchView('holvi-abgleich')" style="flex:1;background:var(--green2);border:1.5px solid var(--accent2);border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
-      <div style="font-size:14px">🏦</div><div style="font-size:10px;font-weight:700;color:var(--accent);margin-top:1px">Holvi</div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" style="flex:none"><path d="M4 21h16M5 21V10h14v11M12 3 4 8h16z"/></svg><div style="font-size:10px;font-weight:700;color:var(--accent);margin-top:1px">Holvi</div>
     </div>
     <div onclick="switchView('ust-voranmeldung')" style="flex:1;background:#fdf2ff;border:1.5px solid #d8b4fe;border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
-      <div style="font-size:14px">🧾</div><div style="font-size:10px;font-weight:700;color:var(--purple);margin-top:1px">USt</div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/><path d="M9 8h6M9 12h6"/></svg><div style="font-size:10px;font-weight:700;color:var(--purple);margin-top:1px">USt</div>
     </div>
     <div onclick="abMonatOpen()" style="flex:1;background:var(--yellow2);border:1.5px solid var(--warm);border-radius:8px;padding:7px;text-align:center;cursor:pointer;touch-action:manipulation">
-      <div style="font-size:14px">📊</div><div style="font-size:10px;font-weight:700;color:#8a6a3f;margin-top:1px">Monatsblatt</div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" style="flex:none"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><div style="font-size:10px;font-weight:700;color:#8a6a3f;margin-top:1px">Monatsblatt</div>
     </div>
   </div>
   <div id="zahlungen-list" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(env(safe-area-inset-bottom) + 90px)"></div>
@@ -1065,7 +1065,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
         <div style="font-size:11px;font-weight:700;color:#666">RECHNUNGSEMPFÄNGER</div>
-        <div onclick="openAuftraggeberSheet()" style="font-size:11px;color:var(--ai);cursor:pointer;font-weight:600">📇 Adressbuch</div>
+        <div onclick="openAuftraggeberSheet()" style="font-size:11px;color:var(--ai);cursor:pointer;font-weight:600">Adressbuch</div>
       </div>
       <select id="re-empf-sel" class="sheet-input" style="appearance:auto;margin-bottom:6px" onchange="reEmpfSelected()">
         <option value="">– Manuell eingeben –</option>
@@ -1143,7 +1143,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <!-- Buttons -->
     <div style="display:flex;gap:10px;padding-bottom:24px">
-      <div id="re-pdf-btn" onclick="generateRechnungPDF()" style="flex:1;padding:14px;background:#f0f4ff;border-radius:10px;text-align:center;font-weight:700;font-size:14px;color:var(--blue);cursor:pointer">📄 PDF erstellen</div>
+      <div id="re-pdf-btn" onclick="generateRechnungPDF()" style="flex:1;padding:14px;background:#f0f4ff;border-radius:10px;text-align:center;font-weight:700;font-size:14px;color:var(--blue);cursor:pointer">PDF erstellen</div>
       <div onclick="saveRechnung()" style="flex:1;padding:14px;background:var(--blue);border-radius:10px;text-align:center;font-weight:700;font-size:14px;color:#fff;cursor:pointer">Speichern</div>
     </div>
   </div>
@@ -1172,17 +1172,17 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   </div>
   <div class="view-scroll" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
     <div class="menu-row" onclick="switchView('pers-daten')">
-      <div class="menu-icon">👤</div>
+      <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></svg></div>
       <div class="menu-label">Persönliche Daten</div>
       <div class="menu-chevron">›</div>
     </div>
     <div class="menu-row" onclick="switchView('bankverbindung')">
-      <div class="menu-icon">💳</div>
+      <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg></div>
       <div class="menu-label">Rechnungs-Bankverbindung</div>
       <div class="menu-chevron">›</div>
     </div>
     <div class="menu-row" onclick="switchView('finanzamt')">
-      <div class="menu-icon">🏛</div>
+      <div class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round"><path d="M4 21h16M5 21V10h14v11M12 3 4 8h16z"/><path d="M9 21v-6h6v6"/></svg></div>
       <div class="menu-label">Finanzamt</div>
       <div class="menu-chevron">›</div>
     </div>
@@ -1376,7 +1376,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       </div>
       <div id="dispo-upload-btn" onclick="document.getElementById('dispo-input').click()" style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;background:var(--cream);transition:all .15s" ontouchstart="this.style.borderColor='var(--leaf)'" ontouchend="this.style.borderColor=''">
         <input type="file" id="dispo-input" accept="image/*" capture="environment" style="display:none" onchange="handleDispoPhoto(this.files[0])">
-        <div style="font-size:22px;margin-bottom:4px">📋</div>
+        <div style="margin-bottom:4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ai)" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></div>
         <div style="font-size:13px;font-weight:600;color:var(--ink)">Dispo-Foto aufnehmen oder hochladen</div>
         <div style="font-size:11px;color:var(--ink4);margin-top:2px">KI liest Produktion, Datum & Takes automatisch aus</div>
       </div>
@@ -1409,7 +1409,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <select class="form-input" id="f-status"><option value="offen">Ausstehend</option><option value="bezahlt">Bezahlt</option></select>
     </div>
     <div class="form-field"><label class="form-label">Notizen</label><input class="form-input" id="f-notizen" type="text" placeholder="Freitext…"></div>
-    <div class="form-field"><label class="form-label">Memofeld 📝</label><textarea class="form-input" id="f-memo" rows="3" placeholder="Eigene Notizen, Besonderheiten, Hinweise…" style="resize:none;line-height:1.5"></textarea></div>
+    <div class="form-field"><label class="form-label">Memofeld</label><textarea class="form-input" id="f-memo" rows="3" placeholder="Eigene Notizen, Besonderheiten, Hinweise…" style="resize:none;line-height:1.5"></textarea></div>
   </div>
   <div class="bs-footer"><button class="btn-primary" onclick="saveTermin()">Termin speichern</button></div>
 </div>
@@ -1533,7 +1533,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div id="lb-title" style="font-family:var(--serif);font-size:17px;font-style:italic;color:#fff;font-weight:300"></div>
       <div id="lb-meta" style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px"></div>
     </div>
-    <div onclick="deleteLightboxDispo()" style="width:36px;height:36px;border-radius:50%;background:rgba(190,18,60,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px">🗑</div>
+    <div onclick="deleteLightboxDispo()" style="width:36px;height:36px;border-radius:50%;background:rgba(190,18,60,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px">✕</div>
   </div>
   <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 12px;overflow:hidden">
     <img id="lb-img" style="max-width:100%;max-height:100%;border-radius:10px;object-fit:contain" />
@@ -1600,7 +1600,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       </div>
       <div id="dispo-upload-btn" onclick="document.getElementById('dispo-input').click()" style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;background:var(--cream);transition:all .15s" ontouchstart="this.style.borderColor='var(--leaf)'" ontouchend="this.style.borderColor=''">
         <input type="file" id="dispo-input" accept="image/*" capture="environment" style="display:none" onchange="handleDispoPhoto(this.files[0])">
-        <div style="font-size:22px;margin-bottom:4px">📋</div>
+        <div style="margin-bottom:4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ai)" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></div>
         <div style="font-size:13px;font-weight:600;color:var(--ink)">Dispo-Foto aufnehmen oder hochladen</div>
         <div style="font-size:11px;color:var(--ink4);margin-top:2px">KI liest Produktion, Datum & Takes automatisch aus</div>
       </div>
@@ -1729,7 +1729,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div id="lb-title" style="font-family:var(--serif);font-size:17px;font-style:italic;color:#fff;font-weight:300"></div>
       <div id="lb-meta" style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px"></div>
     </div>
-    <div onclick="deleteLightboxDispo()" style="width:36px;height:36px;border-radius:50%;background:rgba(190,18,60,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px">🗑</div>
+    <div onclick="deleteLightboxDispo()" style="width:36px;height:36px;border-radius:50%;background:rgba(190,18,60,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px">✕</div>
   </div>
   <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 12px;overflow:hidden">
     <img id="lb-img" style="max-width:100%;max-height:100%;border-radius:10px;object-fit:contain" />
@@ -3594,7 +3594,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // 2229/202603 nach Re-Konsolidierung ("Reparieren" oder erneutes Bestätigen).
   // Build 849 (Issue #21): Datei-Sperre repariert — (1) importedFiles-Migration läuft
   // nur noch EINMAL statt bei jedem Start (kein Re-Lock gelöschter Pipelines aus
-  // _archivLog mehr), (2) "🗑 Alle" + beide Einzel-Löschungen geben Dateinamen über
+  // _archivLog mehr), (2) "✕ Alle" + beide Einzel-Löschungen geben Dateinamen über
   // zentralen Helper frei (Multi-Doc-aware: gesperrt bleibt nur, was noch ein
   // bestätigtes Teil-Dokument hat). Re-Upload ohne Umbenennen.
   // Build 850: 849-Regression gefixt — eingepflegte DISPOS (Termin-Link statt
@@ -3677,7 +3677,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Datum ins Mahn-Log (db.mahnLog, keyed by Gutschrift-Nr — stabil ueber Re-Analyse).
   // Kachel zeigt 'Gemahnt am …' bzw. 'N× gemahnt · zuletzt …'. Keine Auto-Markierung beim
   // Mailversand (mailto liefert keine Rueckmeldung). Sortierung/Optik unveraendert.
-  // Build 874: Gemahnt-Button zustandsabhaengig — ungemahnt grau/unauffaellig (📤 Brief-
+  // Build 874: Gemahnt-Button zustandsabhaengig — ungemahnt grau/unauffaellig (Brief-
   // Pfeil), nach Klick gruen + Label 'Gemahnt am …' erscheint. Erneutes Tippen zaehlt hoch.
   // Build 875: Gemahnt-Button Tap = markieren / Long-Press (500ms) = letzten Eintrag
   // zuruecknehmen (Korrektur bei Fehlklick). Scroll-Schutz, kein Doppel-Trigger.
@@ -3761,7 +3761,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 913 (Design D4b, aus Test-Feedback 911): Terminkarten + Ampeln zen.
   // Statusstreifen bezahlt/ausstehend/offen/storno → Kiefer/Ocker/Ziegel/ink4.
   // Ampel-Dots (Dispo/Abrechn./Zahlung) → Ziegel/Ocker/Kiefer auf Hairline.
-  // Betrags-/Differenz-/GVL-Zeilen gedaempft, Deko-Emojis (💶📝⭐📅🔍) raus,
+  // Betrags-/Differenz-/GVL-Zeilen gedaempft, Deko-Emojis (⭐) raus,
   // Memo/Stern als stille Chips, Multi-Select-Haken Sumi. Beide JS-Empty-States
   // (Tag leer, Suche leer) → Enso-Stil. Nur Farb-/Markup-Strings im Renderer,
   // keine Status- oder Vergleichslogik geaendert.
@@ -3805,7 +3805,24 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // (ok=Kiefer, warn=Ocker, fehler=Ziegel, info=Indigo, Graus=Washi-Toene).
   // Konfetti-Palette bewusst ausgenommen (Belohnungsmoment). Reine Anzeige-
   // farben, keine Logik, keine Datenoperation.
-  if(el) el.textContent = '920';
+  // Build 921 (D6b, aus Feedback „Untermenüs“): Belege-View komplett zen.
+  // Toolbar ohne Emojis, Hierarchie klar (Upload=Urushi, Ordner/Reset=Hairline,
+  // Leeren=Ziegel). Suchleiste+Tabs zen (aktiv: Kiefer-Linie, dokSetTab).
+  // Archiv-Link + Warteschlangen-Banner: heller Shoji-Indigo statt Vollbalken,
+  // Sumi-Button. DOK_TYPES: SVG-Line-Icons statt Emojis. „nicht zugeordnet“
+  // leise. Pinke Altreste global -> Hairline. Reine Darstellung.
+  // Build 922 (D6c, systematischer Sweep): Emoji-Inventur ueber die ganze
+  // App (91 Zeichenklassen, kuratiert). Deko-Emojis aus Buttons, Labels,
+  // Toasts, Kategorie-Namen, Detail-Zeilen entfernt; Ampel-Emojis (Gagen-
+  // Listen, Zahlungsziel) -> stille Farbpunkte (nur Anzeige, Vergleiche
+  // geprueft: keine); Stammdaten-Menue + Icon-Kacheln -> SVG-Line-Icons;
+  // Empty-Icons -> Enso. Funktionszeichen bleiben. Reine Darstellung.
+  // Build 923 (D6c Runde 2): Rest-Sweep. Merkliste ⭐→★ (Clay statt Gelb),
+  // alle Empty-Icons → Enso, Icon-Kacheln (Ordner/Bank/Dispo/Receipt/PDF-
+  // Platzhalter) → SVG-Line-Icons, Undo-Log-Icons neutral, Plattform-/Film-
+  // Icons → Text, Mahn-Symbole → ✉/⚠, danach generischer Praefix-Strip
+  // (36 Deko-Emojis + Variation-Selectors). Funktionszeichen unangetastet.
+  if(el) el.textContent = '923';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -3841,7 +3858,7 @@ function toggleMerklisteFilter(){
   _merklisteFilter = !_merklisteFilter;
   var btn = document.getElementById('merkliste-filter-btn');
   if(btn){
-    btn.textContent = _merklisteFilter ? '⭐' : '☆';
+    btn.textContent = _merklisteFilter ? '★' : '☆';
     btn.style.background = _merklisteFilter ? '#fefce8' : '#fff';
     btn.style.borderColor = _merklisteFilter ? '#f5c518' : 'var(--hair)';
   }
@@ -3955,7 +3972,7 @@ function _backupBanner(){
     if(host&&host.parentNode) host.parentNode.insertBefore(el,host);
   }
   el.innerHTML='<div style="margin:0 16px 10px;background:var(--orange2);border:1px solid #e7dbc6;border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:10px">'
-    +'<span style="font-size:17px">💾</span>'
+    +''
     +'<span style="flex:1;font-size:12.5px;color:#7c2d12;font-weight:600">'+txt+' Deine Daten leben nur auf diesem Gerät.</span>'
     +'<button onclick="exportData()" style="flex:none;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">Jetzt sichern</button>'
     +'</div>';
@@ -3975,9 +3992,9 @@ function rTermine(){
   // Merkliste-Filter: alle gemerkten Termine anzeigen
   if(_merklisteFilter){
     var merkItems=all.filter(function(t){return t._merkliste;});
-    if(header) header.textContent='⭐ Merkliste ('+merkItems.length+')';
+    if(header) header.textContent='★ Merkliste ('+merkItems.length+')';
     if(!merkItems.length){
-      list.innerHTML='<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">Merkliste leer</div><div class="empty-sub">Termine mit ⭐ markieren um sie hier zu sehen.</div></div>';
+      list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Merkliste leer</div><div class="empty-sub">Termine mit ★ markieren um sie hier zu sehen.</div></div>';
     } else {
       list.innerHTML=merkItems.map(function(t){return tCard(t);}).join('');
     }
@@ -4049,7 +4066,7 @@ function rTermine(){
     // Show next 5 upcoming
     var upcoming=all.filter(function(t){return t.datum>=ti;}).slice(0,5);
     if(!upcoming.length){
-      list.innerHTML='<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">Noch keine Termine</div><div class="empty-sub">Tippe auf + um deinen ersten Termin einzutragen.</div></div>';
+      list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Noch keine Termine</div><div class="empty-sub">Tippe auf + um deinen ersten Termin einzutragen.</div></div>';
     }else{
       list.innerHTML='<div class="section-label" style="margin:12px 16px 4px">Nächste Termine</div>'+upcoming.map(function(t){return tCard(t);}).join('');
     }
@@ -4575,7 +4592,7 @@ function openDetail(id){
   var header='<div class="big-date">'
     +'<div class="bd-studio" style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'studio\',\'text\')">'+(t.studio?esc(t.studio):'<span style="color:#ccc">Studio ✎</span>')+'</div>'
     +'<div class="bd-titel" style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'titel\',\'text\')">'+(t.titel?esc(t.titel):'<span style="color:#ccc">Produktionstitel ✎</span>')+'</div>'
-    +'<div class="bd-rolle" style="cursor:pointer;min-height:22px" onclick="inlineEditActivate(this,\''+id+'\',\'rolle\',\'text\')">'+(t.rolle?'🎭 '+esc(t.rolle):'<span style="color:#ccc;font-size:12px">Rolle eingeben ✎</span>')+'</div>'
+    +'<div class="bd-rolle" style="cursor:pointer;min-height:22px" onclick="inlineEditActivate(this,\''+id+'\',\'rolle\',\'text\')">'+(t.rolle?''+esc(t.rolle):'<span style="color:#ccc;font-size:12px">Rolle eingeben ✎</span>')+'</div>'
     +'<div class="bd-dateline">'
     +'<div class="bd-day">'+d.getDate()+'</div>'
     +'<div class="bd-month">'+dayNames[d.getDay()]+', '+monthNames[d.getMonth()]+' '+d.getFullYear()+'</div>'
@@ -4596,7 +4613,7 @@ function openDetail(id){
 
   // ── MEMO FELD (editierbar) ─────────────────────────────────
   var memoHtml='<div class="info-card">'
-    +'<div class="info-card-header"><span>📝 Notiz / Memo</span></div>'
+    +'<div class="info-card-header"><span>Notiz / Memo</span></div>'
     +'<div style="padding:8px 16px 14px">'
     +'<textarea id="dp-memo-field" rows="3" placeholder="Notizen zum Termin... (wird automatisch gespeichert)" '
     +'onblur="saveMemoFromDetail(\''+id+'\')" '
@@ -4612,7 +4629,7 @@ function openDetail(id){
   var gvlDispo=dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
   if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
     gvlHtml='<div class="info-card" style="border-left:4px solid var(--purple)">'
-      +'<div class="info-card-header"><span>🎬 GVL-Übersicht</span>'
+      +'<div class="info-card-header"><span>GVL-Übersicht</span>'
       +'<span class="ic-edit" onclick="gvlTerminBearbeiten(\''+id+'\')" style="color:var(--purple)">✎ Bearbeiten</span></div>'
       +'<div style="padding:0 16px 14px">';
     if(gvlDispo){
@@ -4633,7 +4650,7 @@ function openDetail(id){
       }
       if(gvlDispo.produktion_typ_aktiv){
         var ptCol=gvlDispo.gvl_excluded?'var(--orange)':'var(--accent)';
-        gvlHtml+='<div class="info-row"><div class="ir-key">Plattform</div><div class="ir-val" style="color:'+ptCol+';font-weight:700">'+esc(gvlDispo.produktion_typ_aktiv)+(gvlDispo.gvl_excluded?' ❌ nicht GVL-pflichtig':' ✓ GVL-pflichtig')+'</div></div>';
+        gvlHtml+='<div class="info-row"><div class="ir-key">Plattform</div><div class="ir-val" style="color:'+ptCol+';font-weight:700">'+esc(gvlDispo.produktion_typ_aktiv)+(gvlDispo.gvl_excluded?' ✕ nicht GVL-pflichtig':' ✓ GVL-pflichtig')+'</div></div>';
       }
     } else if(t.gvl_takes_detail && t.gvl_takes_detail.length){
       // Chips aus Termin-eigenen gvl_takes_detail
@@ -4643,7 +4660,7 @@ function openDetail(id){
         var isFilmEntry = td.folge===0;
         var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
         var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
-        var chipLabel = isFilmEntry ? '🎬' : ('S'+sNr+' F'+fNr);
+        var chipLabel = isFilmEntry ? 'Film' : ('S'+sNr+' F'+fNr);
         gvlHtml+='<div style="background:#fff;border:1.5px solid #c4b5fd;border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:700;color:var(--purple)">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:900;color:var(--purple)">'+td.takes+'</div>'+'</div>';
       });
       gvlHtml+='</div>';
@@ -4678,7 +4695,7 @@ function openDetail(id){
     +'<div style="font-size:11px;color:#555;margin-top:1px">'+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?(t.kommgage+'€'):'individuell')+'</div></div>'
     +'</div>'
     +'<div style="padding:0 16px 10px">'
-    +'<button type="button" id="gage-recherche-btn" onclick="terminGageRecherche(\''+id+'\')" style="width:100%;background:#f5f0e8;border:1.5px solid #d4b896;color:#7a5c3a;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">🔍 TV / Streaming recherchieren</button>'
+    +'<button type="button" id="gage-recherche-btn" onclick="terminGageRecherche(\''+id+'\')" style="width:100%;background:#f5f0e8;border:1.5px solid #d4b896;color:#7a5c3a;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">TV / Streaming recherchieren</button>'
     +'<div id="gage-recherche-result" style="margin-top:8px;display:none"></div>'
     +'<div id="gage-mapping-hint"></div>'
     +'</div>'
@@ -4782,7 +4799,7 @@ function openDetail(id){
         html += '<div class="gage-row">'
           +'<span style="color:'+(_dispFehlend?'#999':cTakes)+'">'
           +(_dispFehlend
-            ? '📋 Dispo fehlt'
+            ? 'Dispo fehlt'
             : totalLabel+' Takes × '+parseFloat(t.rate||0).toFixed(2).replace('.',',')+' €'
               +(takesMismatch?' ⚠ <span style="font-size:10px">(Abrechn: '+abTakes+' Takes)</span>':''))
           +'</span>'
@@ -4854,14 +4871,14 @@ function openDetail(id){
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'var(--accent)':'var(--orange)')+'">'
-      +'<div class="info-card-header"><span>💶 Abrechnung'
-      +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#eef2ff;color:#4338ca;padding:2px 6px;border-radius:6px;font-weight:700">🔗 '+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
-      +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#faf5ff;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700">🔗 Master · '+ab._multiAnzahl+' Termine</span>':'')
-      +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✏️ bearbeiten</span>':'')+'</span>'
+      +'<div class="info-card-header"><span>Abrechnung'
+      +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#eef2ff;color:#4338ca;padding:2px 6px;border-radius:6px;font-weight:700">'+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
+      +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#faf5ff;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700">Master · '+ab._multiAnzahl+' Termine</span>':'')
+      +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✎ bearbeiten</span>':'')+'</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(bruttoAnteilFehlt?'· Anteil nicht im PDF ausgewiesen':(netBruttoOk?'✓ Stimmt':'⚠ Differenz'))+'</span></div>'
       +'<div style="padding:0 16px 14px">'
-      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4338ca;margin-bottom:8px;padding:6px 8px;background:#eef2ff;border-radius:6px">🔗 Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
-      +(!hasDispo2?'<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;padding:6px 8px;background:var(--card);border-radius:6px">📋 Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
+      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4338ca;margin-bottom:8px;padding:6px 8px;background:#eef2ff;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
+      +(!hasDispo2?'<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;padding:6px 8px;background:var(--card);border-radius:6px">Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
       +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
       +(ab.takes?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(takesDiff?'color:var(--orange);font-weight:700':'')+'">Takes (abgr.)</div>'+
@@ -5034,7 +5051,7 @@ function openDetail(id){
       var takesDiff   = t.takes_differenz||0;
 
       abHtml = '<div class="info-card" style="border-left:4px solid var(--accent)">'
-        +'<div class="info-card-header"><span>💶 Abrechnung (Monats-GS)</span></div>'
+        +'<div class="info-card-header"><span>Abrechnung (Monats-GS)</span></div>'
         +'<div style="padding:0 16px 14px">';
 
       if(t.gutschrift_nr)
@@ -5142,7 +5159,7 @@ function openDetail(id){
       }
     }
     mergeBanner='<div style="background:var(--orange2);border:2px solid var(--orange);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-      +'<div style="font-size:12px;font-weight:800;color:#8a6a3f;margin-bottom:8px">📋 '+(t._hasPendingMerge?'Dokument hat Felder eingetragen — bitte prüfen':'Vorschläge aus Dokument')+'</div>'
+      +'<div style="font-size:12px;font-weight:800;color:#8a6a3f;margin-bottom:8px">'+(t._hasPendingMerge?'Dokument hat Felder eingetragen — bitte prüfen':'Vorschläge aus Dokument')+'</div>'
       +suggHtml
       +(t._hasPendingMerge?'<div style="font-size:11px;color:#8a6a3f;margin-bottom:10px">Zurückgehen ohne Speichern verwirft alle Änderungen.</div>':'')
       +'<div style="display:flex;gap:8px;margin-top:8px">'
@@ -5161,7 +5178,7 @@ function openDetail(id){
     var gm=tk&&db.gageMappings&&db.gageMappings[tk];
     if(gm && (gm.kommgage!==t.kommgage || gm.rate!==t.rate)){
       gmHintEl.innerHTML='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:10px;padding:8px 12px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
-        +'<div style="font-size:11px;color:#8a6a3f">💡 Zuletzt: <b>'+gm.kommgage+'€ KG · '+parseFloat(gm.rate).toFixed(2).replace('.',',')+'€/Take</b></div>'
+        +'<div style="font-size:11px;color:#8a6a3f">Zuletzt: <b>'+gm.kommgage+'€ KG · '+parseFloat(gm.rate).toFixed(2).replace('.',',')+'€/Take</b></div>'
         +'<button type="button" onclick="setGagePreset(\''+id+'\','+gm.kommgage+','+gm.rate+')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
         +'</div>';
     }
@@ -5507,7 +5524,7 @@ function inlineEditActivate(row, terminId, field, inputType){
   if(valEl.querySelector('input')) return; // already editing
   var curVal = (valEl.firstChild && valEl.firstChild.nodeType===3)
     ? (valEl.firstChild.textContent||'').trim()
-    : valEl.textContent.replace('✎','').replace('🎭','').trim();
+    : valEl.textContent.replace('✎','').replace('','').trim();
   var inp = document.createElement('input');
   inp.type = inputType||'text';
   inp.value = curVal.trim();
@@ -5683,8 +5700,8 @@ function gvlTerminBearbeiten(terminId){
       +'<div style="font-size:12px;color:#888;margin-bottom:12px">'+esc(t.titel||t.studio||'')+'</div>'
       // Film/Serie Toggle
       +'<div style="display:flex;gap:8px;margin-bottom:14px">'
-      +'<button type="button" onclick="gvltSetFilm(false)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--hair)':'var(--purple)')+';background:'+(filmActive?'var(--cream2)':'var(--purple2)')+';color:'+(filmActive?'#888':'var(--purple)')+'">📺 Serie / Folgen</button>'
-      +'<button type="button" onclick="gvltSetFilm(true)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--purple)':'var(--hair)')+';background:'+(filmActive?'var(--purple2)':'var(--cream2)')+';color:'+(filmActive?'var(--purple)':'#888')+'">🎬 Film</button>'
+      +'<button type="button" onclick="gvltSetFilm(false)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--hair)':'var(--purple)')+';background:'+(filmActive?'var(--cream2)':'var(--purple2)')+';color:'+(filmActive?'#888':'var(--purple)')+'">Serie / Folgen</button>'
+      +'<button type="button" onclick="gvltSetFilm(true)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--purple)':'var(--hair)')+';background:'+(filmActive?'var(--purple2)':'var(--cream2)')+';color:'+(filmActive?'var(--purple)':'#888')+'">Film</button>'
       +'</div>'
       +'<div id="gvlt-rows">'+buildRows()+'</div>'
       +(!filmActive?'<button type="button" onclick="gvltAddRow()" style="width:100%;background:var(--cream2);color:var(--purple);border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>':'<div style="margin-bottom:12px;font-size:11px;color:#888">Keine Staffel/Folge — Takes werden dem Filmtitel direkt zugeordnet.</div>')
@@ -5826,8 +5843,8 @@ function gvlDokBearbeiten(dokId){
     box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:8px">GVL Folgen & Takes</div>'
       +'<div style="font-size:12px;color:#888;margin-bottom:12px">'+esc(d.beschr||d.dateiname||'')+'</div>'
       +'<div style="display:flex;gap:8px;margin-bottom:14px">'
-      +'<button type="button" onclick="gvlDokSetFilm(false)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--hair)':'var(--purple)')+';background:'+(filmActive?'var(--cream2)':'var(--purple2)')+';color:'+(filmActive?'#888':'var(--purple)')+'">📺 Serie / Folgen</button>'
-      +'<button type="button" onclick="gvlDokSetFilm(true)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--purple)':'var(--hair)')+';background:'+(filmActive?'var(--purple2)':'var(--cream2)')+';color:'+(filmActive?'var(--purple)':'#888')+'">🎬 Film</button>'
+      +'<button type="button" onclick="gvlDokSetFilm(false)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--hair)':'var(--purple)')+';background:'+(filmActive?'var(--cream2)':'var(--purple2)')+';color:'+(filmActive?'#888':'var(--purple)')+'">Serie / Folgen</button>'
+      +'<button type="button" onclick="gvlDokSetFilm(true)" style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;border:2px solid '+(filmActive?'var(--purple)':'var(--hair)')+';background:'+(filmActive?'var(--purple2)':'var(--cream2)')+';color:'+(filmActive?'var(--purple)':'#888')+'">Film</button>'
       +'</div>'
       +'<div id="gvldok-rows">'+buildRows()+'</div>'
       +(!filmActive?'<button type="button" onclick="gvlDokAddRow()" style="width:100%;background:var(--cream2);color:var(--purple);border:1.5px dashed #c4b5fd;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">+ Weitere Folge</button>':'<div style="margin-bottom:12px;font-size:11px;color:#888">Keine Staffel/Folge — Takes werden dem Filmtitel direkt zugeordnet.</div>')
@@ -6364,7 +6381,7 @@ function _studioHamburgBankMatchScan(d, apiKey, pageDataURLs, cb){
     if(cb) cb(); return;
   }
 
-  showToast('🏦 Lese K4-Felder (Studio Hamburg)…');
+  showToast('Lese K4-Felder (Studio Hamburg)…');
   var xhr = new XMLHttpRequest();
   xhr.open('POST','https://api.anthropic.com/v1/messages');
   xhr.timeout = 120000; // Build 785: 60s→120s. Hi-res-Bilder (scale 2.5) = größerer Payload.
@@ -6538,9 +6555,9 @@ function dokReklassifizieren(dokId){
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
   box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:4px">Typ ändern</div>'
     +'<div style="font-size:12px;color:#888;margin-bottom:16px">Was ist dieses Dokument wirklich?</div>'
-    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'dispo\')" style="width:100%;background:var(--red2);color:var(--red);border:1.5px solid #e3c4c0;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;text-align:left">📋 Dispo / Aufnahmeplan</button>'
-    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'abrechn\')" style="width:100%;background:#fff9e0;color:#8a6a3f;border:1.5px solid var(--warm);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;text-align:left">💶 Gagenabrechnung (Einnahme)</button>'
-    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'ausgabe\')" style="width:100%;background:var(--green2);color:var(--accent);border:1.5px solid var(--accent2);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:16px;text-align:left">🧾 Betriebsausgabe (Ausgabe)</button>'
+    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'dispo\')" style="width:100%;background:var(--red2);color:var(--red);border:1.5px solid #e3c4c0;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;text-align:left">Dispo / Aufnahmeplan</button>'
+    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'abrechn\')" style="width:100%;background:#fff9e0;color:#8a6a3f;border:1.5px solid var(--warm);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;text-align:left">Gagenabrechnung (Einnahme)</button>'
+    +'<button type="button" onclick="dokSetTyp(\''+dokId+'\',\'ausgabe\')" style="width:100%;background:var(--green2);color:var(--accent);border:1.5px solid var(--accent2);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:16px;text-align:left">Betriebsausgabe (Ausgabe)</button>'
     +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:var(--cream2);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
   ov.appendChild(box);
   ov.onclick=function(e){if(e.target===ov)ov.remove();};
@@ -6639,7 +6656,7 @@ function showDateinamen(el){
   var box = document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 40px;width:100%;max-width:480px';
 
-  var html='<div style="font-size:15px;font-weight:800;margin-bottom:4px">📎 '+esc(label)+'</div>';
+  var html='<div style="font-size:15px;font-weight:800;margin-bottom:4px">'+esc(label)+'</div>';
   if(isFallbackText){
     // Kein echter Dateiname vorhanden — hilfreiche Meldung zeigen
     html+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:8px;padding:10px 12px;margin-bottom:10px">'
@@ -6649,7 +6666,7 @@ function showDateinamen(el){
       +'</div>';
   } else {
     html+='<div style="background:var(--green2);border:1.5px solid var(--accent2);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
-      +'<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:3px">📋 IN ZWISCHENABLAGE KOPIERT</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:3px">IN ZWISCHENABLAGE KOPIERT</div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--ink);word-break:break-all">'+esc(firstName)+'</div>'
       +'</div>';
   }
@@ -6662,10 +6679,10 @@ function showDateinamen(el){
     });
   }
   html+='<div style="background:#f0f4ff;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--ink);line-height:1.6">'
-    +'<b>📂 '+ordner+'</b><br>'
+    +'<b>'+ordner+'</b><br>'
     +'Dateien-App öffnen → Ordner antippen → Suche → Einfügen</div>';
   html+='<button type="button" onclick="window.location.href=\'shareddocuments://\'" '
-    +'style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📁 Dateien-App öffnen</button>';
+    +'style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Dateien-App öffnen</button>';
   html+='<button type="button" onclick="removeNamenOv()" style="width:100%;background:var(--cream2);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Schließen</button>';
 
   box.innerHTML=html;
@@ -6803,7 +6820,7 @@ function dokSessionPeek(elOrId, sessionIdx){
     box.innerHTML='<div style="font-size:16px;font-weight:900;margin-bottom:4px">Session '+datLabel+'</div>'
       +'<div style="font-size:12px;color:#888;margin-bottom:16px">Kein Kalendertermin gefunden.</div>'
       +'<button type="button" onclick="dokSessionSkip(\''+dokId+'\','+si+')" style="width:100%;background:var(--green2);color:var(--accent);border:1.5px solid var(--accent2);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">✓ Ohne Termin speichern & weiter</button>'
-      +'<button type="button" onclick="dokSessionGotoKalender(\''+dokId+'\','+si+');this.closest(\'div\').parentNode.remove();" style="width:100%;background:var(--purple2);color:var(--purple);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📅 Manuell im Kalender suchen</button>'
+      +'<button type="button" onclick="dokSessionGotoKalender(\''+dokId+'\','+si+');this.closest(\'div\').parentNode.remove();" style="width:100%;background:var(--purple2);color:var(--purple);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Manuell im Kalender suchen</button>'
       +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:var(--cream2);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
     ov.appendChild(box);
     ov.onclick=function(e){if(e.target===ov)ov.remove();};
@@ -6921,7 +6938,7 @@ function saveMemoFromDetail(terminId){
   if(!t._manualFields) t._manualFields=[];
   if(t._manualFields.indexOf('memo')<0) t._manualFields.push('memo');
   save(db);
-  showToast('📝 Notiz gespeichert');
+  showToast('Notiz gespeichert');
 }
 
 function toggleMerkliste(){
@@ -6932,7 +6949,7 @@ function toggleMerkliste(){
   save(db);
   rTermine();
   _updateMerklisteStern(t);
-  showToast(t._merkliste ? '⭐ Auf Merkliste gesetzt' : '☆ Von Merkliste entfernt');
+  showToast(t._merkliste ? '★ Auf Merkliste gesetzt' : '☆ Von Merkliste entfernt');
 }
 
 function _updateMerklisteStern(t){
@@ -6941,8 +6958,8 @@ function _updateMerklisteStern(t){
   var span = btn.querySelector('span');
   if(!span) return;
   if(t && t._merkliste){
-    span.textContent = '⭐';
-    btn.style.color = '#f5c518';
+    span.textContent = '★';
+    btn.style.color = 'var(--warm)';
   } else {
     span.textContent = '☆';
     btn.style.color = '';
@@ -7159,7 +7176,7 @@ function abrechnungEditOpen(abId){
   ov.id='ab-edit-ov';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:flex-end';
   ov.innerHTML='<div style="background:#fff;border-radius:18px 18px 0 0;padding:20px 16px 44px;width:100%;box-sizing:border-box">'
-    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">✏️ Abrechnung bearbeiten</div>'
+    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">✎ Abrechnung bearbeiten</div>'
     +'<div style="font-size:11px;color:var(--ink3);margin-bottom:16px">Werte aus KI-Auslesung — hier manuell korrigierbar</div>'
     +'<div style="display:grid;gap:10px">'
     +fld('Brutto gesamt €','ae-brutto',ab.brutto||0)
@@ -7318,8 +7335,8 @@ function saveTermin(){
       );
     }
   }
-  if(!t.titel){showToast('⚠️ Bitte Titel eingeben');return;}
-  if(!t.datum){showToast('⚠️ Bitte Datum eingeben');return;}
+  if(!t.titel){showToast('⚠ Bitte Titel eingeben');return;}
+  if(!t.datum){showToast('⚠ Bitte Datum eingeben');return;}
   save(db);
   closeTerminSheet();
   rTermine();updateBadge();
@@ -7640,7 +7657,7 @@ function icalSyncFromWorker(){
   if(!url){ showToast('Keine iCal URL gesetzt – bitte in Profil eintragen'); return; }
   var btn=document.getElementById('ical-sync-btn');
   if(btn) btn.style.opacity='.4';
-  showToast('⏳ Kalender wird geholt…');
+  showToast('Kalender wird geholt…');
   fetch(url)
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
     .then(function(text){
@@ -7684,7 +7701,7 @@ function exportData(){
   a.click();
   try{localStorage.setItem('letztes_backup', new Date().toISOString());}catch(e){}
   var bb=document.getElementById('backup-banner'); if(bb) bb.remove();
-  showToast('📦 Export erstellt · db + dbv2 · API-Key nicht exportiert');
+  showToast('Export erstellt · db + dbv2 · API-Key nicht exportiert');
 }
 function importData(inp){
   var file=inp.files[0];
@@ -7841,7 +7858,7 @@ function holviShowPreview(matches, gesamt){
   var mitTermin = matches.filter(function(m){ return m.termin; });
   var ohneTermin = matches.filter(function(m){ return !m.termin; });
 
-  var html = '<div style="font-size:18px;font-weight:900;margin-bottom:4px">🏦 Kontoauszug-Import</div>'
+  var html = '<div style="font-size:18px;font-weight:900;margin-bottom:4px">Kontoauszug-Import</div>'
     +'<div style="font-size:12px;color:#888;margin-bottom:16px">'+matches.length+' Gage-Eingang'+(matches.length!==1?'e':'')+' erkannt · '+gesamt+' gesamt</div>';
 
   if(mitTermin.length){
@@ -7855,10 +7872,10 @@ function holviShowPreview(matches, gesamt){
         +'style="background:var(--green2);border:1.5px solid var(--accent2);border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(istMonats||m._gutschriftMatch?'':'cursor:pointer;touch-action:manipulation')+'">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
         +'<div style="font-size:13px;font-weight:800">'+fmtEur(m.zahlung.betrag)+'</div>'
-        +(m._konfidenz==='AUTO'?'<div style="background:var(--green2);color:var(--accent);font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚡ AUTO</div>':
+        +(m._konfidenz==='AUTO'?'<div style="background:var(--green2);color:var(--accent);font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">AUTO</div>':
           m._konfidenz==='WARN'?'<div style="background:var(--orange2);color:var(--orange);font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚠ Prüfen</div>':
-          m._konfidenz==='DOPPELT'?'<div style="background:var(--red2);color:var(--red);font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">🔴 Bereits bezahlt</div>':
-          m._konfidenz==='LOHN_GEHALT'?'<div style="background:var(--orange2);color:#8a6a3f;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">📝 Manuell</div>':
+          m._konfidenz==='DOPPELT'?'<div style="background:var(--red2);color:var(--red);font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">Bereits bezahlt</div>':
+          m._konfidenz==='LOHN_GEHALT'?'<div style="background:var(--orange2);color:#8a6a3f;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">Manuell</div>':
           m._konfidenz==='KEINE_ABRECHN'?'<div style="background:var(--red2);color:var(--red);font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px">⚠ Abrechnung fehlt</div>':'')
         +'<div style="font-size:11px;color:#888">'+m.zahlung.datum.split('-').reverse().join('.')+'</div>'
         +'</div>'
@@ -7919,7 +7936,7 @@ function holviShowPreview(matches, gesamt){
         var abweich = m.betragsAbweichung || 0;
 
         html += '<div style="background:var(--green2);border-radius:6px;padding:6px 8px;margin-bottom:4px">'
-          +'<div style="font-size:10px;font-weight:800;color:var(--accent);margin-bottom:4px">📋 MONATS-ABRECHNUNG · '+(m.termineAlle?m.termineAlle.length:0)+'/'+gesamt+' TERMINE GEFUNDEN</div>';
+          +'<div style="font-size:10px;font-weight:800;color:var(--accent);margin-bottom:4px">MONATS-ABRECHNUNG · '+(m.termineAlle?m.termineAlle.length:0)+'/'+gesamt+' TERMINE GEFUNDEN</div>';
         (m.termineAlle||[]).forEach(function(t){
           html += '<div style="font-size:11px;color:var(--accent);margin-bottom:2px">✓ '
             +esc(t.datum?t.datum.split('-').reverse().join('.'):'?')
@@ -8208,11 +8225,11 @@ function exportCSV(){
     return '<option value="'+j+'"'+(j==aktJahr?' selected':'')+'>'+j+'</option>';
   }).join('');
 
-  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">📊 Jahresübersicht exportieren</div>'
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">Jahresübersicht exportieren</div>'
     +'<div style="font-size:12px;color:#888;margin-bottom:14px">Einnahmen &amp; Ausgaben für deinen Steuerberater (EÜR)</div>'
     +'<div style="margin-bottom:14px"><label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:6px">Jahr</label>'
     +'<select id="csv-jahr-sel" style="width:100%;border:1.5px solid var(--hair);border-radius:8px;padding:10px;font-size:14px">'+jahrOpts+'</select></div>'
-    +'<button type="button" onclick="doExportCSV()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">⬇ CSV herunterladen</button>'
+    +'<button type="button" onclick="doExportCSV()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-bottom:8px">CSV herunterladen</button>'
     +'<button type="button" onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:var(--cream2);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">Abbrechen</button>';
   ov.appendChild(box);
   ov.onclick=function(e){if(e.target===ov)ov.remove();};
@@ -8576,7 +8593,7 @@ function diagnoseGutschriften(){
   var hdr = document.createElement('div');
   hdr.style.cssText = 'display:flex;gap:8px;margin-bottom:12px';
   var btnCopy = document.createElement('button');
-  btnCopy.textContent = '📋 Kopieren';
+  btnCopy.textContent = 'Kopieren';
   btnCopy.style.cssText = 'flex:1;background:var(--ai);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer';
   btnCopy.onclick = function(){
     navigator.clipboard.writeText(text).then(function(){ showToast('✓ In Zwischenablage'); });
@@ -8662,12 +8679,12 @@ function rDispos(){
   if(!grid)return;
   var docs=(db.dokumente||[]).filter(function(d){return d.typ==='dispo'||!d.typ;});
   if(!docs.length){
-    grid.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Keine Dispos</div><div class="empty-sub">Scanne oder lade eine Dispo hoch.</div></div>';
+    grid.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Keine Dispos</div><div class="empty-sub">Scanne oder lade eine Dispo hoch.</div></div>';
     return;
   }
   grid.innerHTML=docs.map(function(d){
     return '<div class="dispo-card" onclick="openLightbox(\''+d.id+'\')">'
-      +(d.thumb||d.data?'<img src="'+(d.thumb||d.data)+'" style="width:100%;height:120px;object-fit:cover;border-radius:8px 8px 0 0">':'<div style="height:80px;display:flex;align-items:center;justify-content:center;font-size:32px">📄</div>')
+      +(d.thumb||d.data?'<img src="'+(d.thumb||d.data)+'" style="width:100%;height:120px;object-fit:cover;border-radius:8px 8px 0 0">':'<div style="height:80px;display:flex;align-items:center;justify-content:center"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/></svg></div>')
       +'<div style="padding:8px;font-size:12px;font-weight:700;color:var(--ink)">'+esc(d.name||'Dispo')+'</div>'
       +'<div style="padding:0 8px 8px;font-size:11px;color:var(--ink4)">'+fd(d.datum)+'</div>'
       +'</div>';
@@ -8783,7 +8800,7 @@ function autoCreate(parsed){
 function scanOneFile(file){
   var k=getKey();
   if(!k){showToast('⚠ API-Key fehlt');openApiKeySheet();return;}
-  showToast('⏳ Analysiere…');
+  showToast('Analysiere…');
   f2b64(file).then(function(b64){
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
@@ -8812,7 +8829,7 @@ function scanOneFile(file){
 function ocrDispo(dataUrl,dispoId){
   var k=getKey();
   if(!k){showToast('⚠ API-Key fehlt');openApiKeySheet();return;}
-  showToast('⏳ Analysiere…');
+  showToast('Analysiere…');
   var b64=dataUrl.split(',')[1];
   var mediaType=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
   fetch('https://api.anthropic.com/v1/messages',{
@@ -8870,7 +8887,7 @@ function rGVL(){
 
   if(!keys.length){
     list.innerHTML='<div style="text-align:center;padding:32px 16px;color:#aaa;font-size:13px">'
-      +'<div style="font-size:32px;margin-bottom:8px">🎭</div>'
+      +'<div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>'
       +'Noch keine GVL-Daten für '+y+'.<br>'
       +'<span style="font-size:11px">Dispos analysieren und bestätigen → Staffel/Folge/Takes werden automatisch erkannt.</span>'
       +'</div>';
@@ -8907,19 +8924,19 @@ function rGVL(){
     return '<div style="background:'+cardBg+';border:1.5px solid '+cardBorder+';border-radius:14px;padding:14px;margin:0 16px 12px;opacity:'+(excluded?'0.75':'1')+'">'
       +(excluded
         ?'<div style="background:var(--red2);border:1px solid #e3c4c0;border-radius:7px;padding:5px 10px;margin-bottom:10px;display:flex;align-items:center;gap:6px">'
-          +'<span style="font-size:14px">❌</span>'
+          +'<span style="font-size:14px">✕</span>'
           +'<div><div style="font-size:11px;font-weight:800;color:var(--red)">Nicht GVL-pflichtig</div>'
           +'<div style="font-size:10px;color:var(--red)">'+(ptTypLabel||'Streaming/Kino/Pay TV')+' · keine Meldung erforderlich'+(p.produktion_platt?' · '+esc(p.produktion_platt):'')+'</div>'
           +'</div></div>'
         :'<div style="background:var(--green2);border:1px solid var(--accent2);border-radius:7px;padding:5px 10px;margin-bottom:10px;display:flex;align-items:center;gap:6px">'
-          +'<span style="font-size:14px">✅</span>'
+          +'<span style="font-size:14px">✓</span>'
           +'<div style="font-size:11px;font-weight:800;color:var(--accent)">GVL-pflichtig · bitte melden</div>'
           +'</div>')
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">'
       +'<div style="flex:1">'
       +'<div style="font-size:15px;font-weight:900;color:'+(excluded?'var(--ink2)':'#222')+'">'+esc(p.titel)+'</div>'
-      +(p.rolle?'<div style="font-size:12px;font-weight:700;color:'+(excluded?'var(--ink3)':'var(--purple)')+';margin-top:2px">🎭 '+esc(p.rolle)+'</div>':'')
-      +(p.studio?'<div style="font-size:11px;color:#888;margin-top:1px">🏢 '+esc(p.studio)+'</div>':'')
+      +(p.rolle?'<div style="font-size:12px;font-weight:700;color:'+(excluded?'var(--ink3)':'var(--purple)')+';margin-top:2px">'+esc(p.rolle)+'</div>':'')
+      +(p.studio?'<div style="font-size:11px;color:#888;margin-top:1px">'+esc(p.studio)+'</div>':'')
       +'</div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
       +'<div style="background:'+(excluded?'var(--cream2)':'var(--blue2)')+';border-radius:8px;padding:4px 8px;font-size:12px;font-weight:900;color:'+(excluded?'var(--ink3)':'var(--ai)')+'">'+p.takes_gesamt+' Takes</div>'
@@ -8938,7 +8955,7 @@ function rGVL(){
     +(keysExcl.length
       ?'<div style="margin:4px 16px 12px;display:flex;align-items:center;gap:8px">'
         +'<div style="flex:1;height:1px;background:var(--hair)"></div>'
-        +'<div style="font-size:10px;color:var(--ink3);font-weight:700;white-space:nowrap">❌ Nicht GVL-pflichtig ('+keysExcl.length+')</div>'
+        +'<div style="font-size:10px;color:var(--ink3);font-weight:700;white-space:nowrap">✕ Nicht GVL-pflichtig ('+keysExcl.length+')</div>'
         +'<div style="flex:1;height:1px;background:var(--hair)"></div>'
         +'</div>'
         +keysExcl.map(function(k){return renderGVLCard(k,true);}).join('')
@@ -9496,7 +9513,7 @@ function _processIcsEvents(events){
   syncCandidates=neu;
   injectSyncCandidates(neu);
   switchView('sync');
-  showToast('📅 '+neu.length+' neue Termine gefunden');
+  showToast(''+neu.length+' neue Termine gefunden');
 }
 
 // ── SYNC ──────────────────────────────────────────────────────
@@ -9520,7 +9537,7 @@ function initSyncView(){
   var unanalysed=(db.dokumente||[]).filter(function(d){return !d.typ;});
   if(res){
     if(unanalysed.length>0){
-      res.innerHTML=unanalysed.length+' nicht analysiert &nbsp;<span onclick="syncStartAnalyse()" style="background:var(--red);color:#fff;padding:3px 10px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px">Jetzt analysieren ►</span>';
+      res.innerHTML=unanalysed.length+' nicht analysiert &nbsp;<span onclick="syncStartAnalyse()" style="background:var(--red);color:#fff;padding:3px 10px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px">Jetzt analysieren ›</span>';
     } else {
       res.textContent='';
     }
@@ -9823,7 +9840,7 @@ function rStandardgagen(){
   if(!list)return;
   var gps=db.gagenprofile||[];
   if(!gps.length){
-    list.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-title">Keine Standardgagen</div><div class="empty-sub">Tippe + um ein Gagenprofil anzulegen.</div></div>';
+    list.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Keine Standardgagen</div><div class="empty-sub">Tippe + um ein Gagenprofil anzulegen.</div></div>';
     return;
   }
   list.innerHTML=gps.map(function(gp){
@@ -10044,7 +10061,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
 
   // Sozialabgaben-Kachel
   var svBlock = '<div class="info-card" style="margin-bottom:16px">'
-    + '<div class="info-card-header" style="gap:6px"><span>🛡️</span><span>SOZIALABGABEN '+yr+'</span></div>'
+    + '<div class="info-card-header" style="gap:6px"><span></span><span>SOZIALABGABEN '+yr+'</span></div>'
     + '<div style="padding:0 16px 14px">'
     + '<div class="info-row"><div class="ir-key">Krankenversicherung (KV)</div><div class="ir-val">'+fmtEur(kvGes)+'</div></div>'
     + '<div class="info-row"><div class="ir-key">Rentenversicherung (RV)</div><div class="ir-val">'+fmtEur(rvGes)+'</div></div>'
@@ -10057,7 +10074,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
 
   // Abrechnungs-Tabelle (mit Sammel-Termin-Auflösung)
   var table = '<div class="info-card" style="margin-bottom:16px">'
-    + '<div class="info-card-header" style="gap:6px"><span>📄</span><span>ABRECHNUNGEN '+yr+'</span></div>'
+    + '<div class="info-card-header" style="gap:6px"><span></span><span>ABRECHNUNGEN '+yr+'</span></div>'
     + '<div style="overflow-x:auto;padding:0 16px 14px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:820px">'
     + '<thead><tr style="color:var(--ink3);text-align:left">'
     + '<th style="padding:6px 4px;cursor:pointer" onclick="_jahresSortCol=\'datum\';_jahresSortDir*=-1;rJahresabschluss()">Gutschrift-Nr.</th>'
@@ -10088,11 +10105,11 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
     var konsIcon = '';
     // Build 847: offen-Marker — unbezahlte Belege zählen nicht zur EÜR-Summe
     if(!ab.zahlungs_datum){
-      konsIcon += ' <span title="Noch kein Zahlungseingang — zählt erst bei Zufluss zur EÜR" style="color:var(--ink3);font-size:10px;font-weight:700">⏳ offen</span>';
+      konsIcon += ' <span title="Noch kein Zahlungseingang — zählt erst bei Zufluss zur EÜR" style="color:var(--ink3);font-size:10px;font-weight:700">offen</span>';
     }
     if(kons){
       if(kons.status === 'fehler' && !ab._konsistenz_akzeptiert){
-        konsIcon = ' <span title="Konsistenz-Fehler — bitte prüfen" style="color:var(--red);cursor:help">⛔</span>';
+        konsIcon = ' <span title="Konsistenz-Fehler — bitte prüfen" style="color:var(--red);cursor:help">⚠</span>';
       } else if(kons.status === 'warnung' && !ab._konsistenz_akzeptiert){
         var probs = [];
         if(kons.checks){
@@ -10125,7 +10142,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       table += '<tr style="border-top:1px solid var(--cream2)">'
         + '<td style="padding:6px 4px;font-weight:700">'+esc(ab.beleg_nr||'—')+konsIcon
         +   (datumE?'<div style="font-size:10px;color:var(--ink2);font-weight:500;margin-top:1px">'+fd(datumE)+'</div>':'')
-        +   '<div style="font-size:10px;color:var(--ink3);font-weight:400;margin-top:1px">📄 '+esc(dokNameE)+'</div></td>'
+        +   '<div style="font-size:10px;color:var(--ink3);font-weight:400;margin-top:1px">'+esc(dokNameE)+'</div></td>'
         + '<td style="padding:6px 4px">'+esc(abrName)+'</td>'
         + '<td style="padding:6px 4px"><a href="#" onclick="event.preventDefault();openDetail(\''+(junctions[0]?junctions[0].termin_id:'')+'\')" style="color:var(--ai);text-decoration:underline">'+esc(tName)+'</a></td>'
         + '<td style="padding:6px 4px;text-align:right;font-weight:700">'+fmtEur(ab.brutto||0)+'</td>'
@@ -10145,7 +10162,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       table += '<tr style="border-top:1px solid var(--cream2);background:var(--card)">'
         + '<td style="padding:6px 4px;font-weight:700;vertical-align:top" rowspan="'+(junctions.length+1)+'">'+esc(ab.beleg_nr||'—')+konsIcon
         +   (datumS?'<div style="font-size:10px;color:var(--ink2);font-weight:500;margin-top:1px">'+fd(datumS)+'</div>':'')
-        +   '<div style="font-size:10px;color:var(--ink3);font-weight:400;margin-top:1px">📄 '+esc(dokName)+'</div></td>'
+        +   '<div style="font-size:10px;color:var(--ink3);font-weight:400;margin-top:1px">'+esc(dokName)+'</div></td>'
         + '<td style="padding:6px 4px">'+esc(abrName)+'</td>'
         + '<td colspan="9" style="padding:6px 4px;color:var(--ink3);font-style:italic;font-size:11px">'+junctions.length+' Termine</td>'
         + '</tr>';
@@ -10202,7 +10219,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
   }).sort(function(a,b){ return (a.datum||'')<(b.datum||'') ? -1 : 1; });
 
   var termineHtml = '<div class="info-card" style="margin-bottom:12px">'
-    +'<div class="info-card-header"><span>📅 Termine '+yr+'</span>'
+    +'<div class="info-card-header"><span>Termine '+yr+'</span>'
     +'<span style="font-size:11px;color:#888">'+abgerechnetAnz+'/'+jahrTermine.length+' abger.</span></div>'
     +'<div style="padding:0 16px 14px">';
   if(!jahrTermine.length){
@@ -10215,7 +10232,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
       // Build 866: bezahlt-Ampel aus dbv2-Anker (verknüpfter Beleg mit zahlungs_datum)
       // statt t.status — sonst blieb ein verankerter Termin gelb (z.B. Barsoi).
       var bezahltT  = _terminZahlStatus(t.id)==='bezahlt';
-      var ampel     = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
+      var ampel     = bezahltT ? '<span style="color:var(--accent)">●</span>' : hatAb ? '<span style="color:var(--orange)">●</span>' : '<span style="color:var(--red)">●</span>';
       // Betrag: bevorzugt v2-Junction-Brutto-Anteil, sonst Legacy
       var v2Lnks = (dbv2.abrechnung_termin_links||[]).filter(function(l){return l.termin_id===t.id;});
       var v2Betrag = 0;
@@ -10240,7 +10257,7 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
         +'<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||stName||'?')+'</div>'
         +'<div style="font-size:11px;color:#888">'+fd(t.datum)+(stName?' · '+esc(stName):'')+'</div>'
         +(gutNr?'<div style="font-size:10px;color:#aaa">GS: '+esc(gutNr)+'</div>':'')
-        +(abDateiname?'<div style="font-size:10px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(abDateiname)+'</div>':'')
+        +(abDateiname?'<div style="font-size:10px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(abDateiname)+'</div>':'')
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0">'
         +(betrag?'<div style="font-size:13px;font-weight:800">'+fmtEur(betrag)+'</div>':'<div style="font-size:11px;color:#ccc">kein Betrag</div>')
@@ -10436,7 +10453,7 @@ function rJahresabschluss(){
   // ── SOZIALABGABEN — nur aus db.abrechnungen ──────────────────
   if(svGes > 0){
     html += '<div class="info-card" style="margin-bottom:12px">'
-      +'<div class="info-card-header"><span>🛡 Sozialabgaben '+yr+'</span></div>'
+      +'<div class="info-card-header"><span>Sozialabgaben '+yr+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(kvGes?'<div class="info-row"><div class="ir-key">Krankenversicherung (KV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(kvGes)+'</div></div>':'')
       +(rvGes?'<div class="info-row"><div class="ir-key">Rentenversicherung (RV)</div><div class="ir-val" style="font-weight:700">'+fmtEur(rvGes)+'</div></div>':'')
@@ -10448,7 +10465,7 @@ function rJahresabschluss(){
     html += '<div style="background:var(--orange2);border:1px solid #e7dbc6;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:#8a6a3f">'
       +'<div style="font-weight:700;margin-bottom:6px">⚠ Keine Abrechnungsbeträge gefunden</div>'
       +'<div style="margin-bottom:8px">Bereits eingepflegte Termine können automatisch nachgetragen werden.</div>'
-      +'<button type="button" onclick="migrateAbrechungen()" style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📥 Abrechnungen nachtragen</button>'
+      +'<button type="button" onclick="migrateAbrechungen()" style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">Abrechnungen nachtragen</button>'
       +'</div>';
   }
 
@@ -10461,7 +10478,7 @@ function rJahresabschluss(){
     var colNumH  = colHead+'text-align:right;';
 
     html += '<div class="info-card" style="margin-bottom:12px;overflow-x:auto">'
-      +'<div class="info-card-header"><span>📄 Abrechnungen '+yr+'</span></div>'
+      +'<div class="info-card-header"><span>Abrechnungen '+yr+'</span></div>'
       +'<div style="padding:0 12px 14px;overflow-x:auto">'
       +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
       +'<thead><tr>'
@@ -10583,7 +10600,7 @@ function rJahresabschluss(){
           // Monats-GS: Kopfzeile mit GS-Nr.
           html += '<tr style="background:#f8f8f8">'
             +'<td style="'+colStyle+'font-weight:700;color:var(--ink)" rowspan="'+(sessions.length+1)+'">'+esc(gnr)
-            +(dateiname?'<div style="font-size:9px;color:#aaa;font-weight:400">📄 '+esc(dateiname)+'</div>':'')
+            +(dateiname?'<div style="font-size:9px;color:#aaa;font-weight:400">'+esc(dateiname)+'</div>':'')
             +'</td>'
             +'<td style="'+colStyle+'font-weight:600">'+esc(studio)+'</td>'
             +'<td style="'+colStyle+'color:#888;font-style:italic">'+fd(erstesAb.datum)+'</td>'
@@ -10614,7 +10631,7 @@ function rJahresabschluss(){
           var eMwstInfo = _mwstInfo(gBrutto, parseFloat(erstesAb.mwst)||0);
           html += '<tr style="border-bottom:1px solid var(--cream2)">'
             +'<td style="'+colStyle+'color:#555">'+esc(gnr)
-            +(dateiname?'<div style="font-size:9px;color:#aaa">📄 '+esc(dateiname)+'</div>':'')
+            +(dateiname?'<div style="font-size:9px;color:#aaa">'+esc(dateiname)+'</div>':'')
             +'</td>'
             +'<td style="'+colStyle+'">'+esc(studio)+'</td>'
             +((t&&t.id)?'<td style="'+colStyle+'font-weight:600;cursor:pointer;text-decoration:underline" onclick="switchView(\'termine\');setTimeout(function(){openDetail(\''+t.id+'\')},150)">'+esc(t.titel||erstesAb.produktion||'?')+'</td>':'<td style="'+colStyle+'font-weight:600">'+esc(erstesAb.produktion||'?')+'</td>')
@@ -10680,7 +10697,7 @@ function rJahresabschluss(){
 
   // ── TERMINLISTE ──────────────────────────────────────────────
   html += '<div class="info-card" style="margin-bottom:12px">'
-    +'<div class="info-card-header"><span>📅 Termine '+yr+'</span><span style="font-size:11px;color:#888">'+abgerechnet+'/'+total+' abger.</span></div>'
+    +'<div class="info-card-header"><span>Termine '+yr+'</span><span style="font-size:11px;color:#888">'+abgerechnet+'/'+total+' abger.</span></div>'
     +'<div style="padding:0 16px 14px">';
 
   if(!termine.length){
@@ -10689,7 +10706,7 @@ function rJahresabschluss(){
     termine.forEach(function(t){
       var hatAb = !!(t.abgerechnet||t.abId||t.gutschrift_nr||t.brutto_termin);
       var bezahltT = _terminZahlStatus(t.id)==='bezahlt';
-      var ampel = bezahltT ? '🟢' : hatAb ? '🟡' : '🔴';
+      var ampel = bezahltT ? '<span style="color:var(--accent)">●</span>' : hatAb ? '<span style="color:var(--orange)">●</span>' : '<span style="color:var(--red)">●</span>';
       // Betrag NUR aus db.abrechnungen — nie Dispo-Werte
       var abrechn = t.abId?(db.abrechnungen||[]).find(function(a){return a.id===t.abId;}):null;
       var betrag = (abrechn ? parseFloat(abrechn.brutto)||0 : 0) || parseFloat(t.brutto_termin)||0;
@@ -10702,7 +10719,7 @@ function rJahresabschluss(){
         +'<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.titel||t.studio||'?')+'</div>'
         +'<div style="font-size:11px;color:#888">'+fd(t.datum)+(t.studio?' · '+esc(t.studio):'')+'</div>'
         +(gutNr?'<div style="font-size:10px;color:#aaa">GS: '+esc(gutNr)+'</div>':'')
-        +(abDateiname?'<div style="font-size:10px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(abDateiname)+'</div>':'')
+        +(abDateiname?'<div style="font-size:10px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(abDateiname)+'</div>':'')
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0">'
         +(betrag?'<div style="font-size:13px;font-weight:800">'+fmtEur(betrag)+'</div>':'<div style="font-size:11px;color:#ccc">kein Betrag</div>')
@@ -11337,10 +11354,10 @@ function rUndoLog(){
   if(!el) return;
   var log = db.actionLog || [];
   if(!log.length){
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Keine Aktionen</div><div class="empty-sub">Letzte 20 Aktionen erscheinen hier</div></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-title">Keine Aktionen</div><div class="empty-sub">Letzte 20 Aktionen erscheinen hier</div></div>';
     return;
   }
-  var icons = {holvi_import:'🏦', dok_bestaetigt:'📄', termin_bezahlt:'💶', multi_link:'🔗', dok_verknuepft:'📎'};
+  var icons = {};
   el.innerHTML = log.map(function(a){
     // Detail-Info aus undoData ermitteln
     var detail='';
@@ -11360,7 +11377,7 @@ function rUndoLog(){
     }
     return '<div style="background:#fff;border:1.5px solid var(--hair);border-radius:14px;padding:14px 16px;margin-bottom:10px">'
       +'<div style="display:flex;align-items:flex-start;gap:10px">'
-      +'<div style="font-size:22px;flex-shrink:0;margin-top:2px">'+(icons[a.typ]||'📝')+'</div>'
+      +'<div style="font-size:22px;flex-shrink:0;margin-top:2px">'+(icons[a.typ]||'·')+'</div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:13px;font-weight:700;line-height:1.4">'+esc(a.beschr)+'</div>'
       +(detail?'<div style="font-size:11px;color:var(--ink2);margin-top:3px">'+esc(detail)+'</div>':'')
@@ -11425,7 +11442,7 @@ function rVerdienst(){
       +'<div style="padding:20px 20px 18px">'
       +'<div style="font-family:var(--serif);font-size:30px;font-weight:500;text-align:center;margin-bottom:18px;letter-spacing:.01em">'+fmtEur(g.net)+'</div>'
       +'<div style="display:flex;justify-content:space-between">'
-      +'<div><div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#888;margin-bottom:3px">offen <span style="color:var(--red);font-size:14px">⏱</span></div>'
+      +'<div><div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#888;margin-bottom:3px">offen <span style="color:var(--red);font-size:12px;font-weight:600">⚠</span></div>'
       +'<div style="font-size:15px;font-weight:600;color:var(--red)">'+fmtEur(g.offen)+'</div></div>'
       +'<div style="text-align:right"><div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;font-size:12px;color:#888;margin-bottom:3px"><span style="color:var(--accent);font-size:14px">✓</span> bezahlt</div>'
       +'<div style="font-size:15px;font-weight:600;color:var(--accent)">'+fmtEur(g.bezahlt)+'</div></div>'
@@ -11527,14 +11544,14 @@ function rZahlungsStatistik(jahr){
   if(!studios.length) return '';
 
   function bewertung(tage){
-    if(tage <= 14) return {emoji:'🟢', label:'Schnellzahler'};
-    if(tage <= 30) return {emoji:'🟡', label:'Normal'};
-    if(tage <= 60) return {emoji:'🟠', label:'Langsam'};
-    return {emoji:'🔴', label:'Problematisch'};
+    if(tage <= 14) return {emoji:'<span style="color:var(--accent)">●</span>', label:'Schnellzahler'};
+    if(tage <= 30) return {emoji:'<span style="color:var(--orange)">●</span>', label:'Normal'};
+    if(tage <= 60) return {emoji:'<span style="color:var(--orange)">●</span>', label:'Langsam'};
+    return {emoji:'<span style="color:var(--red)">●</span>', label:'Problematisch'};
   }
 
   var html = '<div style="margin:16px 16px 0">'
-    +'<div style="font-size:13px;font-weight:800;color:#3c4356;margin-bottom:10px">⏱ Zahlungsdauer nach Studio</div>';
+    +'<div style="font-size:13px;font-weight:800;color:#3c4356;margin-bottom:10px">Zahlungsdauer nach Studio</div>';
 
   studios.forEach(function(s){
     var b = bewertung(s.avg);
@@ -11563,11 +11580,18 @@ function rZahlungsStatistik(jahr){
 var _dokTab = 'alle';
 var _dokCurrentId = null;
 
+function _dokSvg(kind,color){
+  var p = kind==='dispo' ? '<rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>'
+        : kind==='abrechn' ? '<circle cx="12" cy="12" r="8.5"/><path d="M9 10h6M9 14h6M12 6.5v11"/>'
+        : kind==='ausgabe' ? '<path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/><path d="M9 8h6M9 12h6"/>'
+        : '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/>';
+  return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+}
 var DOK_TYPES = {
-  dispo:   { label:'Dispo',        icon:'📋', color:'var(--ai)', bg:'var(--blue2)', border:'#d5dae6' },
-  abrechn: { label:'Abrechnung',   icon:'💶', color:'var(--orange)', bg:'var(--orange2)', border:'#e7dbc6' },
-  ausgabe: { label:'Ausgabe',      icon:'🧾', color:'var(--accent)', bg:'var(--green2)', border:'var(--accent2)' },
-  sonstig: { label:'Sonstiges',    icon:'📄', color:'#555',    bg:'var(--cream2)', border:'#ddd'    }
+  dispo:   { label:'Dispo',      kind:'dispo',   color:'var(--ai)',     bg:'var(--blue2)',   border:'#d5dae6' },
+  abrechn: { label:'Abrechnung', kind:'abrechn', color:'#8a6a3f',       bg:'var(--orange2)', border:'#e7dbc6' },
+  ausgabe: { label:'Ausgabe',    kind:'ausgabe', color:'var(--accent)', bg:'var(--green2)',  border:'var(--accent2)' },
+  sonstig: { label:'Sonstiges',  kind:'sonstig', color:'var(--ink2)',   bg:'var(--cream2)',  border:'var(--hair)' }
 };
 
 function showKurzbefehlInfo(){
@@ -11909,11 +11933,11 @@ function rSyncDokList(){
     return;
   }
   var DOK_ICONS={dispo:'&#x1F4CB;',abrechn:'&#x1F4B6;',ausgabe:'&#x1F9FE;',sonstig:'&#x1F4C4;'};
-  var html='<div style="background:#fff;border:1.5px solid #fce7f3;border-radius:12px;overflow:hidden">';
+  var html='<div style="background:#fff;border:1.5px solid var(--hair);border-radius:12px;overflow:hidden">';
   show.forEach(function(d,i){
     var icon = DOK_ICONS[d.typ||'sonstig']||'&#x1F4C4;';
     var analysed = d.typ && d.typ!=='offen';
-    html+='<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:9px 12px;cursor:pointer;'+(i>0?'border-top:1px solid #fce7f3':'')+'">'
+    html+='<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:9px 12px;cursor:pointer;'+(i>0?'border-top:1px solid var(--hair)':'')+'">'
       +(d.dataURL&&d.mime!=='application/pdf'
         ?'<div style="width:36px;height:36px;border-radius:6px;overflow:hidden;flex-shrink:0;margin-right:10px"><img src="'+d.dataURL+'" style="width:100%;height:100%;object-fit:cover"></div>'
         :'<div style="width:36px;height:36px;border-radius:6px;flex-shrink:0;margin-right:10px;background:#fdf2ff;display:flex;align-items:center;justify-content:center;font-size:18px">'+icon+'</div>'
@@ -11938,9 +11962,9 @@ function dokSetTab(tab){
     var el = document.getElementById('dok-tab-'+t);
     if(!el) return;
     var active = t===tab;
-    el.style.color = active ? 'var(--red)' : '#999';
-    el.style.fontWeight = active ? '700' : '600';
-    el.style.borderBottom = active ? '2px solid var(--red)' : 'none';
+    el.style.color = active ? 'var(--ink)' : 'var(--ink3)';
+    el.style.fontWeight = active ? '600' : '500';
+    el.style.borderBottom = active ? '2px solid var(--accent)' : 'none';
   });
   rDokumente();
 }
@@ -11959,7 +11983,7 @@ function rDokumente(){
   var nStubs = db.dokumente.filter(function(d){ return d._stubAfterDeleteAll; }).length;
   var sichtbar = db.dokumente.filter(function(d){ return window._dokZeigeArchiv ? true : !d._stubAfterDeleteAll; });
   var _archivToggleHtml = nStubs>0
-    ? '<div onclick="window._dokZeigeArchiv=!window._dokZeigeArchiv;rDokumente()" style="text-align:center;padding:10px;margin-bottom:10px;background:'+(window._dokZeigeArchiv?'#eef2ff':'var(--card)')+';border:1.5px solid var(--hair);border-radius:10px;font-size:12px;font-weight:700;color:#4338ca;cursor:pointer;touch-action:manipulation">'+(window._dokZeigeArchiv?'📂 Archiv ausblenden':'📦 '+nStubs+' archivierte Belege anzeigen (zum Korrigieren)')+'</div>'
+    ? '<div onclick="window._dokZeigeArchiv=!window._dokZeigeArchiv;rDokumente()" style="text-align:center;padding:10px;margin-bottom:10px;background:'+(window._dokZeigeArchiv?'var(--blue2)':'var(--card)')+';border:1px solid var(--hair);border-radius:10px;font-size:12px;font-weight:600;color:var(--ai);cursor:pointer;touch-action:manipulation">'+(window._dokZeigeArchiv?'Archiv ausblenden':nStubs+' archivierte Belege anzeigen (zum Korrigieren)')+'</div>'
     : '';
 
   // Badge: unanalysed count (Stubs zählen nicht mit)
@@ -11990,7 +12014,7 @@ function rDokumente(){
 
   if(!docs.length){
     el.innerHTML = _archivToggleHtml + '<div style="text-align:center;padding:48px 20px;color:#999">'
-      +'<div style="font-size:48px;margin-bottom:10px">📂</div>'
+      +'<div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>'
       +'<div style="font-weight:700;font-size:15px;margin-bottom:6px">Keine Dokumente</div>'
       +'<div style="font-size:13px">Füge Dispos, Abrechnungen und Belege hier hinzu.<br>Die KI ordnet sie automatisch zu.</div>'
       +'</div>';
@@ -12001,7 +12025,7 @@ function rDokumente(){
   docs.forEach(function(d){
     var t = DOK_TYPES[d.typ||'sonstig'] || DOK_TYPES.sonstig;
     var linked = d.terminId ? '✓ Termin' : (d.ausgabeId ? '✓ Ausgabe' : '');
-    if(d._stubAfterDeleteAll) linked = (linked?linked+' · ':'')+'📦 archiviert';
+    if(d._stubAfterDeleteAll) linked = (linked?linked+' · ':'')+'archiviert';
     var linkedColor = (d.terminId||d.ausgabeId) ? 'var(--accent)' : '';
     // Build 756: SH-Korrektur-Überholt-Badge
     var ueberholtBadge = '';
@@ -12013,20 +12037,20 @@ function rDokumente(){
         ueberholtBadge = '<span style="font-size:10px;font-weight:700;color:#8a6a3f;background:var(--orange2);border:1px solid var(--orange);padding:2px 6px;border-radius:6px">⚠ überholt</span>';
       }
     } catch(e){ /* silent */ }
-    html += '<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #fce7f3;cursor:pointer;background:#fff'+(_isUeberholt ? ';opacity:.7' : '')+'">'
+    html += '<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair);cursor:pointer;background:var(--card)'+(_isUeberholt ? ';opacity:.7' : '')+'">'
       // Thumbnail
       +(d.dataURL && d.mime!=='application/pdf'
-        ? '<div style="width:50px;height:50px;border-radius:8px;overflow:hidden;flex-shrink:0;margin-right:12px;border:1px solid #eee"><img src="'+d.dataURL+'" style="width:100%;height:100%;object-fit:cover"></div>'
-        : '<div style="width:50px;height:50px;border-radius:8px;flex-shrink:0;margin-right:12px;background:'+t.bg+';border:1.5px solid '+t.border+';display:flex;align-items:center;justify-content:center;font-size:22px">'+t.icon+'</div>'
+        ? '<div style="width:50px;height:50px;border-radius:8px;overflow:hidden;flex-shrink:0;margin-right:12px;border:1px solid var(--hair)"><img src="'+d.dataURL+'" style="width:100%;height:100%;object-fit:cover"></div>'
+        : '<div style="width:50px;height:50px;border-radius:8px;flex-shrink:0;margin-right:12px;background:'+t.bg+';border:1.5px solid '+t.border+';display:flex;align-items:center;justify-content:center">'+_dokSvg(t.kind,t.color)+'</div>'
       )
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap">'
       +'<span style="font-size:10px;font-weight:700;color:'+t.color+';background:'+t.bg+';border:1px solid '+t.border+';padding:2px 6px;border-radius:6px">'+t.label+'</span>'
       +ueberholtBadge
-      +(linked?'<span style="font-size:10px;font-weight:700;color:'+linkedColor+'">'+linked+'</span>':'<span style="font-size:10px;color:var(--orange);font-weight:600">nicht zugeordnet</span>')
+      +(linked?'<span style="font-size:10px;font-weight:700;color:'+linkedColor+'">'+linked+'</span>':'<span style="font-size:10px;color:var(--ink3);font-weight:500">nicht zugeordnet</span>')
       +'</div>'
       +'<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(d.beschr||d.dateiname||'Dokument')+'</div>'
-      +'<div style="font-size:11px;color:#999">'+(d.datum?fd(d.datum):'kein Datum')+(d.studio?' · '+esc(d.studio):'')+'</div>'
+      +'<div style="font-size:11px;color:var(--ink3)">'+(d.datum?fd(d.datum):'kein Datum')+(d.studio?' · '+esc(d.studio):'')+'</div>'
       +'</div>'
       +'<div style="font-size:18px;color:#ddd;flex-shrink:0">›</div>'
       +'</div>';
@@ -12158,7 +12182,7 @@ function dokGotFilesFolder(inp){
     _dokQueueKatFn = kategorieAusOrdner;
     _dokQueue.sort(function(a,b){ return typOrder(a)-typOrder(b); });
     neu = neu.slice(0, MAX_BATCH);
-    showToast('📦 '+_dokQueue.length+' weitere in Warteschlange');
+    showToast(_dokQueue.length+' weitere in Warteschlange');
   } else {
     _dokQueue = [];
     _dokQueueKatFn = null;
@@ -12236,13 +12260,13 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
 
   var html='<div style="width:40px;height:4px;background:var(--hair);border-radius:2px;margin:0 auto 16px"></div>';
-  html+='<div style="font-size:17px;font-weight:900;margin-bottom:4px">☁️ '+files.length+' neue Dateien gefunden</div>';
+  html+='<div style="font-size:17px;font-weight:900;margin-bottom:4px">'+files.length+' neue Dateien gefunden</div>';
   if(skipped) html+='<div style="font-size:12px;color:#999;margin-bottom:12px">'+skipped+' bereits vorhanden, werden übersprungen</div>';
   html+='<div style="display:flex;gap:8px;margin-bottom:16px">';
-  if(stats.dispo)   html+='<div style="background:var(--purple2);color:var(--purple);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">📋 '+stats.dispo+' Dispo'+(stats.dispo>1?'s':'')+'</div>';
-  if(stats.abrechn) html+='<div style="background:var(--green2);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">💶 '+stats.abrechn+' Abrechnung'+(stats.abrechn>1?'en':'')+'</div>';
-  if(stats.ausgabe) html+='<div style="background:var(--yellow2);color:#8a6a3f;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">🧾 '+stats.ausgabe+' Ausgabe'+(stats.ausgabe>1?'n':'')+'</div>';
-  if(stats.sonstig) html+='<div style="background:var(--cream2);color:#666;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">📄 '+stats.sonstig+' Sonstige</div>';
+  if(stats.dispo)   html+='<div style="background:var(--purple2);color:var(--purple);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">'+stats.dispo+' Dispo'+(stats.dispo>1?'s':'')+'</div>';
+  if(stats.abrechn) html+='<div style="background:var(--green2);color:var(--accent);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">'+stats.abrechn+' Abrechnung'+(stats.abrechn>1?'en':'')+'</div>';
+  if(stats.ausgabe) html+='<div style="background:var(--yellow2);color:#8a6a3f;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">'+stats.ausgabe+' Ausgabe'+(stats.ausgabe>1?'n':'')+'</div>';
+  if(stats.sonstig) html+='<div style="background:var(--cream2);color:#666;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700">'+stats.sonstig+' Sonstige</div>';
   html+='</div>';
   // Kontrollrechnung-Tabelle
   if(ordnerRows.length){
@@ -12387,15 +12411,15 @@ function _dokQueueBannerShow(){
   if(!_dokQueue.length) return;
   var banner = document.createElement('div');
   banner.id = 'dok-queue-banner';
-  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:45;background:var(--ai);color:#fff;font-size:12px;font-weight:700;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:45;background:var(--blue2);color:#3c4356;font-size:12px;font-weight:600;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #d5dae6;backdrop-filter:blur(8px)';
   var MAX_BATCH = 10;
   var next = Math.min(_dokQueue.length, MAX_BATCH);
   banner.innerHTML = '<div style="flex:1;min-width:0">'
-    + '<div style="font-size:11px;opacity:.8;margin-bottom:1px">📦 Warteschlange</div>'
-    + '<div style="font-size:12px;font-weight:800">Noch <b>'+_dokQueue.length+'</b> Dokumente warten</div>'
+    + '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ai);font-weight:600;margin-bottom:1px">Warteschlange</div>'
+    + '<div style="font-size:12px;font-weight:600">Noch <b>'+_dokQueue.length+'</b> Dokumente warten</div>'
     + '</div>'
-    + '<button type="button" id="dok-queue-next-btn" style="background:#fff;color:var(--ai);border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation;white-space:nowrap">Nächste '+next+' laden →</button>'
-    + '<button type="button" onclick="dokQueueClear()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>';
+    + '<button type="button" id="dok-queue-next-btn" style="background:var(--ink);color:var(--paper);border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;touch-action:manipulation;white-space:nowrap">Nächste '+next+' laden →</button>'
+    + '<button type="button" onclick="dokQueueClear()" style="background:transparent;border:none;color:var(--ink3);font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>';
   document.body.appendChild(banner);
   document.getElementById('dok-queue-next-btn').onclick = function(){
     var batch = _dokQueue.splice(0, MAX_BATCH);
@@ -12441,19 +12465,19 @@ function dokRefreshAll(){
   var pending = (db.dokumente||[]).filter(function(d){return !d.typ||d.typ==='offen';});
   if(!pending.length){ showToast('Keine neuen Dokumente'); return; }
   var btn = document.getElementById('dok-refresh-btn');
-  if(btn){ btn.textContent='⏳ '+pending.length+' analysiere…'; btn.style.opacity='.6'; }
+  if(btn){ btn.textContent=''+pending.length+' analysiere…'; btn.style.opacity='.6'; }
   var done=0;
   function analyseNext(i){
     if(i>=pending.length){
       save(db); rDokumente();
-      if(btn){ btn.textContent='🔄 Analyse'; btn.style.opacity='1'; }
+      if(btn){ btn.textContent='Erneut analysieren'; btn.style.opacity='1'; }
       rSyncDokList();
       showToast('✓ '+pending.length+' Dokumente analysiert');
       return;
     }
     dokAnalyseDoc(pending[i], key, function(){
       done++;
-      if(btn) btn.textContent='⏳ '+(pending.length-done)+' verbleibend…';
+      if(btn) btn.textContent=''+(pending.length-done)+' verbleibend…';
       analyseNext(i+1);
     });
   }
@@ -12578,7 +12602,7 @@ function dokAblehnen(){
   var key=db.profil&&db.profil.apiKey?db.profil.apiKey:null;
   if(!key){showToast('Kein API-Key – bitte im Profil setzen');return;}
   d.typ=null; d.bestaetigt=false;
-  showToast('⏳ Neu analysieren…');
+  showToast('Neu analysieren…');
   dokAnalyseDoc(d,key,function(){
     save(db); rDokumente(); dokOpenDetail(d.id);
     showToast('✓ Neu analysiert: '+d.typ);
@@ -12648,9 +12672,9 @@ function dokDeleteAll(){
   rest.forEach(function(d){ _dateinameFreigeben(d.dateiname); });
   save(db);
   rDokumente();
-  if(nStub && nDel) showToast('🗑 '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
+  if(nStub && nDel) showToast('✕ '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
   else if(nStub)    showToast('✓ '+nStub+' Abr.-PDFs aufgeräumt');
-  else              showToast('🗑 '+nDel+' Dokumente gelöscht');
+  else              showToast('✕ '+nDel+' Dokumente gelöscht');
 }
 
 
@@ -12694,7 +12718,7 @@ function dokAnalyseDoc(d, key, cb){
 
   var prompt='Du analysierst ein Dokument von Synchronsprecher '+_uname.toUpperCase()+'.\n'
     +'\n'
-    +'⛔ BUCHHALTUNGSREGEL — ABSOLUT VERBINDLICH:\n'
+    +'⚠ BUCHHALTUNGSREGEL — ABSOLUT VERBINDLICH:\n'
     +'  ERFINDE NIEMALS Werte. Jede Zahl im JSON MUSS direkt und wörtlich aus dem Dokument lesbar sein.\n'
     +'  Wenn ein Wert nicht eindeutig im Dokument steht: null setzen, NICHT rechnen, NICHT schätzen, NICHT ableiten.\n'
     +'  Rechenoperationen sind NUR als VERIFIKATION erlaubt (prüfen ob takes×take_gage=brutto), nie zur Wert-Ermittlung.\n'
@@ -13291,7 +13315,7 @@ function dokAnalyseDoc(d, key, cb){
         return Promise.all(textExtracts).then(function(results){
           var relevantPages = results.filter(function(r){ return r.relevant; });
           var skipped = results.length - relevantPages.length;
-          if(skipped > 0) showToast('⏭ '+skipped+' Nullseiten übersprungen · '+relevantPages.length+' relevante Seiten');
+          if(skipped > 0) showToast(''+skipped+' Nullseiten übersprungen · '+relevantPages.length+' relevante Seiten');
           if(!relevantPages.length){
             // Alle hatten 0,00 — unwahrscheinlich, aber als Fallback alle senden
             relevantPages = results;
@@ -13341,7 +13365,7 @@ function dokAnalyseDoc(d, key, cb){
     if(_kb > 3000){
       showToast('⚠ Großes PDF ('+_mb+'MB) — Analyse kann 2–3 Min dauern…');
     } else {
-      showToast('⏳ Analysiere ('+_kb+'KB)…');
+      showToast('Analysiere ('+_kb+'KB)…');
     }
     
     // XHR statt fetch — stabiler in iOS Safari für große Bodies
@@ -13694,7 +13718,7 @@ function dokAnalyseDoc(d, key, cb){
       // awaitConfirm: Foto noch zeigen, Felder prüfen lassen
       d.awaitConfirm = true;
       // Debug-Info bei mehreren Sessions
-      if(d.sessions && d.sessions.length > 1) showToast('🔍 '+d.sessions.length+' Sessions erkannt (' + (d.typ||'?') + ')');
+      if(d.sessions && d.sessions.length > 1) showToast(''+d.sessions.length+' Sessions erkannt (' + (d.typ||'?') + ')');
       // Auto-link to termin if dispo or abrechn — alle Felder übergeben für bestes Matching
       if((d.typ==='dispo'||d.typ==='abrechn') && d.datum){
         // abrechn: nur exaktes Datum — Abrechnungen dürfen nie ±1 Tag matchen
@@ -13781,7 +13805,7 @@ function dokAnalyseDoc(d, key, cb){
           showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
         }
         var _kb = Math.round(bodyStr.length/1024);
-        showToast('⏳ Sende '+pageDataURLs.length+' Seiten ('+_kb+'KB)…');
+        showToast('Sende '+pageDataURLs.length+' Seiten ('+_kb+'KB)…');
         var xhr2 = new XMLHttpRequest();
         xhr2.open('POST','https://api.anthropic.com/v1/messages');
         xhr2.setRequestHeader('Content-Type','application/json');
@@ -13914,7 +13938,7 @@ function dokAnalyseDoc(d, key, cb){
   } else {
     // 1000px für gute OCR-Qualität — localStorage-Problem war separat gelöst
     resizeImageB64(d.dataURL, 1200, 0.82, function(resized){
-      showToast('⏳ Sende '+Math.round(resized.length*0.75/1024)+'KB…');
+      showToast('Sende '+Math.round(resized.length*0.75/1024)+'KB…');
       _sendToAPI(resized);
     });
   }
@@ -13931,7 +13955,7 @@ function _askPdfPassword(d, key, cb){
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
   var box = document.createElement('div');
   box.style.cssText = 'background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
-  box.innerHTML = '<div style="font-size:17px;font-weight:900;margin-bottom:6px">🔒 PDF ist passwortgeschützt</div>'
+  box.innerHTML = '<div style="font-size:17px;font-weight:900;margin-bottom:6px">PDF ist passwortgeschützt</div>'
     + '<div style="font-size:13px;color:#555;margin-bottom:14px">Bitte Passwort eingeben um <b>'+esc(d.dateiname||'dieses Dokument')+'</b> zu analysieren.</div>'
     + '<input id="pdf-pw-ask-input" type="password" placeholder="Passwort" autocomplete="off" '
     + 'style="width:100%;padding:12px;border:1.5px solid var(--ink5);border-radius:10px;font-size:15px;box-sizing:border-box;margin-bottom:8px">'
@@ -14014,7 +14038,7 @@ function terminGageRecherche(terminId){
 
   var btn=document.getElementById('gage-recherche-btn');
   var res=document.getElementById('gage-recherche-result');
-  if(btn){ btn.textContent='⏳ Suche…'; btn.style.opacity='.6'; btn.disabled=true; }
+  if(btn){ btn.textContent='Suche…'; btn.style.opacity='.6'; btn.disabled=true; }
 
   var prompt='Produktionstitel: "'+titel+'"\nSynchronstudio: "'+(t.studio||'unbekannt')+'"\n\n'
     +'Achtung: Das Synchronstudio (z.B. Arena, VSI, RC Production, Interopa) ist NICHT der Sender oder Streamingdienst!\n'
@@ -14027,11 +14051,11 @@ function terminGageRecherche(terminId){
     body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:200,
       messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
-    if(btn){ btn.textContent='🔍 TV / Streaming recherchieren'; btn.style.opacity='1'; btn.disabled=false; }
+    if(btn){ btn.textContent='TV / Streaming recherchieren'; btn.style.opacity='1'; btn.disabled=false; }
     if(data.error){
       var errType=data.error.type||'';
-      var msg=errType==='rate_limit_error'?'⏱ API-Limit erreicht – kurz warten und nochmal versuchen'
-             :errType==='authentication_error'?'🔑 API-Key ungültig'
+      var msg=errType==='rate_limit_error'?'API-Limit erreicht – kurz warten und nochmal versuchen'
+             :errType==='authentication_error'?'API-Key ungültig'
              :data.error.message||'API Fehler';
       showToast(msg);
       if(res){ res.style.display='block'; res.innerHTML='<div style="color:var(--orange);font-size:12px">'+msg+'</div>'; }
@@ -14052,7 +14076,7 @@ function terminGageRecherche(terminId){
         res.style.display='block';
         res.innerHTML='<div style="background:'+bg+';border:1.5px solid '+farbe+'44;border-radius:10px;padding:10px 12px">'
           +'<div style="font-size:11px;font-weight:800;color:'+farbe+';margin-bottom:3px">'
-          +(typ==='streaming'?'📺 Streaming':typ==='freetv'?'📡 Free TV':typ==='kino'?'🎬 Kino':'❓ Unbekannt')
+          +(typ==='streaming'?'Streaming':typ==='freetv'?'Free TV':typ==='kino'?'Kino':'Unbekannt')
           +(platt?' · '+platt:'')
           +' <span style="font-weight:400;color:#888">('+wahrsch+'% sicher)</span></div>'
           +(notiz?'<div style="font-size:11px;color:#666;margin-bottom:8px">'+notiz+'</div>':'')
@@ -14064,7 +14088,7 @@ function terminGageRecherche(terminId){
       if(res){ res.style.display='block'; res.innerHTML='<div style="color:var(--orange);font-size:12px">Konnte Ergebnis nicht auswerten</div>'; }
     }
   }).catch(function(err){
-    if(btn){ btn.textContent='🔍 TV / Streaming recherchieren'; btn.style.opacity='1'; btn.disabled=false; }
+    if(btn){ btn.textContent='TV / Streaming recherchieren'; btn.style.opacity='1'; btn.disabled=false; }
     showToast('Fehler: '+err.message);
   });
 }
@@ -14485,7 +14509,7 @@ function dokOpenDetail(id){
     if(d.mime==='application/pdf' && d.dataURL){
       body+='<div style="margin-bottom:12px">';
       body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">PDF-Dokument</div>';
-      var pdfBtn1='<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📄 PDF öffnen / ansehen</button>';
+      var pdfBtn1='<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">PDF öffnen / ansehen</button>';
       body+=pdfBtn1;
       body+='</div>';
     } else if(d.thumb){
@@ -14495,10 +14519,10 @@ function dokOpenDetail(id){
       body+='</div>';
     }
     if(d.dataURL){
-      body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔍 KI-Analyse starten</button>';
+      body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">KI-Analyse starten</button>';
     } else {
       body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#8a6a3f">⚠ Bild nicht im Speicher — App neu gestartet. Bitte neu einlesen.</div>';
-      body+='<label style="width:100%;display:block"><input type="file" accept="image/*,application/pdf" style="display:none" onchange="dokReuploadFile(this,\''+d.id+'\')"><div style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation;box-sizing:border-box">📁 Datei neu einlesen</div></label>';
+      body+='<label style="width:100%;display:block"><input type="file" accept="image/*,application/pdf" style="display:none" onchange="dokReuploadFile(this,\''+d.id+'\')"><div style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation;box-sizing:border-box">Datei neu einlesen</div></label>';
     }
 
 
@@ -14511,7 +14535,7 @@ function dokOpenDetail(id){
       previewDiv+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Vorschau zum Abgleichen</div>';
       previewDiv+='<div id="dok-preview-'+d.id+'" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--hair);background:#111;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\''+d.id+'\')">'
       previewDiv+='<img src="'+d.dataURL+'" style="width:100%;max-height:380px;object-fit:contain;display:block;pointer-events:none">';
-      previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">🔍 Tippen = Vollbild</div>';
+      previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">Tippen = Vollbild</div>';
       previewDiv+='</div></div>';
       body+=previewDiv;
     } else if(!d.dataURL && d.mime!=='application/pdf'){
@@ -14546,18 +14570,18 @@ function dokOpenDetail(id){
         body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">'+_pageLabel+'</div>';
         body+='<div id="pdf-wrap-'+d.id+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--hair);background:#e8e8e8;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\'__pdf__'+d.id+'\')">';
         body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block;transform-origin:center center"></canvas>';
-        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">🔍 Vollbild</div>';
+        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">Vollbild</div>';
         body+='</div>';
         body+='</div>';
       } else {
-        body+='<div style="background:var(--cream2);border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">📄 '+esc(d.dateiname||'PDF-Dokument')+'</div>';
+        body+='<div style="background:var(--cream2);border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">'+esc(d.dateiname||'PDF-Dokument')+'</div>';
       }
     }
     // Analyse-Button: beim ersten Mal "KI Analyse", danach "Nochmal analysieren"
     // Erkennung: hat das Dok schon erkannte Felder (titel/regie/studio/beschreibung/datum)?
     var _schonAnalysiert = !!(d.titel || d.regie || d.studio || d.beschreibung || d.datum
                               || (d.posten && d.posten.length) || (d.sessions && d.sessions.length));
-    var _analyseBtnLabel = _schonAnalysiert ? '🔄 Nochmal analysieren' : '✨ KI Analyse';
+    var _analyseBtnLabel = _schonAnalysiert ? 'Nochmal analysieren' : 'KI-Analyse';
     body+='<div style="margin-bottom:12px">';
     body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">'+_analyseBtnLabel+'</button>';
     body+='</div>';
@@ -14590,7 +14614,7 @@ function dokOpenDetail(id){
           var _bannerBg = _isUeberholt ? 'var(--orange2)' : 'var(--blue2)';
           var _bannerBorder = _isUeberholt ? 'var(--orange)' : '#60a5fa';
           var _bannerColor = _isUeberholt ? '#8a6a3f' : 'var(--ai)';
-          var _bannerIcon = _isUeberholt ? '⚠️' : 'ℹ️';
+          var _bannerIcon = _isUeberholt ? '⚠' : 'ℹ';
           var _bannerTitle = _isUeberholt
             ? 'Diese Korrektur wurde durch einen neueren Beleg ersetzt'
             : (_isJuengster ? 'Dies ist die aktuelle Korrektur-Version' : 'Korrektur-Kette für '+_ketteId);
@@ -14603,7 +14627,7 @@ function dokOpenDetail(id){
           // Liste aller Belege in der Kette
           body += '<div style="background:rgba(255,255,255,.5);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10px">';
           _kette.forEach(function(k,i){
-            var marker = k.id===_v2.id ? '👉 ' : '';
+            var marker = k.id===_v2.id ? '› ' : '';
             var status = !k._ueberholt_durch ? ' · <b>AKTIV</b>' : ' · überholt';
             var datumLabel = k._print_datum || k.ausstellungs_datum || '?';
             body += '<div style="padding:2px 0">'+marker+datumLabel+' · Brutto '+fmtEur(k.brutto||0)+status+'</div>';
@@ -14614,11 +14638,11 @@ function dokOpenDetail(id){
             body += '<div style="background:rgba(255,255,255,.5);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10px">';
             body += '<div style="font-weight:700;margin-bottom:3px;opacity:.7">Bank-Match-Daten</div>';
             if(_v2._print_datum)
-              body += '<div style="padding:1px 0">📅 Druckdatum: '+_v2._print_datum+'</div>';
+              body += '<div style="padding:1px 0">Druckdatum: '+_v2._print_datum+'</div>';
             if(_v2._vorzahlung_anrechnung != null)
-              body += '<div style="padding:1px 0">⤴️ Vorzahlung angerechnet: '+fmtEur(_v2._vorzahlung_anrechnung)+'</div>';
+              body += '<div style="padding:1px 0">Vorzahlung angerechnet: '+fmtEur(_v2._vorzahlung_anrechnung)+'</div>';
             if(_v2._restzahlung != null)
-              body += '<div style="padding:1px 0">💰 Restzahlung an Holvi: <b>'+fmtEur(_v2._restzahlung)+'</b></div>';
+              body += '<div style="padding:1px 0">Restzahlung an Holvi: <b>'+fmtEur(_v2._restzahlung)+'</b></div>';
             body += '</div>';
           }
           // Toggle-Button: manueller Override
@@ -14647,30 +14671,30 @@ function dokOpenDetail(id){
         var _saldoFol = _v2bm.saldo_folgemonat;
         var _auszZiel = _v2bm.auszahlungs_ziel || '';
         body += '<div style="background:#f0f9ff;border:2px solid #7dd3fc;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:#0c4a6e">'
-          + '<div style="font-weight:800;margin-bottom:6px">🏦 K4-Schema-Felder (Studio Hamburg)</div>'
+          + '<div style="font-weight:800;margin-bottom:6px">K4-Schema-Felder (Studio Hamburg)</div>'
           + '<div style="opacity:.7;margin-bottom:8px;line-height:1.4">Felder für Match-Engine und Jahresabschluss. KI extrahiert automatisch — manuell überschreibbar.</div>';
         // Datums-Felder
-        body += '<div style="padding:3px 0">📅 Druckdatum: <b>'+(_printD||'⚠ leer')+'</b>'
+        body += '<div style="padding:3px 0">Druckdatum: <b>'+(_printD||'⚠ leer')+'</b>'
               + (_printFB ? ' <span style="opacity:.5;font-size:10px">(aus Ausstellungsdatum)</span>' : '')
               + '</div>';
-        body += '<div style="padding:3px 0">📆 Verbindlichkeit/Leistungsmonat: <b>'+(_leistMon||'⚠ leer')+'</b></div>';
-        body += '<div style="padding:3px 0">🗓 Lohnsteuer-Zielmonat: <b>'+(_lohnZiel||'— (kein "für …" im Titel)')+'</b></div>';
-        body += '<div style="padding:3px 0">🏦 Auszahlungsziel: <b>'+(_auszZiel||'⚠ leer')+'</b></div>';
+        body += '<div style="padding:3px 0">Verbindlichkeit/Leistungsmonat: <b>'+(_leistMon||'⚠ leer')+'</b></div>';
+        body += '<div style="padding:3px 0">Lohnsteuer-Zielmonat: <b>'+(_lohnZiel||'— (kein "für …" im Titel)')+'</b></div>';
+        body += '<div style="padding:3px 0">Auszahlungsziel: <b>'+(_auszZiel||'⚠ leer')+'</b></div>';
         // Salden — bearbeitbar
         body += '<div style="padding:6px 0;border-top:1px dashed #7dd3fc;margin-top:6px">'
-              + '<label style="display:block;margin-bottom:4px">↩️ Saldo Vormonat (€):</label>'
+              + '<label style="display:block;margin-bottom:4px">↩ Saldo Vormonat (€):</label>'
               + '<input type="number" step="0.01" placeholder="leer wenn nicht im PDF" value="'+(_saldoVor!=null?_saldoVor:'')+'" '
               + 'onchange="dokSetK4Field(\''+_v2bm.id+'\',\'saldo_vormonat\',this.value)" '
               + 'style="width:100%;padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:11px;background:white">'
               + '</div>';
         body += '<div style="padding:6px 0">'
-              + '<label style="display:block;margin-bottom:4px">⤴️ Bereits erhalten (€, negativ):</label>'
+              + '<label style="display:block;margin-bottom:4px">Bereits erhalten (€, negativ):</label>'
               + '<input type="number" step="0.01" placeholder="z.B. -424.98" value="'+(_saldoBer!=null?_saldoBer:'')+'" '
               + 'onchange="dokSetK4Field(\''+_v2bm.id+'\',\'saldo_bereits_erhalten\',this.value)" '
               + 'style="width:100%;padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:11px;background:white">'
               + '</div>';
         body += '<div style="padding:6px 0">'
-              + '<label style="display:block;margin-bottom:4px">💰 Differenz für Folgemonat / Restzahlung an Bank (€):</label>'
+              + '<label style="display:block;margin-bottom:4px">Differenz für Folgemonat / Restzahlung an Bank (€):</label>'
               + '<input type="number" step="0.01" placeholder="z.B. 326.63" value="'+(_saldoFol!=null?_saldoFol:'')+'" '
               + 'onchange="dokSetK4Field(\''+_v2bm.id+'\',\'saldo_folgemonat\',this.value)" '
               + 'style="width:100%;padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:11px;background:white">'
@@ -14732,7 +14756,7 @@ function dokOpenDetail(id){
         var mappedTitel = db.titelMappings[(d.titel||'').trim().toLowerCase()];
         if(mappedTitel && mappedTitel !== (d.titel||'').trim()){
           body+='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:8px;padding:7px 10px;margin:4px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
-            +'<div style="font-size:11px;color:#8a6a3f">💡 Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
+            +'<div style="font-size:11px;color:#8a6a3f">Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
             +'<button type="button" onclick="dokTitelMapping(\''+esc(mappedTitel)+'\')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
             +'</div>';
         }
@@ -14772,7 +14796,7 @@ function dokOpenDetail(id){
           else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
           else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
           body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#e3c4c0':'var(--accent2)')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
-            +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed var(--hair);margin-bottom:2px;padding-bottom:2px">'+(isFilm?'🎬 Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
+            +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed var(--hair);margin-bottom:2px;padding-bottom:2px">'+(isFilm?'Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
             +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'var(--orange)':'var(--accent)')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
             +'</div>';
         });
@@ -14795,7 +14819,7 @@ function dokOpenDetail(id){
         var mappedTitel = db.titelMappings[(d.titel||'').trim().toLowerCase()];
         if(mappedTitel && mappedTitel !== (d.titel||'').trim()){
           body+='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:8px;padding:7px 10px;margin:4px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
-            +'<div style="font-size:11px;color:#8a6a3f">💡 Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
+            +'<div style="font-size:11px;color:#8a6a3f">Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
             +'<button type="button" onclick="dokTitelMapping(\''+esc(mappedTitel)+'\')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
             +'</div>';
         }
@@ -14817,11 +14841,11 @@ function dokOpenDetail(id){
       body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
     }
     if(d.typ==='ausgabe'){
-      var katMap2={equipment:'🔧 Technik/Equipment',software:'💻 Software/Abos',
-        fahrt:'🚂 Fahrtkosten',bewirtung:'🍽️ Bewirtung',buero:'📎 Büro',weiterbildung:'📚 Weiterbildung',
-        marketing:'📣 Marketing',steuer_recht:'⚖️ Steuer/Recht',
-        versicherung:'🛡️ Versicherung',kommunikation:'📱 Kommunikation',sonstiges:'📦 Sonstiges'};
-      var katLabel = (d.ausgabe_kat&&katMap2[d.ausgabe_kat])||'📦 Sonstiges';
+      var katMap2={equipment:'Technik/Equipment',software:'Software/Abos',
+        fahrt:'Fahrtkosten',bewirtung:'Bewirtung',buero:'Büro',weiterbildung:'Weiterbildung',
+        marketing:'Marketing',steuer_recht:'Steuer/Recht',
+        versicherung:'Versicherung',kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
+      var katLabel = (d.ausgabe_kat&&katMap2[d.ausgabe_kat])||'Sonstiges';
       var ustSatzAg2 = d.ustSatz!=null?d.ustSatz:0.19;
       var bruttoAg2  = parseFloat(d.brutto)||0;
       var mwstAg2    = d.mwst?parseFloat(d.mwst):Math.round(bruttoAg2-bruttoAg2/(1+ustSatzAg2)*100)/100;
@@ -14909,7 +14933,7 @@ function dokOpenDetail(id){
             +'</div>';
         }
         body+='<div style="margin:8px 0 2px;border-top:1px solid var(--green2);padding-top:8px">';
-        body+='<div style="font-size:10px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🏦 Studio-Hamburg-Zusatz (K4)</div>';
+        body+='<div style="font-size:10px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Studio-Hamburg-Zusatz (K4)</div>';
         body+='</div>';
         body+=_k4row('Verbindlichk./Leistungsmonat', _leistMon);
         body+=_k4row('Lohnsteuer-Zielmonat', _lohnZiel, true);
@@ -14936,7 +14960,7 @@ function dokOpenDetail(id){
     var aktivTyp=d.produktion_typ_aktiv||d.produktion_typ||'';
     var aktivPlatt=d.produktion_platt_aktiv||d.produktion_platt||'';
     if(aktivTyp && aktivTyp!=='unbekannt'){
-      var ptIcon=aktivTyp==='streaming'?'📺':aktivTyp==='freetv'?'📡':aktivTyp==='kino'?'🎬':'📺';
+      var ptIcon='';
       var ptColor=aktivTyp==='streaming'?'var(--ai)':'var(--accent)';
       var ptBg=aktivTyp==='streaming'?'var(--blue2)':'var(--green2)';
       var ptBorder=aktivTyp==='streaming'?'#bfdbfe':'var(--accent2)';
@@ -14946,7 +14970,7 @@ function dokOpenDetail(id){
       body+='<div style="background:'+ptBg+';border:2px solid '+ptBorder+';border-radius:12px;padding:11px 14px;margin-bottom:10px">'
         +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
         +'<div style="font-size:10px;font-weight:800;color:'+ptColor+'">'+ptIcon+' Produktion erkannt</div>'
-        +(d.produktion_quelle?'<div style="font-size:9px;color:#888;background:#fff;border:1px solid var(--hair);border-radius:4px;padding:1px 6px">📚 '+esc(d.produktion_quelle)+'</div>':'')
+        +(d.produktion_quelle?'<div style="font-size:9px;color:#888;background:#fff;border:1px solid var(--hair);border-radius:4px;padding:1px 6px">'+esc(d.produktion_quelle)+'</div>':'')
         +'</div>'
         +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'
         +'<div style="font-size:15px;font-weight:900;color:'+ptColor+'">'+ptIcon+' '+ptTypLabel+'</div>'
@@ -14955,7 +14979,7 @@ function dokOpenDetail(id){
         +(wahrsch!==null?'<div style="height:6px;background:var(--hair);border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:'+wahrsch+'%;background:'+wahrschColor+';border-radius:4px"></div></div>':'')
         +(d.gage_vorschlag&&d.gage_vorschlag.kommgage?
           '<div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">'
-          +'<div style="font-size:11px;color:#555">💶 <b>'+d.gage_vorschlag.kommgage+'€</b> KG · <b>'+d.gage_vorschlag.rate+'€</b>/Take</div>'
+          +'<div style="font-size:11px;color:#555"><b>'+d.gage_vorschlag.kommgage+'€</b> KG · <b>'+d.gage_vorschlag.rate+'€</b>/Take</div>'
           +'<button type="button" onclick="dokUebernehmeGage(\''+d.id+'\')" style="background:'+ptColor+';color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation">Übernehmen →</button>'
           +'</div>':'')
         +'</div>';
@@ -14965,7 +14989,7 @@ function dokOpenDetail(id){
     if((d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length){
       var allDone = d.sessions.every(function(s){return s._done;});
       body+='<div style="margin-bottom:12px">';
-      body+='<div style="font-size:11px;font-weight:800;color:var(--ai);letter-spacing:.5px;margin-bottom:8px">📋 ERKANNTE TERMINE ('+d.sessions.length+')</div>';
+      body+='<div style="font-size:11px;font-weight:800;color:var(--ai);letter-spacing:.5px;margin-bottom:8px">ERKANNTE TERMINE ('+d.sessions.length+')</div>';
       d.sessions.forEach(function(s, si){
         var tm=s.terminId?(db.termine||[]).find(function(t){return t.id===s.terminId;}):null;
         var isDone = !!s._done;
@@ -15003,7 +15027,7 @@ function dokOpenDetail(id){
         var brokenFlow = doneCount > 0 && doneCount < d.sessions.length;
         if(brokenFlow){
           body+='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:10px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px">'
-            +'<div style="font-size:18px">⚡</div>'
+            +''
             +'<div style="font-size:12px;color:#8a6a3f;font-weight:700">Flow unterbrochen · '+doneCount+' von '+d.sessions.length+' erledigt<br>'
             +'<span style="font-weight:400">Nächste Session antippen um fortzufahren</span></div>'
             +'</div>';
@@ -15022,9 +15046,9 @@ function dokOpenDetail(id){
     if(d._keinTermin){
       // Build 839: Beleg bewusst OHNE Termin (GVL-Ausschüttung, Nachgage, Pauschale, …)
       body += '<div style="background:var(--blue2);border:1.5px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
-        + '<div style="font-size:11px;font-weight:800;color:var(--ai);margin-bottom:3px">🚫 Ohne Termin</div>'
+        + '<div style="font-size:11px;font-weight:800;color:var(--ai);margin-bottom:3px">Ohne Termin</div>'
         + '<div style="font-size:12px;color:var(--ink)">Wird als Einnahme ohne Termin gebucht — kein Aufnahmetermin nötig. USt zählt im Monat des Zahlungseingangs (Ist).</div>'
-        + '<button type="button" onclick="dokDochTerminZuordnen(\''+d.id+'\')" style="margin-top:8px;background:#fff;color:var(--ai);border:1.5px solid #bfdbfe;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">↩︎ Doch Termin zuordnen</button>'
+        + '<button type="button" onclick="dokDochTerminZuordnen(\''+d.id+'\')" style="margin-top:8px;background:#fff;color:var(--ai);border:1.5px solid #bfdbfe;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Doch Termin zuordnen</button>'
         + '</div>';
     } else if(termin){
       // Prüfen ob Termin bereits eine Dispo hat
@@ -15034,7 +15058,7 @@ function dokOpenDetail(id){
       var terminBannerBg = terminHatDispo ? 'var(--orange2)' : 'var(--green2)';
       var terminBannerBorder = terminHatDispo ? '#e7dbc6' : 'var(--accent2)';
       var terminLabelColor = terminHatDispo ? 'var(--orange)' : 'var(--accent)';
-      var terminLabel = terminHatDispo ? '⚠ TERMIN HAT BEREITS EINE DISPO' : '📅 TERMIN GEFUNDEN';
+      var terminLabel = terminHatDispo ? '⚠ TERMIN HAT BEREITS EINE DISPO' : 'TERMIN GEFUNDEN';
       body += '<div style="background:'+terminBannerBg+';border:1.5px solid '+terminBannerBorder+';border-radius:10px;padding:10px 14px;margin-bottom:10px">'
         + '<div>'
         + '<div style="font-size:10px;font-weight:700;color:'+terminLabelColor+';margin-bottom:2px">'+terminLabel+'</div>'
@@ -15044,18 +15068,18 @@ function dokOpenDetail(id){
         + '</div>'
         + '<button type="button" onclick="dokPeekTermin(\''+termin.id+'\')" style="background:'+terminLabelColor+';color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">&#8594; Öffnen</button>'
         + '</div>';
-      body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:var(--card);color:var(--ink);border:1.5px solid var(--ink5);border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🔄 Falscher Termin? Anderen suchen oder neu erstellen</button>';
-      body += '<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:var(--blue2);color:var(--ai);border:1.5px solid #bfdbfe;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🚫 Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
+      body += '<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="width:100%;background:var(--card);color:var(--ink);border:1.5px solid var(--ink5);border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Falscher Termin? Anderen suchen oder neu erstellen</button>';
+      body += '<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:var(--blue2);color:var(--ai);border:1.5px solid #bfdbfe;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
       // Storno-Hinweis bei negativem Brutto
       if(parseFloat(d.brutto||0) < 0){
         body += '<div style="background:var(--red2);border:1.5px solid #e3c4c0;border-radius:10px;padding:12px 14px;margin-bottom:10px">'
           +'<div style="font-size:12px;font-weight:800;color:var(--orange);margin-bottom:4px">⚠ Storno-Gutschrift erkannt</div>'
           +'<div style="font-size:11px;color:var(--red);margin-bottom:10px">Negativer Betrag ('+fmtEur(parseFloat(d.brutto||0))+'). Storno wird mit Termin verknüpft und in Buchhaltung verbucht (negative Werte). Folgt eine Neuberechnung, springt die App zum nächsten Beleg.</div>'
           +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-          +'<button type="button" onclick="dokStornoVerbuchen(\''+d.id+'\')" style="flex:1;min-width:140px;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation">📒 Storno verbuchen → weiter</button>'
-          +'<button type="button" onclick="dokStornoAlsAusgabe(\''+d.id+'\')" style="background:var(--red2);color:var(--red);border:1.5px solid #e3c4c0;border-radius:8px;padding:10px 14px;font-size:11px;font-weight:600;cursor:pointer;touch-action:manipulation">📁 Nur archivieren</button>'
+          +'<button type="button" onclick="dokStornoVerbuchen(\''+d.id+'\')" style="flex:1;min-width:140px;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation">Storno verbuchen → weiter</button>'
+          +'<button type="button" onclick="dokStornoAlsAusgabe(\''+d.id+'\')" style="background:var(--red2);color:var(--red);border:1.5px solid #e3c4c0;border-radius:8px;padding:10px 14px;font-size:11px;font-weight:600;cursor:pointer;touch-action:manipulation">Nur archivieren</button>'
           +'</div>'
-          +'<div style="font-size:10px;color:var(--red);margin-top:8px;line-height:1.4">📒 = Standard (steuerlich sauber). 📁 = nur, wenn Storno außerhalb deiner Buchhaltung wirkt.</div>'
+          +'<div style="font-size:10px;color:var(--red);margin-top:8px;line-height:1.4">= Standard (steuerlich sauber). = nur, wenn Storno außerhalb deiner Buchhaltung wirkt.</div>'
           +'</div>';
       }
       body += _buildMergePreview(d, termin);
@@ -15113,7 +15137,7 @@ function dokOpenDetail(id){
       if(vorschlaege.length){
         // Besten Vorschlag direkt zuordnen (wie dokFindTermin-Fallback)
         if(!d.terminId && !d._keinTermin){ d.terminId=vorschlaege[0].id; save(db); }
-        body+='<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">📅 PASSENDER TERMIN GEFUNDEN</div>';
+        body+='<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">PASSENDER TERMIN GEFUNDEN</div>';
         vorschlaege.forEach(function(tv){
           var diff3=d.datum?Math.abs(new Date(tv.datum)-new Date(d.datum))/(1000*60*60*24):99;
           var ml=diff3===0?'✓ Gleicher Tag':(diff3<=1?'~1 Tag':'~'+Math.round(diff3)+' Tage');
@@ -15132,17 +15156,17 @@ function dokOpenDetail(id){
         });
       } else {
         body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
-          +'<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">📅 Kein passender Termin gefunden</div>'
+          +'<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">Kein passender Termin gefunden</div>'
           +'<div style="font-size:12px;color:#666">Datum '+(d.datum?fd(d.datum):'?')+(d.studio?' · '+esc(d.studio):'')+'</div>'
           +'</div>';
       }
 
       // Fallback: manuell oder neuer Termin
       body+='<div style="display:flex;gap:8px;margin-bottom:8px">'
-        +'<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="flex:1;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">📅 Im Kalender suchen</button>'
+        +'<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="flex:1;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">Im Kalender suchen</button>'
         +'<button type="button" onclick="dokNewTerminAusDok(\''+d.id+'\')" style="flex:1;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
         +'</div>';
-      body+='<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:var(--blue2);color:var(--ai);border:1.5px solid #bfdbfe;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">🚫 Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
+      body+='<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:var(--blue2);color:var(--ai);border:1.5px solid #bfdbfe;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
     }
     } // end else (nicht monats_abrechn)
 
@@ -15157,7 +15181,7 @@ function dokOpenDetail(id){
     // Bei Monatsabrechnungen mit Sessions zählt nur der blaue "Alle übernehmen"-Button
     var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
     if(!isMonatsAbrechn){
-      if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:var(--cream2);border-radius:8px;color:#555;font-size:13px">📄 PDF</div>';
+      if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:var(--cream2);border-radius:8px;color:#555;font-size:13px">PDF</div>';
       var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
       var btnAction = termin
         ? 'dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')'
@@ -15190,7 +15214,7 @@ function dokOpenDetail(id){
         + '<img src="'+d.thumb+'" style="max-width:100%;max-height:280px;border-radius:8px;border:1.5px solid var(--hair);cursor:pointer" onclick="dokShowFullImg(\''+d.id+'\')">'
         + '</div>';
     } else if(d.dataURL && d.mime==='application/pdf'){
-      body += '<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">📄 PDF öffnen</button>';
+      body += '<button type="button" onclick="dokOpenPDF(\''+d.id+'\')" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:12px">PDF öffnen</button>';
     }
 
     // Erkannte Daten in kompakter Form
@@ -15228,12 +15252,12 @@ function dokOpenDetail(id){
 
     // Termin-Link
     if(termin){
-      body += '<button type="button" onclick="openDetail(\''+termin.id+'\')" style="width:100%;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">📅 Zum verknüpften Termin</button>';
+      body += '<button type="button" onclick="openDetail(\''+termin.id+'\')" style="width:100%;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Zum verknüpften Termin</button>';
     }
     // Sessions-Übersicht bei Monats-Abrechnungen
     if(d.typ==='monats_abrechn' && d.sessions && d.sessions.length){
       body += '<div style="background:var(--card);border:1.5px solid var(--hair);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
-        + '<div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">📋 '+d.sessions.length+' Termin(e) in dieser Sammel-Abrechnung</div>';
+        + '<div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">'+d.sessions.length+' Termin(e) in dieser Sammel-Abrechnung</div>';
       d.sessions.slice(0, 8).forEach(function(s){
         body += '<div style="font-size:11px;color:#555;padding:3px 0;border-top:1px solid var(--cream2)">'
           + (s.datum ? fd(s.datum) : '?') + ' · ' + esc(s.titel||'—')
@@ -15318,7 +15342,7 @@ function openStudioPwSheet(){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
   var box = document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
-  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">🔒 PDF-Passwörter</div>'
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">PDF-Passwörter</div>'
     +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::Passwort</b> — je Zeile ein Studio<br>Mehrere Zeilen mit gleichem Namen → alle werden durchprobiert<br>Beispiel: Studio Hamburg::dein-PDF-Passwort</div>'
     +'<textarea id="studio-pw-input" rows="5" style="width:100%;box-sizing:border-box;border:1.5px solid var(--hair);border-radius:10px;padding:10px;font-size:13px;font-family:monospace;resize:vertical">'+entries+'</textarea>'
     +'<button type="button" onclick="saveStudioPws()" style="margin-top:10px;width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
@@ -15411,7 +15435,7 @@ function openStudioEmailSheet(){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
   var box = document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
-  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">✉ Studio E-Mail-Adressen</div>'
+  box.innerHTML='<div style="font-size:17px;font-weight:900;margin-bottom:6px">Studio E-Mail-Adressen</div>'
     +'<div style="font-size:12px;color:#888;margin-bottom:12px">Format: <b>Studioname::email@studio.de</b> — je Zeile ein Studio<br>Wird für Mahnmails automatisch befüllt.</div>'
     +'<textarea id="studio-email-input" rows="10" style="width:100%;box-sizing:border-box;border:1.5px solid var(--hair);border-radius:10px;padding:10px;font-size:12px;font-family:monospace;resize:vertical">'+entries+'</textarea>'
     +'<button type="button" onclick="saveStudioEmails()" style="margin-top:10px;width:100%;background:var(--ai);color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation">✓ Speichern</button>'
@@ -15586,7 +15610,7 @@ function renderPDFCanvas(canvasId, dataURL, password){
           var prompt = document.createElement('div');
           prompt.className = 'pdf-pw-prompt';
           prompt.style.cssText='padding:16px;text-align:center';
-          prompt.innerHTML='<div style="font-size:13px;color:#555;margin-bottom:8px">🔒 PDF ist passwortgeschützt</div>'
+          prompt.innerHTML='<div style="font-size:13px;color:#555;margin-bottom:8px">PDF ist passwortgeschützt</div>'
             +'<input type="password" placeholder="Passwort eingeben" style="width:100%;padding:8px;border:1.5px solid var(--hair);border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px">'
             +'<button type="button" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Entsperren</button>';
           var btn = prompt.querySelector('button');
@@ -15906,7 +15930,7 @@ function dokGotoKalender(dokId){
     function updateBanner(){
       var sel=window._dokLinkMulti||[];
       banner.innerHTML='<div style="flex:1;min-width:0">'
-        +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">📎 Dok verknüpfen:</div>'
+        +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">Dok verknüpfen:</div>'
         +'<div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(titel.slice(0,35))+'</div>'
         +(sel.length?'<div style="font-size:10px;margin-top:2px;opacity:.9">'+sel.length+' Termin'+(sel.length>1?'e':'')+' gewählt</div>':'')
         +'</div>'
@@ -16000,7 +16024,7 @@ function dokSessionGotoKalender(dokId, si){
   // Neuen Termin anlegen — immer verfügbar
   html += '<button type="button" onclick="dokSessionLinkSheetNeu()" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation;margin-top:6px">+ Neuen Termin aus dieser Session anlegen</button>';
   // In Kalender wechseln (alter Weg, als Fallback)
-  html += '<button type="button" onclick="dokSessionLinkSheetKalender()" style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:8px">📅 Im Kalender suchen</button>';
+  html += '<button type="button" onclick="dokSessionLinkSheetKalender()" style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:8px">Im Kalender suchen</button>';
   // Schließen
   html += '<button type="button" onclick="dokSessionLinkSheetClose()" style="width:100%;background:transparent;color:#888;border:none;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:4px">Abbrechen</button>';
   html += '</div>';
@@ -16106,7 +16130,7 @@ function _dokSessionGotoKalenderLegacy(dokId, si){
     }
     var label=(s.datum?s.datum.split('-').reverse().join('.')+' ':'')+(s.titel||d.titel||'Session');
     banner.innerHTML='<div style="flex:1;min-width:0">'
-      +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">📎 Session zuordnen:</div>'
+      +'<div style="font-size:11px;opacity:.8;margin-bottom:2px">Session zuordnen:</div>'
       +'<div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(label.slice(0,35))+'</div>'
       +'</div>'
       +'<button type="button" onclick="dokLinkCancel()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>';
@@ -16869,7 +16893,7 @@ function dokStornoVerbuchen(dokId){
     saveV2(dbv2);
   } catch(e){ console.error('[storno-verbuchen] v2 Hook fehlgeschlagen', e); }
 
-  showToast('📒 Storno verbucht'+(d.terminId?' · Termin verknüpft':''));
+  showToast('Storno verbucht'+(d.terminId?' · Termin verknüpft':''));
 
   // Sprung zum nächsten Split-Doc, falls Multi-PDF
   if(d._splitGroup && d._splitTotal > 1){
@@ -16910,7 +16934,7 @@ function dokStornoAlsAusgabe(dokId){
   }
   _archiveDateiname(d.dateiname||d.beschr, d.terminId||null, 'sonstig');
   save(db);
-  showToast('📁 Storno archiviert'+(termin?' · Notiz am Termin':''));
+  showToast('Storno archiviert'+(termin?' · Notiz am Termin':''));
 
   // Build 744: Sprung zum nächsten Split-Doc, falls Multi-PDF
   if(d._splitGroup && d._splitTotal > 1){
@@ -17346,10 +17370,10 @@ function _checkPendingDokLink(terminId){
   var idx = window._dokLinkMulti.indexOf(terminId);
   if(idx>=0){
     window._dokLinkMulti.splice(idx,1); // deselect
-    showToast('☐ Termin abgewählt');
+    showToast('Termin abgewählt');
   } else {
     window._dokLinkMulti.push(terminId); // select
-    showToast('☑ Termin gewählt — weitere tippen oder „Verknüpfen"');
+    showToast('Termin gewählt — weitere tippen oder „Verknüpfen"');
   }
   // Banner aktualisieren
   if(window._dokLinkBannerUpdate) window._dokLinkBannerUpdate();
@@ -17816,7 +17840,7 @@ function rUstVoranmeldung(){
   var _einnRaten=Object.keys(_einnGruppen).map(Number).sort();
 
   html += '<div style="padding:0 16px;margin-bottom:4px">'
-    +'<div style="font-size:12px;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📥 Einnahmen ('+einnZeilen.length+' Zahlungseingänge)</div>';
+    +'<div style="font-size:12px;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Einnahmen ('+einnZeilen.length+' Zahlungseingänge)</div>';
   if(einnZeilen.length){
     _einnRaten.forEach(function(rPct){
       var grp=_einnGruppen[rPct];
@@ -17861,20 +17885,20 @@ function rUstVoranmeldung(){
   // ── AUSGABEN Sektion ──────────────────────────────────────
   html += '<div style="padding:0 16px;margin-top:8px;margin-bottom:4px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-    +'<div style="font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">📤 Ausgaben / Vorsteuer ('+ausgaben.length+')</div>'
+    +'<div style="font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">Ausgaben / Vorsteuer ('+ausgaben.length+')</div>'
     +'<div onclick="ausgabeOpen()" style="background:var(--purple);color:#fff;font-size:11px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer">+ Beleg</div>'
     +'</div>';
   if(ausgaben.length){
     html += '<div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:10px;overflow:hidden">';
     ausgaben.forEach(function(a, i){
       html += '<div style="display:flex;align-items:center;padding:9px 12px;'+(i>0?'border-top:1px solid var(--green2)':'')+';cursor:pointer" onclick="ustAusgabeDetail(\''+a.id+'\',event)">'
-        +(a.belegImg?'<div style="width:36px;height:36px;border-radius:6px;background:var(--cream2);margin-right:8px;flex-shrink:0;overflow:hidden"><img src="'+a.belegImg+'" style="width:100%;height:100%;object-fit:cover"></div>':'<div style="width:36px;height:36px;border-radius:6px;background:var(--cream2);margin-right:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">🧾</div>')
+        +(a.belegImg?'<div style="width:36px;height:36px;border-radius:6px;background:var(--cream2);margin-right:8px;flex-shrink:0;overflow:hidden"><img src="'+a.belegImg+'" style="width:100%;height:100%;object-fit:cover"></div>':'<div style="width:36px;height:36px;border-radius:6px;background:var(--cream2);margin-right:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/></svg></div>')
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:12px;font-weight:700">'+esc(a.beschr||'')+'</div>'
         +'<div style="font-size:10px;color:#999">'+fd(a.datum)+'  ·  <span style="background:var(--cream2);padding:1px 5px;border-radius:4px;font-weight:600">'+esc(a.kat||'Sonstiges')+'</span>  ·  Brutto '+fmtEur(a.brutto)+'  ·  VSt '+Math.round((a.ustSatz||0)*100)+'%</div>'
         +'</div>'
         +'<div style="font-size:13px;font-weight:800;color:var(--accent);flex-shrink:0;margin-left:8px">−'+fmtEur(a.vorsteuer)+'</div>'
-        +'<div onclick="ustAusgabeDelete(\''+a.id+'\',event)" style="margin-left:8px;font-size:16px;color:#ccc;cursor:pointer">🗑</div>'
+        +'<div onclick="ustAusgabeDelete(\''+a.id+'\',event)" style="margin-left:8px;font-size:16px;color:#ccc;cursor:pointer">✕</div>'
         +'</div>';
     });
     html += '<div style="display:flex;justify-content:space-between;padding:9px 12px;background:var(--green2);border-top:1.5px solid #bbf7d0">'
@@ -17883,7 +17907,7 @@ function rUstVoranmeldung(){
       +'</div></div>';
   } else {
     html += '<div style="background:#fff;border:1.5px dashed #bbf7d0;border-radius:10px;padding:20px;text-align:center;color:#999">'
-      +'<div style="font-size:24px;margin-bottom:6px">🧾</div>'
+      +'<div style="margin-bottom:6px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/><path d="M9 8h6M9 12h6"/></svg></div>'
       +'<div style="font-size:13px;font-weight:600;margin-bottom:4px">Keine Ausgaben erfasst</div>'
       +'<div style="font-size:11px">Belege scannen → Vorsteuer wird automatisch verrechnet</div>'
       +'<div onclick="ausgabeOpen()" style="margin-top:10px;background:var(--purple);color:#fff;padding:10px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">+ Beleg hinzufügen</div>'
@@ -17979,7 +18003,7 @@ function ausgabeScanStart(){
   var key = db.profil&&db.profil.apiKey ? db.profil.apiKey : localStorage.getItem('anthropic_api_key');
   if(!key){ showToast('Kein API-Key'); return; }
   var btn = document.getElementById('ausgabe-scan-btn');
-  btn.textContent='⏳ Analysiere…'; btn.style.opacity='0.6';
+  btn.textContent='Analysiere…'; btn.style.opacity='0.6';
 
   var prompt = 'Analysiere diesen Kassenbeleg/diese Rechnung und extrahiere:\n'
     +'1. beschreibung: kurzer Beschreibungstext (z.B. "Laptop-Kabel Amazon", "Restaurant Mittagessen")\n'
@@ -18000,7 +18024,7 @@ function ausgabeScanStart(){
     body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:500,
       messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]})
   }).then(function(r){return r.json();}).then(function(data){
-    btn.textContent='🔍 KI-Analyse starten'; btn.style.opacity='1';
+    btn.textContent='KI-Analyse starten'; btn.style.opacity='1';
     try{
       var txt=data.content[0].text.replace(/```json|```/g,'').trim();
       var j=JSON.parse(txt);
@@ -18019,7 +18043,7 @@ function ausgabeScanStart(){
         +'(= <strong>'+fmtEur(j.ust_betrag||0)+'</strong> Vorsteuer)</div>';
       showToast('✓ Beleg erkannt');
     }catch(e){ showToast('Analyse fehlgeschlagen'); }
-  }).catch(function(){ btn.textContent='🔍 KI-Analyse starten'; btn.style.opacity='1'; showToast('Fehler'); });
+  }).catch(function(){ btn.textContent='KI-Analyse starten'; btn.style.opacity='1'; showToast('Fehler'); });
 }
 
 function ausgabeSpeichern(){
@@ -18366,7 +18390,7 @@ function rAbrechnungen(){
   var all=db.termine.filter(function(t){return t.datum&&t.datum.startsWith(String(_abYear));});
 
   if(!all.length){
-    el.innerHTML='<div style="text-align:center;padding:40px 20px;color:#999"><div style="font-size:32px;margin-bottom:8px">📑</div><div style="font-weight:700">Keine Termine für '+_abYear+'</div></div>';
+    el.innerHTML='<div style="text-align:center;padding:40px 20px;color:#999"><div style="font-size:32px;margin-bottom:8px"></div><div style="font-weight:700">Keine Termine für '+_abYear+'</div></div>';
     return;
   }
 
@@ -18832,7 +18856,7 @@ function rHolviAbgleich(){
   var sub=document.getElementById('holvi-abgleich-sub');
 
   if(!liste.length){
-    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:#aaa">'      +'<div style="font-size:40px;margin-bottom:12px">🏦</div>'      +'<div style="font-size:15px;font-weight:700;color:#555;margin-bottom:8px">Kein Kontoauszug geladen</div>'      +'<div style="font-size:13px;color:#999">Excel-Datei oben rechts laden</div>'      +'</div>';
+    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:#aaa">'      +'<div style="margin-bottom:12px"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.4" stroke-linecap="round" style="margin:0 auto"><path d="M4 21h16M5 21V10h14v11M12 3 4 8h16z"/></svg></div>'      +'<div style="font-size:15px;font-weight:700;color:#555;margin-bottom:8px">Kein Kontoauszug geladen</div>'      +'<div style="font-size:13px;color:#999">Excel-Datei oben rechts laden</div>'      +'</div>';
     if(sub) sub.textContent='Holvi-Zahlungen prüfen & bestätigen';
     return;
   }
@@ -18860,7 +18884,7 @@ function holviAbgleichZeigeEintrag(zahlungsId){
         if(allCards[idx]) allCards[idx].scrollIntoView({behavior:'smooth',block:'center'});
       }
     }
-    showToast('🏦 Holvi-Eintrag: '+zahlungsId.slice(0,8)+'…');
+    showToast('Holvi-Eintrag: '+zahlungsId.slice(0,8)+'…');
   }, 300);
 }
 
@@ -18880,7 +18904,7 @@ function holviAbgleichRefresh(){
   }
   rHolviAbgleich();
   var offen=_holviOffenCount();
-  showToast('🔄 '+db.holviAbgleich.length+' Eingänge neu gematcht · '+offen+' offen');
+  showToast(''+db.holviAbgleich.length+' Eingänge neu gematcht · '+offen+' offen');
 }
 
 function holviAbgleichBestaetigen(zahlungsId){
@@ -19005,7 +19029,7 @@ function mahnAlsGemahnt(belegId){
   if(!db.mahnLog[k]) db.mahnLog[k]=[];
   db.mahnLog[k].push(today());
   save(db);
-  showToast('📨 Als gemahnt markiert · '+fd(today()));
+  showToast('Als gemahnt markiert · '+fd(today()));
   rMahnwesen();
 }
 // Build 875: Tap = markieren, Long-Press (500 ms) = letzten Eintrag zurücknehmen.
@@ -19061,7 +19085,7 @@ function rMahnwesen(){
 
   if(!offen.length){
     el.innerHTML = '<div class="empty-state">'
-      +'<div class="empty-icon">✅</div>'
+      +'<div class="empty-icon">✓</div>'
       +'<div class="empty-title">Alles bezahlt</div>'
       +'<div class="empty-sub">Keine überfälligen Forderungen</div>'
       +'</div>';
@@ -19099,7 +19123,7 @@ function rMahnwesen(){
       var _mlog = _mahnLogGet(ab);
       var _gemahnt = _mlog.length > 0;
       var _mlogLabel = _mlog.length
-        ? '📨 '+(_mlog.length>1 ? _mlog.length+'× gemahnt · zuletzt '+fd(_mlog[_mlog.length-1]) : 'Gemahnt am '+fd(_mlog[0]))
+        ? '✉ '+(_mlog.length>1 ? _mlog.length+'× gemahnt · zuletzt '+fd(_mlog[_mlog.length-1]) : 'Gemahnt am '+fd(_mlog[0]))
         : '';
 
       html += '<div style="background:'+bgCol+';border:1.5px solid #e3c4c0;border-radius:12px;padding:14px;margin-bottom:10px">'
@@ -19120,7 +19144,7 @@ function rMahnwesen(){
         +(_mlogLabel?'<div style="font-size:10px;color:var(--accent);font-weight:700;margin-bottom:8px">'+_mlogLabel+'</div>':'')
         +'<div style="display:flex;gap:8px">'
         +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
-        +'<button type="button" ontouchstart="_mahnPressStart(\''+ab.id+'\')" ontouchmove="_mahnPressMove()" ontouchend="_mahnPressEnd(\''+ab.id+'\',event)" oncontextmenu="return false" style="background:'+(_gemahnt?'var(--green2)':'var(--cream2)')+';color:'+(_gemahnt?'var(--accent)':'var(--ink3)')+';border:none;border-radius:8px;padding:9px 13px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none" title="'+(_gemahnt?'Gemahnt am '+fd(_mlog[_mlog.length-1])+' — lang drücken zum Zurücknehmen':'Tippen: als gemahnt markieren')+'">📤</button>'
+        +'<button type="button" ontouchstart="_mahnPressStart(\''+ab.id+'\')" ontouchmove="_mahnPressMove()" ontouchend="_mahnPressEnd(\''+ab.id+'\',event)" oncontextmenu="return false" style="background:'+(_gemahnt?'var(--green2)':'var(--cream2)')+';color:'+(_gemahnt?'var(--accent)':'var(--ink3)')+';border:none;border-radius:8px;padding:9px 13px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none" title="'+(_gemahnt?'Gemahnt am '+fd(_mlog[_mlog.length-1])+' — lang drücken zum Zurücknehmen':'Tippen: als gemahnt markieren')+'">✉</button>'
         +(ersterTerminId?'<button type="button" onclick="openDetail(\''+ersterTerminId+'\');switchView(\'termine\')" style="background:var(--cream2);color:var(--ink);border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>':'')
         +'</div>'
         +'</div>';
@@ -19542,12 +19566,12 @@ function runIntegrityCheckAndShow(){
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
 
   var last=db._lastIntegrityCheck||{};
-  var html='<div style="font-size:17px;font-weight:900;margin-bottom:4px">🔍 Daten-Check</div>'
+  var html='<div style="font-size:17px;font-weight:900;margin-bottom:4px">Daten-Check</div>'
     +'<div style="font-size:11px;color:#888;margin-bottom:14px">Geprüft: '+( last.datum||'jetzt')+(last.fixes?' · '+last.fixes+' Auto-Fix'+(last.fixes>1?'es':''):'')+'</div>';
 
   if(!warnings.length){
     html+='<div style="background:var(--green2);border:1.5px solid var(--accent2);border-radius:12px;padding:14px;text-align:center">'
-      +'<div style="font-size:24px;margin-bottom:6px">✅</div>'
+      +'<div style="font-size:24px;margin-bottom:6px">✓</div>'
       +'<div style="font-size:14px;font-weight:700;color:var(--accent)">Alle Prüfungen bestanden</div>'
       +'<div style="font-size:12px;color:#555;margin-top:4px">Datenstruktur &amp; Finanzzahlen ok</div>'
       +'</div>';
@@ -19571,8 +19595,8 @@ function runIntegrityCheckAndShow(){
       return r+'</div>';
     }
 
-    html+=renderKat('🔗 Datenstruktur', strukturFehler);
-    html+=renderKat('💶 Finanzzahlen', finanzFehler);
+    html+=renderKat('Datenstruktur', strukturFehler);
+    html+=renderKat('Finanzzahlen', finanzFehler);
     html+=renderKat('⚠ Sonstiges', sonstige);
     html+='<div style="font-size:11px;color:#888;margin-bottom:12px">Bitte oben genannte Punkte manuell prüfen und korrigieren.</div>';
   }
@@ -19641,7 +19665,7 @@ function rRechnungen(){
   if(cntEl) cntEl.textContent=rechnungen.filter(function(r){return r.status==='offen';}).length+' Rechnungen';
 
   if(!rechnungen.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">🧾</div>'
+    el.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div>'
       +'<div class="empty-title">Noch keine Rechnungen</div>'
       +'<div class="empty-sub">Tippe auf + um deine erste Rechnung zu erstellen.</div></div>';
     return;
@@ -20327,7 +20351,7 @@ function zahlTab(tab){
   if(tb) tb.style.display = tab==='studio' ? 'flex' : 'none';
   if(tab==='zahldauer'){
     var el2 = document.getElementById('zahlungen-list');
-    if(el2) el2.innerHTML = rZahlungsStatistik(_zahlYear)||'<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-title">Noch keine Daten</div><div class="empty-sub">Zahlungseingänge importieren um die Statistik zu sehen</div></div>';
+    if(el2) el2.innerHTML = rZahlungsStatistik(_zahlYear)||'<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Noch keine Daten</div><div class="empty-sub">Zahlungseingänge importieren um die Statistik zu sehen</div></div>';
   } else {
     rZahlungen();
   }
@@ -20393,7 +20417,7 @@ function rZahlungen(){
   });
 
   if(!all.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">💶</div><div class="empty-title">Keine Einnahmen</div><div class="empty-sub">Keine Termine mit Gage für '+_zahlYear+'</div></div>';
+    el.innerHTML='<div class="empty-state"><div style="width:46px;height:46px;margin:0 auto 14px;border-radius:50%;border:1.5px solid var(--accent2)"></div><div class="empty-title">Keine Einnahmen</div><div class="empty-sub">Keine Termine mit Gage für '+_zahlYear+'</div></div>';
     return;
   }
 
@@ -20675,7 +20699,7 @@ function rZahlungen(){
       senderKeys.sort(function(a,b){return senderMap[b].net-senderMap[a].net;});
       var senderMax=senderMap[senderKeys[0]].net||1;
       html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
-        +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">📡 NACH SENDER</div>';
+        +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">NACH SENDER</div>';
       senderKeys.forEach(function(k,i){
         var v=senderMap[k].net; var w=Math.round((v/senderMax)*100);
         html+='<div style="margin-bottom:10px">'
@@ -20908,7 +20932,7 @@ function dsUpdateKeyBar(){
   var k=getKey();
   var el=document.getElementById("ds-key-status");
   var bar=document.getElementById("ds-key-bar");
-  if(el) el.textContent=k?"✅ API-Key: "+k.slice(0,14)+"…":"❌ Kein Key gesetzt";
+  if(el) el.textContent=k?"✓ API-Key: "+k.slice(0,14)+"…":"✕ Kein Key gesetzt";
   if(bar){bar.style.background=k?"var(--green2)":"var(--red2)";bar.style.border=k?"1px solid var(--accent2)":"1px solid #e3c4c0";}
 }
 function dsToggleKeyInput(){
@@ -21181,7 +21205,7 @@ function abRunScan(){
       lernEx+='- KI las: studio="'+ex.studio_roh+'" datum="'+ex.datum_roh+'" produktion="'+ex.produktion_roh+'" -> RICHTIG war: studio="'+ex.termin_studio+'" datum="'+ex.termin_datum+'" titel="'+ex.termin_titel+'"\n';
     });
   }
-  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher '+_uname+'. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⛔ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","ausstellungsdatum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE WICHTIGEN DATUMS-FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann der User im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"ausstellungsdatum" = das DRUCKDATUM/RECHNUNGSDATUM der Gutschrift - meist oben rechts auf dem Beleg, oft mit Uhrzeit (z.B. "31.03.2026 14:21" -> ausstellungsdatum="2026-03-31"). Bei einem Storno- oder Korrektur-Beleg unterscheidet sich dieses Datum oft vom Aufnahmedatum. Wenn nicht eindeutig auffindbar: null.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
+  var prompt='Dies ist eine Gagenabrechnung fuer den Synchronsprecher '+_uname+'. Jede Firma hat ein anderes Layout. Antworte NUR mit reinem JSON, kein Markdown, keine Erklaerung.\n\n⚠ BUCHHALTUNGSREGEL: Erfinde NIEMALS Werte. Jede Zahl muss direkt aus dem Dokument lesbar sein. Wenn unklar: null setzen.\n\nJSON-Schema: {"studio":"","datum":"YYYY-MM-DD","ausstellungsdatum":"YYYY-MM-DD","produktion":"","rolle":"","gutschrift_nr":"","brutto":0,"kv_abzug":0,"rv_abzug":0,"pv_abzug":0,"netto":0,"mwst":0,"auszahlung":0,"takes":0,"take_gage":0,"grundgage":0}\n\nDIE WICHTIGEN DATUMS-FELDER:\n\n"datum" = das AUFNAHMEDATUM - also wann der User im Studio war. Das steht meist in einer Positionstabelle (Spalten wie "Am", "Datum", "von", "Aufnahmetag"). Dieses Datum kann z.B. "Fr 19.12.25" sein, dann ist datum="2025-12-19". NIEMALS das Druckdatum, Abrechnungsdatum oder Gutschriftdatum nehmen - diese stehen meist oben rechts und sind FALSCH fuer dieses Feld.\n\n"ausstellungsdatum" = das DRUCKDATUM/RECHNUNGSDATUM der Gutschrift - meist oben rechts auf dem Beleg, oft mit Uhrzeit (z.B. "31.03.2026 14:21" -> ausstellungsdatum="2026-03-31"). Bei einem Storno- oder Korrektur-Beleg unterscheidet sich dieses Datum oft vom Aufnahmedatum. Wenn nicht eindeutig auffindbar: null.\n\n"studio" = der kurze praegnante Name des Synchronstudios (z.B. "VSI", "FFS", "Arena", "TNT", "Iyuno", "Interopa" usw.), wie er auch im Kalender steht.\n\nAlle anderen Felder nach bestem Wissen aus dem Dokument extrahieren: produktion=Serientitel, brutto/netto/auszahlung/mwst=Geldbetraege, takes/take_gage/grundgage=Gagendetails, kv_abzug/rv_abzug/pv_abzug=Sozialabzuege.'+lernEx;
   var mediaType=_abFileType==='pdf'?'application/pdf':(_abFileMime||'image/jpeg');
   var contentBlock=_abFileType==='pdf'
     ?{type:'document',source:{type:'base64',media_type:mediaType,data:_abFileB64}}
@@ -22405,7 +22429,7 @@ function _mitGruenCardHtml(terminId){
       +'</div></div>';
   }
   // Build 832: separater "Weiterer Aufnahmetag"-Button entfernt — Mehrtages-Zuordnung
-  // läuft über die bestehende manuelle Mehrfach-Verknüpfung (📎 Dok verknüpfen).
+  // läuft über die bestehende manuelle Mehrfach-Verknüpfung (Dok verknüpfen).
   return '';
 }
 function terminMitGruenStart(valueTerminId){
@@ -22512,7 +22536,7 @@ function showZahlungPopup(terminId){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:20px 20px 0 0;padding:16px 16px 36px;width:100%;max-width:480px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-      +'<div style="font-size:15px;font-weight:800;color:var(--accent)">💶 Geldeingang</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--accent)">Geldeingang</div>'
       +'<div onclick="var o=document.getElementById(\'zahlung-popup-ov\');if(o)o.remove();" style="font-size:24px;color:#999;cursor:pointer;padding:0 6px">&times;</div>'
     +'</div>'
     +'<div style="border:1px solid var(--hair);border-radius:12px;overflow:hidden">'+rows.replace('border-top:1px solid var(--cream2)','border-top:none')+'</div>'
@@ -22559,7 +22583,7 @@ function dokKeinTerminZuordnen(dokId){
   if(Array.isArray(d.sessions)) d.sessions.forEach(function(s){ s.terminId = null; });
   save(db);
   if(typeof dokOpenDetail==='function') dokOpenDetail(dokId);
-  showToast('🚫 Ohne Termin — du kannst jetzt bestätigen');
+  showToast('Ohne Termin — du kannst jetzt bestätigen');
 }
 function dokDochTerminZuordnen(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
@@ -22567,7 +22591,7 @@ function dokDochTerminZuordnen(dokId){
   d._keinTermin = false;
   save(db);
   if(typeof dokOpenDetail==='function') dokOpenDetail(dokId);
-  showToast('↩︎ Termin-Zuordnung wieder aktiv');
+  showToast('↩ Termin-Zuordnung wieder aktiv');
 }
 var _mev7ShowVst=false;
 /* Build 826: Vorsteuer pro Monat aus db.ausgaben (mwst = Vorsteuer aus dem Beleg).
@@ -22613,7 +22637,7 @@ function MEV7run(){
       +'<div style="font-size:11px;color:#999">Ist-Versteuerung §20 · '+(_mev7ShowVst?'mit Vorsteuer → Zahllast':'ohne Vorsteuer')+' · read-only</div></div>'
       +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
         +vstBtn
-        +'<button onclick="_mev6Download(_mev7Text(),\'ust-phase7.txt\')" style="background:#ecfdf5;border:1px solid var(--accent);color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📄 Datei</button>'
+        +'<button onclick="_mev6Download(_mev7Text(),\'ust-phase7.txt\')" style="background:#ecfdf5;border:1px solid var(--accent);color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">Datei</button>'
         +'<div onclick="var o=document.getElementById(\'mev7-ov\');if(o)o.remove();" style="font-size:24px;color:#999;cursor:pointer;line-height:1;padding:0 4px">&times;</div>'
       +'</div></div>'
     +rows
@@ -22742,7 +22766,7 @@ function MEV6run(){
           +'<span>'+(e.datum||'?')+' · '+(e.gegenpartei||'').substr(0,30)+'</span>'
           +'<span style="font-weight:700">'+(parseFloat(e.betrag)||0).toFixed(2)+' €</span></div>'
         +'<div style="font-size:11px;font-weight:800;color:'+c+';margin:3px 0">'+r.typ+(r.konfidenz!=='—'?(' ('+r.konfidenz+(typeof r.konfidenz==='number'?'%':'')+')'):'')+deltaTxt+'</div>'
-        +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+' 📅</div>'):'')
+        +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+'</div>'):'')
         +_mev6PeekHtml(r,idx)
         +'<div style="font-size:11px;font-weight:700;color:var(--accent);margin-top:5px">✓ Anker gesetzt · '+(e.datum||'')+' <span onclick="_mev6RowCollapseToggle('+idx+')" style="color:#999;cursor:pointer;font-weight:400"> · einklappen</span></div>'
         +'</div>';
@@ -22766,7 +22790,7 @@ function MEV6run(){
         +'<span>'+(e.datum||'?')+' · '+(e.gegenpartei||'').substr(0,30)+'</span>'
         +'<span style="font-weight:700">'+(parseFloat(e.betrag)||0).toFixed(2)+' €</span></div>'
       +'<div style="font-size:11px;font-weight:800;color:'+_tc+';margin:3px 0">'+_typHtml+'</div>'
-      +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+' 📅</div>'):'')
+      +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+'</div>'):'')
       +_mev6PeekHtml(r,idx)
       +(r.ustNote?('<div style="font-size:10px;color:#777;margin-top:2px">'+r.ustNote+'</div>'):'')
       +ctrl
@@ -22788,9 +22812,9 @@ function MEV6run(){
   if(_elx){
     _elx.innerHTML=
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
-        +(nSicher>0?('<button onclick="_mev6PersistBulk()" style="background:var(--accent);border:none;color:#fff;font-weight:800;font-size:12px;border-radius:8px;padding:7px 12px;cursor:pointer;touch-action:manipulation">✅ '+nSicher+' sichere schreiben</button>'):'')
-        +'<button onclick="_mev6Copy()" style="background:var(--blue2);border:1px solid var(--ai);color:var(--ai);font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📋 Kopieren</button>'
-        +'<button onclick="_mev6File()" style="background:#ecfdf5;border:1px solid var(--accent);color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">📄 Datei</button>'
+        +(nSicher>0?('<button onclick="_mev6PersistBulk()" style="background:var(--accent);border:none;color:#fff;font-weight:800;font-size:12px;border-radius:8px;padding:7px 12px;cursor:pointer;touch-action:manipulation">✓ '+nSicher+' sichere schreiben</button>'):'')
+        +'<button onclick="_mev6Copy()" style="background:var(--blue2);border:1px solid var(--ai);color:var(--ai);font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">Kopieren</button>'
+        +'<button onclick="_mev6File()" style="background:#ecfdf5;border:1px solid var(--accent);color:#047857;font-weight:700;font-size:12px;border-radius:8px;padding:6px 11px;cursor:pointer;touch-action:manipulation">Datei</button>'
       +'</div>'
       + filterbar
       + '<div style="padding:12px 0 0">'+head+body+'</div>';
@@ -22808,7 +22832,7 @@ function _mev6PeekHtml(r,idx){
       return '<div style="padding:2px 0">'
         +'<span style="color:#111;font-weight:600">'+(o.datum||'?')+'</span> · '
         +(o.titel?('<span style="color:#333">'+esc(o.titel)+'</span>'):'<span style="color:#999">ohne Titel</span>')
-        +(o.rolle?(' · 🎭 '+esc(o.rolle)):'')
+        +(o.rolle?(' · '+esc(o.rolle)):'')
         +(o.studio?(' · <span style="color:#777">'+esc(o.studio)+'</span>'):'')
         +'</div>';
     }).join('');
