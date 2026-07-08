@@ -42,8 +42,8 @@
   --red2:#F5EAE7;
   --yellow:var(--warm);
   --yellow2:#F6EFE6;
-  --blue:var(--ai);       /* interaktiv/KI → Indigo */
-  --blue2:#EEF0F5;
+  --blue:#4A5A4E;       /* interaktiv/KI → Indigo */
+  --blue2:#E9ECE7;
   --green:var(--accent);  /* OK/Geld → Kiefer */
   --green2:#F2F5F1;
   --orange:#A8814F;       /* Ocker — gedämpfter Hinweis */
@@ -51,7 +51,7 @@
   --leaf:var(--accent);--leaf2:#3E4C42;--leaf3:var(--green2);
   --amber:var(--orange);--amber2:var(--orange2);
   --rose:var(--red);--rose2:var(--red2);
-  --purple:#7D7A9C;--purple2:#EFEEF5;
+  --purple:#4A5A4E;--purple2:#E9ECE7;
   --card:var(--paper2);
   --border:var(--hair);
   --washi:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
@@ -557,7 +557,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl">Werkzeuge</div>
     <div class="settings-group">
-      <div class="settings-row" onclick="diagnoseGutschriften()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris15" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris15)"><path d="M16.5 6.6C13.9 3.8 9.4 3.6 6.4 6.3 3.4 9 3.2 13.5 5.9 16.5c2.6 2.9 7 3.2 10 .6 1.8-1.6 2.6-3.9 2.4-6.1"/></g></svg><div><div class="sr-label">Diagnose</div><div class="sr-sub">Gutschriften-Status</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="runIntegrityCheckAndShow()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris27" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris27)"><path d="M12 3.5l7 2.5v5c0 5-3.5 8-7 9.5C8.5 19 5 16 5 11v-5z"/><path d="M9 11.5l2 2 4-4"/></g></svg><div><div class="sr-label">Daten-Check</div><div class="sr-sub">Konsistenz prüfen</div></div></div><div class="sr-right">›</div></div><div class="settings-row" onclick="diagnoseGutschriften()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris15" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris15)"><path d="M16.5 6.6C13.9 3.8 9.4 3.6 6.4 6.3 3.4 9 3.2 13.5 5.9 16.5c2.6 2.9 7 3.2 10 .6 1.8-1.6 2.6-3.9 2.4-6.1"/></g></svg><div><div class="sr-label">Diagnose</div><div class="sr-sub">Gutschriften-Status</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="v2KonsolidiereBatch()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris16" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris16)"><path d="M4 11c1.5 4 4.5 6 8 6s6.5-2 8-6"/><path d="M4 11c5-1.5 11-1.5 16 0"/><path d="M11 6l1.5 5M13.5 7.5l-1 3.5" stroke-dasharray="1.3 1.6" opacity=".55"/></g></svg><div><div class="sr-label">Reparieren</div><div class="sr-sub">fehlende dbv2-Einträge</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
@@ -750,7 +750,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div class="group-lbl">Werkzeuge</div>
     <div class="settings-group">
       <div class="settings-row" onclick="switchView('undo')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris26" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris26)"><path d="M9 7 4.5 11 9 15"/><path d="M4.5 11H15a4.5 4.5 0 0 1 0 9h-3"/></g></svg><div><div class="sr-label">Rückgängig</div><div class="sr-sub">letzte Aktionen</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="runIntegrityCheckAndShow()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris27" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris27)"><path d="M12 3.5l7 2.5v5c0 5-3.5 8-7 9.5C8.5 19 5 16 5 11v-5z"/><path d="M9 11.5l2 2 4-4"/></g></svg><div><div class="sr-label">Daten-Check</div><div class="sr-sub">Konsistenz prüfen</div></div></div><div class="sr-right">›</div></div>
+      
     </div>
 
   </div>
@@ -3992,7 +3992,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // alte Termin-Rechenbasis) raus. "Mein Jahr" (dbv2) deckt Monat-für-Monat inkl.
   // KW-Box + offen/bezahlt/abgerechnet ab und kann mehr. Toter Screen-Code bleibt
   // harmlos liegen (kein Datenpfad berührt).
-  if(elH) elH.textContent = '963';
+  // Build 964: Wartungs-Werkzeuge gebuendelt — "Daten-Check" aus Buch-Tab ins Profil
+  // zu Diagnose+Reparieren verschoben. Buch enthaelt jetzt nur noch Buchhaltung,
+  // alle drei Wartungstools an einem Ort. Kein Funktionsverlust.
+  // Build 965: Zen-Farben zentral — Blau (--blue) und Lila (--purple) auf Kiefer
+  // umgestellt, helle Varianten (--blue2/--purple2) auf Washi-Grün. Betrifft alle
+  // Screens auf einmal (USt-Box, Beträge, Buttons, Links). KI-Farbe --ai unberührt.
+  // Build 966: Emojis in Buttons durch krisselige Tusche-Icons ersetzt (currentColor,
+  // erbt Button-Farbe): Rückgängig=Rückbogen, Zahlungserinnerung/Nachfrage=Knotenbrief.
+  if(elH) elH.textContent = '966';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11695,7 +11703,7 @@ function rUndoLog(){
       +(detail?'<div style="font-size:11px;color:var(--ink2);margin-top:3px">'+esc(detail)+'</div>':'')
       +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
       +'</div></div>'
-      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:var(--red2);color:var(--orange);border:1.5px solid #e3c4c0;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Rückgängig</button>'
+      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:var(--red2);color:var(--orange);border:1.5px solid #e3c4c0;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb1)"><path d="M9 7c-4 0-6 3-6 5"/><path d="M6 4 3 7l3 3"/><path d="M8 12c4 0 6-3 6-5"/></g></svg>Rückgängig</button>'
       +'</div>';
   }).join('');
 }
@@ -18764,7 +18772,7 @@ function rAbrechnungen(){
         +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Studio-Brutto</div><strong>'+fmtEur(d.studioBrutto||d.ausgezahlt)+'</strong></div>'
         +'<div style="flex:1;font-size:11px"><div style="color:#999;margin-bottom:1px">Gutschrift-Nr.</div><strong>'+(d.ab.gutschrift_nr||'–')+'</strong></div>'
         +'</div></div>'
-        +'<div id="mahn-btn-'+tid+'" onclick="abMahnEmail(\''+tid+'\')" style="margin-top:6px;background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:8px;padding:8px;text-align:center;font-size:12px;font-weight:700;color:var(--orange);cursor:pointer">✉ Nachfrage-Mail vorbereiten</div>'
+        +'<div id="mahn-btn-'+tid+'" onclick="abMahnEmail(\''+tid+'\')" style="margin-top:6px;background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:8px;padding:8px;text-align:center;font-size:12px;font-weight:700;color:var(--orange);cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb3" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb3)"><path d="M6 6c4-1 8-1 12 0 .4 4 .4 8 0 12-4 1-8 1-12 0-.4-4-.4-8 0-12z"/><path d="M7 11c3.5.8 6.5.8 10 0"/><path d="M10.5 14.5l3 3M13.5 14.5l-3 3"/></g></svg>Nachfrage-Mail vorbereiten</div>'
         +'</div>';
     });
     html+='</div>';
@@ -19455,7 +19463,7 @@ function rMahnwesen(){
         +'</div>'
         +(_mlogLabel?'<div style="font-size:10px;color:var(--accent);font-weight:700;margin-bottom:8px">'+_mlogLabel+'</div>':'')
         +'<div style="display:flex;gap:8px">'
-        +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Zahlungserinnerung</button>'
+        +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb2" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb2)"><path d="M6 6c4-1 8-1 12 0 .4 4 .4 8 0 12-4 1-8 1-12 0-.4-4-.4-8 0-12z"/><path d="M7 11c3.5.8 6.5.8 10 0"/><path d="M10.5 14.5l3 3M13.5 14.5l-3 3"/></g></svg>Zahlungserinnerung</button>'
         +'<button type="button" ontouchstart="_mahnPressStart(\''+ab.id+'\')" ontouchmove="_mahnPressMove()" ontouchend="_mahnPressEnd(\''+ab.id+'\',event)" oncontextmenu="return false" style="background:'+(_gemahnt?'var(--green2)':'var(--cream2)')+';color:'+(_gemahnt?'var(--accent)':'var(--ink3)')+';border:none;border-radius:8px;padding:9px 13px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none" title="'+(_gemahnt?'Gemahnt am '+fd(_mlog[_mlog.length-1])+' — lang drücken zum Zurücknehmen':'Tippen: als gemahnt markieren')+'">✉</button>'
         +(ersterTerminId?'<button type="button" onclick="openDetail(\''+ersterTerminId+'\');switchView(\'termine\')" style="background:var(--cream2);color:var(--ink);border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>':'')
         +'</div>'
