@@ -739,7 +739,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl">Übersicht</div>
     <div class="settings-group">
-      <div class="settings-row" onclick="switchView('verdienstübersicht')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris20" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris20)"><rect x="4.2" y="5.4" width="15.6" height="15" rx="2.6"/><path d="M4.2 10h15.6M9 3.4v3.4M15 3.4v3.4"/></g></svg><div><div class="sr-label">Jahresübersicht</div><div class="sr-sub">Monat für Monat</div></div></div><div class="sr-right">›</div></div>
+      
       <div class="settings-row" onclick="switchView('ust-voranmeldung')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris21" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris21)"><path d="M4 11l8-3 8 3-8 2.4-8-2.4z"/><path d="M12 13.4c-.1 1.9 0 3.7 0 5.6M12 13.4l-4 3M12 13.4l4 3"/><path d="M12 8l1.4-3"/></g></svg><div><div class="sr-label">USt-Voranmeldung</div><div class="sr-sub">Ist-Versteuerung §20</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('jahresabschluss')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris22" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris22)"><path d="M5 4h11l3 3v13H5z"/><path d="M8 9h8M8 12.5h8M8 16h5" opacity=".7"/><path d="M14.5 19.5l2 2 3.5-3.5"/></g></svg><div><div class="sr-label">Jahresabschluss</div><div class="sr-sub">für die Steuerberaterin</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('gvl')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris23" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris23)"><path d="M6 12c0-4 5-4 6 0s6 4 6 0-5-4-6 0-6 4-6 0z"/></g></svg><div><div class="sr-label">GVL</div><div class="sr-sub">Verteilungen · Export</div></div></div><div class="sr-right">›</div></div>
@@ -3981,7 +3981,18 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // + japanisch, inline-Filter kris32-34): Persoenliche Daten=Kamon,
   // Rechnungs-Bankverbindung=Koban, Finanzamt=Hanko(Siegel). Funktionale Icons
   // (Suche/Datum) bewusst unveraendert.
-  if(elH) elH.textContent = '959';
+  // Build 960: (1) Schreibfehler 'Eingangänge'->'Eingänge'. (2) Zen-Titel im
+  // 'alles erfasst'-Zustand rotiert zufaellig aus 30 Zen-Saetzen (Ma/Ruhe/Leere).
+  // Build 961: Zen-Rotation auf 8 vom Nutzer gewaehlte, BELEGTE Zitate (Tao Te King,
+  // Zhuangzi). Im 'alles erfasst'-Zustand: Satz als Titel, Quelle klein darunter,
+  // USt-Zahllast (falls vorhanden) bleibt als Zusatzzeile erhalten.
+  // Build 962: Zen-Satz wechselt nur noch wochenweise (Index aus Kalenderwoche seit
+  // Epoch), bleibt also 7 Tage stabil statt bei jedem Öffnen zu rotieren.
+  // Build 963: Doppelung entfernt — Menüeintrag "Jahresübersicht" (verdienstübersicht,
+  // alte Termin-Rechenbasis) raus. "Mein Jahr" (dbv2) deckt Monat-für-Monat inkl.
+  // KW-Box + offen/bezahlt/abgerechnet ab und kann mehr. Toter Screen-Code bleibt
+  // harmlos liegen (kein Datenpfad berührt).
+  if(elH) elH.textContent = '963';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10074,13 +10085,25 @@ function rHeute(){
   if(ensoEl) ensoEl.innerHTML=_ensoSvg(offenBank+offenDok);
   if(zt&&zs){
     if(offenBank===0&&offenDok===0){
-      zt.textContent='Alles ist erfasst.';
-      zs.innerHTML = ustTxt || 'Nichts wartet auf dich.';
+      var _zenErfasst=[
+        ['Beim Nichtstun bleibt nichts ungetan.','Tao Te King · 48'],
+        ['Die Stille ist der Herr der Unruhe.','Tao Te King · 26'],
+        ['Der Weise tut nichts, doch bleibt nichts ungetan.','Tao Te King · 37'],
+        ['Bleibe still, und die Welt wird von selbst recht.','Tao Te King · 37'],
+        ['Die Erde tut nichts; dieses Nicht-Tun ist Ruhe.','Zhuangzi'],
+        ['Man spiegelt sich im stillen Wasser, nicht im fließenden.','Zhuangzi'],
+        ['Über Vergangenes mach dir keine Sorgen.','Zhuangzi'],
+        ['Wo Wissen und Gelassenheit sich ergänzen, entsteht Ordnung.','Zhuangzi']
+      ];
+      var _week=Math.floor(Date.now()/(7*24*60*60*1000));
+      var _zp=_zenErfasst[_week % _zenErfasst.length];
+      zt.textContent=_zp[0];
+      zs.innerHTML = '<span style="color:var(--ink3)">— '+_zp[1]+'</span>' + (ustTxt ? '<br>'+ustTxt : '');
     }else{
       zt.textContent='Fast alles erfasst.';
       var parts=[];
       if(offenDok>0) parts.push(offenDok+' Beleg'+(offenDok!==1?'e':'')+' unbestätigt');
-      if(offenBank>0) parts.push(offenBank+' Eingang'+(offenBank!==1?'änge':'')+' offen');
+      if(offenBank>0) parts.push(offenBank+' '+(offenBank!==1?'Eingänge':'Eingang')+' offen');
       zs.innerHTML = parts.join(' · ') + (ustTxt ? '<br>'+ustTxt : '');
     }
   }
