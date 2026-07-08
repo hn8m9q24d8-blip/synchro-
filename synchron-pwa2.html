@@ -370,7 +370,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 @keyframes fall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
 .buch-menu-row{background:#fff;border:1px solid #e8e8e8;border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 1px 4px rgba(0,0,0,.06);}
-.buch-menu-row:active{background:#f5f9ff;}
+.buch-menu-row:active{background:#FDFCFA;}
 .buch-menu-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex-shrink:0;}
 .buch-menu-body{flex:1;}
 .buch-menu-title{font-size:15px;font-weight:700;color:var(--ink);}
@@ -381,7 +381,7 @@ select.form-input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://
 
 /* ── TAKES DRUM ROLLER ─────────────────────────────── */
 .takes-drum-wrap{display:flex;align-items:center;justify-content:center;border:1px solid var(--ink6);border-radius:16px;overflow:hidden;height:72px;background:#fff;box-shadow:none;}
-.takes-drum-btn{width:64px;height:72px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:200;color:var(--blue);cursor:pointer;user-select:none;-webkit-user-select:none;background:#f5f9ff;flex-shrink:0;transition:background .1s;}
+.takes-drum-btn{width:64px;height:72px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:200;color:var(--blue);cursor:pointer;user-select:none;-webkit-user-select:none;background:#FDFCFA;flex-shrink:0;transition:background .1s;}
 .takes-drum-btn:active{background:var(--blue2);}
 .takes-drum-display{flex:1;height:72px;overflow:hidden;position:relative;background:#fff;cursor:grab;touch-action:none;}
 .takes-drum-display:active{cursor:grabbing;}
@@ -863,7 +863,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div onclick="ustNavMonth(-1)" style="background:var(--cream2);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:16px">&#x2039;</div>
       <div onclick="ustNavMonth(1)" style="background:var(--cream2);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:16px">&#x203A;</div>
       <div onclick="ustExport()" style="background:var(--purple);color:#fff;font-size:12px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer">Export</div>
-      <div onclick="vorsteuerJahrExport()" style="background:var(--ai);color:#fff;font-size:12px;font-weight:700;padding:7px 10px;border-radius:8px;cursor:pointer" title="Jahres-Vorsteuer für Steuerberater">VSt-Jahr</div>
+      <div onclick="vorsteuerJahrExport()" style="background:var(--accent);color:#fff;font-size:12px;font-weight:700;padding:7px 10px;border-radius:8px;cursor:pointer" title="Jahres-Vorsteuer für Steuerberater">VSt-Jahr</div>
     </div>
   </div>
   <div id="ust-scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(env(safe-area-inset-bottom)+90px)"></div>
@@ -887,8 +887,8 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <input id="ab-file-img" type="file" accept="image/*" style="display:none" onchange="abGotFile(this,'img')">
   <input id="ab-file-pdf" type="file" accept="application/pdf" style="display:none" onchange="abGotFile(this,'pdf')">
   <div style="display:flex;gap:10px;margin-bottom:14px">
-    <div onclick="document.getElementById('ab-file-img').click()" style="flex:1;border:2px dashed #E7E3DA;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:#f5fbff"><div style="font-size:28px">Foto</div><div style="font-size:12px;font-weight:700;color:var(--ai);margin-top:4px">Galerie / Kamera</div></div>
-    <div onclick="document.getElementById('ab-file-pdf').click()" style="flex:1;border:2px dashed #E7E3DA;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:#f5fbff"><div style="font-size:28px">PDF</div><div style="font-size:12px;font-weight:700;color:var(--ai);margin-top:4px">PDF-Datei</div></div>
+    <div onclick="document.getElementById('ab-file-img').click()" style="flex:1;border:2px dashed #E7E3DA;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:#FDFCFA"><div style="font-size:28px">Foto</div><div style="font-size:12px;font-weight:700;color:var(--ai);margin-top:4px">Galerie / Kamera</div></div>
+    <div onclick="document.getElementById('ab-file-pdf').click()" style="flex:1;border:2px dashed #E7E3DA;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:#FDFCFA"><div style="font-size:28px">PDF</div><div style="font-size:12px;font-weight:700;color:var(--ai);margin-top:4px">PDF-Datei</div></div>
   </div>
   <div id="ab-scan-preview" style="display:none;margin-bottom:12px;text-align:center">
     <img id="ab-scan-img" style="max-width:100%;max-height:150px;border-radius:8px;border:1px solid #eee">
@@ -1070,7 +1070,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     </div>
 
     <!-- Summe Preview -->
-    <div id="re-summe-box" style="background:#f5f9ff;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px">
+    <div id="re-summe-box" style="background:#FDFCFA;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;justify-content:space-between;font-size:13px;color:#666">
         <span>Netto</span><span id="re-prev-netto">€ 0,00</span>
       </div>
@@ -3946,7 +3946,36 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // (Schildkrötenpanzer), Rechnungs-Bankverbindung=Berg, E-Mail=Yabane (Pfeilfeder).
   // Inline-kris-Filter beibehalten für iOS.
   // Build 977: Termine-Empty-State — nur noch "Ein freier Tag.", Unterzeile entfernt.
-  if(elH) elH.textContent = '977';
+  // Build 978: Restliche helle Blau/Lila-Boxen (#faf5ff etc.) auf Washi, USt-Box
+  // jetzt Zen. VSt-Jahr-Button von KI-Farbe auf Kiefer (konsistent mit Export).
+  // Build 979: USt-Voranmeldung Konzept 1 — Jahres-Hero (kumulierte eingereichte
+  // Zahllast + Fortschritt) + Monatsraster (Jan-Dez, Status eingereicht/offen/künftig,
+  // tippbar). Neues Feld db.profil.ust_eingereicht. Monatsberechnung unangetastet.
+  // Build 980: USt eingereicht-Toggle — pro Monat "als eingereicht markieren"
+  // (speichert Datum in ust_eingereicht), fliesst in Jahres-Hero + Raster ein.
+  // Build 981: USt-Raster schaltet nach Stammdaten-Feld "Voranmeldung" um —
+  // quartalsweise: 4 Quartalskacheln (Q1-Q4, Zahllast=Summe 3 Monate, ein
+  // eingereicht-Häkchen pro Quartal, Key YYYY-Qn), sonst 12 Monate. Hero gleich.
+  // Build 982: Reparatur — Hero-html-Ausgabe (Titel + Raster) war beim Quartals-
+  // Umbau versehentlich mit-ersetzt worden. Jetzt wiederhergestellt, Grid-Spalten
+  // dynamisch (2 Quartal / 3 Monat). Raster + Hero rendern wieder.
+  // Build 983: Dezenter Fristen-Countdown auf der Startseite — nächste Steuerfrist
+  // (USt nach voranm-Feld, ESt-Vorauszahlungen, Jahressteuer mit Berater) als leise
+  // Zeile unter dem Zen-Spruch, analog zur USt-Zahllast-Zeile. Aus Datum berechnet.
+  // Build 984: Fristen-Zeile ruhiger — "Umsatzsteuer Juni · in zwei Tagen" statt
+  // "Nächste Frist: USt-Voranmeldung". Erscheint erst ab 3 Tagen vorher (sonst nichts),
+  // neutral in Grautönen, kein Ampel-Rot/Grün, kein Ermahnen.
+  // Build 985: Frist-Zeile im Pitch-Ton — "Als Nächstes: Umsatzsteuer Juni —
+  // fällig in drei Tagen", warm und beruhigend statt technisch, ganz in dezentem
+  // Grau. Zen-Zitate bleiben Titel. Weiter nur ≤3 Tage, kein Ampel-Rot/Grün.
+  // Build 986: Frist als Aufgabe statt Countdown — nahende Frist (USt/ESt 5 Tage,
+  // GVL 14 Tage) kippt den Ensō auf offen, Titel "Fast alles erledigt.", darunter
+  // die Aufgabe (was zu tun ist), kein "Als Nächstes"/kein Tage-Countdown.
+  // Build 987: GVL-Frist recherchiert & korrigiert — Meldeschluss 31.12. (nicht 31.1.),
+  // betroffenes Verteilungsjahr = Frist-Jahr minus 3 (belegt: Schlussverteilung 2023
+  // → Meldeschluss 31.12.2026). 14 Tage Vorlauf. Quelle: gvl.de/fristen.
+  // Build 988: GVL-Aufgabentext gekürzt — "(Schlussverteilung)" entfernt.
+  if(elH) elH.textContent = '988';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5002,8 +5031,8 @@ function openDetail(id){
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'var(--accent)':'var(--orange)')+'">'
       +'<div class="info-card-header"><span>Abrechnung'
       +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#FDFCFA;color:#4A5A4E;padding:2px 6px;border-radius:6px;font-weight:700">'+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
-      +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#faf5ff;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700">Master · '+ab._multiAnzahl+' Termine</span>':'')
-      +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#faf5ff;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✎ bearbeiten</span>':'')+'</span>'
+      +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#FDFCFA;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700">Master · '+ab._multiAnzahl+' Termine</span>':'')
+      +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#FDFCFA;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✎ bearbeiten</span>':'')+'</span>'
       +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(bruttoAnteilFehlt?'· Anteil nicht im PDF ausgewiesen':(netBruttoOk?'✓ Stimmt':'⚠ Differenz'))+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4A5A4E;margin-bottom:8px;padding:6px 8px;background:#FDFCFA;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
@@ -10035,10 +10064,12 @@ function rHeute(){
       ustTxt=mNames[pm.getMonth()]+' ans Finanzamt: <span class="n">'+fmtEur(last)+'</span>';
     }
   }catch(e){}
+  var _fAufg=''; try{ _fAufg=_fristFaellig()||''; }catch(e){}
+  var _offenGes=offenBank+offenDok+(_fAufg?1:0);
   var ensoEl=document.getElementById('heute-enso');
-  if(ensoEl) ensoEl.innerHTML=_ensoSvg(offenBank+offenDok);
+  if(ensoEl) ensoEl.innerHTML=_ensoSvg(_offenGes);
   if(zt&&zs){
-    if(offenBank===0&&offenDok===0){
+    if(_offenGes===0){
       var _zenErfasst=[
         ['Beim Nichtstun bleibt nichts ungetan.','Tao Te King · 48'],
         ['Die Stille ist der Herr der Unruhe.','Tao Te King · 26'],
@@ -10056,6 +10087,7 @@ function rHeute(){
     }else{
       zt.textContent='Fast alles erfasst.';
       var parts=[];
+      if(_fAufg) parts.push(_fAufg);
       if(offenDok>0) parts.push(offenDok+' Beleg'+(offenDok!==1?'e':'')+' unbestätigt');
       if(offenBank>0) parts.push(offenBank+' '+(offenBank!==1?'Eingänge':'Eingang')+' offen');
       zs.innerHTML = parts.join(' · ') + (ustTxt ? '<br>'+ustTxt : '');
@@ -14308,7 +14340,7 @@ function terminGageRecherche(terminId){
       var empfKG=typ==='streaming'?85:typ==='freetv'?80:typ==='kino'?100:null;
       var empfRate=typ==='streaming'?4.20:typ==='freetv'?4.00:typ==='kino'?5.00:null;
       var farbe=typ==='streaming'?'var(--ai)':typ==='freetv'?'var(--accent)':typ==='kino'?'var(--purple)':'#666';
-      var bg=typ==='streaming'?'var(--blue2)':typ==='freetv'?'var(--green2)':typ==='kino'?'#faf5ff':'var(--card)';
+      var bg=typ==='streaming'?'var(--blue2)':typ==='freetv'?'var(--green2)':typ==='kino'?'#FDFCFA':'var(--card)';
       if(res){
         res.style.display='block';
         res.innerHTML='<div style="background:'+bg+';border:1.5px solid '+farbe+'44;border-radius:10px;padding:10px 12px">'
@@ -17981,6 +18013,65 @@ function ustNavMonth(dir){
   rUstVoranmeldung();
 }
 
+function _naechsteFristen(){
+  var now=new Date(); now.setHours(0,0,0,0);
+  var mN=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var out=[];
+  var vm=(db.profil&&db.profil.voranm)||'monatlich';
+  var yB=now.getFullYear();
+  for(var yy=yB-1; yy<=yB+1; yy++){
+    if(vm==='quartalsweise'){
+      [[3,'1. Quartal'],[6,'2. Quartal'],[9,'3. Quartal'],[12,'4. Quartal']].forEach(function(q){
+        out.push({label:'Umsatzsteuer '+q[1]+' ans Finanzamt', typ:'ust', datum:new Date(yy, q[0], 10)});
+      });
+    } else if(vm!=='jährlich'){
+      for(var m=0;m<12;m++){
+        out.push({label:'Umsatzsteuer '+mN[m]+' ans Finanzamt', typ:'ust', datum:new Date(yy, m+1, 10)});
+      }
+    }
+    [2,5,8,11].forEach(function(mo){
+      out.push({label:'Einkommensteuer-Vorauszahlung', typ:'est', datum:new Date(yy,mo,10)});
+    });
+    out.push({label:'GVL-Meldungen für '+(yy-3)+' abgeben', typ:'gvl', datum:new Date(yy,11,31)});
+  }
+  out=out.filter(function(f){return f.datum>=now;}).sort(function(a,b){return a.datum-b.datum;});
+  return out;
+}
+function _fristFaellig(){
+  var now=new Date(); now.setHours(0,0,0,0);
+  var ff=_naechsteFristen();
+  for(var i=0;i<ff.length;i++){
+    var tage=Math.round((ff[i].datum-now)/864e5);
+    var vorlauf=ff[i].typ==='gvl'?14:5;
+    if(tage<=vorlauf && tage>=0) return ff[i].label;
+  }
+  return null;
+}
+
+function _ustMonatZahllast(yr, mo){
+  var ym=yr+'-'+String(mo+1).padStart(2,'0');
+  var einn=0;
+  var v2abs=(typeof dbv2!=='undefined'&&dbv2.abrechnungen)||[];
+  v2abs.forEach(function(a){
+    var zd=a.zahlungs_datum;
+    if(!zd||zd.slice(0,7)!==ym||a._ueberholt_durch) return;
+    var brutto=parseFloat(a.brutto)||0, ust=parseFloat(a.ust_betrag)||0;
+    if(String(a.klasse)==='4'&&!ust) ust=Math.round(brutto*0.07*100)/100;
+    if(a.steuerfrei) ust=0;
+    einn+=ust;
+  });
+  return Math.round(einn*100)/100;
+}
+function ustSelectMonth(m){ _ustMonth=m; rUstVoranmeldung(); }
+function ustToggleEingereicht(){
+  var _qw=(db.profil&&db.profil.voranm==='quartalsweise');
+  var key=_qw ? (_ustYear+'-Q'+(Math.floor(_ustMonth/3)+1)) : (_ustYear+'-'+String(_ustMonth+1).padStart(2,'0'));
+  if(!db.profil) db.profil={};
+  if(!db.profil.ust_eingereicht) db.profil.ust_eingereicht={};
+  if(db.profil.ust_eingereicht[key]){ delete db.profil.ust_eingereicht[key]; }
+  else { db.profil.ust_eingereicht[key]=new Date().toISOString().slice(0,10); }
+  save(db); rUstVoranmeldung();
+}
 function rUstVoranmeldung(){
   var lbl = document.getElementById('ust-period-label');
   if(lbl) lbl.textContent = MONTH_NAMES[_ustMonth] + ' ' + _ustYear;
@@ -18048,10 +18139,72 @@ function rUstVoranmeldung(){
 
   // ── RENDER ───────────────────────────────────────────────
   var html = '';
+  // Build 979: Jahres-Hero + Monatsraster (Konzept 1)
+  (function(){
+    var eingereicht=(db.profil&&db.profil.ust_eingereicht)||{};
+    var now=new Date(), curY=now.getFullYear(), curM=now.getMonth();
+    var mnames=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+    var kumuliert=0, anzEing=0, anzPflicht=0, cells='';
+    var _qw=(db.profil&&db.profil.voranm==='quartalsweise');
+    if(_qw){
+      var qn=['Q1 · Jan–Mär','Q2 · Apr–Jun','Q3 · Jul–Sep','Q4 · Okt–Dez'];
+      for(var q=0;q<4;q++){
+        var qkey=_ustYear+'-Q'+(q+1);
+        var z=Math.round((_ustMonatZahllast(_ustYear,q*3)+_ustMonatZahllast(_ustYear,q*3+1)+_ustMonatZahllast(_ustYear,q*3+2))*100)/100;
+        var eing=!!eingereicht[qkey];
+        var kuenftig=(_ustYear>curY)||(_ustYear===curY&&q*3>curM);
+        var aktuell=(Math.floor(_ustMonth/3)===q);
+        if(eing){ kumuliert+=z; anzEing++; }
+        if(!kuenftig) anzPflicht++;
+        var bg=eing?'#eef1ec':(kuenftig?'var(--card)':'#f4ede4');
+        var bc=aktuell?'var(--accent)':(eing?'#dfe4dc':'var(--hair)');
+        var stc=eing?'var(--accent)':(kuenftig?'var(--ink3)':'#A8814F');
+        var stt=eing?'✓ eingereicht':(kuenftig?'künftig':'offen');
+        cells+='<div onclick="ustSelectMonth('+(q*3)+')" style="background:'+bg+';border:'+(aktuell?'1.5px':'1px')+' solid '+bc+';border-radius:11px;padding:11px 12px;cursor:pointer;'+(kuenftig?'opacity:.55;':'')+'">'
+          +'<div style="font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px">'+qn[q]+'</div>'
+          +'<div style="font-family:var(--serif);font-size:15px;margin-top:3px">'+((kuenftig&&z===0)?'—':fmtEur(z))+'</div>'
+          +'<div style="font-size:9px;margin-top:4px;color:'+stc+'">'+stt+'</div></div>';
+      }
+    } else {
+      for(var m=0;m<12;m++){
+        var ym=_ustYear+'-'+String(m+1).padStart(2,'0');
+        var z=_ustMonatZahllast(_ustYear,m);
+        var eing=!!eingereicht[ym];
+        var kuenftig=(_ustYear>curY)||(_ustYear===curY&&m>curM);
+        var aktuell=(m===_ustMonth);
+        if(eing){ kumuliert+=z; anzEing++; }
+        if(!kuenftig) anzPflicht++;
+        var bg=eing?'#eef1ec':(kuenftig?'var(--card)':'#f4ede4');
+        var bc=aktuell?'var(--accent)':(eing?'#dfe4dc':'var(--hair)');
+        var stc=eing?'var(--accent)':(kuenftig?'var(--ink3)':'#A8814F');
+        var stt=eing?'✓ eingereicht':(kuenftig?'künftig':'offen');
+        cells+='<div onclick="ustSelectMonth('+m+')" style="background:'+bg+';border:'+(aktuell?'1.5px':'1px')+' solid '+bc+';border-radius:11px;padding:9px 10px;cursor:pointer;'+(kuenftig?'opacity:.55;':'')+'">'
+          +'<div style="font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px">'+['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][m]+'</div>'
+          +'<div style="font-family:var(--serif);font-size:14px;margin-top:2px">'+((kuenftig&&z===0)?'—':fmtEur(z))+'</div>'
+          +'<div style="font-size:9px;margin-top:4px;color:'+stc+'">'+stt+'</div></div>';
+      }
+    }
+    var _gridCols=_qw?2:3;
+    html+='<div style="background:var(--card);border:1px solid var(--hair);border-top:3px solid var(--accent);border-radius:14px;padding:16px;margin-bottom:12px">'
+      +'<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--clay);font-weight:600">USt '+_ustYear+' · bisher ans Finanzamt</div>'
+      +'<div style="font-family:var(--serif);font-size:30px;color:var(--accent);margin:6px 0 2px">'+fmtEur(kumuliert)+'</div>'
+      +'<div style="font-size:12px;color:var(--ink2)">'+anzEing+' von '+anzPflicht+' '+(_qw?'Voranmeldungen':'Voranmeldungen')+' eingereicht</div></div>'
+      +'<div style="display:grid;grid-template-columns:repeat('+_gridCols+',1fr);gap:8px;margin-bottom:16px">'+cells+'</div>';
+  })();
 
   // Summary card
   var zahlCol = zahllast > 0 ? 'var(--purple)' : 'var(--accent)';
-  html += '<div style="margin:12px 16px;background:#faf5ff;border:2px solid #E7E3DA;border-radius:14px;padding:16px">'
+  (function(){
+    var _qw2=(db.profil&&db.profil.voranm==='quartalsweise');
+    var _ym=_qw2 ? (_ustYear+'-Q'+(Math.floor(_ustMonth/3)+1)) : (_ustYear+'-'+String(_ustMonth+1).padStart(2,'0'));
+    var _eing=(db.profil&&db.profil.ust_eingereicht&&db.profil.ust_eingereicht[_ym]);
+    html+='<div onclick="ustToggleEingereicht()" style="cursor:pointer;text-align:center;padding:11px;margin:0 0 14px;border-radius:11px;'
+      +(_eing?'background:#eef1ec;border:1px solid #dfe4dc;color:var(--accent)':'background:var(--card);border:1px dashed var(--ink3);color:var(--ink2)')
+      +';font-size:13px;font-weight:500">'
+      +(_eing?'✓ Eingereicht am '+_eing.split('-').reverse().join('.')+' · tippen zum Zurücknehmen':(_qw2?'Dieses Quartal als eingereicht markieren':'Diesen Monat als eingereicht markieren'))
+      +'</div>';
+  })();
+  html += '<div style="margin:12px 16px;background:#FDFCFA;border:2px solid #E7E3DA;border-radius:14px;padding:16px">'
     +'<div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">'+MONTH_NAMES[_ustMonth]+' '+_ustYear+' – Zusammenfassung</div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
     +'<div style="font-size:13px;color:#666">Zahllast ans Finanzamt</div>'
@@ -20086,7 +20239,7 @@ function reRenderPositionen(){
   var el=document.getElementById('re-positionen');
   if(!el) return;
   el.innerHTML=_rePositionen.map(function(p,i){
-    return '<div style="background:#f8f9ff;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">'
+    return '<div style="background:#FDFCFA;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center">'
       +'<div style="font-size:11px;font-weight:700;color:#666">POSITION '+(i+1)+'</div>'
       +(_rePositionen.length>1?'<span onclick="reRemovePosition('+i+')" style="color:var(--red);font-size:18px;cursor:pointer">✕</span>':'')
@@ -20528,7 +20681,7 @@ function generateRechnungPDFHTMLPreview(){
     +'<div style="font-size:13px;color:#666">Datum: '+fd(r.datum||today())+'</div>'
     +(r.faellig?'<div style="font-size:13px;color:var(--red);font-weight:700">Fällig: '+fd(r.faellig)+'</div>':'')
     +'</div></div>'
-    +'<div style="background:#f5f9ff;border-left:3px solid var(--ai);padding:12px 16px;margin-bottom:28px">'
+    +'<div style="background:#FDFCFA;border-left:3px solid var(--ai);padding:12px 16px;margin-bottom:28px">'
     +'<div style="font-size:11px;color:#888;margin-bottom:4px">AN</div>'
     +'<div style="font-weight:700;font-size:15px">'+esc(r.empf||'–')+'</div></div>'
     +(r.leistung?'<div style="margin-bottom:20px"><div style="font-size:11px;color:#888;margin-bottom:6px;font-weight:700;letter-spacing:.5px">LEISTUNGSBESCHREIBUNG</div>'
@@ -23125,7 +23278,7 @@ function _mev6PeekHtml(r,idx){
     <div id="ds-upload-area">
       <input id="ds-file-gallery" type="file" accept="image/*" style="display:none" onchange="dsGotFile(this)">
       <input id="ds-file-camera" type="file" accept="image/*" capture="environment" style="display:none" onchange="dsGotFile(this)">
-      <div onclick="document.getElementById('ds-file-gallery').click()" style="border:2px dashed #E7E3DA;border-radius:14px;padding:24px;text-align:center;cursor:pointer;background:#f5fbff;margin-bottom:16px">
+      <div onclick="document.getElementById('ds-file-gallery').click()" style="border:2px dashed #E7E3DA;border-radius:14px;padding:24px;text-align:center;cursor:pointer;background:#FDFCFA;margin-bottom:16px">
         <div style="font-size:40px">&#x1F5BC;&#xFE0F;</div>
         <div style="font-weight:800;color:var(--ai);font-size:15px;margin-top:8px">Dispo-Foto aus Galerie w&#xe4;hlen</div>
         <div style="font-size:12px;color:#999;margin-top:4px">Foto der Synchron-Dispo</div>
