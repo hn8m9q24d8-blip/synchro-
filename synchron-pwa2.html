@@ -954,7 +954,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
         <button onclick="reJahrWechsel(1)" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);border-radius:8px;padding:3px 10px;font-size:15px;cursor:pointer">&rsaquo;</button>
       </div>
     </div>
-    <div style="background:var(--card);border:1px solid var(--hair);border-top:3px solid var(--accent);border-radius:14px;padding:16px">
+    <div style="background:var(--cream2);border:1px solid var(--hair);border-top:3px solid var(--accent);border-radius:14px;padding:16px">
       <div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--clay);font-weight:600">Rechnungen <span id="re-jahr2">2026</span> &middot; gestellt</div>
       <div id="re-hero-sum" style="font-family:var(--serif);font-size:29px;color:var(--accent);margin:6px 0 2px">&euro; 0,00</div>
       <div id="re-hero-cnt" style="font-size:12px;color:var(--ink2)">0 Rechnungen</div>
@@ -3990,7 +3990,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Netto/USt) mit Jahres-Navigation, Zen-Liste Variante B (Empfänger, Nummer·Datum,
   // Betrag, Status-Balken offen/bezahlt/storniert). Überfälligkeit/Eingang bewusst
   // ausgelassen (gehören ins Mahnwesen bzw. Kontoabgleich).
-  if(elH) elH.textContent = '989';
+  // Build 990: Rechnungen-Hero auf den App-Holzton --cream2 (#EFECE5) — der
+  // etablierte warme Leisten-Ton (62x in der App), statt weißem --card. Einheitlich.
+  // Build 991: Rechnungen-Empty-State = Brief im Handwerk-Tusche-Stil (Variante 2,
+  // feine Umrisslinien, milder sumi-Filter inline, rote Marke). "Noch keine Rechnung."
+  if(elH) elH.textContent = '991';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -20071,7 +20075,7 @@ function rRechnungen(){
   setT('re-hero-ust', fmtEur(ust));
   setT('re-jahr', _reJahr); setT('re-jahr2', _reJahr);
   if(!rechnungen.length){
-    el.innerHTML='<div class="empty-state" style="padding:44px 20px"><div class="empty-title" style="font-family:var(--serif);font-weight:500">Keine Rechnungen '+_reJahr+'</div><div class="empty-sub">Tippe auf + um eine Rechnung zu erstellen.</div></div>';
+    el.innerHTML='<div class="empty-state" style="padding:34px 20px;text-align:center"><svg viewBox="0 0 300 150" style="width:min(220px,60%);height:auto;display:block;margin:0 auto 14px" aria-hidden="true"><defs><filter id="sumiRe" filterUnits="userSpaceOnUse" x="-30" y="-30" width="380" height="240"><feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/><feDisplacementMap in="SourceGraphic" in2="warp" scale="3.4" result="disp"/><feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/><feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 1 1 1 1 1 1 1"/></feComponentTransfer><feComposite in="disp" in2="dryA" operator="in" result="torn"/><feGaussianBlur in="disp" stdDeviation=".5" result="bleedRaw"/><feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.22"/></feComponentTransfer><feMerge><feMergeNode in="bleed"/><feMergeNode in="torn"/></feMerge></filter></defs><g filter="url(#sumiRe)"><path d="M56 44c62-5 128-5 190 0 5 0 8 3 8 8v46c0 5-3 8-8 8-62 5-128 5-190 0-5 0-8-3-8-8V52c0-5 3-8 8-8z" fill="none" stroke="#201e1a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M52 50l96 42c2 1 4 1 6 0l96-42" fill="none" stroke="#3a362f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/><path d="M188 74c22-2 42-2 44 0M188 84l40 .3" fill="none" stroke="#3a362f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".45" stroke-dasharray="5 3 2 4"/><path d="M74 66c10-2 20-2 24 0 2 0 2 18 0 19-8 2-18 2-26 0-2-1-2-17 0-18z" fill="#B14A3F" opacity=".68"/></g></svg><div class="empty-title" style="font-family:var(--serif);font-weight:500">Noch keine Rechnung.</div><div class="empty-sub">Tippe auf +, um die erste zu schreiben.</div></div>';
     return;
   }
   var sorted=rechnungen.slice().sort(function(a,b){return(b.datum||'')>(a.datum||'')?1:-1;});
