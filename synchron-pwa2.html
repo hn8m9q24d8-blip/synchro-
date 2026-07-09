@@ -724,11 +724,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   </div></div>
   <div class="view-scroll" style="padding:4px 16px 100px">
 
-    <div class="qstats" style="display:flex;border:1px solid var(--hair);border-radius:16px;background:var(--card);overflow:hidden;margin-bottom:14px">
-      <div style="flex:1;padding:13px 6px;text-align:center;border-right:1px solid var(--hair)"><div style="font-size:14px;font-weight:600" id="buch-quick-total">–</div><div style="font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.04em">Jahr netto</div></div>
-      <div style="flex:1;padding:13px 6px;text-align:center;border-right:1px solid var(--hair)"><div style="font-size:14px;font-weight:600;color:var(--accent)" id="buch-quick-bezahlt">–</div><div style="font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.04em">bezahlt</div></div>
-      <div style="flex:1;padding:13px 6px;text-align:center"><div style="font-size:14px;font-weight:600" id="buch-quick-offen">–</div><div style="font-size:10px;color:var(--ink2);margin-top:3px;letter-spacing:.04em">offen</div></div>
-    </div>
+
 
     <div class="group-lbl" style="margin-top:4px">Bewegung</div>
     <div class="settings-group">
@@ -3994,7 +3990,17 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // etablierte warme Leisten-Ton (62x in der App), statt weißem --card. Einheitlich.
   // Build 991: Rechnungen-Empty-State = Brief im Handwerk-Tusche-Stil (Variante 2,
   // feine Umrisslinien, milder sumi-Filter inline, rote Marke). "Noch keine Rechnung."
-  if(elH) elH.textContent = '991';
+  // Build 992: Doppelung "Juni ans Finanzamt" behoben — die neue Frist-Aufgabe und
+  // die ältere USt-Betrag-Zeile (ustTxt) sagten dasselbe. Jetzt eine Zeile:
+  // "Umsatzsteuer Juni ans Finanzamt · 478,88 €" (monatlich), ustTxt unterdrückt.
+  // Build 993: USt-Frist-Aufgabe verschwindet, sobald die Periode im USt-Bereich als
+  // "eingereicht" markiert ist (ust_eingereicht). USt-Fristen tragen jetzt einen
+  // periode-Key (Monat/Quartal); _fristFaellig überspringt abgehakte Perioden.
+  // Build 994: Drei Jahres-Zahlen (netto/bezahlt/offen) aus dem Buch-Kopf entfernt.
+  // Kommen ggf. später dezent auf die Startseite. Setter laufen ins Leere (Null-Guard).
+  // Build 995: Blau/lila "Leichen" im Diagnose-Gutschriften-Sheet bereinigt —
+  // Kopieren-Button von Indigo (--ai) auf Kiefer (--accent), Schließen auf --cream2.
+  if(elH) elH.textContent = '995';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8773,13 +8779,13 @@ function diagnoseGutschriften(){
   hdr.style.cssText = 'display:flex;gap:8px;margin-bottom:12px';
   var btnCopy = document.createElement('button');
   btnCopy.textContent = 'Kopieren';
-  btnCopy.style.cssText = 'flex:1;background:var(--ai);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer';
+  btnCopy.style.cssText = 'flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer';
   btnCopy.onclick = function(){
     navigator.clipboard.writeText(text).then(function(){ showToast('✓ In Zwischenablage'); });
   };
   var btnClose = document.createElement('button');
   btnClose.textContent = 'Schließen';
-  btnClose.style.cssText = 'flex:0 0 auto;background:var(--hair);border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer';
+  btnClose.style.cssText = 'flex:0 0 auto;background:var(--cream2);color:var(--ink);border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer';
   btnClose.onclick = function(){ sh.remove(); };
   hdr.appendChild(btnCopy);
   hdr.appendChild(btnClose);
@@ -10071,7 +10077,7 @@ function rHeute(){
   try{ if(typeof _holviOffenCount==='function') offenBank=_holviOffenCount(); }catch(e){}
   try{ offenDok=_dokUnanalysedCount(); }catch(e){}
   var mNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-  var ustTxt='';
+  var ustTxt='', _ustBetragVal=null;
   try{
     var pm=new Date(now.getFullYear(),now.getMonth()-1,1);
     var key=pm.getFullYear()+'-'+String(pm.getMonth()+1).padStart(2,'0');
@@ -10080,10 +10086,16 @@ function rHeute(){
       var brutto=by[key].u7+by[key].u19+by[key].k4;
       var vst=0; try{ var v=_mev7Vorsteuer(); vst=v&&v[key]?v[key]:0; }catch(e){}
       var last=Math.round((brutto-vst)*100)/100;
+      _ustBetragVal=last;
       ustTxt=mNames[pm.getMonth()]+' ans Finanzamt: <span class="n">'+fmtEur(last)+'</span>';
     }
   }catch(e){}
   var _fAufg=''; try{ _fAufg=_fristFaellig()||''; }catch(e){}
+  if(_fAufg && _fAufg.indexOf('Umsatzsteuer')>=0){
+    var _qwH=(db.profil&&db.profil.voranm==='quartalsweise');
+    if(!_qwH && _ustBetragVal!=null){ _fAufg=_fAufg+' · <span class="n">'+fmtEur(_ustBetragVal)+'</span>'; }
+    ustTxt='';
+  }
   var _offenGes=offenBank+offenDok+(_fAufg?1:0);
   var ensoEl=document.getElementById('heute-enso');
   if(ensoEl) ensoEl.innerHTML=_ensoSvg(_offenGes);
@@ -18040,12 +18052,12 @@ function _naechsteFristen(){
   var yB=now.getFullYear();
   for(var yy=yB-1; yy<=yB+1; yy++){
     if(vm==='quartalsweise'){
-      [[3,'1. Quartal'],[6,'2. Quartal'],[9,'3. Quartal'],[12,'4. Quartal']].forEach(function(q){
-        out.push({label:'Umsatzsteuer '+q[1]+' ans Finanzamt', typ:'ust', datum:new Date(yy, q[0], 10)});
+      [[3,'1. Quartal',1],[6,'2. Quartal',2],[9,'3. Quartal',3],[12,'4. Quartal',4]].forEach(function(q){
+        out.push({label:'Umsatzsteuer '+q[1]+' ans Finanzamt', typ:'ust', periode:yy+'-Q'+q[2], datum:new Date(yy, q[0], 10)});
       });
     } else if(vm!=='jährlich'){
       for(var m=0;m<12;m++){
-        out.push({label:'Umsatzsteuer '+mN[m]+' ans Finanzamt', typ:'ust', datum:new Date(yy, m+1, 10)});
+        out.push({label:'Umsatzsteuer '+mN[m]+' ans Finanzamt', typ:'ust', periode:yy+'-'+String(m+1).padStart(2,'0'), datum:new Date(yy, m+1, 10)});
       }
     }
     [2,5,8,11].forEach(function(mo){
@@ -18058,11 +18070,14 @@ function _naechsteFristen(){
 }
 function _fristFaellig(){
   var now=new Date(); now.setHours(0,0,0,0);
+  var eingereicht=(db.profil&&db.profil.ust_eingereicht)||{};
   var ff=_naechsteFristen();
   for(var i=0;i<ff.length;i++){
-    var tage=Math.round((ff[i].datum-now)/864e5);
-    var vorlauf=ff[i].typ==='gvl'?14:5;
-    if(tage<=vorlauf && tage>=0) return ff[i].label;
+    var f=ff[i];
+    if(f.typ==='ust' && f.periode && eingereicht[f.periode]) continue;
+    var tage=Math.round((f.datum-now)/864e5);
+    var vorlauf=f.typ==='gvl'?14:5;
+    if(tage<=vorlauf && tage>=0) return f.label;
   }
   return null;
 }
