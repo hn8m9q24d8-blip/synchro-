@@ -444,6 +444,16 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
         <feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
         <feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge>
       </filter>
+      <filter id="krisIcon" filterUnits="userSpaceOnUse" x="-10" y="-10" width="60" height="60">
+        <feTurbulence type="fractalNoise" baseFrequency=".05 .14" numOctaves="4" seed="5" result="w"/>
+        <feDisplacementMap in="SourceGraphic" in2="w" scale="3.2" result="d"/>
+        <feTurbulence type="fractalNoise" baseFrequency=".3 .5" numOctaves="3" seed="11" result="k"/>
+        <feComponentTransfer in="k" result="ka"><feFuncA type="discrete" tableValues="0 1 1 1 1 1 1 1"/></feComponentTransfer>
+        <feComposite in="d" in2="ka" operator="in" result="t"/>
+        <feGaussianBlur in="d" stdDeviation=".5" result="gr"/>
+        <feComponentTransfer in="gr" result="g"><feFuncA type="linear" slope="0.22"/></feComponentTransfer>
+        <feMerge><feMergeNode in="g"/><feMergeNode in="t"/></feMerge>
+      </filter>
       <filter id="tusche-s" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%">
         <feTurbulence type="fractalNoise" baseFrequency=".18 .5" numOctaves="3" seed="5" result="warp"/>
         <feDisplacementMap in="SourceGraphic" in2="warp" scale="1.4" result="disp"/>
@@ -818,13 +828,16 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     </div>
   </div>
   <!-- Action buttons row -->
-  <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream)">
-        <div onclick="dokDeleteAll()" style="background:var(--red2);border:1px solid #e3c4c0;color:var(--red);font-size:12px;font-weight:600;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">Leeren</div>
+  <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream);align-items:center;position:relative">
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
-    <button type="button" onclick="document.getElementById('dok-folder-input').click()" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);font-size:12px;font-weight:600;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation">Ordner</button>
-    <div onclick="document.getElementById('dok-upload-input').click()" style="background:linear-gradient(180deg,#2A2823 0%,#1C1B19 42%,#141311 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.13);color:var(--paper);font-size:12px;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="PDFs und Einzeldateien">＋ Dateien / PDF</div>
-    <div onclick="importedFilesReset()" style="margin-left:auto;background:var(--card);border:1px solid var(--hair);color:var(--ink2);font-size:12px;font-weight:600;padding:9px 12px;border-radius:10px;cursor:pointer;touch-action:manipulation" title="Import-Gedächtnis zurücksetzen">Reset</div>
+    <div onclick="document.getElementById('dok-folder-input').click()" title="Belege reinholen" style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;touch-action:manipulation"><svg width="28" height="28" viewBox="0 0 40 40"><g filter="url(#krisIcon)"><g stroke="#201e1a" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="20" cy="19" rx="11" ry="3.4"/><path d="M9 19c0 8 4 13 11 13s11-5 11-13"/><path d="M20 3v10M15.5 9.5l4.5 4 4.5-4"/></g></g></svg></div>
+    <div onclick="dokMenuToggle(event)" title="Mehr" style="margin-left:auto;width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;color:var(--ink2);font-size:20px;touch-action:manipulation">&#8943;</div>
+    <div id="dok-menu" style="display:none;position:absolute;top:50px;right:12px;z-index:60;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.13);padding:6px;min-width:190px">
+      <div onclick="document.getElementById('dok-upload-input').click();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--ink)">Dateien</div>
+      <div onclick="dokDeleteAll();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--red)">Pipeline leeren</div>
+      <div onclick="importedFilesReset();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--red)">Zurücksetzen</div>
+    </div>
   </div>
   <!-- Search bar -->
   <div style="padding:8px 12px;background:var(--cream);flex-shrink:0;border-bottom:1px solid var(--hair)">
@@ -4006,7 +4019,16 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 997: eingereicht-Haken statt breitem Button — dezenter Haken-Toggle oben
   // rechts in der Monats-Zusammenfassung (offen: gestrichelt/blass, eingereicht:
   // Kiefer+weiß), ohne Label. Zus-Überschrift lila->Kiefer.
-  if(elH) elH.textContent = '997';
+  // Build 998: Auch die USt-Betrag-Zeile (ustTxt, zeigt Vormonat) verschwindet jetzt,
+  // wenn der Monat/das Quartal als eingereicht markiert ist — vorher blieb sie stehen,
+  // obwohl die Frist-Aufgabe schon weg war.
+  // Build 999: Belege-Kopf beruhigt — laute 4-Button-Reihe (schwarz/rot/weiß) ersetzt
+  // durch dezenten Schale-Knopf (Ordner-Import, kris-Ton) links + ⋯-Menü rechts
+  // (Dateien/Leeren/Reset, letztere in Ziegelrot). krisIcon-Filter neu.
+  // Build 1000: Belege-Leerzustand — Handwerk-Welle statt Filmklappe, Titel
+  // "Noch nichts eingelesen" (Mincho), Text auf "reinholen" abgestimmt. welle-Motiv
+  // in _tusche von einfacher Linie auf gefuellte Wellenklaue (Handwerk-Board) umgestellt.
+  if(elH) elH.textContent = '1000';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9964,7 +9986,7 @@ function _tusche(name){
       +'<path '+L+' stroke-width="3" d="M56 40h92v84H56zM56 60h92M80 40V28M124 40V28"/>'
       +'<path '+I+' opacity=".85" d="M96 82a14 14 0 1 0 28 0a14 14 0 1 0 -28 0z"/>';
   } else if(name==='welle'){
-    b='<path '+L+' stroke-width="5" d="M20 78c16 0 16-6 24-6s8 26 16 26 10-52 18-52 10 72 18 72 10-56 18-56 10 20 18 20 10-6 18-6 16 0 26 0"/>';
+    b='<g transform="translate(4 14) scale(0.6)">'+'<path '+I+' opacity=".94" d="M18 152c4-14 12-26 26-38 22-19 50-28 78-24 18 3 32 11 40 23-15-7-31-7-42 0 16 0 28 7 33 17-12-5-23-3-30 4 9 0 16 4 18 10-8-3-15-2-20 3-3 3-8 2-8-2 1-8 7-15 15-18-11-2-22 2-28 10-3 3-8 1-7-3 3-10 12-18 24-21-17-3-35 3-47 15-10 9-16 20-19 30-1 4-6 4-7 0z"/>'+'<path '+I+' opacity=".6" d="M96 92l5-9 4 8-4 3zM134 100l5-8 4 8-4 2zM70 116l5-8 4 8-4 2zM118 84l4-7 3 7-3 2z"/>'+'<path stroke="#3a362f" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6" opacity=".4" d="M178 148c22-3 37-15 43-32 7 15 22 28 43 30"/>'+'<path '+I+' opacity=".38" d="M234 128l17-28c1-2 3-2 4 0l16 27c1 2-1 3-3 2-10-5-21-5-31 1-2 1-4 0-3-2z"/>'+'<path '+I+' opacity=".8" d="M12 160c50-6 100-8 148-6 50 2 100 2 148 6 2 0 2 3 0 3-98 4-198 4-296 0-2 0-2-3 0-3z"/>'+'</g>';
   } else if(name==='kuvert'){
     b='<path '+I+' opacity=".14" d="M50 46h100v72H50z"/>'
       +'<path '+L+' stroke-width="3" d="M50 46h100v72H50z"/>'
@@ -10087,8 +10109,10 @@ function rHeute(){
   try{
     var pm=new Date(now.getFullYear(),now.getMonth()-1,1);
     var key=pm.getFullYear()+'-'+String(pm.getMonth()+1).padStart(2,'0');
+    var _pKey=(db.profil&&db.profil.voranm==='quartalsweise') ? (pm.getFullYear()+'-Q'+(Math.floor(pm.getMonth()/3)+1)) : key;
+    var _eingP=(db.profil&&db.profil.ust_eingereicht)||{};
     var by=_mev7Buckets();
-    if(by[key] && by[key].n>0){
+    if(by[key] && by[key].n>0 && !_eingP[_pKey]){
       var brutto=by[key].u7+by[key].u19+by[key].k4;
       var vst=0; try{ var v=_mev7Vorsteuer(); vst=v&&v[key]?v[key]:0; }catch(e){}
       var last=Math.round((brutto-vst)*100)/100;
@@ -12320,9 +12344,9 @@ function rDokumente(){
 
   if(!docs.length){
     el.innerHTML = _archivToggleHtml + '<div style="text-align:center;padding:48px 20px;color:#999">'
-      +_ukiyo('klappe')
-      +'<div style="font-weight:700;font-size:15px;margin-bottom:6px">Keine Dokumente</div>'
-      +'<div style="font-size:13px">Füge Dispos, Abrechnungen und Belege hier hinzu.<br>Die KI ordnet sie automatisch zu.</div>'
+      +_ukiyo('welle')
+      +'<div style="font-family:\'Shippori Mincho\',serif;font-weight:600;font-size:17px;margin-bottom:5px;color:var(--ink)">Noch nichts eingelesen</div>'
+      +'<div style="font-size:13px">Dispos, Abrechnungen und Belege reinholen &mdash;<br>die KI ordnet sie von selbst zu.</div>'
       +'</div>';
     return;
   }
@@ -12915,6 +12939,9 @@ function dokAblehnen(){
   });
 }
 
+function dokMenuToggle(e){ if(e){e.stopPropagation();} var m=document.getElementById('dok-menu'); if(!m) return; var open=(m.style.display==='block'); if(open){ dokMenuClose(); } else { m.style.display='block'; setTimeout(function(){ document.addEventListener('click', dokMenuOutside); },0); } }
+function dokMenuOutside(ev){ var m=document.getElementById('dok-menu'); if(m && !m.contains(ev.target)){ dokMenuClose(); } }
+function dokMenuClose(){ var m=document.getElementById('dok-menu'); if(m){ m.style.display='none'; } document.removeEventListener('click', dokMenuOutside); }
 function dokDeleteAllMenu(){
   var o=document.createElement('div');
   o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
