@@ -945,12 +945,23 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Rechnungen</div>
     <div onclick="openRechnungSheet(null)" style="color:var(--ink);font-size:26px;cursor:pointer;font-weight:300;line-height:1">+</div>
   </div>
-  <!-- Summen-Banner -->
-  <div style="background:#4A5A4E;padding:14px 16px;flex-shrink:0">
-    <div style="color:#ccc;font-size:11px;margin-bottom:6px;font-weight:600;letter-spacing:.5px">OFFENE RECHNUNGEN</div>
-    <div style="display:flex;justify-content:space-between;align-items:flex-end">
-      <span id="re-offen-sum" style="font-size:24px;font-weight:900;color:#ef9a9a">€ 0,00</span>
-      <span id="re-offen-count" style="font-size:12px;color:#aaa">0 Rechnungen</span>
+  <!-- Jahres-Hero (USt-Stil) -->
+  <div style="padding:12px 16px 6px;flex-shrink:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-family:var(--serif);font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--clay);font-weight:600">Steuerjahr <span id="re-jahr">2026</span></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="reJahrWechsel(-1)" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);border-radius:8px;padding:3px 10px;font-size:15px;cursor:pointer">&lsaquo;</button>
+        <button onclick="reJahrWechsel(1)" style="background:var(--card);border:1px solid var(--hair);color:var(--ink);border-radius:8px;padding:3px 10px;font-size:15px;cursor:pointer">&rsaquo;</button>
+      </div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--hair);border-top:3px solid var(--accent);border-radius:14px;padding:16px">
+      <div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--clay);font-weight:600">Rechnungen <span id="re-jahr2">2026</span> &middot; gestellt</div>
+      <div id="re-hero-sum" style="font-family:var(--serif);font-size:29px;color:var(--accent);margin:6px 0 2px">&euro; 0,00</div>
+      <div id="re-hero-cnt" style="font-size:12px;color:var(--ink2)">0 Rechnungen</div>
+      <div style="display:flex;gap:14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)">
+        <div style="flex:1"><div style="font-size:11px;color:var(--ink2)">Netto</div><div id="re-hero-netto" style="font-size:15px;margin-top:2px;font-weight:600;font-family:var(--serif)">&euro; 0,00</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--ink2)">USt</div><div id="re-hero-ust" style="font-size:15px;margin-top:2px;font-weight:600;font-family:var(--serif)">&euro; 0,00</div></div>
+      </div>
     </div>
   </div>
   <div id="rechnungen-list" class="view-scroll" style="padding:0;min-height:0;padding-bottom:calc(env(safe-area-inset-bottom) + 80px)">
@@ -3975,7 +3986,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // betroffenes Verteilungsjahr = Frist-Jahr minus 3 (belegt: Schlussverteilung 2023
   // → Meldeschluss 31.12.2026). 14 Tage Vorlauf. Quelle: gvl.de/fristen.
   // Build 988: GVL-Aufgabentext gekürzt — "(Schlussverteilung)" entfernt.
-  if(elH) elH.textContent = '988';
+  // Build 989: Rechnungen-Rubrik im USt-Stil — Washi-Jahres-Hero (gestellt +
+  // Netto/USt) mit Jahres-Navigation, Zen-Liste Variante B (Empfänger, Nummer·Datum,
+  // Betrag, Status-Balken offen/bezahlt/storniert). Überfälligkeit/Eingang bewusst
+  // ausgelassen (gehören ins Mahnwesen bzw. Kontoabgleich).
+  if(elH) elH.textContent = '989';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -20040,47 +20055,41 @@ function abMahnEmail(tid){
 }
 
 // ── RECHNUNGEN ────────────────────────────────────────────────
+var _reJahr = new Date().getFullYear();
+function reJahrWechsel(d){ _reJahr+=d; rRechnungen(); }
 function rRechnungen(){
   var el=document.getElementById('rechnungen-list');
-  var sumEl=document.getElementById('re-offen-sum');
-  var cntEl=document.getElementById('re-offen-count');
   if(!el) return;
-
   db.rechnungen=db.rechnungen||[];
-  var rechnungen=db.rechnungen;
-
-  var offenSum=0;
-  rechnungen.filter(function(r){return r.status==='offen';}).forEach(function(r){offenSum+=r.brutto||0;});
-  if(sumEl) sumEl.textContent=fmtEur(offenSum);
-  if(cntEl) cntEl.textContent=rechnungen.filter(function(r){return r.status==='offen';}).length+' Rechnungen';
-
+  var rechnungen=db.rechnungen.filter(function(r){return (r.datum||'').slice(0,4)===String(_reJahr);});
+  var brutto=0,netto=0,ust=0;
+  rechnungen.forEach(function(r){ brutto+=r.brutto||0; netto+=r.netto||0; ust+=(r.ustBetrag||0); });
+  var setT=function(id,v){var e=document.getElementById(id); if(e)e.textContent=v;};
+  setT('re-hero-sum', fmtEur(brutto));
+  setT('re-hero-cnt', rechnungen.length+' Rechnung'+(rechnungen.length!==1?'en':''));
+  setT('re-hero-netto', fmtEur(netto));
+  setT('re-hero-ust', fmtEur(ust));
+  setT('re-jahr', _reJahr); setT('re-jahr2', _reJahr);
   if(!rechnungen.length){
-    el.innerHTML='<div class="empty-state">'+_ukiyo('rechnung')
-      +'<div class="empty-title">Noch keine Rechnungen</div>'
-      +'<div class="empty-sub">Tippe auf + um deine erste Rechnung zu erstellen.</div></div>';
+    el.innerHTML='<div class="empty-state" style="padding:44px 20px"><div class="empty-title" style="font-family:var(--serif);font-weight:500">Keine Rechnungen '+_reJahr+'</div><div class="empty-sub">Tippe auf + um eine Rechnung zu erstellen.</div></div>';
     return;
   }
-
   var sorted=rechnungen.slice().sort(function(a,b){return(b.datum||'')>(a.datum||'')?1:-1;});
-  var statusColor={'offen':'var(--red)','bezahlt':'var(--accent)','storno':'#999'};
-  var statusLabel={'offen':'Offen','bezahlt':'Bezahlt','storno':'Storniert'};
-
-  el.innerHTML=sorted.map(function(r){
-    var sc=statusColor[r.status]||'#999';
-    var sl=statusLabel[r.status]||r.status;
-    return '<div onclick="openRechnungSheet(\''+r.id+'\')" style="padding:14px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-      +'<div style="width:4px;height:52px;border-radius:2px;background:'+sc+';flex-shrink:0"></div>'
+  var stF={'offen':'var(--ocker)','bezahlt':'var(--sage)','storno':'var(--ink3)'};
+  var stT={'offen':'offen','bezahlt':'bezahlt','storno':'storniert'};
+  el.innerHTML='<div style="background:var(--card);border:1px solid var(--hair);border-radius:14px;overflow:hidden;margin:0 16px 16px">'+sorted.map(function(r){
+    var sc=stF[r.status]||'var(--ink3)'; var sl=stT[r.status]||r.status;
+    return '<div onclick="openRechnungSheet(\''+r.id+'\')" style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--hair);cursor:pointer;-webkit-tap-highlight-color:transparent">'
+      +'<div style="width:3px;align-self:stretch;border-radius:3px;background:'+sc+';flex:none;min-height:36px"></div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-      +'<div style="font-weight:800;font-size:14px;color:var(--ink)">'+esc(r.nr||'–')+'</div>'
-      +'<div style="font-size:18px;font-weight:900;color:'+(r.status==='bezahlt'?'var(--accent)':'var(--ink)')+'">'+fmtEur(r.brutto)+'</div>'
+      +'<div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.empf||'–')+'</div>'
+      +'<div style="font-size:11.5px;color:var(--ink2);margin-top:1px">'+esc(r.nr||'')+' &middot; '+fd(r.datum)+'</div>'
       +'</div>'
-      +'<div style="font-size:13px;color:#555;margin-top:2px">'+esc(r.empf||'–')+'</div>'
-      +'<div style="display:flex;justify-content:space-between;margin-top:4px">'
-      +'<div style="font-size:11px;color:#999">'+fd(r.datum)+'</div>'
-      +'<div style="font-size:11px;font-weight:700;color:'+sc+'">'+sl+'</div>'
-      +'</div></div></div>';
-  }).join('');
+      +'<div style="text-align:right;flex:none">'
+      +'<div style="font-family:var(--serif);font-size:16px">'+fmtEur(r.brutto)+'</div>'
+      +'<div style="font-size:10.5px;color:'+sc+';margin-top:2px">'+sl+'</div>'
+      +'</div></div>';
+  }).join('')+'</div>';
 }
 
 // ── RECHNUNG SHEET ────────────────────────────────────────────
