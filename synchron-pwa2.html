@@ -4036,7 +4036,16 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1003: Heute-Nachrichten untereinander statt nebeneinander — die Aufgaben
   // (USt ans Finanzamt, Belege unbestätigt, Eingänge offen) waren mit " · " in einer
   // Zeile verkettet, jetzt je eine Zeile.
-  if(elH) elH.textContent = '1003';
+  // Build 1004: Belege-Welle war in den 200x150-_tusche-Rahmen gequetscht (klein/verzerrt).
+  // Jetzt direkt als eigenes SVG in nativer viewBox 320x190, 220px breit, inline-Filter.
+  // Build 1005: iCal-Reconcile — im Kalender geloeschte, zukuenftige, unverknuepfte
+  // Termine werden beim Auto-Sync entfernt (Disponenten-Rohebene). Vergangenes,
+  // App-eigenes und alles mit Gage/Takes/Abrechnungs-Link bleibt unangetastet.
+  // Laeuft nur bei erfolgreich geholtem, nicht-leerem Feed.
+  // Build 1006: iCal-Update — Disponenten-Aenderungen (Datum/Zeit/Titel/Studio/Regie/
+  // Notizen) an zukuenftigen, unverknuepften Terminen werden beim Auto-Sync uebernommen.
+  // Verknuepfte (Dispo/Abrechnung) und vergangene bleiben; App-Daten nie ueberschrieben.
+  if(elH) elH.textContent = '1006';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9793,18 +9802,57 @@ function autoSyncBootFetch(){
       .then(function(text){
         localStorage.setItem('ical_last_fetch', String(Date.now()));
         var events=icsParse(text);
-        if(!events||!events.length) return;            // still, kein Toast
+        if(!events||!events.length) return;            // Feed leer/fehlerhaft -> NICHTS anfassen (Sicherung)
+        var feedIds={};
+        events.forEach(function(e){ if(e.calEventId) feedIds[e.calEventId]=true; });
         var existing={};
         (db.termine||[]).forEach(function(t){ if(t.calEventId) existing[t.calEventId]=true; });
         var neu=events.filter(function(e){ return e.calEventId&&!existing[e.calEventId]; });
-        if(!neu.length) return;                        // nichts Neues -> still
-        if(!db.termine) db.termine=[];
-        neu.forEach(function(e){ if(!e.id) e.id=uid(); db.termine.push(e); });
-        db.termine.sort(function(a,b){ return (a.datum||'').localeCompare(b.datum||''); });
-        save(db);
-        if(typeof rTermine==='function') rTermine();
-        updateBadge();
-        showToast('✓ '+neu.length+' neue'+(neu.length===1?'r Drehtag':' Drehtage')+' importiert');
+        // --- RECONCILE (Build 1005): im Kalender geloeschte, ZUKUENFTIGE, UNVERKNUEPFTE
+        // iCal-Termine entfernen. Vergangenes, App-eigenes und alles mit Daten dran bleibt. ---
+        var _h=new Date(); _h.setHours(0,0,0,0);
+        var _heute=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
+        var _links=(typeof dbv2!=='undefined'&&dbv2&&dbv2.abrechnung_termin_links)?dbv2.abrechnung_termin_links:[];
+        var _verkn={}; _links.forEach(function(l){ if(l&&l.termin_id) _verkn[l.termin_id]=true; });
+        function _hatDaten(t){ return (t.rate>0)||(t.kommgage>0)||(t.takes&&t.takes!=='')||(t.doneTakes&&t.doneTakes.length>0)||_verkn[t.id]; }
+        var _entfernt=0;
+        db.termine=(db.termine||[]).filter(function(t){
+          if(!t.calEventId) return true;               // App-eigen -> behalten
+          if((t.datum||'')<_heute) return true;        // vergangen -> behalten
+          if(feedIds[t.calEventId]) return true;       // noch im Feed -> behalten
+          if(_hatDaten(t)) return true;                // Gage/Takes/Link dran -> schuetzen
+          _entfernt++; return false;                   // zukuenftig + leer + weg -> raus
+        });
+        // --- ADD: neue Termine ---
+        if(neu.length){ if(!db.termine) db.termine=[]; neu.forEach(function(e){ if(!e.id) e.id=uid(); db.termine.push(e); }); }
+        // --- UPDATE (Build 1006): Disponenten-Aenderungen an ZUKUENFTIGEN, UNVERKNUEPFTEN
+        // Terminen uebernehmen (Datum/Zeit/Titel/Studio/Regie/Notizen). Verknuepfte und
+        // vergangene bleiben unberuehrt; App-Daten (Gage/Takes) werden nie angefasst. ---
+        var _feedById={};
+        events.forEach(function(e){ if(e.calEventId) _feedById[e.calEventId]=e; });
+        var _geaendert=0;
+        (db.termine||[]).forEach(function(t){
+          if(!t.calEventId) return;
+          if((t.datum||'')<_heute) return;
+          if(_hatDaten(t)) return;
+          var _e=_feedById[t.calEventId]; if(!_e) return;
+          var _ch=false;
+          ['datum','uhrzeit','titel','studio','regie','notizen'].forEach(function(f){
+            if((_e[f]||'')!==(t[f]||'')){ t[f]=_e[f]||''; _ch=true; }
+          });
+          if(_ch) _geaendert++;
+        });
+        if(neu.length||_entfernt||_geaendert){
+          db.termine.sort(function(a,b){ return (a.datum||'').localeCompare(b.datum||''); });
+          save(db);
+          if(typeof rTermine==='function') rTermine();
+          updateBadge();
+          var _m=[];
+          if(neu.length) _m.push('\u2713 '+neu.length+' neue'+(neu.length===1?'r Drehtag':' Drehtage'));
+          if(_entfernt) _m.push(_entfernt+' im Kalender gel\u00f6schte'+(_entfernt===1?'r':'')+' entfernt');
+          if(_geaendert) _m.push(_geaendert+' aktualisiert');
+          if(_m.length) showToast(_m.join(' \u00b7 '));
+        }
       })
       .catch(function(){ /* still: kein Fehler-Toast bei jedem Start */ });
   }catch(e){}
@@ -12353,7 +12401,7 @@ function rDokumente(){
 
   if(!docs.length){
     el.innerHTML = _archivToggleHtml + '<div style="text-align:center;padding:48px 20px;color:#999">'
-      +_ukiyo('welle')
+      +'<svg viewBox="0 0 320 190" style="width:220px;height:auto;display:block;margin:0 auto 14px" aria-hidden="true"><defs><filter id="wlEmpty" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/> <feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/> <feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/> <feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer> <feComposite in="disp" in2="dryA" operator="in" result="torn"/> <feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/> <feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer> <feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/> <feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/> <feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer> <feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge></filter></defs><g filter="url(#wlEmpty)"><path fill="#201E1A" stroke="none" opacity=".94" d="M18 152c4-14 12-26 26-38 22-19 50-28 78-24 18 3 32 11 40 23-15-7-31-7-42 0 16 0 28 7 33 17-12-5-23-3-30 4 9 0 16 4 18 10-8-3-15-2-20 3-3 3-8 2-8-2 1-8 7-15 15-18-11-2-22 2-28 10-3 3-8 1-7-3 3-10 12-18 24-21-17-3-35 3-47 15-10 9-16 20-19 30-1 4-6 4-7 0z"/><path fill="#201E1A" stroke="none" opacity=".6" d="M96 92l5-9 4 8-4 3zM134 100l5-8 4 8-4 2zM70 116l5-8 4 8-4 2zM118 84l4-7 3 7-3 2z"/><path stroke="#3a362f" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6" opacity=".4" d="M178 148c22-3 37-15 43-32 7 15 22 28 43 30"/><path fill="#201E1A" stroke="none" opacity=".38" d="M234 128l17-28c1-2 3-2 4 0l16 27c1 2-1 3-3 2-10-5-21-5-31 1-2 1-4 0-3-2z"/><path fill="#201E1A" stroke="none" opacity=".8" d="M12 160c50-6 100-8 148-6 50 2 100 2 148 6 2 0 2 3 0 3-98 4-198 4-296 0-2 0-2-3 0-3z"/></g></svg>'
       +'<div style="font-family:\'Shippori Mincho\',serif;font-weight:600;font-size:17px;margin-bottom:5px;color:var(--ink)">Noch nichts eingelesen</div>'
       +'<div style="font-size:13px">Dispos, Abrechnungen und Belege reinholen &mdash;<br>die KI ordnet sie von selbst zu.</div>'
       +'</div>';
