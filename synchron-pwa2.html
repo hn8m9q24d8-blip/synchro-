@@ -822,7 +822,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <div id="view-dokumente" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:10px">
-      <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;line-height:1;flex-shrink:0;padding:2px 4px 2px 0">‹</div>
+      <div onclick="switchView(window._dokBack||'buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;line-height:1;flex-shrink:0;padding:2px 4px 2px 0">‹</div>
       <div><div class="header-title">Belege</div>
       <div class="header-sub" id="dok-badge">0 Dok.</div></div>
     </div>
@@ -831,7 +831,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream);align-items:center;position:relative">
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
-    <div onclick="document.getElementById('dok-folder-input').click()" title="Belege reinholen" style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;touch-action:manipulation"><svg width="28" height="28" viewBox="0 0 40 40"><g filter="url(#krisIcon)"><g stroke="#201e1a" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="20" cy="19" rx="11" ry="3.4"/><path d="M9 19c0 8 4 13 11 13s11-5 11-13"/><path d="M20 3v10M15.5 9.5l4.5 4 4.5-4"/></g></g></svg></div>
+    <div onclick="document.getElementById('dok-folder-input').click()" title="Belege reinholen" style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;touch-action:manipulation"><svg width="28" height="28" viewBox="0 0 40 40"><defs><filter id="krisSch" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.09 0.28" numOctaves="3" seed="7" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.7" result="d"/><feGaussianBlur in="d" stdDeviation="0.2"/></filter></defs><g filter="url(#krisSch)"><g stroke="#201e1a" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="20" cy="19" rx="11" ry="3.4"/><path d="M9 19c0 8 4 13 11 13s11-5 11-13"/><path d="M20 3v10M15.5 9.5l4.5 4 4.5-4"/></g></g></svg></div>
     <div onclick="dokMenuToggle(event)" title="Mehr" style="margin-left:auto;width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;color:var(--ink2);font-size:20px;touch-action:manipulation">&#8943;</div>
     <div id="dok-menu" style="display:none;position:absolute;top:50px;right:12px;z-index:60;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.13);padding:6px;min-width:190px">
       <div onclick="document.getElementById('dok-upload-input').click();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--ink)">Dateien</div>
@@ -4028,7 +4028,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1000: Belege-Leerzustand — Handwerk-Welle statt Filmklappe, Titel
   // "Noch nichts eingelesen" (Mincho), Text auf "reinholen" abgestimmt. welle-Motiv
   // in _tusche von einfacher Linie auf gefuellte Wellenklaue (Handwerk-Board) umgestellt.
-  if(elH) elH.textContent = '1000';
+  // Build 1001: Render-Fix — tusche- und kris-Filter lagen im width=0-defs-SVG und
+  // wurden per url() referenziert (versagt auf WebKit/iOS -> leere Schale, keine Welle).
+  // Beide jetzt INLINE im jeweiligen SVG definiert (wie die funktionierenden App-Icons).
+  // Build 1002: Navigation — von Heute auf Belege und zurück landet wieder auf Heute
+  // (statt immer im Buch). switchView merkt die Herkunft in _dokBack.
+  // Build 1003: Heute-Nachrichten untereinander statt nebeneinander — die Aufgaben
+  // (USt ans Finanzamt, Belege unbestätigt, Eingänge offen) waren mit " · " in einer
+  // Zeile verkettet, jetzt je eine Zeile.
+  if(elH) elH.textContent = '1003';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10007,7 +10015,7 @@ function _tusche(name){
     return _tusche('mikrofon');
   }
   return '<svg viewBox="0 0 200 150" style="width:150px;height:auto;display:block;margin:0 auto 6px" aria-hidden="true">'
-    +'<g filter="url(#tusche)">'+b+'</g></svg>';
+    +'<defs><filter id="tuscheIn" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%"> <feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/> <feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/> <feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/> <feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer> <feComposite in="disp" in2="dryA" operator="in" result="torn"/> <feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/> <feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer> <feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/> <feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/> <feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer> <feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge> </filter></defs><g filter="url(#tuscheIn)">'+b+'</g></svg>';
 }
 // Build 924: Ukiyo-e-Drucke als Empty-State-Illustrationen (Moodboard IV).
 function _ukiyo(name){
@@ -10151,7 +10159,7 @@ function rHeute(){
       if(_fAufg) parts.push(_fAufg);
       if(offenDok>0) parts.push(offenDok+' Beleg'+(offenDok!==1?'e':'')+' unbestätigt');
       if(offenBank>0) parts.push(offenBank+' '+(offenBank!==1?'Eingänge':'Eingang')+' offen');
-      zs.innerHTML = parts.join(' · ') + (ustTxt ? '<br>'+ustTxt : '');
+      zs.innerHTML = parts.join('<br>') + (ustTxt ? '<br>'+ustTxt : '');
     }
   }
   var bs=document.getElementById('heute-belege-sub');
@@ -11199,6 +11207,7 @@ function fmtEur(v){
 
 // ── switchView overrides ──────────────────────────────────────
 function switchView(v){
+  try{ if(v==='dokumente'){ var _pv=window._curView; window._dokBack=(_pv==='heute'||_pv==='buch')?_pv:'buch'; } window._curView=v; }catch(e){}
   // Wenn aktiver Split-Flow (aus Termin-Peek) und User verlässt die View:
   // Flow-State bewahren → User kann über Dokumente-View fortfahren
   // Aber wenn er explizit zu 'termine' ohne _pendingDokLink wechselt
