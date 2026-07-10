@@ -4077,7 +4077,21 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Abweichung nur noch als Vorschlag im "bitte prüfen"-Block angeboten (nicht mehr
   // still ueberschrieben). Endzeit-Feldname auf uhrzeit_bis angeglichen (App-weit),
   // damit die Dispo-Endzeit auch in Anzeige und Ø/Stunde ankommt.
-  if(elH) elH.textContent = '1017';
+  // Build 1018: Ø/Monat auf der Mein-Jahr-Startseite von totalAll/12 auf avgMonat
+  // (Gage / Monate mit Terminen) umgestellt — jetzt identisch zur Analyse-Rubrik.
+  // Beide zeigen denselben Wert; kein Widerspruch mehr.
+  // Build 1019: Sender-Recherche — ermittelt beim App-Start im Hintergrund fuer bis zu
+  // 10 Termine ohne Sender die Plattform (Netflix/ARD/Amazon/Disney+ ...). Erst
+  // Gedaechtnis, sonst KI; Eintrag nur ab 85% Sicherheit, dann ziehen alle Termine
+  // derselben Produktion ueber das Gedaechtnis mit. Unsichere bleiben unangetastet.
+  // Build 1020: Sender-Recherche praeziser — Prompt nutzt jetzt Jahr (gegen Remakes),
+  // Regie, Rolle, Staffel (Serie schliesst Kino aus) und den aus der Gage abgeleiteten
+  // Typ (Kino/Streaming/TV). KI wird angewiesen, bei Remake-Unsicherheit niedrig zu werten.
+  // Build 1021: Sender-Recherche justiert — Regie entfernt (ist Synchronregie, nicht
+  // Film-Regie), Jahr nur noch als weicher Hinweis (Produktionsjahr != Synchronjahr,
+  // Filme werden teils Jahre spaeter synchronisiert), Gage-Ableitung nur noch fuer Kino
+  // (Streaming/TV-Tarife koennen fehlbezahlt sein). Rolle + Staffel bleiben.
+  if(elH) elH.textContent = '1021';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5886,6 +5900,68 @@ function _senderAusGedaechtnis(t){
     return true;
   }
   return false;
+}
+
+
+// ── SENDER-RECHERCHE (Build 1019) ────────────────────────────────────────
+// Ermittelt Sender/Plattform fuer einen Termin. Erst Gedaechtnis (kostenlos,
+// keine API), sonst KI-Schaetzung. Traegt NUR bei >=85% Sicherheit automatisch
+// ein — und ueber das bestehende Gedaechtnis ziehen alle Termine derselben
+// Produktion mit. Unsichere Faelle (<85%) bleiben unangetastet.
+function _terminSenderRecherche(t, cb){
+  if(!t || t.sender || !t.titel){ if(cb) cb(); return; }
+  if(_senderAusGedaechtnis(t)){ save(db); if(cb) cb(); return; }
+  var key=(db.profil&&db.profil.apiKey)||'';
+  if(!key){ if(cb) cb(); return; }
+  // Kontext aus vorhandenen Daten anreichern (praeziser -> weniger Fehltreffer)
+  var _jahr=(t.datum||'').slice(0,4);
+  var _staffel=parseInt(t.gvl_staffel||'0')||0;
+  var _r=parseFloat(t.rate)||0, _k=parseFloat(t.kommgage)||0;
+  // Nur Kino verlaesslich ableiten — Streaming/TV-Tarife koennen falsch abgerechnet sein.
+  var _kino=(_r>=4.9 && _k>=95);
+  var _ctx='Produktionstitel: "'+t.titel+'"\n';
+  if(t.studio) _ctx+='Studio: "'+t.studio+'"\n';
+  if(t.rolle) _ctx+='Rolle/Figur: "'+t.rolle+'" (hilft, die richtige Produktion zu identifizieren)\n';
+  if(_jahr) _ctx+='Synchronisiert '+_jahr+'. Das Produktionsjahr kann abweichen \u2014 meist aus diesem oder den letzten Jahren, selten deutlich aelter. Nur als Hinweis, nicht als hartes Kriterium.\n';
+  if(_staffel>0) _ctx+='Serie, Staffel '+_staffel+' (also kein Kinofilm).\n';
+  if(_kino) _ctx+='Aus der Kino-Gage abgeleitet: sehr wahrscheinlich ein Kinofilm.\n';
+  // Regie bewusst NICHT genannt — das ist die Synchronregie, nicht der Film-Regisseur.
+  var prompt=_ctx+'\nAuf welchem Sender oder Streaming-Dienst laeuft diese Produktion im deutschsprachigen Raum?\nAntworte NUR mit JSON (kein Text drumherum):\n{"plattform":"z.B. Netflix|ARD|ZDF|Amazon Prime|Disney+|Apple TV+|RTL|Sky etc.","wahrsch":80,"notiz":"kurz"}\n"wahrsch" = Prozent Sicherheit (0-100). Wenn mehrere Fassungen/Remakes moeglich sind und unklar ist welche, oder du unsicher bist: gib eine NIEDRIGE Zahl.';
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:150,messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    try{
+      var txt=(data.content&&data.content[0]&&data.content[0].text||'').replace(/```json|```/g,'').trim();
+      var j=JSON.parse(txt);
+      if(j.plattform && typeof j.wahrsch==='number' && j.wahrsch>=85){
+        var pk=_senderProdKey(t);
+        if(!db._senderProProduktion) db._senderProProduktion={};
+        db._senderProProduktion[pk]={sender:j.plattform,kuerzel:null};
+        (db.termine||[]).forEach(function(o){
+          if(o.sender) return;
+          if(_senderProdKey(o)!==pk) return;
+          o.sender=j.plattform;
+          o.sender_quelle='KI '+j.wahrsch+'%';
+        });
+        save(db);
+      }
+    }catch(e){}
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
+// Schonender Hintergrund-Batch: max. 10 Termine ohne Sender pro App-Start, sequenziell
+// (ein API-Call nach dem anderen, damit die API nicht geflutet wird).
+function _senderBatchRun(){
+  if(!db.profil || !db.profil.apiKey) return;
+  var todo=(db.termine||[]).filter(function(t){ return !t.sender && t.titel; }).slice(0,10);
+  if(!todo.length) return;
+  var i=0;
+  (function next(){
+    if(i>=todo.length){ if(typeof rTermine==='function') rTermine(); return; }
+    _terminSenderRecherche(todo[i++], next);
+  })();
 }
 
 function gvlTerminBearbeiten(terminId){
@@ -9900,6 +9976,7 @@ function autoSyncBootFetch(){
           if(_geaendert) _m.push(_geaendert+' aktualisiert');
           if(_m.length) showToast(_m.join(' \u00b7 '));
         }
+        setTimeout(_senderBatchRun, 2500);   // Build 1019: Sender im Hintergrund recherchieren
       })
       .catch(function(){ /* still: kein Fehler-Toast bei jedem Start */ });
   }catch(e){}
@@ -21219,7 +21296,7 @@ function rZahlungen(){
       +'<div style="color:var(--ink2);font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:8px">JAHRESANALYSE '+_zahlYear+'</div>'
       +'<div style="display:flex;gap:14px;flex-wrap:wrap">'
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Termine</div><div style="font-size:20px;font-weight:900;color:#fff">'+all.length+'</div></div>'
-      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Monat</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(totalAll/12)+'</div></div>'
+      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Monat</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(avgMonat)+'</div></div>'
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Termin</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(all.length?totalAll/all.length:0)+'</div></div>'
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Stunde</div><div style="font-size:20px;font-weight:900;color:#fff">'+(_gStd>0?fmtEur(_gageProStd):'&#8212;')+'</div></div>'
       +'</div></div>';
