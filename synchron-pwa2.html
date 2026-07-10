@@ -649,7 +649,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <div id="view-gvl" class="view">
   <div class="app-header">
     <div class="header-left" style="display:flex;align-items:center;gap:10px">
-      <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;line-height:1;flex-shrink:0;padding:2px 4px 2px 0">‹</div>
+      <div onclick="switchView(window._navBack||'buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;line-height:1;flex-shrink:0;padding:2px 4px 2px 0">‹</div>
       <div class="header-title">GVL · ARTSYS</div>
       <div class="header-sub" id="gvl-sub">Jahresübersicht für Meldung</div>
     </div>
@@ -764,7 +764,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
 <div id="view-undo" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div onclick="switchView(window._navBack||'buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div><div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Rückgängig</div><div style="color:var(--ink2);font-size:12px">Letzte 20 Aktionen</div></div>
   </div>
   <div class="scroll" id="undo-log-list" style="padding:16px;padding-bottom:100px"></div>
@@ -776,7 +776,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <!-- ══════ JAHRESABSCHLUSS ════════════════════════════════════ -->
 <div id="view-jahresabschluss" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div onclick="switchView(window._navBack||'buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div style="flex:1">
       <div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Jahresabschluss</div>
       <div style="color:var(--ink2);font-size:12px" id="jahres-sub">Steuerübersicht</div>
@@ -796,7 +796,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <!-- ══════ HOLVI KONTOABGLEICH ══════════════════════════ -->
 <div id="view-holvi-abgleich" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div onclick="switchView(window._navBack||'buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div style="flex:1">
       <div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Zahlungen</div>
       <div style="color:var(--ink2);font-size:12px" id="holvi-abgleich-sub">Holvi-Zahlungen prüfen &amp; bestätigen</div>
@@ -812,7 +812,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <!-- ══════ MAHNWESEN ════════════════════════════════════ -->
 <div id="view-mahnwesen" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="height:56px;display:flex;align-items:center;padding:0 16px;gap:0">
-    <div onclick="switchView('buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
+    <div onclick="switchView(window._navBack||'buch')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 14px 0 0;line-height:1;flex-shrink:0">‹</div>
     <div><div style="font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Offene Honorare</div><div style="color:var(--ink2);font-size:12px">ausstehende Belege · Erinnerung</div></div>
   </div>
   <div class="scroll" id="mahn-scroll" style="padding:16px;padding-bottom:100px"></div>
@@ -862,7 +862,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <div id="view-ust-voranmeldung" class="view" style="overflow:hidden;display:flex;flex-direction:column">
   <div class="app-header" style="flex-direction:column;align-items:stretch;gap:11px;height:auto">
     <div class="header-left">
-      <div onclick="switchView('buch')" style="font-size:22px;cursor:pointer;padding:4px 8px 4px 0;color:var(--ink2)">&#x2039;</div>
+      <div onclick="switchView(window._navBack||'buch')" style="font-size:22px;cursor:pointer;padding:4px 8px 4px 0;color:var(--ink2)">&#x2039;</div>
       <div>
         <div class="header-title">Umsatzsteuer&shy;voranmeldung</div>
         <div class="header-sub" id="ust-period-label">&#x2026;</div>
@@ -950,7 +950,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <!-- ══════ RECHNUNGEN ════════════════════════════════════ -->
 <div id="view-rechnungen" class="view" style="overflow:hidden">
   <div class="app-header" style="display:flex;align-items:center;padding:0 16px;height:56px">
-    <div onclick="switchView('buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
+    <div onclick="switchView(window._navBack||'buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
     <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Rechnungen</div>
     <div onclick="openRechnungSheet(null)" style="color:var(--ink);font-size:26px;cursor:pointer;font-weight:300;line-height:1">+</div>
   </div>
@@ -984,7 +984,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 <div id="view-gagenabrechnungen" class="view" style="overflow:hidden;flex-direction:column">
   <!-- Header -->
   <div class="app-header" style="display:flex;align-items:center;padding:0 16px;height:56px;flex-shrink:0">
-    <div onclick="switchView('buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
+    <div onclick="switchView(window._navBack||'buchhaltung')" style="font-size:24px;color:var(--ink2);cursor:pointer;padding:0 12px 0 0;line-height:1">‹</div>
     <div style="flex:1;font-family:var(--serif);color:var(--ink);font-size:18px;font-weight:500">Mein Jahr</div>
     <div id="zahl-year-tabs" style="display:flex;gap:4px"></div>
   </div>
@@ -4091,7 +4091,16 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Film-Regie), Jahr nur noch als weicher Hinweis (Produktionsjahr != Synchronjahr,
   // Filme werden teils Jahre spaeter synchronisiert), Gage-Ableitung nur noch fuer Kino
   // (Streaming/TV-Tarife koennen fehlbezahlt sein). Rolle + Staffel bleiben.
-  if(elH) elH.textContent = '1021';
+  // Build 1022: Ø/Monat im Analyse-Tab zeigte 0 — avgMonat war nur im studio-Tab
+  // berechnet (Build 1018 nutzte es im analyse-Tab, wo es undefined war). Jetzt im
+  // analyse-Tab mit gleicher Formel neu berechnet; Startseite und Analyse stimmen ueberein.
+  // Build 1023: Navigation — Header-Zurück-Buttons (gvl/undo/jahresabschluss/mahnwesen
+  // etc.) fuehren jetzt zur Herkunft zurueck (Heute -> zurueck zu Heute, Buch -> Buch)
+  // statt immer zu Buch. switchView merkt die Herkunft in _navBack. Nav-Leiste unveraendert.
+  // Build 1024: Mein-Jahr-Zurück (gagenabrechnungen) ging via switchView('buchhaltung')
+  // immer zur Buchhaltung — jetzt herkunfts-bewusst (Heute -> Heute). Damit fuehren beide
+  // von Heute erreichbaren Views (Belege + Mein Jahr) beim Zurueck wieder nach Heute.
+  if(elH) elH.textContent = '1024';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11380,7 +11389,7 @@ function fmtEur(v){
 
 // ── switchView overrides ──────────────────────────────────────
 function switchView(v){
-  try{ if(v==='dokumente'){ var _pv=window._curView; window._dokBack=(_pv==='heute'||_pv==='buch')?_pv:'buch'; } window._curView=v; }catch(e){}
+  try{ var _pv=window._curView; if(v==='dokumente'){ window._dokBack=(_pv==='heute'||_pv==='buch')?_pv:'buch'; } if(_pv==='heute'||_pv==='buch') window._navBack=_pv; window._curView=v; }catch(e){}
   // Wenn aktiver Split-Flow (aus Termin-Peek) und User verlässt die View:
   // Flow-State bewahren → User kann über Dokumente-View fortfahren
   // Aber wenn er explizit zu 'termine' ohne _pendingDokLink wechselt
@@ -21265,6 +21274,10 @@ function rZahlungen(){
 
   // ── ANALYSE TAB ─────────────────────────────────────────────
   if(_zahlTab==='analyse'){
+    // Build 1022: avgMonat hier lokal berechnen — im studio-Tab definiert, aber im
+    // analyse-Tab sonst undefined (zeigte 0). Gleiche Formel wie Startseite.
+    var _mwdA={}; all.forEach(function(t){ if(t.datum) _mwdA[t.datum.slice(0,7)]=1; });
+    avgMonat=totalAll/Math.max(1,Object.keys(_mwdA).length);
     var COLORS=['var(--accent)','var(--accent2)','var(--warm)','var(--orange)','var(--sage)','var(--red)','#8E9B77','var(--ocker)'];
     var studios={};
     all.forEach(function(t){var k=(t.studio||'Unbekannt').toLowerCase();if(!studios[k])studios[k]=0;studios[k]+=calcNet(t);});
