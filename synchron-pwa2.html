@@ -4064,7 +4064,13 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1013: Neue Kennzahl "Ø/Stunde" in der Jahresanalyse (Mein Jahr) — Gage pro
   // gearbeiteter Stunde, nur aus Terminen mit Anfang UND Ende gerechnet (Gage/Stunden
   // aus derselben Menge, nicht verzerrt). Zeigt "—" bis Endzeiten gesynct sind.
-  if(elH) elH.textContent = '1013';
+  // Build 1014: Endzeit-Anzeige im Termin-Detail — zeigt jetzt "Beginn–Ende Uhr"
+  // (z.B. 10:00–13:30), wenn uhrzeit_bis gesetzt ist. Vorher wurde die aus dem iCal
+  // gelesene Endzeit nirgends angezeigt, obwohl sie im Datensatz stand.
+  // Build 1015: Ø/Stunde-Fix — Termine OHNE zugeordnete Gage (noch nicht abgerechnet)
+  // zaehlten mit ihren Stunden mit, aber ohne Gage -> Schnitt verwaessert (2026: 59
+  // statt korrekt 78 €/Std). Jetzt nur Termine mit Gage UND Zeit (Gage/Std echt).
+  if(elH) elH.textContent = '1015';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4839,7 +4845,7 @@ function openDetail(id){
     +'<div class="bd-dateline">'
     +'<div class="bd-day">'+d.getDate()+'</div>'
     +'<div class="bd-month">'+dayNames[d.getDay()]+', '+monthNames[d.getMonth()]+' '+d.getFullYear()+'</div>'
-    +(t.uhrzeit?'<div class="bd-time">'+esc(t.uhrzeit)+' Uhr</div>':'')
+    +(t.uhrzeit?'<div class="bd-time">'+esc(t.uhrzeit)+(t.uhrzeit_bis?'&#8211;'+esc(t.uhrzeit_bis):'')+' Uhr</div>':'')
     +'</div>'
     +'</div>';
 
@@ -21188,7 +21194,8 @@ function rZahlungen(){
     all.forEach(function(t){
       if(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis)){
         var _min=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5)));
-        if(_min>0){ _gStd+=_min/60; _gGage+=calcNet(t); }
+        var _net=calcNet(t);
+        if(_min>0 && _net>0){ _gStd+=_min/60; _gGage+=_net; }
       }
     });
     var _gageProStd=_gStd>0?_gGage/_gStd:0;
