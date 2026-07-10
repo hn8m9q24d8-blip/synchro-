@@ -4047,7 +4047,24 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Verknuepfte (Dispo/Abrechnung) und vergangene bleiben; App-Daten nie ueberschrieben.
   // Build 1007: Profil/iCal-Sheet-Titel — kaputtes "&#4A5A4E;" (versehentlich als
   // HTML-Entity geratener Farbwert) aus der Ueberschrift "iCal Sync URL" entfernt.
-  if(elH) elH.textContent = '1007';
+  // Build 1008: Archiv (bestätigte Belege) nach Beleg-Datum sortiert, neueste oben
+  // (statt nach Typ + Import-Zeitpunkt). Offene Belege unverändert.
+  // Build 1009: "Daten bestätigen & Foto löschen"-Knopf (ohne Termin) entfernt —
+  // Bestätigen läuft immer über einen Termin; terminlose Belege ueber den Reiter
+  // "Keinen Termin zuordnen (GVL / Nachgage / Pauschale)".
+  // Build 1010: Endzeit (DTEND) aus iCal — icsParse liest jetzt Beginn UND Ende
+  // (uhrzeit_bis). Neue/zukuenftige Termine bekommen sie beim Sync; fuer bestehende
+  // wird sie EINMALIG ADDITIV nachgetragen (nur wenn leer, sonst nichts angefasst).
+  // Build 1011: Prüf-/Vorschlagsblock (mergeBanner) ans ENDE des Termin-Details verschoben
+  // — erst durch die Felder scrollen, prüfen, dann unten bestätigen. Dazu dezenter im
+  // neuen Design: dünner Rahmen + Clay-Akzentstreifen statt auffälliger orange 2px-Box.
+  // Build 1012: GVL "Folgen & Takes bearbeiten"-Button (lila) entfernt. Volle Bearbeitung
+  // jetzt per Tipp auf die Kachelfläche/Gesamt-Zeile (gvlDokBearbeiten). Einzelne Zahlen
+  // (Folge/Takes) bleiben inline antippbar — event.stopPropagation verhindert Doppel-Trigger.
+  // Build 1013: Neue Kennzahl "Ø/Stunde" in der Jahresanalyse (Mein Jahr) — Gage pro
+  // gearbeiteter Stunde, nur aus Terminen mit Anfang UND Ende gerechnet (Gage/Stunden
+  // aus derselben Menge, nicht verzerrt). Zeigt "—" bis Endzeiten gesynct sind.
+  if(elH) elH.textContent = '1013';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5388,8 +5405,8 @@ function openDetail(id){
         });
       }
     }
-    mergeBanner='<div style="background:var(--orange2);border:2px solid var(--orange);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-      +'<div style="font-size:12px;font-weight:800;color:#8a6a3f;margin-bottom:8px">'+(t._hasPendingMerge?'Dokument hat Felder eingetragen — bitte prüfen':'Vorschläge aus Dokument')+'</div>'
+    mergeBanner='<div style="background:var(--washi2);border:1px solid var(--hair);border-left:3px solid var(--clay);border-radius:10px;padding:12px 14px;margin-top:18px">'
+      +'<div style="font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--clay);margin-bottom:8px">'+(t._hasPendingMerge?'Dokument hat Felder eingetragen — bitte prüfen':'Vorschläge aus Dokument')+'</div>'
       +suggHtml
       +(t._hasPendingMerge?'<div style="font-size:11px;color:#8a6a3f;margin-bottom:10px">Zurückgehen ohne Speichern verwirft alle Änderungen.</div>':'')
       +'<div style="display:flex;gap:8px;margin-top:8px">'
@@ -5399,7 +5416,7 @@ function openDetail(id){
       +'</div>';
   }
 
-  dpScroll.innerHTML=mergeBanner+diffWarnHtml+ampel+header+_mitGruenCardHtml(id)+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml;
+  dpScroll.innerHTML=diffWarnHtml+ampel+header+_mitGruenCardHtml(id)+stamm+dokGalerie+gvlHtml+gageHtml+abHtml+aktionen+memoHtml+mergeBanner;
 
   // Gage-Mapping Vorschlag befüllen
   var gmHintEl = document.getElementById('gage-mapping-hint');
@@ -9636,6 +9653,12 @@ function icsParse(text){
       }
     }
     if(!datum) continue;
+    var dtend=get('DTEND');
+    var uhrzeit_bis='';
+    if(dtend){
+      var em=dtend.replace(/Z$/,'').match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/);
+      if(em&&em[4]&&em[5]) uhrzeit_bis=em[4]+':'+em[5];
+    }
     var summary=get('SUMMARY');
     var location=get('LOCATION');
     var summaryCheck = summary.toLowerCase();
@@ -9686,6 +9709,7 @@ function icsParse(text){
     events.push({
       datum:datum,
       uhrzeit:uhrzeit,
+      uhrzeit_bis:uhrzeit_bis,
       titel:summary,
       notizen:location,
       studio:studio,
@@ -9839,12 +9863,21 @@ function autoSyncBootFetch(){
           if(_hatDaten(t)) return;
           var _e=_feedById[t.calEventId]; if(!_e) return;
           var _ch=false;
-          ['datum','uhrzeit','titel','studio','regie','notizen'].forEach(function(f){
+          ['datum','uhrzeit','uhrzeit_bis','titel','studio','regie','notizen'].forEach(function(f){
             if((_e[f]||'')!==(t[f]||'')){ t[f]=_e[f]||''; _ch=true; }
           });
           if(_ch) _geaendert++;
         });
-        if(neu.length||_entfernt||_geaendert){
+        // --- MIGRATION (additiv): Endzeit fuer BESTEHENDE Termine aus dem Feed nachtragen.
+        // Rein additiv: setzt nur uhrzeit_bis, wenn leer. Faellt kein anderes Feld an,
+        // daher auch fuer vergangene/verknuepfte sicher. ---
+        var _ergaenzt=0;
+        (db.termine||[]).forEach(function(t){
+          if(!t.calEventId || t.uhrzeit_bis) return;
+          var _e=_feedById[t.calEventId];
+          if(_e && _e.uhrzeit_bis){ t.uhrzeit_bis=_e.uhrzeit_bis; _ergaenzt++; }
+        });
+        if(neu.length||_entfernt||_geaendert||_ergaenzt){
           db.termine.sort(function(a,b){ return (a.datum||'').localeCompare(b.datum||''); });
           save(db);
           if(typeof rTermine==='function') rTermine();
@@ -9939,6 +9972,7 @@ function confirmSyncTermin(idx){
     titel:t.titel||t.sourceTitle||'',
     datum:t.datum||'',
     uhrzeit:t.uhrzeit||'',
+    uhrzeit_bis:t.uhrzeit_bis||'',
     studio:t.studio||'',
     regie:t.regie||'',
     notizen:t.notizen||'',
@@ -12393,6 +12427,13 @@ function rDokumente(){
     var aDone = a.bestaetigt ? 10 : 0;
     var bDone = b.bestaetigt ? 10 : 0;
     if(aDone !== bDone) return aDone - bDone;
+    // Archiv (beide bestätigt): nach Beleg-Datum, neueste zuerst
+    if(aDone===10){
+      var _da=a.datum||a.ausstellungs_datum||a.leistungs_datum_von||a.addedAt||'';
+      var _db=b.datum||b.ausstellungs_datum||b.leistungs_datum_von||b.addedAt||'';
+      if(_da!==_db) return _da>_db ? -1 : 1;
+      return 0;
+    }
     // Nicht-bestätigte nach Typ sortieren
     var pa = typPrio[a.typ||'offen'] !== undefined ? typPrio[a.typ||'offen'] : 4;
     var pb = typPrio[b.typ||'offen'] !== undefined ? typPrio[b.typ||'offen'] : 4;
@@ -15178,7 +15219,7 @@ function dokOpenDetail(id){
               +'<span style="font-weight:400">Bitte Einzelwerte prüfen – KI hat möglicherweise eine Zahl falsch gelesen.</span>'
               +'</div>'
             : '')
-          +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
+          +'<div onclick="gvlDokBearbeiten(\''+d.id+'\')" title="Tippen: Folgen hinzufügen/löschen" style="display:flex;flex-wrap:wrap;gap:5px;cursor:pointer">';
         d.gvl_takes_detail.forEach(function(e, ei){
           var isFilm = e.folge===0;
           var folgeStr=String(e.folge);
@@ -15188,14 +15229,13 @@ function dokOpenDetail(id){
           else if(folgeStr.length>2){ staffelNr=String(parseInt(folgeStr.slice(0,-2))); folgeNr=String(parseInt(folgeStr.slice(-2))); }
           else { staffelNr='1'; folgeNr=String(parseInt(folgeStr)||0); }
           body+='<div style="background:#fff;border:1.5px solid '+(summeFehler?'#e3c4c0':'var(--accent2)')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
-            +'<div onclick="gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed var(--hair);margin-bottom:2px;padding-bottom:2px">'+(isFilm?'Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
-            +'<div onclick="gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'var(--orange)':'var(--accent)')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
+            +'<div onclick="event.stopPropagation();gvlFolgeEdit(this,\''+d.id+'\','+ei+')" style="font-size:9px;font-weight:700;color:#555;cursor:pointer;touch-action:manipulation;border-bottom:1px dashed var(--hair);margin-bottom:2px;padding-bottom:2px">'+(isFilm?'Film':('S'+staffelNr+' F'+folgeNr))+' ✎</div>'
+            +'<div onclick="event.stopPropagation();gvlChipEdit(this,\''+d.id+'\','+ei+')" style="font-size:16px;font-weight:900;color:'+(summeFehler?'var(--orange)':'var(--accent)')+';cursor:pointer;touch-action:manipulation">'+e.takes+'</div>'
             +'</div>';
         });
         var _gvlSum = d.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
         if(!d.gvl_takes && _gvlSum>0){ d.gvl_takes=_gvlSum; }
-        body+='</div><div style="font-size:10px;color:#888;margin-top:5px">Gesamt: <b>'+(d.gvl_takes||_gvlSum||'')+'</b> Takes</div>'
-          +'<button type="button" onclick="gvlDokBearbeiten(\''+d.id+'\')" style="margin-top:8px;width:100%;background:var(--purple2);color:var(--purple);border:1.5px solid #E7E3DA;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✎ GVL Folgen & Takes bearbeiten</button>'
+        body+='</div><div onclick="gvlDokBearbeiten(\''+d.id+'\')" style="font-size:10px;color:#888;margin-top:6px;cursor:pointer">Gesamt: <b>'+(d.gvl_takes||_gvlSum||'')+'</b> Takes <span style="color:var(--clay);font-weight:700">· ✎ bearbeiten</span></div>'
           +'</div>';
       } else {
         body+=_editRow('gvl_staffel','Staffel',d.gvl_staffel||d.gvl_staffel_header||'');
@@ -15574,11 +15614,11 @@ function dokOpenDetail(id){
     var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
     if(!isMonatsAbrechn){
       if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:var(--cream2);border-radius:8px;color:#555;font-size:13px">PDF</div>';
-      var btnLabel = termin ? '✓ Alle Felder übernehmen & bestätigen' : '✓ Daten bestätigen & Foto löschen';
+      var btnLabel = '✓ Alle Felder übernehmen & bestätigen';
       var btnAction = termin
         ? 'dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')'
         : 'dokBestaetigen()';
-      body += '<div style="padding:8px 0 20px">'
+      if(termin) body += '<div style="padding:8px 0 20px">'
         + '<button type="button" onclick="' + btnAction + '" '
         + 'style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:14px;'
         + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
@@ -21143,13 +21183,23 @@ function rZahlungen(){
       monthTrend.push(mT.reduce(function(s,t){return s+calcNet(t);},0));
     }
     var monthMax=Math.max.apply(null,monthTrend)||1;
+    // Ø Gage/Stunde: nur Termine mit Anfang UND Ende (Gage/Stunden aus gleicher Menge)
+    var _gStd=0,_gGage=0;
+    all.forEach(function(t){
+      if(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis)){
+        var _min=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5)));
+        if(_min>0){ _gStd+=_min/60; _gGage+=calcNet(t); }
+      }
+    });
+    var _gageProStd=_gStd>0?_gGage/_gStd:0;
     var html='';
     html+='<div style="background:var(--ink);padding:16px">'
       +'<div style="color:var(--ink2);font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:8px">JAHRESANALYSE '+_zahlYear+'</div>'
-      +'<div style="display:flex;gap:16px">'
+      +'<div style="display:flex;gap:14px;flex-wrap:wrap">'
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Termine</div><div style="font-size:20px;font-weight:900;color:#fff">'+all.length+'</div></div>'
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Monat</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(totalAll/12)+'</div></div>'
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Termin</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(all.length?totalAll/all.length:0)+'</div></div>'
+      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Stunde</div><div style="font-size:20px;font-weight:900;color:#fff">'+(_gStd>0?fmtEur(_gageProStd):'&#8212;')+'</div></div>'
       +'</div></div>';
     html+='<div style="padding:16px 16px 8px">'
       +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">&#128200; MONATSVERLAUF</div>'
