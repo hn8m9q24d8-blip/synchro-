@@ -4070,7 +4070,14 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1015: Ø/Stunde-Fix — Termine OHNE zugeordnete Gage (noch nicht abgerechnet)
   // zaehlten mit ihren Stunden mit, aber ohne Gage -> Schnitt verwaessert (2026: 59
   // statt korrekt 78 €/Std). Jetzt nur Termine mit Gage UND Zeit (Gage/Std echt).
-  if(elH) elH.textContent = '1015';
+  // Build 1016: Uhrzeit-Feld aus den Stammdaten entfernt — die Uhrzeit steht seit
+  // Build 1014 oben im Kopf (Beginn–Ende Uhr). Doppelung raus; Zeiten werden ohnehin
+  // ueber den Kalender gepflegt.
+  // Build 1017: Dispo-Zeiten (Variante 2) — Beginn UND Ende vom Dispoblatt werden bei
+  // Abweichung nur noch als Vorschlag im "bitte prüfen"-Block angeboten (nicht mehr
+  // still ueberschrieben). Endzeit-Feldname auf uhrzeit_bis angeglichen (App-weit),
+  // damit die Dispo-Endzeit auch in Anzeige und Ø/Stunde ankommt.
+  if(elH) elH.textContent = '1017';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4860,7 +4867,6 @@ function openDetail(id){
     +_inlineField(id,'sender','Sender',t.sender||'','text',true)
     +_inlineField(id,'atelier','Atelier',t.atelier||t.notizen||'','text',true)
     +(istFilm?'':_inlineField(id,'episode','Episode',t.episode||'','text',true))
-    +_inlineField(id,'uhrzeit','Uhrzeit',t.uhrzeit||'','time',true)
     +'<div class="info-row"><div class="ir-key">Status</div><div class="ir-val">'+tlabel(t.status)+'</div></div>'
     +'</div>';
 
@@ -17494,11 +17500,20 @@ function dokMergeIntoTermin(d, termin){
       overwrite(tField, dVal, label);
     }
   }
+  // Variante 2: Zeit-Felder (Beginn/Ende) NIE still ueberschreiben, sondern nur
+  // vorschlagen — Tim bestaetigt per Tipp. Feldname Ende = uhrzeit_bis (App-weit).
+  function suggestField(tField, dVal, label){
+    if(!dVal && dVal!==0) return;
+    if((termin[tField]||'').toString() !== dVal.toString()){
+      if(!termin._mergeSuggestions) termin._mergeSuggestions = {};
+      termin._mergeSuggestions[tField] = {val: dVal, label: label};
+    }
+  }
   mergeField('titel',       d.titel,       'Titel');
   mergeField('regie',       d.regie,       'Regie');
   mergeField('rolle',       d.rolle,       'Rolle');
-  mergeField('uhrzeit',     d.uhrzeit,     'Uhrzeit');
-  mergeField('bis_uhrzeit', d.bis_uhrzeit, 'Bis-Uhrzeit');
+  suggestField('uhrzeit',   d.uhrzeit,     'Beginn');
+  suggestField('uhrzeit_bis', d.bis_uhrzeit, 'Ende');
   // Studio: nur überschreiben wenn Dispo-Studio spezifischer ist
   // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat)
   if(d.studio){
