@@ -4100,7 +4100,17 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1024: Mein-Jahr-Zurück (gagenabrechnungen) ging via switchView('buchhaltung')
   // immer zur Buchhaltung — jetzt herkunfts-bewusst (Heute -> Heute). Damit fuehren beide
   // von Heute erreichbaren Views (Belege + Mein Jahr) beim Zurueck wieder nach Heute.
-  if(elH) elH.textContent = '1024';
+  // Build 1025: Analyse-Tab — bunte Emoji-Icons (🎤📈🎬📊, als HTML-Entities kodiert)
+  // durch schlichte Tusche-Strichsymbole im Zen-Stil ersetzt (Torii/Berg/Klappe/Enso).
+  // Erster Entwurf zur Freigabe.
+  // Build 1026: Analyse-Symbole im bekannten Tusche-Look (Handwerk-Board-Motive +
+  // inline kris-Filter, iOS-tauglich): Bambus=Studios, Berg=Verlauf, Pinsel=Produktionen,
+  // Sonnenkreis=Verteilung. Ersetzt die glatten Striche aus Build 1025.
+  // Build 1027: KI-Prompt Endzeit — der Prompt verlangte eine eigene "BIS-Spalte", die es
+  // auf realen Dispozetteln nicht gibt (dort steht EINE Spalte "Von - Bis" mit "13:15-14:05").
+  // Die KI fand keine BIS-Spalte und liess das Feld leer. Jetzt wird die kombinierte Zelle
+  // explizit zerlegt (Wert vor/nach dem Bindestrich) — mit Beispiel.
+  if(elH) elH.textContent = '1027';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13304,8 +13314,13 @@ function dokAnalyseDoc(d, key, cb){
     +'    4) Alle anderen Zeilen komplett ignorieren — auch wenn sie ähnliche EPS-Nummern haben!\n'
     +'    KREUZPRÜFUNG: Die Zeile muss eine Uhrzeit (von/bis) haben — das ist die User-Aufnahmezeit.\n'
     +'    Wenn "'+_uname+'" in mehreren Zeilen steht → alle einzeln verarbeiten (mehrere Rollen am selben Tag)\n'
-    +'  uhrzeit: Startzeit von '+_uname+'s Zeile (VON-Spalte, Format HH:MM)\n'
-    +'  bis_uhrzeit: Endzeit von '+_uname+'s Zeile (BIS-Spalte, Format HH:MM)\n'
+    +'  ZEITEN: Die Zeiten stehen oft in EINER gemeinsamen Spalte "Von - Bis" bzw. "Von-Bis",\n'
+    +'    als kombinierte Zelle wie "13:15-14:05" oder "13:15 - 14:05" oder "13.15-14.05".\n'
+    +'    Zerlege diese Zelle IMMER in Start und Ende. Es gibt nicht immer getrennte Spalten!\n'
+    +'  uhrzeit: STARTzeit von '+_uname+'s Zeile (der Wert VOR dem Bindestrich), Format HH:MM\n'
+    +'  bis_uhrzeit: ENDzeit von '+_uname+'s Zeile (der Wert NACH dem Bindestrich), Format HH:MM\n'
+    +'    Beispiel: steht in der Zeile "13:15-14:05" -> uhrzeit="13:15", bis_uhrzeit="14:05"\n'
+    +'    bis_uhrzeit nur leer lassen, wenn wirklich keine Endzeit erkennbar ist.\n'
     +'  takes: Anzahl Takes aus '+_uname+'s Zeile (TAKES-Spalte)\n'
     +'    Wenn "Trailer", "TR", "Trailer-Aufnahme" o.ä. im Titel oder in der Zeile steht:\n'
     +'    → produktionstyp_kino=false, takes=0, take_gage=0 (Trailer werden pauschal abgerechnet)\n'
@@ -21314,7 +21329,7 @@ function rZahlungen(){
       +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Stunde</div><div style="font-size:20px;font-weight:900;color:#fff">'+(_gStd>0?fmtEur(_gageProStd):'&#8212;')+'</div></div>'
       +'</div></div>';
     html+='<div style="padding:16px 16px 8px">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">&#128200; MONATSVERLAUF</div>'
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA2" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="8" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA2)"><path d="M3.2 17.8 9 8.1l3.4 5.3 2.6-3.2 5.8 7.7z"/><path d="M9 8.2l1.6 2.4 1.4-1.8" opacity=".55"/></g></svg>MONATSVERLAUF</div>'
       +'<div style="display:flex;align-items:flex-end;gap:3px;height:80px">';
     monthTrend.forEach(function(v,i){
       var h2=Math.round((v/monthMax)*76);
@@ -21326,7 +21341,7 @@ function rZahlungen(){
     });
     html+='</div></div>';
     html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">&#127908; TOP STUDIOS</div>';
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA1)"><path d="M5.1 19.9 5 9.2M12 20 11.9 4.3M18.9 19.8l.1-7.9"/><path d="M5.1 9.2c2-1.4 4.9-1.5 6.8-4.8" opacity=".4"/></g></svg>TOP STUDIOS</div>';
     studioKeys.forEach(function(k,i){
       var v=studios[k]; var w=Math.round((v/studioMax)*100);
       html+='<div style="margin-bottom:10px">'
@@ -21339,7 +21354,7 @@ function rZahlungen(){
     });
     html+='</div>';
     html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">&#127916; TOP PRODUKTIONEN</div>';
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA3" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="12" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA3)"><path d="M17.2 3.8 7 14.1l-2 4.9 4.9-2L20.1 6.8z"/><path d="M14.9 6.2l2.9 2.8"/></g></svg>TOP PRODUKTIONEN</div>';
     prodKeys.forEach(function(k,i){
       var v=prodMap[k]; var w=Math.round((v/prodMax)*100);
       html+='<div style="margin-bottom:10px">'
@@ -21358,7 +21373,7 @@ function rZahlungen(){
     var abgDash=circ*(abgAll/total2);
     var bezDash=circ*(bezahltAll/total2);
     html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px">&#128202; STATUS-VERTEILUNG</div>'
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA4" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="3" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA4)"><path d="M12 4.1c4.3-.2 7.8 3.4 7.9 7.7.1 4.4-3.5 8-7.8 8.1-4.4.1-8-3.5-8-7.9C4 7.7 7.6 4.2 12 4.1z"/><path d="M12 4v2.4M12 17.7V20M4.2 12h2.4M17.5 11.9l2.4.1"/></g></svg>STATUS-VERTEILUNG</div>'
       +'<div style="display:flex;align-items:center;gap:20px">'
       +'<svg width="120" height="120" viewBox="0 0 120 120">'
       +'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--cream2)" stroke-width="14"/>'
