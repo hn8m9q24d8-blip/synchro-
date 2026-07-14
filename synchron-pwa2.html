@@ -4110,7 +4110,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // auf realen Dispozetteln nicht gibt (dort steht EINE Spalte "Von - Bis" mit "13:15-14:05").
   // Die KI fand keine BIS-Spalte und liess das Feld leer. Jetzt wird die kombinierte Zelle
   // explizit zerlegt (Wert vor/nach dem Bindestrich) — mit Beispiel.
-  if(elH) elH.textContent = '1027';
+  // Build 1028 [ROOT CAUSE]: Die KI lieferte die Endzeit (bis_uhrzeit) laengst, aber die
+  // Feld-Uebernahme hatte nur "d.uhrzeit = j.uhrzeit" — eine Zeile "d.bis_uhrzeit =
+  // j.bis_uhrzeit" fehlte komplett. Der Wert wurde empfangen und weggeworfen, deshalb
+  // blieb "Ende" IMMER leer, unabhaengig vom Zettel-Layout. Jetzt uebernommen (beide Pfade).
+  if(elH) elH.textContent = '1028';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13972,6 +13976,7 @@ function dokAnalyseDoc(d, key, cb){
       d.regie   = j.regie || null;
       d.rolle   = j.rolle || null;
       d.uhrzeit = j.uhrzeit || null;
+      d.bis_uhrzeit = j.bis_uhrzeit || d.bis_uhrzeit || null;   // Build 1028: Endzeit wurde nie uebernommen
       d.takes   = j.takes || null;
       d.brutto  = j.brutto || null;
       d.netto   = j.netto || null;
@@ -14387,6 +14392,7 @@ function dokAnalyseDoc(d, key, cb){
               d.titel = _bereinigeSthHTitel(d.titel);
             }
             d.regie=_j.regie||null; d.rolle=_j.rolle||null; d.uhrzeit=_j.uhrzeit||null;
+            d.bis_uhrzeit=_j.bis_uhrzeit||d.bis_uhrzeit||null;   // Build 1028
             d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
             d.auszahlung=_j.auszahlung||null; d.gutschrift_nr=_j.gutschrift_nr||null;
             d.kv_abzug=_j.kv_abzug||null; d.rv_abzug=_j.rv_abzug||null; d.pv_abzug=_j.pv_abzug||null;
