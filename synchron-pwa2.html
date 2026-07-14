@@ -4134,7 +4134,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // (3) Rechnungsliste schrieb "offen", obwohl der Zahlungsstatus erst beim
   //     Beleg-Scan entsteht — irrefuehrend (AkibaDreams war laengst bezahlt).
   //     Badge erscheint jetzt nur noch bei bezahlt/storniert.
-  if(elH) elH.textContent = '1031';
+  // Build 1032 [ZWEI WEBKIT-/SCOPE-FALLEN]:
+  // (1) Der Deck-Keil des Ensō hatte fill="var(--washi,...)" — WebKit unterstuetzt
+  //     KEINE CSS-Variablen in SVG-Praesentationsattributen (gleiche Familie wie die
+  //     url(#filter)-Falle). Der Keil wurde nicht gezeichnet -> Kreis blieb IMMER voll,
+  //     egal wie viel offen war. Jetzt literale Farbe.
+  // (2) Dispo/Bezahlt/Offen blieb leer: calcNet() ist in rZahlungen eingeschlossen und
+  //     von rHeute aus unerreichbar (ReferenceError, vom try/catch geschluckt).
+  //     Die Nettogage wird jetzt in rHeute selbst gerechnet.
+  if(elH) elH.textContent = '1032';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -10296,7 +10304,7 @@ function _ensoSvg(offen){
   if(pct<100){
     var pts=["100 100"], aa;
     for(aa=Aend-OVER; aa<=S+361; aa+=1.5) pts.push(P(142,aa));
-    out += '<path d="M'+pts.join(" L")+' Z" fill="var(--washi,#F7F5F1)"/>'
+    out += '<path d="M'+pts.join(" L")+' Z" fill="#F7F5F1"/>'   // literal: WebKit kann kein var() in SVG-Attributen
         +  '<g transform="rotate('+rot.toFixed(2)+',100,100)"><image href="'+_ENSO_TAIL+'" x="0" y="0" width="200" height="200"/></g>';
   }
   return out+'</svg>';
@@ -10355,7 +10363,8 @@ function rHeute(){
       var _disp=0,_bez=0,_off=0;
       (db.termine||[]).forEach(function(t){
         if(!t.datum || t.datum.slice(0,4)!==_yr) return;
-        var _net=calcNet(t);
+        // calcNet() lebt in rZahlungen und ist hier NICHT erreichbar -> selbst rechnen
+        var _net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
         if(!_net) return;
         _disp+=_net;
         var _st=(typeof _terminZahlStatus==='function')?_terminZahlStatus(t.id):'';
