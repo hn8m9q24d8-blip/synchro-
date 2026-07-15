@@ -1022,7 +1022,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div style="flex:1;font-size:17px;font-weight:800" id="re-sheet-title">Neue Rechnung</div>
     <div onclick="closeRechnungSheet()" style="font-size:22px;color:#999;cursor:pointer;padding:4px">✕</div>
   </div>
-  <div style="overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;flex:1">
+  <div style="overflow-y:auto;overflow-x:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;flex:1;max-width:100%">
     <input type="hidden" id="re-id">
 
     <!-- Rechnungsnummer + Datum -->
@@ -1041,25 +1041,17 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
         <div style="font-size:11px;font-weight:700;color:#666">RECHNUNGSEMPFÄNGER</div>
-        <div style="display:flex;gap:12px">
-          <div onclick="reEmpfMerken()" style="font-size:11px;color:var(--accent);cursor:pointer;font-weight:600" title="Eingetippte Adresse ins Adressbuch übernehmen">+ Merken</div>
-          <div onclick="openAuftraggeberSheet()" style="font-size:11px;color:var(--ai);cursor:pointer;font-weight:600">Adressbuch</div>
-        </div>
+        <div onclick="reEmpfMerken()" style="font-size:11px;color:var(--accent);cursor:pointer;font-weight:600" title="Eingetippte Adresse ins Adressbuch übernehmen">Neue Adresse und merken</div>
       </div>
       <select id="re-empf-sel" class="sheet-input" style="appearance:auto;margin-bottom:6px" onchange="reEmpfSelected()">
-        <option value="">Aus Adressbuch wählen…</option>
+        <option value="">Adressbuch</option>
       </select>
       <input id="re-empf" class="sheet-input" placeholder="Empfänger (Firma, Straße, PLZ Ort — eine Zeile pro Datenfeld)">
       <textarea id="re-empf-adresse" class="sheet-input" rows="3" placeholder="Vollständige Adresse (mehrzeilig, optional — wird unter dem Namen aufs PDF gedruckt)" style="resize:none;margin-top:6px;font-size:13px"></textarea>
     </div>
 
-    <!-- Termin verknüpfen -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">TERMIN VERKNÜPFEN (optional)</div>
-      <select id="re-termin-sel" class="sheet-input" style="appearance:auto" onchange="reTerminSelected()">
-        <option value="">– Kein Termin –</option>
-      </select>
-    </div>
+    <!-- Termin-Feld entfernt (Build 1061): Verknuepfung laeuft ueber KI/Bankabgleich. re-termin-sel bleibt als hidden fuer Speicher-Kompatibilitaet. -->
+    <input type="hidden" id="re-termin-sel" value="">
 
     <!-- Leistungsbeschreibung -->
     <div>
@@ -4259,7 +4251,12 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // mittig ueber der Summe); beim Antippen wird zusaetzlich die ganze Kachel dezent gruen
   // (washi-gruenes #EEF2ED, japanische Palette) als "abgeschickt"-Signal. (2) Der grosse
   // gruene Plus-Kreis (FAB) unten rechts ist raus — neue Rechnung ueber das + oben rechts.
-  if(elH) elH.textContent = '1060';
+  // Build 1061: (1) Kachel-Gruen zurueckgenommen — nur der Flieger faerbt sich gruen,
+  // und er sitzt jetzt ganz in der oberen rechten Ecke. (2) Rechnungs-Sheet nicht mehr
+  // horizontal ziehbar (overflow-x:hidden). (3) Empfaenger-Header: "Neue Adresse und
+  // merken" (der separate "+ Merken"-Knopf ist raus), Dropdown-Platzhalter -> "Adressbuch".
+  // (4) Termin-Verknuepfen-Feld entfernt — die Verknuepfung laeuft ueber KI/Bankabgleich.
+  if(elH) elH.textContent = '1061';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -20658,7 +20655,7 @@ function rRechnungen(){
     // Build 1060: Flieger oben rechts in der Kachel; bei "versendet" wird die ganze
     // Kachel dezent gruen (washi-gruen, japanische Palette). Zeile ist position:relative,
     // damit der Flieger absolut oben rechts sitzen kann.
-    var _vsBg = r.versendet ? 'background:#EEF2ED;' : '';   // dezentes Kiefer-Gruen auf Washi
+    var _vsBg = '';   // Build 1061: Kachel-Gruen zurueckgenommen — nur der Flieger faerbt sich
     return '<div onclick="openRechnungSheet(\''+r.id+'\')" style="position:relative;display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--hair);cursor:pointer;-webkit-tap-highlight-color:transparent;'+_vsBg+'">'
       +'<div style="width:3px;align-self:stretch;border-radius:3px;background:'+sc+';flex:none;min-height:36px"></div>'
       +'<div style="flex:1;min-width:0">'
@@ -20669,7 +20666,7 @@ function rRechnungen(){
       +'<div style="font-family:var(--serif);font-size:16px">'+fmtEur(r.brutto)+'</div>'
       +(sl?'<div style="font-size:10.5px;color:'+sc+';margin-top:2px">'+sl+'</div>':'')
       +'</div>'
-      +'<div onclick="rechnungVersendetToggle(\''+r.id+'\',event)" title="Abgeschickt?" style="position:absolute;top:8px;right:10px;padding:4px;cursor:pointer;touch-action:manipulation;z-index:2">'+_schwalbeSvg(r.versendet)+'</div>'
+      +'<div onclick="rechnungVersendetToggle(\''+r.id+'\',event)" title="Abgeschickt?" style="position:absolute;top:3px;right:3px;padding:3px;cursor:pointer;touch-action:manipulation;z-index:2">'+_schwalbeSvg(r.versendet)+'</div>'
       +'</div>';
   }).join('')+'</div>';
 }
@@ -20720,7 +20717,7 @@ function openRechnungSheet(id){
   // Auftraggeber-Dropdown füllen (Build 790)
   var empfSel=document.getElementById('re-empf-sel');
   if(empfSel){
-    empfSel.innerHTML='<option value="">Aus Adressbuch wählen…</option>';
+    empfSel.innerHTML='<option value="">Adressbuch</option>';
     (db.auftraggeber||[]).slice().sort(function(a,b){
       return String(a.name||'').localeCompare(String(b.name||''));
     }).forEach(function(a){
@@ -20992,7 +20989,7 @@ function reEmpfMerken(){
     var empfSel=document.getElementById('re-empf-sel');
     if(empfSel){
       var cur=empfSel.value;
-      empfSel.innerHTML='<option value="">Aus Adressbuch wählen…</option>';
+      empfSel.innerHTML='<option value="">Adressbuch</option>';
       db.auftraggeber.forEach(function(a){
         var o=document.createElement('option'); o.value=a.id; o.textContent=a.name; empfSel.appendChild(o);
       });
