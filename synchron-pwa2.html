@@ -4177,7 +4177,26 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // dort "Antippen" (wenn noch kein Datum gesetzt) bzw. das gesetzte Datum.
   // Build 1041: "Antippen" aus der Buchhaltung-ab-Zeile entfernt — rechts bleibt leer,
   // bis ein Datum gesetzt ist.
-  if(elH) elH.textContent = '1041';
+  // Build 1042 [BELEG-DETAIL UEBERSICHTLICHER]: Die Detailansicht zeigte alle Felder als
+  // editierbare Zeilen — auch die leeren (Datum, Regie, Beginn, Ende, Folge ...). Jetzt
+  // erscheint zuerst eine kompakte Read-only-Vorschau, die NUR gefuellte Felder zeigt
+  // (_dokDispBlock + _dispRow, das leere ueberspringt). Klick auf den Header "ERKANNTE
+  // DATEN" schaltet ueber window._dokEditOpen auf den vollen Editor zum Nachtragen und
+  // zurueck. Speicherlogik unveraendert.
+  // Build 1043 [BELEG-DETAIL, 6 Punkte]: (1) Ende ist jetzt ein Zeitfeld wie Beginn.
+  // (2) Kein Datum erkannt -> Aufnahmedatum des Fotos (EXIF) als Fallback. (3) "Kein
+  // passender Termin"-Kachel klappt die drei Optionen (Kalender/Neuer Termin/Keinen)
+  // erst auf Klick auf. (4) Header "ERKANNTE DATEN" oeffnet direkt den Editor, ohne
+  // Zusatz-Label. (5) "Vorschau zum Abgleichen"-Text raus. (6) GVL-Button entfernt —
+  // Staffel/Folge/Takes GVL in der Uebersicht sind jetzt klickbar und oeffnen das GVL-Menue.
+  // Build 1044: "Tippen = Vollbild"-Hinweis aus dem Dispo-Foto-Vorschauscreen entfernt.
+  // Die Funktion bleibt — ein Tap auf das Foto oeffnet weiterhin die Vollbildansicht,
+  // nur das Label ist weg.
+  // Build 1045: "Nochmal analysieren" ist jetzt ein dezentes Wiederholungssymbol (Kreis-
+  // pfeil) unten rechts im Vorschaufoto, statt eines grossen Buttons. Der grosse Button
+  // erscheint nur noch bei der Erstanalyse ("KI-Analyse"); sobald erkannt wurde, genuegt
+  // das Icon. event.stopPropagation verhindert, dass der Tap zugleich Vollbild oeffnet.
+  if(elH) elH.textContent = '1045';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -14037,6 +14056,8 @@ function dokAnalyseDoc(d, key, cb){
       d.typ     = _dokTypAufloesen(d, j.typ, j.gutschrift_nr);
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
+      // Build 1043: Fallback — kein Datum erkannt? Aufnahmedatum des Fotos (EXIF) nehmen.
+      if(!d.datum && d.dataURL){ var _ex=_exifDatum(d.dataURL); if(_ex){ d.datum=_ex; d._datumAusFoto=true; } }
       // Build 747: Ausstellungsdatum eigenes Feld (war bisher in d.datum mit Aufnahme
       // vermischt). Für Steuerjahr-Zuordnung relevant. Bei Storno/Korrektur weicht
       // dieses Datum oft vom Aufnahmedatum ab. Fallback null wenn KI nichts findet.
@@ -15009,7 +15030,7 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
 
 // ── DETAIL VIEW ──────────────────────────────────────────────
 function _editRow(field, label, val){
-  var inputType = (field==='datum')?'date':(field==='uhrzeit')?'time':'text';
+  var inputType = (field==='datum')?'date':(field==='uhrzeit'||field==='bis_uhrzeit')?'time':'text';  // Build 1043: Ende auch Zeitfeld
   return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--cream2)">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
     +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
@@ -15017,12 +15038,61 @@ function _editRow(field, label, val){
 }
 
 // Read-only Anzeigezeile (wie im Screenshot)
-function _dispRow(label, val, color){
+function _dispRow(label, val, color, onclick){
   if(!val && val!==0) return '';
-  return '<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--green2)">'
+  var clk = onclick ? ' onclick="'+onclick+'" style="cursor:pointer;touch-action:manipulation;' : ' style="';
+  var hint = onclick ? '<span style="font-size:10px;color:var(--accent);margin-left:6px">\u270e</span>' : '';
+  return '<div'+clk+'display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--green2)">'
     +'<div style="font-size:12px;color:#888;flex:1">'+label+'</div>'
-    +'<div style="font-size:13px;font-weight:700;color:'+(color||'var(--ink)')+'">'+esc(String(val))+'</div>'
+    +'<div style="font-size:13px;font-weight:700;color:'+(color||'var(--ink)')+'">'+esc(String(val))+hint+'</div>'
     +'</div>';
+}
+
+// Build 1043: EXIF-Aufnahmedatum aus einem JPEG-DataURL lesen (nur DateTimeOriginal).
+// Liefert 'YYYY-MM-DD' oder '' wenn nicht vorhanden (z.B. PNG, Screenshot, PDF).
+function _exifDatum(dataURL){
+  try{
+    if(!dataURL || dataURL.indexOf('image/jpeg')<0) return '';
+    var b64 = dataURL.split(',')[1]; if(!b64) return '';
+    var bin = atob(b64.slice(0, 120000));  // Header reicht — EXIF steht vorne
+    var bytes = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    // Suche nach ASCII "YYYY:MM:DD HH:MM:SS" (EXIF-Datumsformat)
+    var s=''; for(var k=0;k<bytes.length;k++){ var c=bytes[k]; s+= (c>=32&&c<127)?String.fromCharCode(c):'\n'; }
+    var m = s.match(/(\d{4}):(\d{2}):(\d{2}) \d{2}:\d{2}:\d{2}/);
+    if(m){ return m[1]+'-'+m[2]+'-'+m[3]; }
+    return '';
+  }catch(e){ return ''; }
+}
+
+// Build 1042: Read-only-Vorschau der erkannten Daten — zeigt NUR gefuellte Felder.
+// Leere Felder (Datum, Regie, Beginn, Ende, Folge ...) werden weggelassen.
+// Klick auf den Header oeffnet den vollen Editor (window._dokEditOpen).
+function _dokDispBlock(d){
+  var o='';
+  o+=_dispRow('Beschreibung', d.beschr||'');
+  o+=_dispRow('Datum', d.datum||'');
+  o+=_dispRow('Studio', d.studio||'');
+  o+=_dispRow('Titel', d.titel||'');
+  o+=_dispRow('Regie', d.regie||'');
+  o+=_dispRow('Rolle(n)', d.rolle||'');
+  o+=_dispRow('Beginn', d.uhrzeit||'');
+  o+=_dispRow('Ende', d.bis_uhrzeit||'');
+  o+=_dispRow('Gutschrift-Nr.', d.gutschrift_nr||'');
+  if(d.takes||d.takes===0) o+=_dispRow('Takes', d.takes);
+  o+=_dispRow('Take-Gage \u20ac', d.take_gage||'');
+  o+=_dispRow('Grundgage \u20ac', d.grundgage||'');
+  o+=_dispRow('Brutto \u20ac', d.brutto||'');
+  o+=_dispRow('Krankenvers. (KV) \u20ac', d.kv_abzug||'');
+  o+=_dispRow('Rentenvers. (RV) \u20ac', d.rv_abzug||'');
+  o+=_dispRow('Pflegevers. (PV) \u20ac', d.pv_abzug||'');
+  o+=_dispRow('Netto \u20ac', d.netto||'');
+  o+=_dispRow('Auszahlung \u20ac', d.auszahlung||'');
+  o+=_dispRow('Staffel', d.gvl_staffel||d.gvl_staffel_header||'', null, 'gvlDokBearbeiten(\''+d.id+'\')');
+  o+=_dispRow('Folge', d.gvl_folge||'', null, 'gvlDokBearbeiten(\''+d.id+'\')');
+  o+=_dispRow('Takes GVL', d.gvl_takes||'', null, 'gvlDokBearbeiten(\''+d.id+'\')');
+  if(!o) o='<div style="font-size:12px;color:var(--ink3);padding:6px 0">Noch nichts erkannt \u2014 auf \u201enachtragen\u201c tippen.</div>';
+  return o;
 }
 
 // Build 804: Inline-Edit für Felder eines bestätigten Dokuments (Studio, Titel etc.)
@@ -15062,7 +15132,12 @@ function dokEditFieldInline(rowEl, dokId, field){
   try { if(typeof rJahresabschluss === 'function') rJahresabschluss(); } catch(e){}
 }
 
-function dokOpenDetail(id){
+function dokOpenDetail(id, _keepEdit){
+  // Build 1042: Bei echtem Oeffnen in der Vorschau starten (_dokEditOpen=false);
+  // der Toggle-Rerender ruft mit _keepEdit=true und behaelt den Editor-Zustand.
+  if(!_keepEdit) window._dokEditOpen=false;
+  window._rerenderDetail=function(){ dokOpenDetail(id, true); };
+
   _dokCurrentId = id;
   var d = (db.dokumente||[]).find(function(x){return x.id===id;});
   // Build 758 (#6): Stub-Doc / nicht gefunden — informativer Toast statt blank
@@ -15164,12 +15239,24 @@ function dokOpenDetail(id){
   } else if(d.awaitConfirm || !d.bestaetigt){
 
     // ── Große Vorschau zum Abgleichen ──
-    if(d.dataURL && d.mime!=='application/pdf'){
+    var _schonAnalysiert2 = !!((d.titel||d.rolle||d.gutschrift_nr||d.brutto||(d.gvlListen&&d.gvlListen.length)||(d.sessions&&d.sessions.length)));
+      if(d.dataURL && d.mime!=='application/pdf'){
       var previewDiv='<div style="margin-bottom:12px">';
-      previewDiv+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Vorschau zum Abgleichen</div>';
+      previewDiv+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:none">Vorschau</div>';
       previewDiv+='<div id="dok-preview-'+d.id+'" style="cursor:zoom-in;position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--hair);background:#111;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\''+d.id+'\')">'
       previewDiv+='<img src="'+d.dataURL+'" style="width:100%;max-height:380px;object-fit:contain;display:block;pointer-events:none">';
-      previewDiv+='<div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px">Tippen = Vollbild</div>';
+      /* Build 1044: "Tippen = Vollbild"-Badge entfernt — Tap auf das Foto oeffnet weiterhin Vollbild */
+      // Build 1045: dezentes "Nochmal analysieren"-Symbol (Enso-Wiederholungspfeil) unten rechts,
+      // nur wenn schon analysiert. Erstanalyse laeuft weiter ueber den grossen Button.
+      if(_schonAnalysiert2){
+        previewDiv+='<div onclick="event.stopPropagation();dokAnalyseOne();" title="Nochmal analysieren" '
+          +'style="position:absolute;bottom:8px;right:8px;width:34px;height:34px;border-radius:50%;'
+          +'background:rgba(28,27,25,.62);display:flex;align-items:center;justify-content:center;'
+          +'cursor:pointer;touch-action:manipulation;backdrop-filter:blur(2px)">'
+          +'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" '
+          +'stroke-linecap="round" stroke-linejoin="round">'
+          +'<path d="M20 11.5a8 8 0 1 1-2.3-5.4"/><path d="M20 3.5v4.2h-4.2"/></svg></div>';
+      }
       previewDiv+='</div></div>';
       body+=previewDiv;
     } else if(!d.dataURL && d.mime!=='application/pdf'){
@@ -15217,7 +15304,10 @@ function dokOpenDetail(id){
                               || (d.posten && d.posten.length) || (d.sessions && d.sessions.length));
     var _analyseBtnLabel = _schonAnalysiert ? 'Nochmal analysieren' : 'KI-Analyse';
     body+='<div style="margin-bottom:12px">';
-    body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">'+_analyseBtnLabel+'</button>';
+    // Build 1045: grosser Button NUR bei Erstanalyse; danach uebernimmt das Reload-Icon im Foto
+    if(!_schonAnalysiert){
+      body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">'+_analyseBtnLabel+'</button>';
+    }
     body+='</div>';
 
     // ── ERKANNTE DATEN (editierbar — Korrekturen möglich) ──
@@ -15378,8 +15468,11 @@ function dokOpenDetail(id){
     } catch(eK){ console.warn('Konsistenz-Banner Fehler:', eK); }
     // ═══ Ende Build 758 (#2) ═══
 
-    body+='<div style="background:var(--green2);border:2px solid var(--accent2);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
-      +'<div style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.5px;margin-bottom:8px">ERKANNTE DATEN</div>';
+body+='<div style="background:var(--green2);border:2px solid var(--accent2);border-radius:12px;padding:12px 14px;margin-bottom:12px">';
+    var _eo=!!window._dokEditOpen;
+    body+='<div onclick="window._dokEditOpen=!window._dokEditOpen;(window._rerenderDetail||function(){})();" style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.5px;margin-bottom:8px;cursor:pointer;touch-action:manipulation">ERKANNTE DATEN</div>';
+    if(!_eo){ body+=_dokDispBlock(d); }
+    if(_eo){
     body+=_editRow('beschr','Beschreibung',d.beschr||'');
     body+=_editRow('datum','Datum',d.datum||'');
     body+=_editRow('studio','Studio',d.studio||'');
@@ -15442,7 +15535,7 @@ function dokOpenDetail(id){
         body+=_editRow('gvl_staffel','Staffel',d.gvl_staffel||d.gvl_staffel_header||'');
         body+=_editRow('gvl_folge','Folge',d.gvl_folge||d.gvl_episode_header||'');
         body+=_editRow('gvl_takes','Takes GVL',d.gvl_takes||d.takes||'');
-        body+='<button type="button" onclick="gvlDokBearbeiten(\''+d.id+'\')" style="margin-top:4px;width:100%;background:var(--purple2);color:var(--purple);border:1.5px solid #E7E3DA;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✎ GVL Folgen & Takes bearbeiten</button>';
+        /* Build 1043: GVL-Button entfernt — GVL-Werte in der Uebersicht sind jetzt klickbar */
       }
     }
     if(d.typ==='abrechn'){
@@ -15582,6 +15675,7 @@ function dokOpenDetail(id){
     // Vorher nur bei typ='ausgabe' sichtbar (Zeile 14390), aber bei falsch
     // klassifizierten Belegen (z.B. Honorarvereinbarung als 'sonstig') muss
     // man auch manuell auf 'abrechn' umstellen können.
+    } // Build 1042: Ende Editor-Zweig (_eo)
     body+='<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #bbf7d0">'
       +'<button type="button" onclick="dokReklassifizieren(\''+d.id+'\')" '
       +'style="width:100%;background:rgba(255,255,255,.7);color:var(--accent);border:1.5px solid var(--accent2);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">'
@@ -15789,17 +15883,20 @@ function dokOpenDetail(id){
         });
       } else {
         body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
-          +'<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">Kein passender Termin gefunden</div>'
+          +'<div onclick="window._dokTermOpt=window._dokTermOpt||{};window._dokTermOpt[\''+d.id+'\']=!window._dokTermOpt[\''+d.id+'\'];(window._rerenderDetail||function(){})();" style="cursor:pointer;touch-action:manipulation">'
+          +'<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px;display:flex;justify-content:space-between"><span>Kein passender Termin gefunden</span><span style="color:var(--ink3);font-weight:600">'+((window._dokTermOpt&&window._dokTermOpt[d.id])?'✕':'Optionen ›')+'</span></div>'
           +'<div style="font-size:12px;color:#666">Datum '+(d.datum?fd(d.datum):'?')+(d.studio?' · '+esc(d.studio):'')+'</div>'
-          +'</div>';
+          +'</div></div>';
       }
 
       // Fallback: manuell oder neuer Termin
+      if(window._dokTermOpt && window._dokTermOpt[d.id]){
       body+='<div style="display:flex;gap:8px;margin-bottom:8px">'
         +'<button type="button" onclick="dokGotoKalender(\''+d.id+'\')" style="flex:1;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">Im Kalender suchen</button>'
         +'<button type="button" onclick="dokNewTerminAusDok(\''+d.id+'\')" style="flex:1;background:var(--hair);color:var(--ink);border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">+ Neuer Termin</button>'
         +'</div>';
       body+='<button type="button" onclick="dokKeinTerminZuordnen(\''+d.id+'\')" style="width:100%;background:var(--blue2);color:var(--ai);border:1.5px solid #E7E3DA;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px">Keinen Termin zuordnen (GVL / Nachgage / Pauschale)</button>';
+      }
     }
     } // end else (nicht monats_abrechn)
 
