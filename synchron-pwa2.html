@@ -4214,7 +4214,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // sie als Durchschnitt ueber die Folgen verteilen kann. Jetzt: fehlende Folge = 0,
   // Eingabefeld bleibt leer (Platzhalter). folge=0 wird in der GVL-Auswertung bereits
   // als "ganze Staffel" behandelt.
-  if(elH) elH.textContent = '1048';
+  // Build 1049: Das Warteschlangen-Banner (position:fixed, top:0) lag ueber dem Header
+  // des Dokumente-Views und ueberlappte die "10 Dok. · 128 archiv."-Zeile. Jetzt schiebt
+  // es den View um seine eigene Hoehe nach unten (paddingTop), und beim Schliessen wird
+  // das wieder entfernt.
+  // Build 1050 [EINE ZAHL UEBERALL]: Heute zeigte via MEV6 die korrekten offenen Zahlungen
+  // (2), aber die Zahlungen-Kachel im Buch (grünes Badge) und das rote Buch-Tab-Badge
+  // nutzten noch die Legacy-Zaehlung _holviOffenCount (10). Beide jetzt auf dieselbe
+  // MEV6-Quelle (_zahlungsArbeitCount) umgestellt — eine Zahl in allen Ansichten.
+  if(elH) elH.textContent = '1050';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13068,7 +13076,7 @@ var _dokQueueKatFn = null; // Kategorie-Funktion für die Queue
 
 function _dokQueueBannerShow(){
   var existing = document.getElementById('dok-queue-banner');
-  if(existing) existing.remove();
+  if(existing) existing.remove(); var _vd2=document.getElementById('view-dokumente'); if(_vd2) _vd2.style.paddingTop='';
   if(!_dokQueue.length) return;
   var banner = document.createElement('div');
   banner.id = 'dok-queue-banner';
@@ -13082,6 +13090,12 @@ function _dokQueueBannerShow(){
     + '<button type="button" id="dok-queue-next-btn" style="background:var(--ink);color:var(--paper);border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;touch-action:manipulation;white-space:nowrap">Nächste '+next+' laden →</button>'
     + '<button type="button" onclick="dokQueueClear()" style="background:transparent;border:none;color:var(--ink3);font-size:18px;cursor:pointer;padding:0 4px;touch-action:manipulation">✕</button>';
   document.body.appendChild(banner);
+  // Build 1049: Banner ist position:fixed und lag ueber dem Header. Jetzt schiebt es
+  // den Dokumente-View um seine eigene Hoehe nach unten, damit nichts ueberlappt.
+  try{
+    var _vd=document.getElementById('view-dokumente');
+    if(_vd){ requestAnimationFrame(function(){ _vd.style.paddingTop=(banner.offsetHeight||44)+'px'; }); }
+  }catch(e){}
   document.getElementById('dok-queue-next-btn').onclick = function(){
     var batch = _dokQueue.splice(0, MAX_BATCH);
     var katFn = _dokQueueKatFn || function(){ return null; };
@@ -13115,7 +13129,7 @@ function dokQueueClear(){
   _dokQueue = [];
   _dokQueueKatFn = null;
   var banner = document.getElementById('dok-queue-banner');
-  if(banner) banner.remove();
+  if(banner) banner.remove(); var _vd2=document.getElementById('view-dokumente'); if(_vd2) _vd2.style.paddingTop='';
   showToast('Warteschlange geleert');
 }
 
@@ -19890,8 +19904,9 @@ function holviIgnoriertUndo(id){
   showToast('Wieder aufgenommen');
 }
 function _updateHolviAbgleichBadge(){
-  var liste=db.holviAbgleich||[];
-  var offen=_holviOffenCount();
+  // Build 1050: gleiche Quelle wie Heute (MEV6) statt Legacy _holviOffenCount,
+  // damit Heute, Buch-Kachel und Buch-Tab-Badge dieselbe Zahl zeigen.
+  var offen=(typeof _zahlungsArbeitCount==='function')?_zahlungsArbeitCount():_holviOffenCount();
   var badge=document.getElementById('holvi-abgleich-badge');
   if(badge){ badge.textContent=offen||''; badge.style.display=offen>0?'inline':'none'; }
 }
@@ -20077,7 +20092,7 @@ function updateBuchBadge(){
   if(!el) return;
   var n=0;
   try{ n+=_dokUnanalysedCount(); }catch(e){}
-  try{ if(typeof _holviOffenCount==='function') n+=_holviOffenCount(); }catch(e){}
+  try{ if(typeof _zahlungsArbeitCount==='function') n+=_zahlungsArbeitCount(); else if(typeof _holviOffenCount==='function') n+=_holviOffenCount(); }catch(e){}  // Build 1050: MEV6 wie Heute
   el.textContent = n>0 ? n : '';
   el.style.display = n>0 ? 'inline-flex' : 'none';
 }
