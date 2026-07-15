@@ -4260,7 +4260,19 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // angezeigt statt des Ausstellungsdatums (aussagekraeftiger). Faellt aufs Ausstellungs-
   // datum zurueck, wenn kein Leistungsdatum gesetzt ist. Alt-Freitext wird via
   // _reLeistdatumIso nach ISO konvertiert, damit fd() korrekt deutsch formatiert.
-  if(elH) elH.textContent = '1062';
+  // Build 1063: KI-Prompt erkennt jetzt selbstgeschriebene Rechnungen (K3) als eigenen Typ.
+  // Vorher las die KI bei Eigenrechnungen die falschen Felder — z.B. das Ausstellungsdatum
+  // oben rechts statt des klar beschrifteten "Leistungsdatum:", und Studio/Titel gar nicht.
+  // Neue Regeln: datum=Leistungsdatum, gutschrift_nr=Rechnungsnummer, titel=hinter "Titel:",
+  // studio=RechnungsEMPFAENGER (die Firma, an die Tim schreibt), nicht Tim selbst.
+  // Build 1064: K3-Erkennung im Prompt haerter abgegrenzt, damit sie die bewaehrten
+  // Studio-/Gutschrift-Formate (FFS, RC, Iyuno, Arena, Interopa, toneworx K2, Studio
+  // Hamburg K4, GVL …) NICHT stoert. Der Eigenrechnungs-Block greift jetzt nur, wenn
+  // ALLE drei Merkmale zutreffen (Username als Absender-Briefkopf + Ueberschrift
+  // "Rechnung" + beschriftete Zeilen "Rechnungsnummer:"/"Leistungsdatum:"). Fehlt eines,
+  // ignoriert die KI den Block und nutzt die normalen Regeln. Die generelle Studio-Regel
+  // ist zusaetzlich klar als Regelfall markiert.
+  if(elH) elH.textContent = '1064';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13632,6 +13644,24 @@ function dokAnalyseDoc(d, key, cb){
     +'    - Beispiel: "Grundgage TV ... Kevin Dark S2" → rolle="Kevin", titel="Dark"\n'
     +'  datum = AUFNAHMEDATUM aus der Positions-Zeile (NICHT Druckdatum oben rechts!)\n'
     +'  ausstellungsdatum = das DRUCKDATUM/RECHNUNGSDATUM oben rechts auf dem Beleg (oft mit Uhrzeit, z.B. "31.03.2026 14:21" → ausstellungsdatum="2026-03-31"). Bei Storno/Korrektur weicht dieses Datum vom Aufnahmedatum ab. Wenn nicht eindeutig: null.\n'
+    +'\n'
+    +'  ══ SONDERFALL: SELBSTGESCHRIEBENE RECHNUNG (Eigenrechnung des Users) ══\n'
+    +'  Dieser Block gilt AUSSCHLIESSLICH, wenn ALLE diese Merkmale zutreffen:\n'
+    +'    (a) "'+_uname+'" steht als ABSENDER im Briefkopf ganz oben (nicht als Empfaenger/Sprecher in einer Tabelle),\n'
+    +'    (b) das Dokument ist mit "Rechnung" ueberschrieben (NICHT "Gutschrift"/"Abrechnung"/"Honorarabrechnung"),\n'
+    +'    (c) es gibt beschriftete Zeilen "Rechnungsnummer:" UND "Leistungsdatum:".\n'
+    +'  Wenn auch nur EINES dieser Merkmale fehlt, ist es KEINE Eigenrechnung — dann diesen Block\n'
+    +'  komplett ignorieren und die normalen Studio-/Gutschrift-Regeln unten anwenden!\n'
+    +'  NUR wenn (a)+(b)+(c) alle zutreffen, gelten diese Feld-Regeln VORRANGIG:\n'
+    +'    - gutschrift_nr = die Nummer hinter "Rechnungsnummer:" (z.B. "08/2026")\n'
+    +'    - datum = das Datum hinter "Leistungsdatum:" (NICHT das Datum oben rechts!). Format JJJJ-MM-TT.\n'
+    +'    - ausstellungsdatum = das Datum oben rechts ("Berlin, TT.MM.JJJJ")\n'
+    +'    - titel = der Text hinter "Titel:" (z.B. "Europa 2057")\n'
+    +'    - studio = der EMPFAENGER der Rechnung (die Firma, an die der User schreibt), NICHT der User selbst.\n'
+    +'      Der Empfaenger steht als Anschrift-Block oben links unter dem Absender (z.B. "mobyDOK GmbH" → studio="mobyDOK").\n'
+    +'    - rolle = leer lassen, wenn keine explizite Rolle genannt ist.\n'
+    +'\n'
+    +'  ── Ab hier: NORMALE Studio-Gutschrift/Abrechnung (der Regelfall, KEINE Eigenrechnung) ──\n'
     +'  studio = der KURZNAME des Synchronstudios/der Produktionsfirma — z.B. "FFS", "VSI", "Arena", "TNT", "Interopa", "RC", "Taunus"\n'
     +'    NICHT der Atelierraum/Studioraum (z.B. NICHT "BLN Studio E (-65)", NICHT "Atelier 4", NICHT "Studio Hamburg")\n'
     +'    Der Studioname steht oft als Logo/Firmenname ganz oben auf dem Dokument (Briefkopf), z.B. "Film & Fernseh Synchron GmbH" → "FFS"\n'
