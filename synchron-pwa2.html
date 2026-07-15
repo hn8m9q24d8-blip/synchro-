@@ -4256,7 +4256,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // horizontal ziehbar (overflow-x:hidden). (3) Empfaenger-Header: "Neue Adresse und
   // merken" (der separate "+ Merken"-Knopf ist raus), Dropdown-Platzhalter -> "Adressbuch".
   // (4) Termin-Verknuepfen-Feld entfernt — die Verknuepfung laeuft ueber KI/Bankabgleich.
-  if(elH) elH.textContent = '1061';
+  // Build 1062: In der Rechnungsuebersicht wird pro Zeile jetzt das Leistungsdatum
+  // angezeigt statt des Ausstellungsdatums (aussagekraeftiger). Faellt aufs Ausstellungs-
+  // datum zurueck, wenn kein Leistungsdatum gesetzt ist. Alt-Freitext wird via
+  // _reLeistdatumIso nach ISO konvertiert, damit fd() korrekt deutsch formatiert.
+  if(elH) elH.textContent = '1062';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -20660,7 +20664,7 @@ function rRechnungen(){
       +'<div style="width:3px;align-self:stretch;border-radius:3px;background:'+sc+';flex:none;min-height:36px"></div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:26px">'+esc(r.empf||'–')+'</div>'
-      +'<div style="font-size:11.5px;color:var(--ink2);margin-top:1px">'+esc(r.nr||'')+' &middot; '+fd(r.datum)+'</div>'
+      +'<div style="font-size:11.5px;color:var(--ink2);margin-top:1px">'+esc(r.nr||'')+' &middot; '+fd(_reLeistdatumIso(r.leistdatum)||r.datum)+'</div>'
       +'</div>'
       +'<div style="text-align:right;flex:none">'
       +'<div style="font-family:var(--serif);font-size:16px">'+fmtEur(r.brutto)+'</div>'
