@@ -4203,7 +4203,18 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // direkt editierbar ohne Extra-Klick; nur gefuellte Felder + immer Datum. Takes, Staffel
   // und Folge oeffnen bei Klick das GVL-Menue. (P5) EXIF-Datum bleibt reiner Fallback, nur
   // wenn die KI kein Datum liefert. Dateiname unveraendert (EXIF setzt nur d.datum).
-  if(elH) elH.textContent = '1046';
+  // Build 1047: Datum-Fallback aus dem Dateinamen. EXIF (Build 1043) griff nicht, weil
+  // die Bilder vor dem Speichern verkleinert werden (resizeImageB64) und dabei die
+  // EXIF-Daten verlieren. Das Datum steht aber im Dateinamen (iOS: "... 2026-07-15 um
+  // 11.06.14.jpeg") — das wird jetzt zuerst geprueft, EXIF bleibt als zweiter Fallback.
+  // Build 1048 [GVL FOLGE-FIX]: Wenn auf dem Dispo keine Folge steht, trug die App
+  // automatisch Folge 1 ein und buchte alle Takes darauf (folge:...||1 an zwei Stellen:
+  // Anzeige in gvlDokBearbeiten und Speichern in gvlDokSave). Falsch — bei fehlender
+  // Folge sollen die Takes der ganzen Staffel zugeordnet bleiben (folge=0), damit Tim
+  // sie als Durchschnitt ueber die Folgen verteilen kann. Jetzt: fehlende Folge = 0,
+  // Eingabefeld bleibt leer (Platzhalter). folge=0 wird in der GVL-Auswertung bereits
+  // als "ganze Staffel" behandelt.
+  if(elH) elH.textContent = '1048';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6247,7 +6258,7 @@ function gvlDokBearbeiten(dokId){
 
   var detail = d.gvl_takes_detail && d.gvl_takes_detail.length
     ? d.gvl_takes_detail.map(function(e){ return {staffel:staffelAus(e.folge),folge:folgeAus(e.folge),takes:e.takes}; })
-    : [{staffel:parseInt(d.gvl_staffel||d.gvl_staffel_header)||1, folge:parseInt(d.gvl_folge||d.gvl_episode_header)||1, takes:parseInt(d.gvl_takes||d.takes)||0}];
+    : [{staffel:parseInt(d.gvl_staffel||d.gvl_staffel_header)||1, folge:parseInt(d.gvl_folge||d.gvl_episode_header)||0, takes:parseInt(d.gvl_takes||d.takes)||0}]  // Build 1048: keine Folge -> 0 (ganze Staffel), nicht 1;
 
   var isFilmDok = d.gvl_takes_detail && d.gvl_takes_detail.length===1 && d.gvl_takes_detail[0].folge===0;
   window._gvlDokIsFilm = isFilmDok;
@@ -6267,7 +6278,7 @@ function gvlDokBearbeiten(dokId){
         +'<div style="flex:1"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">STAFFEL</div>'
         +'<input type="number" id="gvldok-s-'+i+'" value="'+row.staffel+'" min="1" style="width:100%;border:1px solid var(--hair);border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
         +'<div style="flex:1"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">FOLGE</div>'
-        +'<input type="number" id="gvldok-f-'+i+'" value="'+row.folge+'" min="1" style="width:100%;border:1px solid var(--hair);border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
+        +'<input type="number" id="gvldok-f-'+i+'" value="'+(row.folge?row.folge:'')+'" min="0" placeholder="\u2014" style="width:100%;border:1px solid var(--hair);border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box"></div>'
         +'<div style="flex:1.5"><div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">TAKES</div>'
         +'<input type="number" id="gvldok-t-'+i+'" value="'+row.takes+'" min="0" style="width:100%;border:1px solid var(--hair);border-radius:6px;padding:5px 7px;font-size:14px;font-weight:900;color:var(--ai);box-sizing:border-box"></div>'
         +(d2.length>1?'<button type="button" onclick="gvlDokRemoveRow('+i+')" style="flex-shrink:0;background:var(--red2);color:var(--orange);border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;touch-action:manipulation;align-self:flex-end;margin-bottom:2px">✕</button>':'')
@@ -6345,7 +6356,7 @@ function gvlDokSave(btn){
       var f=document.getElementById('gvldok-f-'+i);
       var t=document.getElementById('gvldok-t-'+i);
       var staffel=s?parseInt(s.value)||1:row.staffel;
-      var folge=f?parseInt(f.value)||1:row.folge;
+      var folge=f?(f.value.trim()===''?0:parseInt(f.value)||0):row.folge;  // Build 1048: leer = ganze Staffel (0), nicht Folge 1
       var takes=t?parseInt(t.value)||0:row.takes;
       detail.push({folge:staffel*100+folge, takes:takes});
     });
@@ -14064,6 +14075,8 @@ function dokAnalyseDoc(d, key, cb){
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
       // Build 1043: Fallback — kein Datum erkannt? Aufnahmedatum des Fotos (EXIF) nehmen.
+      // Build 1047: Kein Datum erkannt? Erst Dateiname (robust), dann EXIF (falls noch vorhanden).
+      if(!d.datum){ var _dn=_datumAusName(d.dateiname||d.beschr||''); if(_dn){ d.datum=_dn; d._datumAusFoto=true; } }
       if(!d.datum && d.dataURL){ var _ex=_exifDatum(d.dataURL); if(_ex){ d.datum=_ex; d._datumAusFoto=true; } }
       // Build 747: Ausstellungsdatum eigenes Feld (war bisher in d.datum mit Aufnahme
       // vermischt). Für Steuerjahr-Zuordnung relevant. Bei Storno/Korrektur weicht
@@ -15057,6 +15070,16 @@ function _dispRow(label, val, color, onclick){
 
 // Build 1043: EXIF-Aufnahmedatum aus einem JPEG-DataURL lesen (nur DateTimeOriginal).
 // Liefert 'YYYY-MM-DD' oder '' wenn nicht vorhanden (z.B. PNG, Screenshot, PDF).
+// Build 1047: Datum aus dem Dateinamen ziehen (zuverlaessiger als EXIF, das beim
+// Resizen der Bilder verloren geht). iOS-Fotos heissen oft "... 2026-07-15 um 11.06.14".
+function _datumAusName(name){
+  if(!name) return '';
+  var m = name.match(/(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/);
+  if(m){ var mo=+m[2], d=+m[3]; if(mo>=1&&mo<=12&&d>=1&&d<=31) return m[1]+'-'+m[2]+'-'+m[3]; }
+  m = name.match(/(\d{2})\.(\d{2})\.(20\d{2})/);
+  if(m) return m[3]+'-'+m[2]+'-'+m[1];
+  return '';
+}
 function _exifDatum(dataURL){
   try{
     if(!dataURL || dataURL.indexOf('image/jpeg')<0) return '';
