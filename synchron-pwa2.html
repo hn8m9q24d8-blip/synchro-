@@ -4272,7 +4272,18 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // "Rechnung" + beschriftete Zeilen "Rechnungsnummer:"/"Leistungsdatum:"). Fehlt eines,
   // ignoriert die KI den Block und nutzt die normalen Regeln. Die generelle Studio-Regel
   // ist zusaetzlich klar als Regelfall markiert.
-  if(elH) elH.textContent = '1064';
+  // Build 1065: Die "Produktion GEÄNDERT / × nicht übernehmen"-Box in der Beleg-Detail-
+  // ansicht wird nicht mehr angezeigt (_buildMergePreview gibt '' zurueck). Die erkannten
+  // Beleg-Werte werden weiterhin automatisch ins Sheet uebernommen (via mergeField, davon
+  // unabhaengig); aendern kann Tim sie direkt in den editierbaren Feldern oben. Die
+  // "TERMIN GEFUNDEN"-Box mit Titel/Datum/Studio bleibt erhalten.
+  // Build 1066: Abweichende Kalender-Werte werden jetzt direkt im Sheet-Feld angezeigt —
+  // klein, grau und durchgestrichen UNTER dem uebernommenen Wert (rechtsbuendig, damit es
+  // bei langen Namen lesbar bleibt). Antippen holt den Kalender-Wert zurueck (↩). Nur vor
+  // dem Bestaetigen sichtbar (d._kalenderAlt, nicht persistiert). Loest zugleich das
+  // Label-Wirrwarr: der alte Wert steht beim richtigen Sheet-Feld (z.B. "Titel"), nicht
+  // mehr unter abweichendem Namen ("Produktion") in einer separaten Box.
+  if(elH) elH.textContent = '1066';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -15146,12 +15157,28 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
 }
 
 // ── DETAIL VIEW ──────────────────────────────────────────────
-function _editRow(field, label, val){
+function _editRow(field, label, val, altWert){
   var inputType = (field==='datum')?'date':(field==='uhrzeit'||field==='bis_uhrzeit')?'time':'text';  // Build 1043: Ende auch Zeitfeld
-  return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--cream2)">'
+  // Build 1066: altWert = abweichender Kalender-Wert (durchgestrichen, antippbar zum Zurueckholen)
+  var altHtml='';
+  if(altWert && String(altWert).trim() && String(altWert).trim().toLowerCase()!==String(val||'').trim().toLowerCase()){
+    var _av=esc(String(altWert));
+    altHtml='<div onclick="_dokAltZurueck(\''+field+'\',this.getAttribute(\'data-alt\'))" data-alt="'+_av+'" '
+      +'style="text-align:right;font-size:11px;color:#b0aca4;text-decoration:line-through;margin-top:2px;cursor:pointer;touch-action:manipulation" '
+      +'title="Kalender-Wert \u2014 antippen zum Uebernehmen">'+_av+' <span style="text-decoration:none;color:var(--accent);font-size:10px">\u21a9</span></div>';
+  }
+  return '<div style="padding:7px 0;border-bottom:1px solid var(--cream2)">'
+    +'<div style="display:flex;align-items:center">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
     +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
+    +'</div>'
+    +altHtml
     +'</div>';
+}
+// Build 1066: Kalender-Wert (durchgestrichen) ins Feld uebernehmen
+function _dokAltZurueck(field, altWert){
+  var el=document.getElementById('dedit-'+field);
+  if(el){ el.value=altWert; if(typeof showToast==='function') showToast('\u21a9 Kalender-Wert uebernommen'); }
 }
 
 
@@ -15201,9 +15228,9 @@ function _dokDispBlock(d){
   // gefuellte Felder gezeigt; Datum erscheint immer (zum Nachtragen). GVL-Werte
   // (Staffel/Folge/Takes) oeffnen bei Klick das GVL-Menue statt eines Textfelds.
   var o='';
-  function row(field,label,val){ return (val||val===0)?_editRow(field,label,val):''; }
+  function row(field,label,val){ var _alt=(d._kalenderAlt&&d._kalenderAlt[field])||''; return (val||val===0)?_editRow(field,label,val,_alt):(_alt?_editRow(field,label,'',_alt):''); }
   o+=row('beschr','Beschreibung',d.beschr||'');
-  o+=_editRow('datum','Datum',d.datum||'');   // immer, auch leer
+  o+=_editRow('datum','Datum',d.datum||'',(d._kalenderAlt&&d._kalenderAlt.datum)||'');   // immer, auch leer
   o+=row('studio','Studio',d.studio||'');
   o+=row('titel','Titel',d.titel||'');
   o+=row('regie','Regie',d.regie||'');
@@ -15348,6 +15375,21 @@ function dokOpenDetail(id, _keepEdit){
     if(_m){ d.terminId=_m.id; save(db); }
   }
   var termin = d.terminId ? (db.termine||[]).find(function(x){return x.id===d.terminId;}) : null;
+  // Build 1066: Abweichende alte Kalender-Werte fuer die durchgestrichene Anzeige im Sheet
+  // sammeln (nur vor dem Bestaetigen; kein Merk-Feld, nicht persistiert).
+  d._kalenderAlt = null;
+  if(termin && !d.bestaetigt){
+    var _kaMap=[['titel','titel'],['datum','datum'],['uhrzeit','uhrzeit'],['bis_uhrzeit','uhrzeit_bis'],['regie','regie'],['rolle','rolle'],['takes','takes'],['gvl_staffel','gvl_staffel'],['gvl_folge','gvl_folge']];
+    var _ka={};
+    _kaMap.forEach(function(pair){
+      var dField=pair[0], tField=pair[1];
+      var dVal=d[dField], tVal=termin[tField];
+      if((dVal||dVal===0) && (tVal||tVal===0) && String(tVal).trim().toLowerCase()!==String(dVal).trim().toLowerCase()){
+        _ka[dField]=String(tVal);
+      }
+    });
+    if(Object.keys(_ka).length) d._kalenderAlt=_ka;
+  }
   var ausgabe = d.ausgabeId ? (db.ausgaben||[]).find(function(x){return x.id===d.ausgabeId;}) : null;
 
   var body = '';
@@ -17009,6 +17051,11 @@ function _dokSessionGotoKalenderLegacy(dokId, si){
 
 // Baut Merge-Vorschau HTML: zeigt GEÄNDERT/NEU Felder mit altem Wert durchgestrichen
 function _buildMergePreview(d, t){
+  // Build 1065: Die "Produktion GEÄNDERT / nicht übernehmen"-Box wird nicht mehr
+  // angezeigt. Die erkannten Beleg-Werte werden ohnehin automatisch ins Sheet
+  // übernommen (via mergeField beim Termin-Peek); die Vorher-Nachher-Box war nur
+  // Anzeige. Aendern kann Tim die Werte weiterhin direkt in den Feldern oben.
+  return '';
   var rows = [];
   function check(label, tField, dVal){
     if(!dVal && dVal!==0) return;
