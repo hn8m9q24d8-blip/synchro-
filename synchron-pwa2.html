@@ -4196,7 +4196,14 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // pfeil) unten rechts im Vorschaufoto, statt eines grossen Buttons. Der grosse Button
   // erscheint nur noch bei der Erstanalyse ("KI-Analyse"); sobald erkannt wurde, genuegt
   // das Icon. event.stopPropagation verhindert, dass der Tap zugleich Vollbild oeffnet.
-  if(elH) elH.textContent = '1045';
+  // Build 1046 [BELEG-DETAIL, mehrere Punkte]: (P1) "ERKANNTE DATEN"- und "Kein passender
+  // Termin"-Karten erscheinen erst nach der KI-Analyse; vorher nur der KI-Analyse-Button.
+  // (P2) Refresh-Icon im Foto fing auf iOS den Touch nicht ab und oeffnete Vollbild —
+  // jetzt eigenes ontouchend mit preventDefault, analysiert wirklich neu. (P3/P4) Felder
+  // direkt editierbar ohne Extra-Klick; nur gefuellte Felder + immer Datum. Takes, Staffel
+  // und Folge oeffnen bei Klick das GVL-Menue. (P5) EXIF-Datum bleibt reiner Fallback, nur
+  // wenn die KI kein Datum liefert. Dateiname unveraendert (EXIF setzt nur d.datum).
+  if(elH) elH.textContent = '1046';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -15069,30 +15076,41 @@ function _exifDatum(dataURL){
 // Leere Felder (Datum, Regie, Beginn, Ende, Folge ...) werden weggelassen.
 // Klick auf den Header oeffnet den vollen Editor (window._dokEditOpen).
 function _dokDispBlock(d){
+  // Build 1046: Felder direkt editierbar (kein Extra-Klick noetig). Es werden nur
+  // gefuellte Felder gezeigt; Datum erscheint immer (zum Nachtragen). GVL-Werte
+  // (Staffel/Folge/Takes) oeffnen bei Klick das GVL-Menue statt eines Textfelds.
   var o='';
-  o+=_dispRow('Beschreibung', d.beschr||'');
-  o+=_dispRow('Datum', d.datum||'');
-  o+=_dispRow('Studio', d.studio||'');
-  o+=_dispRow('Titel', d.titel||'');
-  o+=_dispRow('Regie', d.regie||'');
-  o+=_dispRow('Rolle(n)', d.rolle||'');
-  o+=_dispRow('Beginn', d.uhrzeit||'');
-  o+=_dispRow('Ende', d.bis_uhrzeit||'');
-  o+=_dispRow('Gutschrift-Nr.', d.gutschrift_nr||'');
-  if(d.takes||d.takes===0) o+=_dispRow('Takes', d.takes);
-  o+=_dispRow('Take-Gage \u20ac', d.take_gage||'');
-  o+=_dispRow('Grundgage \u20ac', d.grundgage||'');
-  o+=_dispRow('Brutto \u20ac', d.brutto||'');
-  o+=_dispRow('Krankenvers. (KV) \u20ac', d.kv_abzug||'');
-  o+=_dispRow('Rentenvers. (RV) \u20ac', d.rv_abzug||'');
-  o+=_dispRow('Pflegevers. (PV) \u20ac', d.pv_abzug||'');
-  o+=_dispRow('Netto \u20ac', d.netto||'');
-  o+=_dispRow('Auszahlung \u20ac', d.auszahlung||'');
-  o+=_dispRow('Staffel', d.gvl_staffel||d.gvl_staffel_header||'', null, 'gvlDokBearbeiten(\''+d.id+'\')');
-  o+=_dispRow('Folge', d.gvl_folge||'', null, 'gvlDokBearbeiten(\''+d.id+'\')');
-  o+=_dispRow('Takes GVL', d.gvl_takes||'', null, 'gvlDokBearbeiten(\''+d.id+'\')');
-  if(!o) o='<div style="font-size:12px;color:var(--ink3);padding:6px 0">Noch nichts erkannt \u2014 auf \u201enachtragen\u201c tippen.</div>';
+  function row(field,label,val){ return (val||val===0)?_editRow(field,label,val):''; }
+  o+=row('beschr','Beschreibung',d.beschr||'');
+  o+=_editRow('datum','Datum',d.datum||'');   // immer, auch leer
+  o+=row('studio','Studio',d.studio||'');
+  o+=row('titel','Titel',d.titel||'');
+  o+=row('regie','Regie',d.regie||'');
+  o+=row('rolle','Rolle(n)',d.rolle||'');
+  o+=row('uhrzeit','Beginn',d.uhrzeit||'');
+  o+=row('bis_uhrzeit','Ende',d.bis_uhrzeit||'');
+  o+=row('gutschrift_nr','Gutschrift-Nr.',d.gutschrift_nr||'');
+  // GVL-relevante Felder: Klick oeffnet GVL-Menue (nicht editierbar als Textfeld)
+  if(d.takes||d.takes===0) o+=_gvlDispRow('Takes', d.takes, d.id);
+  o+=row('take_gage','Take-Gage \u20ac',d.take_gage||'');
+  o+=row('grundgage','Grundgage \u20ac',d.grundgage||'');
+  o+=row('brutto','Brutto \u20ac',d.brutto||'');
+  o+=row('kv_abzug','Krankenvers. (KV) \u20ac',d.kv_abzug||'');
+  o+=row('rv_abzug','Rentenvers. (RV) \u20ac',d.rv_abzug||'');
+  o+=row('pv_abzug','Pflegevers. (PV) \u20ac',d.pv_abzug||'');
+  o+=row('netto','Netto \u20ac',d.netto||'');
+  o+=row('auszahlung','Auszahlung \u20ac',d.auszahlung||'');
+  if(d.gvl_staffel||d.gvl_staffel_header) o+=_gvlDispRow('Staffel', d.gvl_staffel||d.gvl_staffel_header, d.id);
+  if(d.gvl_folge) o+=_gvlDispRow('Folge', d.gvl_folge, d.id);
+  if(d.gvl_takes) o+=_gvlDispRow('Takes GVL', d.gvl_takes, d.id);
   return o;
+}
+// Build 1046: GVL-Wert-Zeile — Klick oeffnet das GVL-Menue
+function _gvlDispRow(label, val, did){
+  return '<div onclick="gvlDokBearbeiten(\''+did+'\')" style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--cream2);cursor:pointer;touch-action:manipulation">'
+    +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
+    +'<div style="flex:1;text-align:right;font-size:13px;font-weight:700;color:var(--ink)">'+esc(String(val))+'<span style="font-size:10px;color:var(--accent);margin-left:6px">\u270e</span></div>'
+    +'</div>';
 }
 
 // Build 804: Inline-Edit für Felder eines bestätigten Dokuments (Studio, Titel etc.)
@@ -15249,7 +15267,7 @@ function dokOpenDetail(id, _keepEdit){
       // Build 1045: dezentes "Nochmal analysieren"-Symbol (Enso-Wiederholungspfeil) unten rechts,
       // nur wenn schon analysiert. Erstanalyse laeuft weiter ueber den grossen Button.
       if(_schonAnalysiert2){
-        previewDiv+='<div onclick="event.stopPropagation();dokAnalyseOne();" title="Nochmal analysieren" '
+        previewDiv+='<div onclick="event.stopPropagation();dokAnalyseOne();" ontouchend="event.stopPropagation();event.preventDefault();dokAnalyseOne();" title="Nochmal analysieren" '
           +'style="position:absolute;bottom:8px;right:8px;width:34px;height:34px;border-radius:50%;'
           +'background:rgba(28,27,25,.62);display:flex;align-items:center;justify-content:center;'
           +'cursor:pointer;touch-action:manipulation;backdrop-filter:blur(2px)">'
@@ -15468,7 +15486,7 @@ function dokOpenDetail(id, _keepEdit){
     } catch(eK){ console.warn('Konsistenz-Banner Fehler:', eK); }
     // ═══ Ende Build 758 (#2) ═══
 
-body+='<div style="background:var(--green2);border:2px solid var(--accent2);border-radius:12px;padding:12px 14px;margin-bottom:12px">';
+body+='<div style="background:var(--green2);border:2px solid var(--accent2);border-radius:12px;padding:12px 14px;margin-bottom:12px'+(_schonAnalysiert?'':';display:none')+'">';  // Build 1046: erst nach Analyse
     var _eo=!!window._dokEditOpen;
     body+='<div onclick="window._dokEditOpen=!window._dokEditOpen;(window._rerenderDetail||function(){})();" style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.5px;margin-bottom:8px;cursor:pointer;touch-action:manipulation">ERKANNTE DATEN</div>';
     if(!_eo){ body+=_dokDispBlock(d); }
@@ -15882,7 +15900,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
             +'</div></div>';
         });
       } else {
-        body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+        body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px'+(_schonAnalysiert?'':';display:none')+'">'
           +'<div onclick="window._dokTermOpt=window._dokTermOpt||{};window._dokTermOpt[\''+d.id+'\']=!window._dokTermOpt[\''+d.id+'\'];(window._rerenderDetail||function(){})();" style="cursor:pointer;touch-action:manipulation">'
           +'<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px;display:flex;justify-content:space-between"><span>Kein passender Termin gefunden</span><span style="color:var(--ink3);font-weight:600">'+((window._dokTermOpt&&window._dokTermOpt[d.id])?'✕':'Optionen ›')+'</span></div>'
           +'<div style="font-size:12px;color:#666">Datum '+(d.datum?fd(d.datum):'?')+(d.studio?' · '+esc(d.studio):'')+'</div>'
