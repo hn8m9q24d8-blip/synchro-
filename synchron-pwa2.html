@@ -4222,7 +4222,28 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // (2), aber die Zahlungen-Kachel im Buch (grünes Badge) und das rote Buch-Tab-Badge
   // nutzten noch die Legacy-Zaehlung _holviOffenCount (10). Beide jetzt auf dieselbe
   // MEV6-Quelle (_zahlungsArbeitCount) umgestellt — eine Zahl in allen Ansichten.
-  if(elH) elH.textContent = '1050';
+  // Build 1051: In der Zahlungs-Diagnose wird jetzt der Verwendungszweck des Bank-
+  // eingangs angezeigt (z.B. "VZ: RG 01/2026, ..."), mit hervorgehobener Rechnungs-/
+  // Gutschriftsnummer. So findet man den passenden Beleg schneller — die Info stand
+  // vorher nur im Backup, nicht in der Ansicht.
+  // Build 1052: Schwalben-Symbol in jeder Rechnungszeile (rechts). Antippen faerbt es
+  // gruen und markiert die Rechnung als abgeschickt (r.versendet, in localStorage
+  // gespeichert). event.stopPropagation verhindert, dass zugleich das Rechnungs-Sheet
+  // aufgeht. Motiv: japanische Schwalbe (tsubame), passend zum Tusche-Design.
+  // Build 1053: Statt Schwalbe jetzt ein Origami-Papierflieger als "abgeschickt"-Marke
+  // (Tim-Wunsch). Zwei gefaltete Flaechen + Mittelgrat, grau=offen / gruen=abgeschickt.
+  // Build 1054 [PROBLEMFALL-WIDERSPRUCH]: Ein bereits verankerter Eingang (grüner Haken
+  // "Anker gesetzt", in dbv2.zahlungsgruppen) wurde weiter als Problemfall gezaehlt und
+  // gelistet, weil der problem-Check — anders als der offen-Check — nicht pruefte, ob der
+  // Eingang schon geschrieben ist. Ergebnis: gruener Haken UND Problemfall zugleich.
+  // Jetzt schliesst der problem-Bucket verankerte Eingaenge aus (&& !_mev6IstGeschrieben).
+  // Build 1055 [dbv2-SYNC bei Feld-Edit]: Nachgewiesener Bug — ein Studio-Edit an einem
+  // bestaetigten Beleg wurde nur in db.dokumente gespeichert, nie nach dbv2.abrechnungen
+  // synchronisiert. Match-Engine und Jahresabschluss lesen aber dbv2, also blieb der
+  // Eingang "offen" trotz korrektem Studio im Dokument. Jetzt laeuft nach einer Studio-
+  // Aenderung an einem bestaetigten Beleg die dbv2-Konsolidierung fuer genau diesen
+  // Beleg nach. Kein Masseneingriff, nur der editierte Beleg.
+  if(elH) elH.textContent = '1055';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -17598,6 +17619,7 @@ function dokTitelMapping(titel){
 
 function _applyEditedFields(d){
   var originalTitel = d.titel||'';
+  var _origStudioSync = (d.studio||'').trim();  // Build 1055: fuer dbv2-Sync bei Aenderung
   var fields=['beschr','datum','studio','titel','regie','rolle','uhrzeit','bis_uhrzeit',
     'takes','gvl_staffel','gvl_folge','gvl_takes',
     'gutschrift_nr','take_gage','grundgage','brutto',
@@ -17627,6 +17649,18 @@ function _applyEditedFields(d){
     if(!db.titelMappings) db.titelMappings = {};
     db.titelMappings[origTrim.toLowerCase()] = newTitel;
   }
+  // Build 1055 [dbv2-SYNC-FIX]: Ein Studio-Edit an einem bestaetigten Beleg landete bisher
+  // nur in db.dokumente, NICHT in dbv2.abrechnungen — wo Match-Engine und Jahresabschluss
+  // lesen. Deshalb blieb die Zahlung "offen", egal wie oft man das Studio korrigierte.
+  // Fix: Bei geaendertem Studio an einem bestaetigten Beleg die dbv2-Konsolidierung
+  // nachlaufen lassen. Nur DIESER eine Beleg, kein Masseneingriff.
+  try{
+    var _newStudioSync=(d.studio||'').trim();
+    if(d.bestaetigt && _newStudioSync && _newStudioSync!==_origStudioSync
+       && typeof _konsolidiereDokumentNachV2==='function'){
+      _konsolidiereDokumentNachV2(d.id);
+    }
+  }catch(_eSync){ console.warn('[1055] dbv2-Sync nach Studio-Edit fehlgeschlagen:', _eSync); }
 }
 
 
@@ -20595,7 +20629,7 @@ function rRechnungen(){
       +'<div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.empf||'–')+'</div>'
       +'<div style="font-size:11.5px;color:var(--ink2);margin-top:1px">'+esc(r.nr||'')+' &middot; '+fd(r.datum)+'</div>'
       +'</div>'
-      +'<div style="text-align:right;flex:none">'
+      +'<div onclick="rechnungVersendetToggle(\''+r.id+'\',event)" title="Abgeschickt?" style="flex:none;padding:6px;margin-right:2px;cursor:pointer;touch-action:manipulation">'+_schwalbeSvg(r.versendet)+'</div>'+'<div style="text-align:right;flex:none">'
       +'<div style="font-family:var(--serif);font-size:16px">'+fmtEur(r.brutto)+'</div>'
       +(sl?'<div style="font-size:10.5px;color:'+sc+';margin-top:2px">'+sl+'</div>':'')
       +'</div></div>';
@@ -20603,6 +20637,30 @@ function rRechnungen(){
 }
 
 // ── RECHNUNG SHEET ────────────────────────────────────────────
+// Build 1052: Schwalbe als "abgeschickt"-Markierung. Antippen faerbt sie gruen —
+// so sieht Tim auf einen Blick, welche Rechnung er schon versendet hat.
+// Die Schwalbe (tsubame) ist ein japanisches Motiv fuer Rueckkehr/Zuverlaessigkeit.
+function rechnungVersendetToggle(id, ev){
+  if(ev){ ev.stopPropagation(); }
+  var r=(db.rechnungen||[]).find(function(x){return x.id===id;});
+  if(!r) return;
+  r.versendet = !r.versendet;
+  save(db);
+  if(typeof rRechnungen==='function') rRechnungen();
+  showToast(r.versendet ? '\u2713 Als abgeschickt markiert' : 'Markierung entfernt');
+}
+function _schwalbeSvg(aktiv){
+  // Build 1053: Origami-Papierflieger ("abgeschickt"). Zwei gefaltete Flaechen (oberer
+  // Fluegel hell, Kiel dunkler) + Mittelgrat geben die 3D-Faltung. Grau = offen, gruen = raus.
+  var base = aktiv ? '#4A5A4E' : '#9A958C';
+  var dark = aktiv ? '#2E3A30' : '#6B6862';
+  var op = aktiv ? '1' : '.6';
+  return '<svg width="22" height="22" viewBox="0 0 24 24" style="display:block" opacity="'+op+'">'
+    + '<path d="M22 5 L2.5 9.5 L11 12 Z" fill="'+base+'"/>'          /* oberer Fluegel */
+    + '<path d="M22 5 L11 12 L5.5 16.5 Z" fill="'+dark+'"/>'         /* Kiel (dunkler) */
+    + '<path d="M22 5 L11 12" stroke="'+dark+'" stroke-width="0.6" stroke-linecap="round"/>' /* Mittelgrat */
+    + '</svg>';
+}
 function openRechnungSheet(id){
   db.rechnungen=db.rechnungen||[];
   db.auftraggeber=db.auftraggeber||[];
@@ -23697,7 +23755,10 @@ function _mev6RowBucket(r){
   var d=e.valuta||e.datum||'';
   var vorTracking = !!(cutoff && d && d < cutoff);
   var istProblemTyp = (r.typ==='KEIN-MATCH'||r.typ==='BELEG-LUECKE'||r.typ==='MEHRDEUTIG');
-  var problem = istProblemTyp && !e.ignoriert && !vorTracking;
+  // Build 1054: verankerte Eingaenge (grüner Haken, in dbv2.zahlungsgruppen) sind
+  // KEINE Problemfaelle mehr — auch wenn der Typ noch BELEG-LUECKE ist. Vorher blieben
+  // sie faelschlich in der Problemfaelle-Liste stehen, obwohl bereits verankert.
+  var problem = istProblemTyp && !e.ignoriert && !vorTracking && !_mev6IstGeschrieben(e);
   return { offen:offen, problem:problem };
 }
 // Build 1033: EINE QUELLE fuer die Zahl offener Zahlungen. Bisher zaehlte Heute
@@ -23785,6 +23846,7 @@ function MEV6run(){
         +'<div style="font-size:11px;font-weight:800;color:'+c+';margin:3px 0">'+r.typ+(r.konfidenz!=='—'?(' ('+r.konfidenz+(typeof r.konfidenz==='number'?'%':'')+')'):'')+deltaTxt+'</div>'
         +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+'</div>'):'')
         +_mev6PeekHtml(r,idx)
+        +_mev6VzweckHtml(e)
         +'<div style="font-size:11px;font-weight:700;color:var(--accent);margin-top:5px">✓ Anker gesetzt · '+(e.datum||'')+' <span onclick="_mev6RowCollapseToggle('+idx+')" style="color:#999;cursor:pointer;font-weight:400"> · einklappen</span></div>'
         +'</div>';
       body+=slim+full;
@@ -23810,6 +23872,7 @@ function MEV6run(){
       +(bel?('<div onclick="_mev6PeekToggle('+idx+')" style="font-size:11px;color:#333;font-family:monospace;cursor:pointer;text-decoration:underline dotted">'+bel+'</div>'):'')
       +_mev6PeekHtml(r,idx)
       +(r.ustNote?('<div style="font-size:10px;color:#777;margin-top:2px">'+r.ustNote+'</div>'):'')
+      +_mev6VzweckHtml(e)
       +ctrl
       +'</div>';
   });
@@ -23839,6 +23902,16 @@ function MEV6run(){
   try{ console.table(rows.map(function(r){return {datum:r._e.datum,betrag:r._e.betrag,gegen:r._e.gegenpartei,typ:r.typ,konf:r.konfidenz,belege:r.belege.map(function(a){return a.beleg_nr;}).join(','),delta:r.delta};})); }catch(x){}
 }
 /* Build 889: HTML der (zunächst versteckten) Inline-Peek-Zeile für eine Row. */
+// Build 1051: Verwendungszweck (Rechnungs-/Gutschriftsnummer) in der Zahlungs-Diagnose
+// anzeigen, damit man den passenden Beleg schneller findet. Hebt "RG .../GS ..." hervor.
+function _mev6VzweckHtml(e){
+  var vz = (e && e.nachricht) ? String(e.nachricht) : '';
+  if(!vz) return '';
+  var kurz = vz.length>70 ? vz.slice(0,70)+'\u2026' : vz;
+  // RG/GS/Rechnungsnummer hervorheben
+  kurz = kurz.replace(/(RG|GS|Rg|Gs)\s*([0-9]+\/[0-9]+)/, '<b style="color:var(--accent)">$1 $2</b>');
+  return '<div style="font-size:10px;color:#888;margin-top:3px;font-family:monospace;word-break:break-word">VZ: '+kurz+'</div>';
+}
 function _mev6PeekHtml(r,idx){
   var peek=_mev6TerminPeek(r);
   var inner;
