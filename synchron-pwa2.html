@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="color-scheme" content="light">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 
 
 <title>Synchron</title>
@@ -981,8 +981,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div id="rechnungen-list" class="view-scroll" style="padding:0;min-height:0;padding-bottom:calc(env(safe-area-inset-bottom) + 80px)">
     <!-- rendered by rRechnungen() -->
   </div>
-  <!-- FAB -->
-  <div onclick="openRechnungSheet(null)" style="position:absolute;bottom:90px;right:20px;width:54px;height:54px;background:var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 16px rgba(26,110,168,.4);cursor:pointer;z-index:50;font-weight:300">+</div>
+  <!-- FAB entfernt (Build 1060): neue Rechnung ueber das + oben rechts -->
 </div>
 
 <!-- ══════ ZAHLUNGEN (Neue Übersicht) ═══════════════════ -->
@@ -1016,7 +1015,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 </div>
 
 <!-- ══════ RECHNUNG SHEET ════════════════════════════════ -->
-<div class="overlay-bg" id="re-sheet-bg" onclick="closeRechnungSheet()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200"></div>
+<div class="overlay-bg" id="re-sheet-bg" onclick="closeRechnungSheetGuarded()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200"></div>
 <div id="rechnung-sheet" style="display:none;position:fixed;bottom:-100%;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;z-index:201;transition:bottom .3s ease;max-height:92vh;flex-direction:column">
   <div style="width:36px;height:4px;background:#ddd;border-radius:2px;margin:12px auto 0"></div>
   <div style="display:flex;align-items:center;padding:12px 16px 10px;border-bottom:1px solid #eee">
@@ -1042,10 +1041,13 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     <div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
         <div style="font-size:11px;font-weight:700;color:#666">RECHNUNGSEMPFÄNGER</div>
-        <div onclick="openAuftraggeberSheet()" style="font-size:11px;color:var(--ai);cursor:pointer;font-weight:600">Adressbuch</div>
+        <div style="display:flex;gap:12px">
+          <div onclick="reEmpfMerken()" style="font-size:11px;color:var(--accent);cursor:pointer;font-weight:600" title="Eingetippte Adresse ins Adressbuch übernehmen">+ Merken</div>
+          <div onclick="openAuftraggeberSheet()" style="font-size:11px;color:var(--ai);cursor:pointer;font-weight:600">Adressbuch</div>
+        </div>
       </div>
       <select id="re-empf-sel" class="sheet-input" style="appearance:auto;margin-bottom:6px" onchange="reEmpfSelected()">
-        <option value="">– Manuell eingeben –</option>
+        <option value="">Aus Adressbuch wählen…</option>
       </select>
       <input id="re-empf" class="sheet-input" placeholder="Empfänger (Firma, Straße, PLZ Ort — eine Zeile pro Datenfeld)">
       <textarea id="re-empf-adresse" class="sheet-input" rows="3" placeholder="Vollständige Adresse (mehrzeilig, optional — wird unter dem Namen aufs PDF gedruckt)" style="resize:none;margin-top:6px;font-size:13px"></textarea>
@@ -1067,8 +1069,8 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <!-- Leistungsdatum -->
     <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">LEISTUNGSZEITRAUM</div>
-      <input id="re-leistdatum" class="sheet-input" placeholder="z.B. 03.03.2026">
+      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">LEISTUNGSDATUM</div>
+      <input id="re-leistdatum" type="date" class="sheet-input" style="appearance:auto">
     </div>
 
     <!-- Positionen -->
@@ -1108,15 +1110,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       </div>
     </div>
 
-    <!-- Status -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">STATUS</div>
-      <div style="display:flex;gap:8px">
-        <div id="re-st-offen" onclick="reSetStatus('offen')" class="re-status-btn active">Offen</div>
-        <div id="re-st-bezahlt" onclick="reSetStatus('bezahlt')" class="re-status-btn">Bezahlt</div>
-        <div id="re-st-storno" onclick="reSetStatus('storno')" class="re-status-btn">Storniert</div>
-      </div>
-    </div>
+    <!-- Status: Build 1058 entfernt — Status kommt automatisch aus KI-Analyse/Bankabgleich, nicht manuell. -->
 
     <!-- Buttons -->
     <div style="display:flex;gap:10px;padding-bottom:24px">
@@ -4243,7 +4237,29 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Eingang "offen" trotz korrektem Studio im Dokument. Jetzt laeuft nach einer Studio-
   // Aenderung an einem bestaetigten Beleg die dbv2-Konsolidierung fuer genau diesen
   // Beleg nach. Kein Masseneingriff, nur der editierte Beleg.
-  if(elH) elH.textContent = '1055';
+  // Build 1056: Das Suchfeld ("Studio, Produktion, Datum…") filterte die Dokumenten-/
+  // Archivliste nicht — rDokumente las es gar nicht aus. Jetzt filtert es nach Studio,
+  // Titel/Produktion, Datum (auch TT.MM.JJJJ), Dateiname, Gutschrift-/Beleg-Nr., Rolle,
+  // Regie, Beschreibung. Mehrere Woerter = UND-Verknuepfung. Gilt auch fuers Archiv.
+  // Build 1056: Suchfeld filtert die Dokumentenliste (siehe unten).
+  // Build 1057: Rechnungsformular — "+ Merken"-Knopf beim Empfaenger. Uebernimmt die
+  // eingetippte Adresse eines neuen Studios direkt ins Adressbuch (mit Dubletten-Schutz:
+  // gleicher Name aktualisiert nur die Adresse). Bestehende Empfaenger waehlt man wie
+  // bisher ueber das Dropdown. Spart die doppelte Eingabe bei neuen Auftraggebern.
+  // Build 1058: (1) Status-Kacheln (Offen/Bezahlt/Storniert) aus dem Rechnungsformular
+  // entfernt — der Status kommt automatisch aus KI-Analyse und Bankabgleich, nicht mehr
+  // manuell. _reStatus bleibt intern 'offen' als Startwert. (2) Leistungszeitraum ist
+  // jetzt ein Kalender-Dropdown (type=date) wie das Rechnungsdatum, statt Freitext.
+  // Build 1059: (1) Zoom deaktiviert + Backdrop-Klick fragt nach, bevor er das Rechnungs-
+  // Sheet schliesst — beim Rauszoomen mit zwei Fingern verrutschte der Touch bisher auf
+  // den Hintergrund und alle Eingaben waren weg. (2) Dropdown-Platzhalter "Manuell
+  // eingeben" -> "Aus Adressbuch waehlen…" (klarer; die Firmen stehen darunter).
+  // (3) Label "LEISTUNGSZEITRAUM" -> "LEISTUNGSDATUM".
+  // Build 1060: (1) Origami-Flieger sitzt jetzt oben rechts in der Rechnungskachel (statt
+  // mittig ueber der Summe); beim Antippen wird zusaetzlich die ganze Kachel dezent gruen
+  // (washi-gruenes #EEF2ED, japanische Palette) als "abgeschickt"-Signal. (2) Der grosse
+  // gruene Plus-Kreis (FAB) unten rechts ist raus — neue Rechnung ueber das + oben rechts.
+  if(elH) elH.textContent = '1060';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12679,6 +12695,21 @@ function rDokumente(){
     if(_dokTab==='offen') return !d.typ||d.typ==='offen';
     return d.typ===_dokTab;
   });
+  // Build 1056: Suchfeld filtert jetzt auch das Archiv/die Liste. Durchsucht Studio,
+  // Titel/Produktion, Datum, Dateiname, Gutschrift-/Beleg-Nr., Rolle, Beschreibung.
+  var _dokQ = '';
+  try{ var _qEl=document.getElementById('dok-search'); _dokQ=(_qEl&&_qEl.value||'').trim().toLowerCase(); }catch(e){}
+  if(_dokQ){
+    docs = docs.filter(function(d){
+      var hay = [d.studio, d.titel, d.produktion, d.datum, d.dateiname, d.beschr,
+                 d.gutschrift_nr, d.beleg_nr, d.rolle, d.regie,
+                 (d.brutto!=null?String(d.brutto):''), (d.brutto!=null?String(d.brutto).replace('.',','):'')]
+                .filter(Boolean).join(' ').toLowerCase();
+      // auch fd()-Datum (TT.MM.JJJJ) durchsuchbar
+      try{ if(d.datum && typeof fd==='function') hay += ' '+fd(d.datum); }catch(e){}
+      return _dokQ.split(/\s+/).every(function(tok){ return hay.indexOf(tok)>=0; });
+    });
+  }
   // Sortierung: Unanalysiert → Dispo → Abrechnung/Monatsabrechnung → Ausgabe → Bestätigt
   // Innerhalb jeder Gruppe: neueste zuerst
   var typPrio = {'offen':0, null:0, 'dispo':1, 'abrechn':2, 'monats_abrechn':2, 'ausgabe':3, 'sonstig':4};
@@ -15091,6 +15122,7 @@ function _editRow(field, label, val){
     +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
     +'</div>';
 }
+
 
 // Read-only Anzeigezeile (wie im Screenshot)
 function _dispRow(label, val, color, onclick){
@@ -20623,16 +20655,22 @@ function rRechnungen(){
   var stT={'bezahlt':'bezahlt','storno':'storniert'};
   el.innerHTML='<div style="background:var(--card);border:1px solid var(--hair);border-radius:14px;overflow:hidden;margin:0 16px 16px">'+sorted.map(function(r){
     var sc=stF[r.status]||'var(--hair)'; var sl=stT[r.status]||'';
-    return '<div onclick="openRechnungSheet(\''+r.id+'\')" style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--hair);cursor:pointer;-webkit-tap-highlight-color:transparent">'
+    // Build 1060: Flieger oben rechts in der Kachel; bei "versendet" wird die ganze
+    // Kachel dezent gruen (washi-gruen, japanische Palette). Zeile ist position:relative,
+    // damit der Flieger absolut oben rechts sitzen kann.
+    var _vsBg = r.versendet ? 'background:#EEF2ED;' : '';   // dezentes Kiefer-Gruen auf Washi
+    return '<div onclick="openRechnungSheet(\''+r.id+'\')" style="position:relative;display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--hair);cursor:pointer;-webkit-tap-highlight-color:transparent;'+_vsBg+'">'
       +'<div style="width:3px;align-self:stretch;border-radius:3px;background:'+sc+';flex:none;min-height:36px"></div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.empf||'–')+'</div>'
+      +'<div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:26px">'+esc(r.empf||'–')+'</div>'
       +'<div style="font-size:11.5px;color:var(--ink2);margin-top:1px">'+esc(r.nr||'')+' &middot; '+fd(r.datum)+'</div>'
       +'</div>'
-      +'<div onclick="rechnungVersendetToggle(\''+r.id+'\',event)" title="Abgeschickt?" style="flex:none;padding:6px;margin-right:2px;cursor:pointer;touch-action:manipulation">'+_schwalbeSvg(r.versendet)+'</div>'+'<div style="text-align:right;flex:none">'
+      +'<div style="text-align:right;flex:none">'
       +'<div style="font-family:var(--serif);font-size:16px">'+fmtEur(r.brutto)+'</div>'
       +(sl?'<div style="font-size:10.5px;color:'+sc+';margin-top:2px">'+sl+'</div>':'')
-      +'</div></div>';
+      +'</div>'
+      +'<div onclick="rechnungVersendetToggle(\''+r.id+'\',event)" title="Abgeschickt?" style="position:absolute;top:8px;right:10px;padding:4px;cursor:pointer;touch-action:manipulation;z-index:2">'+_schwalbeSvg(r.versendet)+'</div>'
+      +'</div>';
   }).join('')+'</div>';
 }
 
@@ -20682,7 +20720,7 @@ function openRechnungSheet(id){
   // Auftraggeber-Dropdown füllen (Build 790)
   var empfSel=document.getElementById('re-empf-sel');
   if(empfSel){
-    empfSel.innerHTML='<option value="">– Manuell eingeben –</option>';
+    empfSel.innerHTML='<option value="">Aus Adressbuch wählen…</option>';
     (db.auftraggeber||[]).slice().sort(function(a,b){
       return String(a.name||'').localeCompare(String(b.name||''));
     }).forEach(function(a){
@@ -20756,7 +20794,7 @@ function openRechnungSheet(id){
     document.getElementById('re-empf').value=r.empf||'';
     var adrEl2=document.getElementById('re-empf-adresse'); if(adrEl2) adrEl2.value=r.empfAdresse||'';
     document.getElementById('re-leistung').value=r.leistung||'';
-    document.getElementById('re-leistdatum').value=r.leistdatum||'';
+    document.getElementById('re-leistdatum').value=_reLeistdatumIso(r.leistdatum);  // Build 1058: Alt-Freitext -> ISO
     document.getElementById('re-sheet-title').textContent='Rechnung bearbeiten';
     _rePositionen=r.positionen?JSON.parse(JSON.stringify(r.positionen)):[{beschr:'Leistung',menge:1,einheit:'Pau.',preis:0}];
     _reStatus=r.status||'offen';
@@ -20774,6 +20812,24 @@ function openRechnungSheet(id){
   if(bg) bg.style.display='block';
 }
 
+// Build 1059: Schutz vor versehentlichem Schliessen (z.B. beim Rauszoomen mit zwei
+// Fingern verrutscht der Touch auf den Hintergrund). Wenn Felder ausgefuellt sind,
+// erst nachfragen — sonst gehen alle Eingaben verloren.
+function closeRechnungSheetGuarded(){
+  var hatInhalt=false;
+  try{
+    ['re-empf','re-leistung','re-leistdatum'].forEach(function(fid){
+      var el=document.getElementById(fid);
+      if(el && String(el.value||'').trim()) hatInhalt=true;
+    });
+    // auch Positionen mit Preis?
+    if(Array.isArray(_rePositionen) && _rePositionen.some(function(p){return (parseFloat(p.preis)||0)>0;})) hatInhalt=true;
+  }catch(e){}
+  if(hatInhalt){
+    if(!confirm('Rechnung verwerfen? Die eingegebenen Daten gehen verloren.')) return;
+  }
+  closeRechnungSheet();
+}
 function closeRechnungSheet(){
   var sheet=document.getElementById('rechnung-sheet');
   var bg=document.getElementById('re-sheet-bg');
@@ -20788,7 +20844,7 @@ function reTerminSelected(){
   if(!t) return;
   var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
   document.getElementById('re-empf').value=t.studio||'';
-  document.getElementById('re-leistdatum').value=fd(t.datum);
+  document.getElementById('re-leistdatum').value=(t.datum||'');  // Build 1058: ISO für type=date
   document.getElementById('re-leistung').value='Synchronsprecherleistung: '+esc(t.titel||''+(t.regie?' – Regie: '+t.regie:''));
   _rePositionen=[{beschr:t.titel||(t.studio+' Synchronleistung'),menge:parseInt(t.takes)||1,einheit:parseInt(t.takes)?'Takes':'Pau.',preis:(parseInt(t.takes)||1)>0?parseFloat(t.rate)||net:net}];
   reRenderPositionen();
@@ -20847,6 +20903,16 @@ function reCalcTotal(){
   if(b) b.textContent=fmtEur(brutto);
 }
 
+// Build 1058: Leistungszeitraum ist jetzt ein type=date-Feld (braucht JJJJ-MM-TT).
+// Alte Rechnungen haben evtl. Freitext ("03.03.2026") gespeichert — hier konvertieren.
+function _reLeistdatumIso(v){
+  if(!v) return '';
+  v=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;                 // schon ISO
+  var m=v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);          // TT.MM.JJJJ
+  if(m) return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);
+  return '';  // unparsbarer Freitext (z.B. Zeitraum) -> leer lassen
+}
 function reSetStatus(s){
   _reStatus=s;
   ['offen','bezahlt','storno'].forEach(function(x){
@@ -20902,6 +20968,38 @@ function saveRechnung(){
 // ── AUFTRAGGEBER-ADRESSBUCH (Build 790) ───────────────────────
 // Speichert wiederkehrende Rechnungsempfänger (Firma + Adresse).
 // Beim Auswählen werden die Felder ins Rechnungs-Sheet übertragen.
+// Build 1057: Aktuell eingetippten Empfaenger ins Adressbuch uebernehmen — damit man
+// die Adresse eines neuen Studios nicht doppelt eingeben muss. Mit Dubletten-Schutz
+// (gleicher Name existiert schon -> aktualisiert dessen Adresse statt neuem Eintrag).
+function reEmpfMerken(){
+  var emp=document.getElementById('re-empf');
+  var adr=document.getElementById('re-empf-adresse');
+  var name=String((emp&&emp.value)||'').trim();
+  var adresse=String((adr&&adr.value)||'').trim();
+  if(!name){ if(typeof showToast==='function') showToast('Empfaenger-Name fehlt'); return; }
+  db.auftraggeber=db.auftraggeber||[];
+  var vorhanden=db.auftraggeber.find(function(x){ return (x.name||'').trim().toLowerCase()===name.toLowerCase(); });
+  if(vorhanden){
+    if(adresse && vorhanden.adresse!==adresse){ vorhanden.adresse=adresse; save(db); if(typeof showToast==='function') showToast('\u2713 Adresse aktualisiert'); }
+    else { if(typeof showToast==='function') showToast('Steht schon im Adressbuch'); }
+  } else {
+    db.auftraggeber.push({ id: (typeof uid==='function'?uid():'ag'+Date.now()), name: name, adresse: adresse, createdAt: new Date().toISOString() });
+    save(db);
+    if(typeof showToast==='function') showToast('\u2713 Ins Adressbuch uebernommen');
+  }
+  // Dropdown neu befuellen, damit der neue Eintrag sofort waehlbar ist
+  try{
+    var empfSel=document.getElementById('re-empf-sel');
+    if(empfSel){
+      var cur=empfSel.value;
+      empfSel.innerHTML='<option value="">Aus Adressbuch wählen…</option>';
+      db.auftraggeber.forEach(function(a){
+        var o=document.createElement('option'); o.value=a.id; o.textContent=a.name; empfSel.appendChild(o);
+      });
+      empfSel.value=cur;
+    }
+  }catch(e){}
+}
 function reEmpfSelected(){
   var sel=document.getElementById('re-empf-sel');
   if(!sel||!sel.value){ return; }
