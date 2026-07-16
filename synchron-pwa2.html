@@ -4304,7 +4304,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // im Kalender verknuepft/bestaetigt ist; Neu = Ordnerdateien, die es nicht sind.
   // Verknuepfte Dateien, die NICHT (mehr) im Ordner liegen, werden ignoriert. Damit ist
   // die Rechnung eine echte Ordner<->Kalender-Kontrolle und geht zugleich immer auf.
-  if(elH) elH.textContent = '1071';
+  // Build 1072 (Diagnose): Die Zeilen der Kontrollrechnung sind jetzt antippbar. Ein Tap
+  // zeigt die tatsaechlich gezaehlten Dateinamen samt Ordner-Pfad (bekannt + neu), damit
+  // sichtbar wird, welche Dateien die App im Ordner sieht — und ob z.B. Pfade dabei sind,
+  // die gar nicht in den erwarteten Ordner gehoeren (Ursachensuche 199 vs. 143).
+  // Build 1073: Diagnose-Werkzeug aus 1072 wieder entfernt (Ursache der 199-vs-143-Frage
+  // war geklaert: ein Unterordner "2025" mit 57 Dateien im Dispofotos-Ordner, den der
+  // Finder als 1 Objekt zaehlt, die App aber rekursiv mit 57 — 142+57=199, alles korrekt).
+  // Kontrollrechnung bleibt wie in 1071 (aus einem Ordner-Scan, bekannt+neu=gesamt).
+  if(elH) elH.textContent = '1073';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
