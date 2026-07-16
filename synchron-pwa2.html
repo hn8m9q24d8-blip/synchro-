@@ -1138,7 +1138,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="settings-row" onclick="switchView('pers-daten')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" style="flex:none;margin-right:13px" aria-hidden="true" viewBox="0 0 24 24"><defs><filter id="kris32" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris32)"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.6c1.6 1.4 1.6 3.6 0 5.4-1.6-1.8-1.6-4 0-5.4zM6.6 12c1.4-1.6 3.6-1.6 5.4 0-1.8 1.6-4 1.6-5.4 0zM12 17.4c-1.6-1.4-1.6-3.6 0-5.4 1.6 1.8 1.6 4 0 5.4zM17.4 12c-1.4 1.6-3.6 1.6-5.4 0 1.8-1.6 4-1.6 5.4 0z"/></g></svg><div><div class="sr-label">Persönliche Daten</div><div class="sr-sub">Name · Anschrift · Steuernummer</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('bankverbindung')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" style="flex:none;margin-right:13px" aria-hidden="true" viewBox="0 0 24 24"><defs><filter id="kris33" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris33)"><path d="M3.2 17.8 9 8.1l3.4 5.3 2.6-3.2 5.8 7.7z"/><path d="M9 8.2l1.6 2.4 1.4-1.8" opacity=".55"/></g></svg><div><div class="sr-label">Rechnungs-Bankverbindung</div><div class="sr-sub">IBAN für deine Rechnungen</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('finanzamt')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" style="flex:none;margin-right:13px" aria-hidden="true" viewBox="0 0 24 24"><defs><filter id="kris34" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris34)"><rect x="5.5" y="5.5" width="13" height="13" rx="2.5"/><path d="M12 9v6M9.5 12h5" opacity=".55"/></g></svg><div><div class="sr-label">Finanzamt</div><div class="sr-sub">Steuernummer · zuständiges Amt</div></div></div><div class="sr-right">›</div></div>
-      <div class="settings-row" onclick="setBuchhaltungAb()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 6.4h15.6v13.4H4.2z"/><path d="M4.2 10.4h15.6M8.4 4.3v4M15.6 4.3v4"/><path d="M8.2 14.6l2.6 2.6 5-5.3" opacity=".5"/></g></svg><div><div class="sr-label">Buchhaltung ab</div><div class="sr-sub">Ab wann du selbst buchst — Datum eintragen</div></div></div><div class="sr-right" id="sd-buchab-val" style="font-size:12px;color:var(--ink2)">–</div></div>
+      <div class="settings-row" onclick="setBuchhaltungAb()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 6.4h15.6v13.4H4.2z"/><path d="M4.2 10.4h15.6M8.4 4.3v4M15.6 4.3v4"/><path d="M8.2 14.6l2.6 2.6 5-5.3" opacity=".5"/></g></svg><div><div class="sr-label">Buchhaltung ab</div><div class="sr-sub">Ab wann du mit dieser App buchst</div></div></div><div class="sr-right" id="sd-buchab-val" style="font-size:12px;color:var(--ink2)">–</div></div>
     </div>
   </div>
 </div>
@@ -4283,7 +4283,28 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // dem Bestaetigen sichtbar (d._kalenderAlt, nicht persistiert). Loest zugleich das
   // Label-Wirrwarr: der alte Wert steht beim richtigen Sheet-Feld (z.B. "Titel"), nicht
   // mehr unter abweichendem Namen ("Produktion") in einer separaten Box.
-  if(elH) elH.textContent = '1066';
+  // Build 1067: Der Stichtag "Buchhaltung ab" wird jetzt ueber ein Kalender-Dropdown
+  // (type=date) in einem Sheet gesetzt statt ueber einen prompt(), wo man JJJJ-MM-TT von
+  // Hand tippen musste. Klarerer Text ("Ab wann machst du die Buchhaltung mit dieser App?").
+  // Build 1068: Untertext der "Buchhaltung ab"-Zeile in den Stammdaten angepasst —
+  // "Ab wann du mit dieser App buchst" (klarer, konsistent zum neuen Sheet-Text).
+  // Build 1069: Kontrollrechnung geht wieder auf (bekannt + neu = gesamt). Ursache war,
+  // dass "Bekannt" und "Neu" zwei verschiedene "schon-bekannt"-Mengen nutzten (_impSet mit
+  // Termin-Dateinamen vs. existingNames ohne). Jetzt teilen sich Import-Erkennung und
+  // Kontrollrechnung dieselbe existingNames-Menge (Docs + importedFiles + Termin-Dateinamen),
+  // sodass die drei Spalten mathematisch konsistent sind.
+  // Build 1070: Eine Datei gilt jetzt erst als "bekannt", wenn sie WIRKLICH verarbeitet
+  // ist — Dokument bestaetigt oder mit Termin verknuepft, an einem Termin haengend, oder
+  // in importedFiles (was nur bei Kalenderverknuepfung passiert). Ein bloszes hochgeladenes,
+  // aber unbestaetigtes Dokument ohne Terminbezug zaehlt NICHT mehr als bekannt: nach dem
+  // Leeren/Loeschen der Pipeline erscheint es wieder zum Import, statt still zu verschwinden.
+  // Exakt dieselbe Bedingung wie _dateinameFreigeben (Loesch-Logik) — alle Stellen konsistent.
+  // Build 1071: Alle drei Spalten der Kontrollrechnung (Gesamt/Bekannt/Neu) werden jetzt
+  // aus DEMSELBEN Ordner-Scan (allInFolder) gezaehlt. Bekannt = Ordnerdateien, deren Name
+  // im Kalender verknuepft/bestaetigt ist; Neu = Ordnerdateien, die es nicht sind.
+  // Verknuepfte Dateien, die NICHT (mehr) im Ordner liegen, werden ignoriert. Damit ist
+  // die Rechnung eine echte Ordner<->Kalender-Kontrolle und geht zugleich immer auf.
+  if(elH) elH.textContent = '1071';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12889,8 +12910,20 @@ function dokGotFilesFolder(inp){
   var normName = function(n){ return (n||'').toLowerCase().replace(/\.[^.]+$/,'').trim(); };
   var existingNames={};
   var existingNamesNorm={};
+  // Build 1070: Eine Datei gilt NUR als bekannt, wenn sie WIRKLICH verarbeitet ist —
+  // exakt dieselbe Bedingung wie _dateinameFreigeben (die maszgebliche Loesch-Logik):
+  //   Dokument mit (bestaetigt ODER terminId), ODER an einem Termin haengend, ODER in
+  //   importedFiles. Ein bloszes unbestaetigtes Dokument OHNE Terminbezug zaehlt NICHT
+  //   als bekannt — sonst wuerde es nach dem Leeren/Loeschen der Pipeline nicht wieder
+  //   zum Import erscheinen, obwohl Tim es nie bestaetigt hat (Datenverlust-Gefahr).
   (db.dokumente||[]).forEach(function(d){
-    if(d.dateiname){ existingNames[d.dateiname]=true; existingNamesNorm[normName(d.dateiname)]=true; }
+    if(d.dateiname && (d.bestaetigt || d.terminId)){
+      existingNames[d.dateiname]=true; existingNamesNorm[normName(d.dateiname)]=true;
+    }
+  });
+  (db.termine||[]).forEach(function(t){
+    if(t._dispoDateiname){ existingNames[t._dispoDateiname]=true; existingNamesNorm[normName(t._dispoDateiname)]=true; }
+    if(t.abrechn_dateiname){ existingNames[t.abrechn_dateiname]=true; existingNamesNorm[normName(t.abrechn_dateiname)]=true; }
   });
   // importedFiles nur prüfen wenn kein Reset aktiv
   if(!window._skipImportedFilesCheck){
@@ -12960,19 +12993,27 @@ function dokGotFilesFolder(inp){
     if(t._dispoDateiname){ _impSet[t._dispoDateiname]=true; _impSet[normName(t._dispoDateiname)]=true; }
     if(t.abrechn_dateiname){ _impSet[t.abrechn_dateiname]=true; _impSet[normName(t.abrechn_dateiname)]=true; }
   });
+  // Build 1069: "Bekannt" nutzt jetzt exakt dieselbe existingNames-Menge wie die Import-
+  // Erkennung 'neu'. Da 'neu' = allInFolder-Dateien, die NICHT in existingNames sind, und
+  // "bekannt" = die, die drin sind, gilt mathematisch zwingend bekannt + neu = gesamt.
+  // (Zuvor nutzte "bekannt" _impSet, "neu" existingNames — zwei Mengen, daher Abweichung.)
   allInFolder.forEach(function(f){
-    if(_impSet[f.name]||_impSet[normName(f.name)]){
+    if(existingNames[f.name]||existingNamesNorm[normName(f.name)]){
       var k=kategorieAusOrdner(f)||'sonstig';
       if(statsBekannt[k]!==undefined) statsBekannt[k]++;
     }
   });
-  // Neu = im Ordner aber nicht in importedFiles
-  var _neuAll = files.filter(function(f){
-    return !existingNames[f.name] && !existingNamesNorm[normName(f.name)];
-  });
-  _neuAll.forEach(function(f){
-    var k=kategorieAusOrdner(f)||'sonstig';
-    if(neuStats[k]!==undefined) neuStats[k]++;
+  // Build 1071: "Neu" wird jetzt aus DEMSELBEN Ordner-Scan (allInFolder) gezaehlt wie
+  // "Gesamt" und "Bekannt" — nicht mehr aus dem ungefilterten 'files'. Damit stammen alle
+  // drei Spalten aus derselben Menge: jede Ordnerdatei ist entweder bekannt (Name im
+  // Kalender verknuepft) oder neu (nicht verknuepft). bekannt + neu = gesamt gilt zwingend,
+  // und verknuepfte Dateien, die NICHT im Ordner liegen, werden ignoriert (nicht gezaehlt).
+  allInFolder.forEach(function(f){
+    var istBekannt = !!(existingNames[f.name] || existingNamesNorm[normName(f.name)]);
+    if(!istBekannt){
+      var k=kategorieAusOrdner(f)||'sonstig';
+      if(neuStats[k]!==undefined) neuStats[k]++;
+    }
   });
   _dokOrdnerVorschau(neu, skipped, kategorieAusOrdner, allInFolder.length, statsGesamt, statsBekannt, neuStats, allInFolder);
   inp.value='';
@@ -23901,12 +23942,25 @@ function _buchabAnzeigen(){
   el.textContent = v ? (typeof fd==='function' ? fd(v) : v) : '';
 }
 function setBuchhaltungAb(){
+  // Build 1067: Kalender-Sheet statt prompt() — Datum per Dropdown waehlen.
   db.profil = db.profil || {};
-  var akt = db.profil.buchhaltung_ab || '';
-  var v = prompt('Ab welchem Datum machst du die Buchhaltung selbst?\n\nAlles davor hat deine alte Buchhaltung erledigt und wird nicht mehr als offene Arbeit gezaehlt.\n\nFormat: JJJJ-MM-TT (z. B. 2026-01-01)\nLeer lassen = automatisch', akt);
-  if(v===null) return;
-  v=(v||'').trim();
-  if(v && !/^\d{4}-\d{2}-\d{2}$/.test(v)){ showToast('Bitte Format JJJJ-MM-TT'); return; }
+  var el=document.getElementById('buchab-date');
+  if(el) el.value = db.profil.buchhaltung_ab || '';
+  var bg=document.getElementById('buchab-bg');
+  var sh=document.getElementById('buchab-sheet');
+  if(bg) bg.style.display='block';
+  if(sh){ sh.style.display='flex'; requestAnimationFrame(function(){ sh.style.bottom='0'; }); }
+}
+function closeBuchabSheet(){
+  var bg=document.getElementById('buchab-bg');
+  var sh=document.getElementById('buchab-sheet');
+  if(sh){ sh.style.bottom='-100%'; setTimeout(function(){ if(sh) sh.style.display='none'; },310); }
+  if(bg) bg.style.display='none';
+}
+function saveBuchabSheet(){
+  db.profil = db.profil || {};
+  var el=document.getElementById('buchab-date');
+  var v=(el&&el.value||'').trim();   // type=date liefert JJJJ-MM-TT oder ''
   db.profil.buchhaltung_ab = v;
   save(db);
   window._mev6Last=null;                       // Neu bewerten
@@ -23914,7 +23968,8 @@ function setBuchhaltungAb(){
   if(typeof rHeute==='function') rHeute();
   if(typeof rProfil==='function') rProfil();
   try{_buchabAnzeigen();}catch(e){}
-  showToast(v ? '\u2713 Buchhaltung ab '+v : '\u2713 Stichtag automatisch');
+  closeBuchabSheet();
+  showToast(v ? '\u2713 Buchhaltung ab '+fd(v) : '\u2713 Stichtag automatisch');
 }
 // Build 902: Eintrag als privat/ignoriert markieren (oder zurück) direkt aus dem Overlay
 function _mev6MarkPrivat(idx, val){
@@ -24170,6 +24225,22 @@ function _mev6PeekHtml(r,idx){
     <div style="text-align:center;padding:40px 20px;color:#ccc">
       <div style="font-size:40px;margin-bottom:12px">&#x1F50D;</div>
       <div style="font-size:14px">Suche nach Studio, Produktion,<br>Rolle, Datum oder Betrag</div>
+    </div>
+  </div>
+</div>
+
+<!-- Build 1067: Buchhaltung-ab Sheet mit Kalender-Dropdown (ersetzt prompt) -->
+<div class="overlay-bg" id="buchab-bg" onclick="closeBuchabSheet()" style="display:none"></div>
+<div id="buchab-sheet" style="display:none;position:fixed;bottom:-100%;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;z-index:321;transition:bottom .3s ease;max-height:80vh;flex-direction:column">
+  <div style="width:36px;height:4px;background:#ddd;border-radius:2px;margin:12px auto 0"></div>
+  <div style="padding:16px 20px 8px">
+    <div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);margin-bottom:8px">Ab wann machst du die Buchhaltung mit dieser App?</div>
+    <div style="font-size:13px;color:var(--ink2);line-height:1.5;margin-bottom:16px">Alles davor hat deine alte Buchhaltung erledigt und wird nicht mehr als offene Arbeit gez&auml;hlt.</div>
+    <input id="buchab-date" type="date" style="width:100%;box-sizing:border-box;appearance:auto;border:1.5px solid var(--hair);border-radius:10px;padding:12px;font-size:16px;background:var(--washi);color:var(--ink);margin-bottom:6px">
+    <div style="font-size:11px;color:var(--ink3);margin-bottom:16px">Leer lassen = automatisch aus den Daten bestimmen</div>
+    <div style="display:flex;gap:10px;padding-bottom:calc(env(safe-area-inset-bottom) + 16px)">
+      <div onclick="closeBuchabSheet()" style="flex:1;text-align:center;padding:12px;border:1.5px solid var(--hair);border-radius:10px;font-size:14px;font-weight:600;color:var(--ink2);cursor:pointer;touch-action:manipulation">Abbrechen</div>
+      <div onclick="saveBuchabSheet()" style="flex:1;text-align:center;padding:12px;background:var(--accent);color:#fff;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation">Speichern</div>
     </div>
   </div>
 </div>
