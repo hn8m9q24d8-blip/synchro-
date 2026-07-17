@@ -4325,7 +4325,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // markiert. Vorher hiess es pauschal "werden beim naechsten Import automatisch erkannt"
   // — was fuer xlsx falsch war (die App liest nur PDFs und Bilder). Der Untertext passt
   // sich an, je nachdem ob unterstuetzte, nicht unterstuetzte oder gemischte Dateien da sind.
-  if(elH) elH.textContent = '1076';
+  // Build 1077: Zahlungen-Leerzustand ("Nichts offen") bekommt einen Empty-State im
+  // gefuellten Sumi-Tuschestil — eine Bank-Silhouette (Motiv C aus dem Moodboard),
+  // gleiche Filter-Rezeptur wie das Mikrofon-Bild, mit roter Marke und Kanji 銀 (Bank).
+  if(elH) elH.textContent = '1077';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -24057,6 +24060,39 @@ function _zahlungsArbeitCount(){
     return n;
   }catch(e){ return 0; }
 }
+
+// Build 1077: Empty-State fuer die Zahlungen-Ansicht ("Nichts offen") — Bank-Silhouette
+// im gefuellten Sumi-Tuschestil (gleiche Filter-Rezeptur wie das Mikrofon-Bild:
+// cloud-Druckvariation, kasure/torn, nijimi/bleed), mit roter Marke.
+function _zahlEmptyBank(){
+  var INK='#201e1a', RED='#B14A3F';
+  var filter='<filter id="sumiBank" filterUnits="userSpaceOnUse" x="-30" y="-30" width="380" height="280">'
+    +'<feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="14" result="warp"/>'
+    +'<feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/>'
+    +'<feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/>'
+    +'<feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer>'
+    +'<feComposite in="disp" in2="dryA" operator="in" result="torn"/>'
+    +'<feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/>'
+    +'<feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer>'
+    +'<feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/>'
+    +'<feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/>'
+    +'<feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer>'
+    +'<feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge></filter>';
+  var svg='<svg viewBox="0 0 320 200" style="width:min(210px,56%);height:auto;display:block;margin:0 auto 14px" aria-hidden="true">'
+    +'<defs>'+filter+'</defs><g filter="url(#sumiBank)">'
+    +'<path fill="'+INK+'" d="M160 52l70 34c3 2 2 7-2 7h-136c-4 0-5-5-2-7z"/>'
+    +'<path fill="'+INK+'" d="M104 104h12v50h-12zM138 104h12v50h-12zM172 104h12v50h-12zM206 104h12v50h-12z"/>'
+    +'<path fill="'+INK+'" d="M92 158h140c3 0 5 3 5 6s-2 6-5 6H92c-3 0-5-3-5-6s2-6 5-6z"/>'
+    +'<rect x="214" y="52" width="14" height="14" rx="3" fill="'+RED+'" opacity=".72"/>'
+    +'</g></svg>';
+  return '<div style="padding:30px 20px 26px;text-align:center">'
+    +svg
+    +'<div class="empty-title" style="font-family:var(--serif);font-weight:500">Konto abgeglichen.</div>'
+    +'<div class="empty-sub">Keine offenen Eingänge.</div>'
+    +'<div style="font-size:13px;color:var(--ink3);margin-top:12px">\u9280 \u00b7 Bank</div>'
+    +'</div>';
+}
+
 function MEV6run(){
   var eing=_mev6Eingaenge();
   if(!eing.length){ if(typeof showToast==='function') showToast('Kein Holvi-Auszug geladen'); return; }
@@ -24097,9 +24133,11 @@ function MEV6run(){
 
   var body='';
   if(!sichtbar.length){
-    body='<div style="color:#999;font-size:13px;padding:24px 8px;text-align:center">'
-      +(flt==='offen'?'✓ Nichts offen — alle sicheren Treffer sind verankert.':'Keine Einträge in diesem Filter.')
-      +'</div>';
+    if(flt==='offen'){
+      body=_zahlEmptyBank();
+    } else {
+      body='<div style="color:#999;font-size:13px;padding:24px 8px;text-align:center">Keine Einträge in diesem Filter.</div>';
+    }
   }
   sichtbar.forEach(function(r){
     var idx=rows.indexOf(r); // stabiler Index für Persist/Toggle
