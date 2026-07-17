@@ -4312,7 +4312,20 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // war geklaert: ein Unterordner "2025" mit 57 Dateien im Dispofotos-Ordner, den der
   // Finder als 1 Objekt zaehlt, die App aber rekursiv mit 57 — 142+57=199, alles korrekt).
   // Kontrollrechnung bleibt wie in 1071 (aus einem Ordner-Scan, bekannt+neu=gesamt).
-  if(elH) elH.textContent = '1073';
+  // Build 1074: Start- und Endzeit in der Termin-Kopfkarte sind jetzt einzeln antippbar
+  // und editierbar (inlineEditActivate mit type=time) — auch bei Terminen ohne Dispo/
+  // ausgelesenen Beleg. Vorher war die Uhrzeit dort reine Anzeige ohne Editier-Weg.
+  // Fehlende Zeiten zeigen "Beginn ✎"/"Ende ✎" zum Nachtragen.
+  // Build 1075: Die "noch nicht eingepflegt"-Kachel beruecksichtigt jetzt auch Dateien,
+  // die an einem Termin haengen (Dispo/Abrechnung). Vorher pruefte sie nur importedFiles
+  // und db.dokumente — dadurch tauchten termin-verknuepfte Dateien (z.B. aus dem 2025-
+  // Unterordner) faelschlich als "noch nicht eingepflegt" auf, obwohl sie verarbeitet sind.
+  // Build 1076: In der "noch nicht eingepflegt"-Kachel werden Dateien mit nicht
+  // unterstuetztem Format (z.B. Excel .xlsx) jetzt als "Format wird nicht unterstuetzt"
+  // markiert. Vorher hiess es pauschal "werden beim naechsten Import automatisch erkannt"
+  // — was fuer xlsx falsch war (die App liest nur PDFs und Bilder). Der Untertext passt
+  // sich an, je nachdem ob unterstuetzte, nicht unterstuetzte oder gemischte Dateien da sind.
+  if(elH) elH.textContent = '1076';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5087,7 +5100,11 @@ function openDetail(id){
     +'<div class="bd-dateline">'
     +'<div class="bd-day">'+d.getDate()+'</div>'
     +'<div class="bd-month">'+dayNames[d.getDay()]+', '+monthNames[d.getMonth()]+' '+d.getFullYear()+'</div>'
-    +(t.uhrzeit?'<div class="bd-time">'+esc(t.uhrzeit)+(t.uhrzeit_bis?'&#8211;'+esc(t.uhrzeit_bis):'')+' Uhr</div>':'')
+    +'<div class="bd-time">'
+    +'<span style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'uhrzeit\',\'time\')">'+(t.uhrzeit?esc(t.uhrzeit):'<span style="color:#ccc">Beginn \u270e</span>')+'</span>'
+    +'&#8211;'
+    +'<span style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'uhrzeit_bis\',\'time\')">'+(t.uhrzeit_bis?esc(t.uhrzeit_bis):'<span style="color:#ccc">Ende \u270e</span>')+'</span>'
+    +' Uhr</div>'
     +'</div>'
     +'</div>';
 
@@ -13105,6 +13122,14 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
     (db.dokumente||[]).forEach(function(d){
       if(d.dateiname){impSet2[d.dateiname]=true;impSet2[normN(d.dateiname)]=true;}
     });
+    // Build 1075: Termin-Dateinamen (Dispo/Abrechnung) ebenfalls als eingepflegt fuehren —
+    // sonst meldet die "noch nicht eingepflegt"-Kachel Dateien, die zwar an einem Termin
+    // haengen, aber (noch) nicht in importedFiles/db.dokumente stehen (z.B. Dispofotos aus
+    // dem 2025-Unterordner). Gleiche Quelle wie die Hauptzaehlung (Build 1069/1070).
+    (db.termine||[]).forEach(function(t){
+      if(t._dispoDateiname){impSet2[t._dispoDateiname]=true;impSet2[normN(t._dispoDateiname)]=true;}
+      if(t.abrechn_dateiname){impSet2[t.abrechn_dateiname]=true;impSet2[normN(t.abrechn_dateiname)]=true;}
+    });
     // neu (gerade im Scan gefunden)
     var neuSet={};
     (files||[]).forEach(function(f){neuSet[f.name]=true;});
@@ -13115,11 +13140,21 @@ function _dokOrdnerVorschau(files, skipped, katFn, gesamtTotal, statsGesamt, sta
     if(fehlende.length){
       html+='<div style="background:var(--red2);border:1.5px solid #ead4d1;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
       html+='<div style="font-size:10px;font-weight:800;color:var(--red);margin-bottom:6px;letter-spacing:.5px">⚠ '+fehlende.length+' NOCH NICHT EINGEPFLEGT</div>';
+      var _hatUnsupported=false, _hatSupported=false;
       fehlende.slice(0,10).forEach(function(f){
-        html+='<div style="font-size:11px;color:var(--red);padding:2px 0;word-break:break-all">• '+esc(f.name)+'</div>';
+        var isPdf = f.type==='application/pdf' || /\.pdf$/i.test(f.name);
+        var isImg = (f.type||'').indexOf('image/')===0 || /\.(jpg|jpeg|png|heic|tiff|bmp|gif|webp)$/i.test(f.name);
+        var unterstuetzt = isPdf || isImg;
+        if(unterstuetzt) _hatSupported=true; else _hatUnsupported=true;
+        var hinweis = unterstuetzt ? '' : ' <span style="color:#8a6a3f;font-weight:700">— Format wird nicht unterstützt</span>';
+        html+='<div style="font-size:11px;color:var(--red);padding:2px 0;word-break:break-all">• '+esc(f.name)+hinweis+'</div>';
       });
       if(fehlende.length>10) html+='<div style="font-size:11px;color:var(--red);padding:2px 0">... und '+(fehlende.length-10)+' weitere</div>';
-      html+='<div style="font-size:10px;color:#8a6a3f;margin-top:6px">Diese Dateien werden beim nächsten Import automatisch erkannt.</div>';
+      var _hinweisText='';
+      if(_hatSupported && _hatUnsupported) _hinweisText='PDFs/Bilder werden beim nächsten Import automatisch erkannt. Andere Formate (z.B. Excel) kann die App nicht als Beleg lesen — bitte als PDF speichern.';
+      else if(_hatSupported) _hinweisText='Diese Dateien werden beim nächsten Import automatisch erkannt.';
+      else _hinweisText='Format wird nicht unterstützt — die App liest nur PDFs und Bilder. Bitte als PDF speichern.';
+      html+='<div style="font-size:10px;color:#8a6a3f;margin-top:6px">'+_hinweisText+'</div>';
       html+='</div>';
     } else {
       html+='<div style="background:var(--green2);border:1px solid var(--accent2);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:var(--accent);font-weight:700">✓ Alle Dateien bestätigt &amp; eingepflegt</div>';
