@@ -4328,7 +4328,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1077: Zahlungen-Leerzustand ("Nichts offen") bekommt einen Empty-State im
   // gefuellten Sumi-Tuschestil — eine Bank-Silhouette (Motiv C aus dem Moodboard),
   // gleiche Filter-Rezeptur wie das Mikrofon-Bild, mit roter Marke und Kanji 銀 (Bank).
-  if(elH) elH.textContent = '1077';
+  // Build 1078: GVL-Uebersicht im Termin zeigt jetzt auch dann Kacheln, wenn die
+  // GVL-Details am Dispo-Dokument haengen (neuer Scan-Eingabeweg). Vorher rendete
+  // dieser Pfad nur Listen-Zeilen, waehrend der aeltere Termin-eigene GVL-Pfad
+  // Kacheln zeigte — dadurch "verschwanden" die Kacheln bei neu gescannten Terminen.
+  if(elH) elH.textContent = '1078';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5150,6 +5154,11 @@ function openDetail(id){
       if(gvlDispo.gvl_staffel_header) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(gvlDispo.gvl_staffel_header)+'</div></div>';
       if(gvlDispo.gvl_episode_header) gvlHtml+='<div class="info-row"><div class="ir-key">Episode</div><div class="ir-val">'+esc(gvlDispo.gvl_episode_header)+'</div></div>';
       if(gvlDispo.gvl_takes_detail&&gvlDispo.gvl_takes_detail.length){
+        // Build 1078: Kachel-Darstellung (statt Listen-Zeilen) — identisch zum
+        // Termin-GVL-Pfad unten. Wird ausgeloest, wenn die GVL am Dispo-Dokument
+        // haengt (neuer Scan-Eingabeweg), nicht am Termin selbst.
+        var _gdSum=0;
+        gvlHtml+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 6px">';
         gvlDispo.gvl_takes_detail.forEach(function(td){
           var fs=String(td.folge||'');
           // Staffel+Folge immer explizit anzeigen (auch S1)
@@ -5159,8 +5168,11 @@ function openDetail(id){
           else if(fs.length===4){ folgeLabel='S'+fs.slice(0,2)+' F'+parseInt(fs.slice(2)); }
           else if(fs.length>4){ folgeLabel='S'+parseInt(fs.slice(0,-2))+' F'+parseInt(fs.slice(-2)); }
           else { folgeLabel='F'+fs; } // nur Folge ohne Staffel
-          gvlHtml+='<div class="info-row"><div class="ir-key">'+folgeLabel+'</div><div class="ir-val">'+esc(String(td.takes||0))+' Takes</div></div>';
+          _gdSum+=(parseInt(td.takes)||0);
+          gvlHtml+='<div style="background:var(--card);border:1px solid var(--accent2);border-radius:7px;padding:4px 8px;text-align:center;min-width:48px"><div style="font-size:9px;font-weight:600;color:var(--accent)">'+folgeLabel+'</div><div style="font-size:14px;font-weight:700;color:var(--accent)">'+esc(String(td.takes||0))+'</div></div>';
         });
+        gvlHtml+='</div>';
+        gvlHtml+='<div style="font-size:10px;color:#888">Gesamt: <b>'+_gdSum+'</b> Takes</div>';
       }
       if(gvlDispo.produktion_typ_aktiv){
         var ptCol=gvlDispo.gvl_excluded?'var(--orange)':'var(--accent)';
