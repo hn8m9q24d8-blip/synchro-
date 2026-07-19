@@ -4332,7 +4332,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // GVL-Details am Dispo-Dokument haengen (neuer Scan-Eingabeweg). Vorher rendete
   // dieser Pfad nur Listen-Zeilen, waehrend der aeltere Termin-eigene GVL-Pfad
   // Kacheln zeigte — dadurch "verschwanden" die Kacheln bei neu gescannten Terminen.
-  if(elH) elH.textContent = '1078';
+  // Build 1079: Datei-Sperre entsteht nur noch beim echten Speichern im Kalendertermin.
+  // (1) dokPeekTermin setzt keinen Stempel und keine importedFiles-Sperre mehr.
+  // (2) saveMergeChanges setzt beides — dort, wo der Nutzer wirklich bestaetigt.
+  // (3) deleteDispoById gibt den Dateinamen frei (einziger Loeschpfad, der das nicht tat).
+  if(elH) elH.textContent = '1079';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5843,6 +5847,29 @@ function saveMergeChanges(){
       if(dok._splitGroup && dok._splitTotal > 1) _lastSplitDok = dok;
     }
   });
+
+  // Build 1079: Stempel + importedFiles-Sperre entstehen JETZT — beim echten Speichern.
+  // Vorher passierte das schon in dokPeekTermin(), also bevor der Nutzer bestaetigt hat.
+  // Ging er mit "zurueck" raus, rollte closeDetail() den Termin zurueck, die Sperre blieb
+  // stehen und die Datei tauchte im Ordner-Scan nie wieder auf (3 Dispos + 1 Abrechnung
+  // am 14.-16.07.2026 so verloren). Regel ab hier: kein Speichern, keine Sperre.
+  if(t && _mergeSnapshot && _mergeSnapshot._fromDokId){
+    var _sDok = (db.dokumente||[]).find(function(x){ return x.id===_mergeSnapshot._fromDokId; });
+    // Schutz gegen Kreuzkontamination: _mergeSnapshot kann veraltet sein (Zeile 6099/7613
+    // setzen ihn nur, wenn noch keiner existiert). Ohne diese Pruefung koennte ein Termin
+    // den Dateinamen eines Dokuments bekommen, das zu einem ANDEREN Termin gehoert.
+    var _passt = _sDok && _sDok.dateiname
+              && _mergeTerminId === t.id
+              && (_sDok.terminId === t.id || !_sDok.terminId);
+    if(_passt){
+      if(_sDok.typ==='dispo'){
+        t._dispoDateiname = _sDok.dateiname;
+      } else if(_sDok.typ==='abrechn' || _sDok.typ==='monats_abrechn'){
+        t.abrechn_dateiname = _sDok.dateiname;
+      }
+      _archiveDateiname(_sDok.dateiname||_sDok.beschr, t.id, _sDok.typ||'dispo');
+    }
+  }
 
   // Log für Undo (Snapshot war _mergeSnapshot)
   if(_mergeSnapshot){
@@ -7484,18 +7511,14 @@ function dokPeekTermin(terminId){
     _peekDok._skipAbCreate = true;
     dokMergeIntoTermin(_peekDok, t);
     t._hasPendingMerge = true;
-    // Dateiname sofort am Termin speichern — nicht warten auf dokBestaetigen
-    if(d.typ==='dispo' && d.dateiname && /\\.(pdf|jpg|jpeg|png|heic|tiff|bmp)$/i.test(d.dateiname)){
-      t._dispoDateiname = d.dateiname;
-    } else if(d.typ==='dispo' && d.dateiname){
-      t._dispoDateiname = d.dateiname;
-    }
-    if((d.typ==='abrechn'||d.typ==='monats_abrechn') && d.dateiname){
-      t.abrechn_dateiname = d.dateiname;
-    }
-    // d.terminId setzen — dok weiss welchem Termin es zugeordnet ist
+    // Build 1079: KEIN Stempel, KEINE importedFiles-Sperre mehr an dieser Stelle.
+    // Vorher wurden _dispoDateiname/abrechn_dateiname + _archiveDateiname hier sofort
+    // gesetzt ("nicht warten auf dokBestaetigen"). Das war der Verlustpfad: closeDetail()
+    // rollt den Termin aus _mergeSnapshot zurueck, die Sperre blieb aber stehen — die
+    // Datei galt als eingepflegt, obwohl nichts gespeichert wurde. Ab jetzt entstehen
+    // Stempel und Sperre ausschliesslich in saveMergeChanges() (echtes "Speichern").
+    // d.terminId bleibt gesetzt: die Termin-Ansicht liest darueber die Vorschaudaten.
     d.terminId = terminId;
-    _archiveDateiname(d.dateiname||d.beschr, terminId, d.typ||'dispo');
     save(db);
   }
 
@@ -9306,7 +9329,12 @@ function handleDispoPhoto(evt){
 }
 function loadDispos(){return(db.dokumente||[]).filter(function(d){return d.typ==='dispo'||!d.typ;});}
 function deleteDispoById(id){
+  // Build 1079: Dateiname freigeben — dieser Loeschpfad tat das als einziger nicht,
+  // dadurch blieb die Datei nach dem Loeschen dauerhaft aus dem Ordner-Scan gesperrt.
+  // _dateinameFreigeben prueft selbst, ob der Name noch echt genutzt wird.
+  var _dDok=(db.dokumente||[]).find(function(d){return d.id===id;});
   db.dokumente=(db.dokumente||[]).filter(function(d){return d.id!==id;});
+  if(_dDok && _dDok.dateiname && !_dDok.bestaetigt) _dateinameFreigeben(_dDok.dateiname);
   save(db);
   rDispos();
 }
