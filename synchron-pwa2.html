@@ -4336,7 +4336,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // (1) dokPeekTermin setzt keinen Stempel und keine importedFiles-Sperre mehr.
   // (2) saveMergeChanges setzt beides — dort, wo der Nutzer wirklich bestaetigt.
   // (3) deleteDispoById gibt den Dateinamen frei (einziger Loeschpfad, der das nicht tat).
-  if(elH) elH.textContent = '1079';
+  // Build 1080: Termin-Zuordnung — exaktes Datum wiegt jetzt 30 statt 20 Punkte.
+  // Build 1081: GVL-Folgen erscheinen in der Beleg-Leseansicht als Kacheln statt Zeilen.
+  // Build 1082: USt-Vergleichsbasis per Rechenprobe statt Klassenabfrage — auch im
+  // Fallback vor dem Bestaetigen. Beseitigt die Scheindifferenz bei K3/K2.
+  if(elH) elH.textContent = '1082';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5243,10 +5247,11 @@ function openDetail(id){
       // brutto = netto + mwst), nicht nur am klasse-Flag — manuell eingetragene
       // Eigenrechnungen haben oft kein klasse='3' und MwSt in ab.mwst statt ab.ust_betrag.
       var _ustValG = ab ? parseFloat(ab.ust_betrag||ab.mwst||0) : 0;
-      var _istEigenRgG = ab && _ustValG>0 && ab.netto &&
-        Math.abs(abBruttoRaw-(parseFloat(ab.netto)+_ustValG))<0.05;
-      if(ab && (ab.klasse === '3' || _istEigenRgG) && _ustValG){
-        abBrutto = Math.round((abBruttoRaw - _ustValG) * 100) / 100;
+      // Build 1082: Rechenprobe statt klasse==='3'. Die alte Signatur verlangte ein
+      // gefuelltes ab.netto — das ist in dbv2 bei ALLEN Saetzen leer, feuerte also nie.
+      var _ustDrinG = ab && _ustIstEnthalten(abBruttoRaw, _ustValG, ab.ust_satz);
+      if(ab && _ustDrinG){
+        abBrutto = _ustNettoBasis(abBruttoRaw, _ustValG, ab.ust_satz);
       }
       var abTakes  = ab ? (parseInt(ab.takes)||0) : 0;
       var abGG     = ab ? (parseFloat(ab.grundgage)||0) : 0;
@@ -5257,7 +5262,30 @@ function openDetail(id){
       var kommMismatch  = ab && abGG > 0 && Math.abs(abGG - (parseFloat(t.kommgage)||0)) > 0.5;
 
       // Fallback: wenn kein abId aber t.brutto_termin vorhanden (monats_abrechn session)
-      var abBruttoFallback = (!ab && t.brutto_termin) ? parseFloat(t.brutto_termin)||0 : 0;
+      // Build 1082: USt nur dann herausrechnen, wenn das verknuepfte Dokument als
+      // Eigenrechnung (K3) oder toneworx (K2) klassifiziert — dort ist brutto_termin der
+      // Endbetrag inkl. USt. Bewusst NICHT ueber eine Rechenprobe auf mwst_anteil:
+      // empirisch geprueft passen 32 von 38 solcher Termine zum ROHWERT, die Probe waere
+      // auf Termin-Ebene also falsch. Die Dokument-Klassifizierung trifft dagegen genau
+      // die 8 echten Faelle von 153.
+      var _btRaw = (!ab && t.brutto_termin) ? parseFloat(t.brutto_termin)||0 : 0;
+      var _fallbackUstDrin = false;
+      var _btUst = 0;
+      if(_btRaw){
+        try{
+          var _kl3 = allDoks.filter(function(x){
+            var k = _klassifiziereAbrechnung(null, x);
+            return k==='2' || k==='3';
+          });
+          if(_kl3.length){
+            _btUst = parseFloat(t.mwst_anteil) || parseFloat(_kl3[0].mwst) || 0;
+            if(_btUst > 0 && _btUst < _btRaw) _fallbackUstDrin = true;
+          }
+        }catch(e){ _fallbackUstDrin = false; }
+      }
+      var abBruttoFallback = _fallbackUstDrin
+        ? Math.round((_btRaw - _btUst) * 100) / 100
+        : _btRaw;
       var abTakesFallback  = (!ab && t.takes_abgerechnet) ? parseInt(t.takes_abgerechnet)||0 : 0;
       var abGGFallback     = (!ab && t.kommgage_abgerechnet) ? parseFloat(t.kommgage_abgerechnet)||0 : 0;
       var abRateFallback   = (!ab && t.rate_abgerechnet) ? parseFloat(t.rate_abgerechnet)||0 : 0;
@@ -5340,9 +5368,11 @@ function openDetail(id){
 
       // Netto = Studio-Brutto (Hauptzeile, grün/rot)
       // Build 799: Label bei Klasse 3 ehrlich: "Abrechn.-Netto", weil Beleg-Brutto inkl. USt
+      // Build 1082: Label auch im Fallback-Pfad (vor dem Bestaetigen), sonst steht dort
+      // nur "Brutto" und der Nettowert wirkt wie ein Fehler.
       var _bruttoLabel = ab
-        ? (ab.klasse === '3' ? ' = Abrechn.-Netto (vor USt)' : ' = Abrechn.-Brutto')
-        : '';
+        ? (_ustDrinG ? ' = Abrechn.-Netto (vor USt)' : ' = Abrechn.-Brutto')
+        : (_fallbackUstDrin ? ' = Abrechn.-Netto (vor USt)' : '');
       html += '<div class="gage-row" style="margin-top:8px;padding-top:8px;border-top:1.5px solid var(--hair)">'
         +'<span style="color:'+cNet+';font-weight:800;'+bgNet+'">Brutto'+_bruttoLabel+'</span>'
         +'<span style="color:'+cNet+';font-weight:900;font-size:16px;'+bgNet+'">'+net.toFixed(2).replace('.',',')+' €'
@@ -15256,7 +15286,13 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     var diff=Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24);
     if(strictDate && diff!==0) return -1; // Abrechnung: nur exaktes Datum
     if(diff>1) return -1; // Dispo etc.: max 1 Tag Abstand
-    var sc=diff===0?20:8;
+    // Build 1080: Bonus fuer exaktes Datum von 20 auf 30 angehoben. Vorher konnte ein
+    // besserer Titeltreffer (+22 statt +3) den Datumsvorsprung (nur 12 Punkte) ueberstimmen
+    // — z.B. Medusa 14.07.: der Termin vom 15. gewann 45:38, weil sein Titel bereits auf
+    // "Medusa" normalisiert war, waehrend der 14. noch "VSI / Medusa" hiess.
+    // Vertraeglich mit Build 749 (Issue #22): dort liegen beide Termine am SELBEN Tag,
+    // der Datumsbonus hebt sich auf und der Titel entscheidet weiterhin.
+    var sc=diff===0?30:8;
     // Studio/Firma
     var ss=studio?bestStudioScore(t):0;
     if(studio && ss<0.15) sc-=8; // schwacher Studio-Treffer → Abzug, kein Ausschluss
@@ -15376,11 +15412,71 @@ function _dokDispBlock(d){
   o+=row('netto','Netto \u20ac',d.netto||'');
   o+=row('auszahlung','Auszahlung \u20ac',d.auszahlung||'');
   if(d.gvl_staffel||d.gvl_staffel_header) o+=_gvlDispRow('Staffel', d.gvl_staffel||d.gvl_staffel_header, d.id);
-  if(d.gvl_folge) o+=_gvlDispRow('Folge', d.gvl_folge, d.id);
-  if(d.gvl_takes) o+=_gvlDispRow('Takes GVL', d.gvl_takes, d.id);
+  // Build 1081: Liegen GVL-Details vor, ersetzen Kacheln die Einzelzeilen "Folge"/"Takes GVL"
+  // — gleiche Optik wie im Kalendertermin. Tippen oeffnet das gewohnte GVL-Menue.
+  if(d.gvl_takes_detail && d.gvl_takes_detail.length){
+    o+=_gvlDispKacheln(d);
+  } else {
+    if(d.gvl_folge) o+=_gvlDispRow('Folge', d.gvl_folge, d.id);
+    if(d.gvl_takes) o+=_gvlDispRow('Takes GVL', d.gvl_takes, d.id);
+  }
+  return o;
+}
+// Build 1081: GVL-Folgen als Kacheln (Leseansicht Beleg). Beschriftung identisch zur
+// Termin-Ansicht: 3-stellig 201 -> S2 F1, 4-stellig 1201 -> S12 F1, folge 0 -> Film.
+function _gvlDispKacheln(d){
+  var det=d.gvl_takes_detail||[];
+  var summe=det.reduce(function(s,e){ return s+(parseInt(e.takes)||0); },0);
+  var gesamt=parseInt(d.gvl_takes||d.takes||0);
+  var fehler=gesamt>0 && summe!==gesamt;
+  var o='<div onclick="gvlDokBearbeiten(\''+d.id+'\')" title="Tippen: GVL bearbeiten" '
+       +'style="padding:8px 0;border-bottom:1px solid var(--cream2);cursor:pointer;touch-action:manipulation">'
+       +'<div style="font-size:10px;color:#999;margin-bottom:5px">GVL TAKES PRO FOLGE</div>'
+       +'<div style="display:flex;flex-wrap:wrap;gap:5px">';
+  det.forEach(function(e){
+    var fs=String(e.folge||''), lab;
+    if(e.folge===0) lab='Film';
+    else if(fs.length===3) lab='S'+fs[0]+' F'+parseInt(fs.slice(1));
+    else if(fs.length===4) lab='S'+fs.slice(0,2)+' F'+parseInt(fs.slice(2));
+    else if(fs.length>4)   lab='S'+parseInt(fs.slice(0,-2))+' F'+parseInt(fs.slice(-2));
+    else lab='F'+fs;
+    o+='<div style="background:#fff;border:1.5px solid '+(fehler?'#e3c4c0':'var(--accent2)')+';border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'
+      +'<div style="font-size:9px;font-weight:700;color:#555">'+esc(lab)+'</div>'
+      +'<div style="font-size:16px;font-weight:900;color:'+(fehler?'var(--orange)':'var(--accent)')+'">'+esc(String(e.takes||0))+'</div>'
+      +'</div>';
+  });
+  o+='</div>';
+  if(fehler){
+    o+='<div style="margin-top:6px;font-size:11px;color:var(--orange);font-weight:700">'
+      +'\u26a0 Summe Einzelfolgen ('+summe+') \u2260 Gesamt-Takes ('+gesamt+')</div>';
+  }
+  o+='<div style="font-size:10px;color:#888;margin-top:6px">Gesamt: <b>'+(gesamt||summe)+'</b> Takes'
+    +'<span style="color:var(--clay);font-weight:700"> \u00b7 \u270e bearbeiten</span></div>'
+    +'</div>';
   return o;
 }
 // Build 1046: GVL-Wert-Zeile — Klick oeffnet das GVL-Menue
+// Build 1082: Rechenprobe statt Klassen-Abfrage. Ob ein Betrag die USt ENTHAELT oder
+// ob sie obendrauf kommt, laesst sich rechnerisch entscheiden:
+//   USt-Betrag ~= wert * satz          -> obendrauf, "wert" ist bereits Netto
+//   USt-Betrag ~= wert/(1+satz) * satz -> enthalten, "wert" ist der Endbetrag
+// Belegt an echten Daten (Backup 19.07.2026): K1a/K1b/K4 rechnen auf (brutto = Netto),
+// K2/K3 rechnen ein (brutto = Endbetrag). Die alte Abfrage auf klasse==='3' hat K2 und
+// klassenlose Saetze uebersehen — dort blieb eine unechte Differenz in Hoehe der USt.
+function _ustIstEnthalten(wert, ustBetrag, ustSatz){
+  var w=parseFloat(wert)||0, u=parseFloat(ustBetrag)||0, s=parseFloat(ustSatz)||0;
+  if(!(w>0 && u>0 && s>0)) return false;
+  var dAuf = Math.abs(u - w*s);           // USt kommt obendrauf
+  var dIn  = Math.abs(u - w/(1+s)*s);     // USt steckt drin
+  return dIn < dAuf && dIn <= Math.max(0.05, w*0.001);
+}
+// Liefert die Netto-Vergleichsbasis eines Betrags.
+function _ustNettoBasis(wert, ustBetrag, ustSatz){
+  var w=parseFloat(wert)||0;
+  return _ustIstEnthalten(w, ustBetrag, ustSatz)
+    ? Math.round((w - (parseFloat(ustBetrag)||0)) * 100) / 100
+    : w;
+}
 function _gvlDispRow(label, val, did){
   return '<div onclick="gvlDokBearbeiten(\''+did+'\')" style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--cream2);cursor:pointer;touch-action:manipulation">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
