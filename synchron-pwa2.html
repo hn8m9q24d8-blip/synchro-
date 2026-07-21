@@ -1870,11 +1870,27 @@ function save(d){
           if(syncRes && syncRes.ok){
             console.log('[v2-waechter create] OK '+dok.id+' beleg='+(dok.gutschrift_nr||'?')
               +' erstellt='+(syncRes.erstellt||0)+' lnks='+(syncRes.linksErstellt||0));
+            // Build 1091 (Audit Befund 4): frueherer Fehlschlag jetzt geheilt -> Merker
+            // loeschen, damit eine SPAETERE Stoerung wieder gemeldet wird.
+            if(dok._v2FehlerGemeldet) delete dok._v2FehlerGemeldet;
           } else if(syncRes){
             console.warn('[v2-waechter create] FEHL '+dok.id+' grund='+(syncRes.grund||'?'));
+            // Build 1091 (Audit Befund 4): Auf dem iPhone gibt es keine Console — ein
+            // bestaetigtes Dokument ohne dbv2-Eintrag fehlte bisher STILL in USt-VA und
+            // Jahresabschluss ("User merkt es nur im Jahresabschluss"). Jetzt einmalig
+            // pro Dokument ein sichtbarer Hinweis; der Waechter laeuft bei jedem save,
+            // ohne Merker wuerde der Toast dauerfeuern.
+            if(!dok._v2FehlerGemeldet){
+              dok._v2FehlerGemeldet = true;
+              try{ showToast('\u26a0 Beleg NICHT verbucht: '+(dok.dateiname||dok.gutschrift_nr||dok.id)+' — '+(syncRes.grund||'unbekannt')); }catch(_t){}
+            }
           }
         } catch(syncE){
           console.error('[v2-waechter create] EXCEPTION '+dok.id, syncE);
+          if(!dok._v2FehlerGemeldet){
+            dok._v2FehlerGemeldet = true;
+            try{ showToast('\u26a0 Beleg NICHT verbucht: '+(dok.dateiname||dok.id)+' — technischer Fehler'); }catch(_t){}
+          }
         }
       });
 
@@ -3160,6 +3176,9 @@ function _autoKonsolidiereNachBestaetigen(dokId){
             console.log('[v2] Auto-Hook Retry: erfolgreich');
           } else {
             console.error('[v2] Auto-Hook Retry FEHLGESCHLAGEN', dokId, retry);
+            // Build 1091 (Audit Befund 4): sofort sichtbar machen — hier hat der Nutzer
+            // gerade bestaetigt und schaut hin. Kein Merker noetig (laeuft nur einmal).
+            try{ showToast('\u26a0 Beleg NICHT verbucht'+(retry&&retry.grund?' — '+retry.grund:'')); }catch(_t){}
           }
         }
       } catch(verifyE){ console.warn('[v2] Auto-Hook Verify-Fehler', verifyE); }
@@ -3227,6 +3246,14 @@ function _autoKonsolidiereNachBestaetigen(dokId){
       } catch(toastE){ console.warn('[v2] Konsistenz-Toast fehlgeschlagen', toastE); }
     } else if(res){
       console.warn('[v2] Auto-Hook übersprungen:', res.grund);
+      // Build 1091 (Audit Befund 4): "uebersprungen" heisst KEIN dbv2-Eintrag. Bei einem
+      // gerade bestaetigten Abrechn-Dokument ist das ein Verbuchungsfehler, kein Detail.
+      try{
+        var _d91=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+        if(_d91 && _d91.bestaetigt && (_d91.typ==='abrechn'||_d91.typ==='monats_abrechn')){
+          showToast('\u26a0 Beleg NICHT verbucht: '+(res.grund||'unbekannt'));
+        }
+      }catch(_t){}
     }
   } catch(e){
     console.error('[v2] Auto-Hook Fehler:', e);
@@ -4425,7 +4452,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1090: Bemessungsgrundlage jetzt an EINER Stelle — _v2Basis() mit Rechenprobe
   // als Korrektiv. Termin-Karte, Termin-Detail (beide Bloecke), USt-VA, VA-PDF,
   // Jahresabschluss und Monats-Buckets lesen zwingend denselben Wert.
-  if(elH) elH.textContent = '1090';
+  // Build 1091 (Audit Befunde 3+4): Konsolidierungs-Fehlschlaege erscheinen jetzt als
+  // Toast statt nur in der unsichtbaren Console; Sperr-Kommentar am toten
+  // ausgabeSpeichern-Pfad (unverkleinertes Belegfoto).
+  // Build 1092 (Audit Befunde 8+9): Peek-Verwerfen setzt d.terminId auf den Vorzustand
+  // zurueck und schreibt keine Hilfsfelder mehr in den Termin; iban_sparkasse wird im
+  // Profil jetzt wirklich gespeichert; tote rProfil/saveProfil-Erstfassungen stillgelegt.
+  // Build 1093: Regression aus 1090 — Termin-Karte zeigte bei K3-Eigenrechnungen eine
+  // unechte Differenz (-USt), weil das Karten-View-Objekt ust_basis/ust_satz nicht trug.
+  if(elH) elH.textContent = '1093';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4726,7 +4761,16 @@ function tCard(t){
           _v2AnzahlTermineInSammel: v2view.anzahlTermineInSammel,
           _v2GesamtBrutto:          v2view.ab && v2view.ab.brutto,
           klasse:                   v2view.ab && v2view.ab.klasse,
-          ust_betrag:               (v2view.ab && v2view.ab.ust_betrag) || null
+          // Build 1093 (Regression aus 1090): _v2Basis() braucht ust_basis und ust_satz.
+          // Dieses synthetische Objekt trug beide nicht — _v2Basis fiel auf den vollen
+          // Endbetrag zurueck, die Karte zeigte bei K3 eine unechte Differenz von -USt
+          // (rot), waehrend das Termin-Detail (echter dbv2-Satz) gruen war.
+          // Bei Sammel-Anteilen bewusst null: brutto ist dort der ANTEIL des Termins,
+          // Beleg-weite USt-Felder wuerden die Rechenprobe in die Irre fuehren
+          // (Differenz-Warnung ist fuer Sammel ohnehin abgeschaltet).
+          ust_basis:                v2view.istTeilVonSammel ? null : (v2view.ab && v2view.ab.ust_basis),
+          ust_satz:                 v2view.istTeilVonSammel ? null : (v2view.ab && v2view.ab.ust_satz),
+          ust_betrag:               v2view.istTeilVonSammel ? null : ((v2view.ab && v2view.ab.ust_betrag) || null)
         };
       } else if(v2view.altAb){
         // Fallback aus altem db.abrechnungen (nur für Bestands-Daten vor v2-Umstieg)
@@ -5837,6 +5881,17 @@ function closeDetail(){
   if(_mergeSnapshot && _mergeTerminId){
     var t=(db.termine||[]).find(function(x){return x.id===_mergeTerminId;});
     if(t && t._hasPendingMerge){
+      // Build 1092 (Audit Befund 8): gleiche Symmetrie wie discardMergeChanges —
+      // d.terminId auf den Vorzustand, Hilfsfelder nicht in den Termin zurueckschreiben.
+      if(_mergeSnapshot._fromDokId){
+        var _rd=(db.dokumente||[]).find(function(x){ return x.id===_mergeSnapshot._fromDokId; });
+        if(_rd && _rd.terminId===_mergeTerminId){
+          _rd.terminId = _mergeSnapshot._dokTerminIdVorher || null;
+        }
+      }
+      delete _mergeSnapshot._fromDokId;
+      delete _mergeSnapshot._fromSessionIdx;
+      delete _mergeSnapshot._dokTerminIdVorher;
       // Termin aus Snapshot wiederherstellen
       var idx=db.termine.indexOf(t);
       if(idx>=0){
@@ -7616,6 +7671,11 @@ function dokPeekTermin(terminId){
   // Merge vorbereiten — Snapshot sichern damit Verwerfen möglich ist
   _mergeSnapshot = JSON.parse(JSON.stringify(t));
   _mergeSnapshot._fromDokId = _dokCurrentId;
+  // Build 1092 (Audit Befund 8): Vorzustand von d.terminId merken. Der Peek setzt gleich
+  // d.terminId = terminId; beim Verwerfen muss EXAKT der Vorzustand zurueck — nicht null
+  // (war terminId schon per Auto-Match gesetzt, darf das Verwerfen ihn nicht loeschen).
+  var _pkDok = (db.dokumente||[]).find(function(x){ return x.id===_dokCurrentId; });
+  _mergeSnapshot._dokTerminIdVorher = _pkDok ? (_pkDok.terminId||null) : null;
   _mergeTerminId = terminId;
 
   // Dokument-Daten in Termin eintragen — mit _skipAbCreate=true
@@ -7761,6 +7821,19 @@ function discardMergeChanges(){
   var t=(db.termine||[]).find(function(x){return x.id===(_mergeTerminId||ctid);});
 
   if(_mergeSnapshot && _mergeTerminId){
+    // Build 1092 (Audit Befund 8): Symmetrie zum Peek. (1) d.terminId auf den Vorzustand
+    // zuruecksetzen, sonst gilt der Beleg weiter als dem VERWORFENEN Termin zugeordnet
+    // und dokFooterBestaetigen wuerde spaeter ohne Rueckfrage dorthin bestaetigen.
+    // (2) Hilfsfelder vom Snapshot loeschen, damit sie nicht dauerhaft im Termin landen.
+    if(_mergeSnapshot._fromDokId){
+      var _rd=(db.dokumente||[]).find(function(x){ return x.id===_mergeSnapshot._fromDokId; });
+      if(_rd && _rd.terminId===_mergeTerminId){
+        _rd.terminId = _mergeSnapshot._dokTerminIdVorher || null;
+      }
+    }
+    delete _mergeSnapshot._fromDokId;
+    delete _mergeSnapshot._fromSessionIdx;
+    delete _mergeSnapshot._dokTerminIdVorher;
     var idx=db.termine.indexOf(t);
     if(idx>=0){ db.termine[idx]=_mergeSnapshot; }
   } else if(t){
@@ -8252,7 +8325,11 @@ function closeGagenprofilSheet(){
 }
 
 // ── PROFIL ────────────────────────────────────────────────────
-function rProfil(){
+// Build 1092 (Audit Befund 9): rProfil + saveProfil existieren DOPPELT. Diese
+// Erstfassungen hier sind TOT — die Zweitdefinitionen (Z. ~10939 / ~11817)
+// ueberschreiben sie per Hoisting. In _TOT_ umbenannt statt geloescht, damit kein
+// versteckter Aufrufer bricht; keine Aenderungen hier vornehmen, sie laufen nie.
+function rProfil_TOT_1092(){
   var p=db.profil||{};
   // Update display in profil view
   var nameEl=document.getElementById('profil-name');
@@ -8273,7 +8350,7 @@ function rProfil(){
   updateApiNotice();
   updateIcalWorkerStatus();
 }
-function saveProfil(){
+function saveProfil_TOT_1092(){
   var p=db.profil||{};
   ['name','beruf','strasse','plz','ort','iban','bic','bank','iban_sparkasse'].forEach(function(f){
     var el=document.getElementById('pf-'+f);
@@ -10879,7 +10956,11 @@ function rFinanzamt(){
 
 function saveProfil(){
   var p=db.profil||{};
-  ['name','beruf','strasse','plz','ort','iban','bic','bank','steuernr','ustid','famt'].forEach(function(f){
+  // Build 1092 (Audit Befund 9): iban_sparkasse ergaenzt — stand nur in der toten
+  // Erstfassung; die Haspa-IBAN aus dem Profil-Sheet wurde nie persistiert.
+  // Gefahrlos: rBankverbindung() befuellt pf-iban_sparkasse beim Oeffnen (Z. ~10920),
+  // ein leerer Wert ueberschreibt also nichts Bestehendes unbeabsichtigt.
+  ['name','beruf','strasse','plz','ort','iban','bic','bank','iban_sparkasse','steuernr','ustid','famt'].forEach(function(f){
     var el=document.getElementById('pf-'+f);
     if(el&&el.value!==undefined)p[f]=el.value;
   });
@@ -19492,6 +19573,15 @@ function ausgabeScanStart(){
   }).catch(function(){ btn.textContent='KI-Analyse starten'; btn.style.opacity='1'; showToast('Fehler'); });
 }
 
+// ============================================================================
+// ACHTUNG (Audit Befund 3, Build 1091): Diese Funktion hat AKTUELL KEINEN AUFRUFER
+// (toter Pfad). Sie speichert in Zeile ~19540 das UNVERKLEINERTE Kamera-Original
+// (_ausgabeFileDataURL) in db.ausgaben[].belegImg. Die Slim-Logik in save() strippt
+// nur dokumente[].dataURL, NIE ausgaben[].belegImg — 1-2 iPhone-Fotos wuerden die
+// iOS-localStorage-Quota (~5-10 MB) fuellen.
+// VOR EINER REAKTIVIERUNG ZWINGEND: resizeImageB64(_ausgabeFileDataURL, 800, 0.70, ...)
+// einbauen (Muster: Zeile ~12705) und erst das Ergebnis speichern.
+// ============================================================================
 function ausgabeSpeichern(){
   var beschr = document.getElementById('ausgabe-beschr').value.trim();
   var datum = document.getElementById('ausgabe-datum').value;
