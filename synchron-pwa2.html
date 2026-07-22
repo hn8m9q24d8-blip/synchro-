@@ -2458,6 +2458,7 @@ function _konsolidiereDokumentNachV2(dokId){
     }
   }
 
+  var _dup851Faelle = []; // Build 1097: geblockte Beleg-Nrn sammeln (forEach-return = continue)
   Object.keys(gnrGruppen).forEach(function(gnrKey){
     var gruppenSessions = gnrGruppen[gnrKey];
     var belegNr = (gnrKey === '__ohne_gnr__') ? '' : gnrKey;
@@ -2572,6 +2573,21 @@ function _konsolidiereDokumentNachV2(dokId){
       _gsDup851 = dbv2.abrechnungen.find(function(a){
         return a !== v2Ab && (a.beleg_nr||'') === belegNr && a.pdf_datei_id !== dokId && !a._ueberholt_durch;
       });
+    }
+    // Build 1097 (Issue #21 Stufe 1, Absicherung): Aus der WARNUNG wird ein harter
+    // BLOCK. Vorher wurde der Beleg trotz erkannter Dublette verbucht und zaehlte
+    // doppelt in USt-VA/Jahresabschluss — nur mit ⚠-Flag. Mit dem Erzwingen-Dialog
+    // aus 1096 waere das ein realer Doppelbuchungs-Pfad gewesen. Jetzt: kein
+    // v2-Eintrag; frisch angelegte Huelle wird entfernt; Grund geht an den
+    // 1091-Toast ("Beleg NICHT verbucht: …") und Invariante (a) aus 1094 erinnert
+    // beim Start, bis das Duplikat-Dok geloescht ist. Steuerzahlen bleiben sauber.
+    if(_gsDup851){
+      if(!existing){
+        dbv2.abrechnungen = dbv2.abrechnungen.filter(function(a){ return a !== v2Ab; });
+        erstellt--;
+      }
+      _dup851Faelle.push(belegNr);
+      return; // continue: naechste GNR-Gruppe (return-Objekt wuerde im forEach verschluckt)
     }
 
     v2Ab.klasse              = klasse;
@@ -3083,6 +3099,14 @@ function _konsolidiereDokumentNachV2(dokId){
   });
 
   saveV2(dbv2);
+  // Build 1097: geblockte Dubletten melden. Wurde ALLES geblockt -> harter Fehlschlag
+  // (loest den 1091-Toast 'Beleg NICHT verbucht' aus). Teilblock -> eigener Toast.
+  if(_dup851Faelle.length){
+    if(erstellt===0 && geupdated===0){
+      return { ok:false, grund:'Beleg-Nr '+_dup851Faelle.join(', ')+' bereits aus anderem PDF verbucht — NICHT doppelt gebucht. Dokument bitte löschen.' };
+    }
+    try{ showToast('\u26a0 '+_dup851Faelle.length+' Teil(e) bereits verbucht — übersprungen: '+_dup851Faelle.join(', ')); }catch(_t){}
+  }
   return {
     ok: true,
     erstellt: erstellt,
@@ -4475,7 +4499,15 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1095 (Audit 16-18): NUR Kommentare. Toter USt-VA-Zweig + _snapUst markiert;
   // Warnbanner am toten Sheet-Duplikatblock (NICHT geloescht — Bloecke sind entgegen
   // Audit nicht byte-identisch); Sperr-Kommentare an 4 Holvi-Altpfaden (kein dbv2-Anker).
-  if(elH) elH.textContent = '1095';
+  // Build 1096 (Issue #21, Stufe 1): Beim Upload gesperrter Dateien erscheint ein
+  // Dialog mit Teil-Status (x/y bestaetigt) und der Option, die Analyse zu erzwingen.
+  // Unbestaetigte Alt-Doks derselben Datei werden dabei ersetzt. Sperren, Marker und
+  // Migration unveraendert; Doppelbuchung blockt weiterhin der 851-Waechter.
+  // Build 1097 (Lebenszyklus-Simulation zu 1096): (1) 851-Duplikatschutz ist jetzt ein
+  // HARTER BLOCK — vorher wurde trotz erkannter Dublette verbucht (nur ⚠-Flag), mit dem
+  // Erzwingen-Dialog waere das ein Doppelbuchungspfad gewesen. (2) Haupt-Scan ersetzt
+  // unbestaetigte Alt-Doks gleichen Namens. (3) Dialogtext 'vorhandenen Teilen'.
+  if(elH) elH.textContent = '1097';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13181,6 +13213,40 @@ function dokGotFiles(inp){
   inp.value='';
 }
 
+// ── Build 1096 (Issue #21, Stufe 1) ─────────────────────────────────────────
+// Gesperrte Dateien werden beim Upload nicht mehr stumm verworfen, sondern mit
+// Teil-Status angezeigt; der Nutzer kann die erneute Analyse erzwingen.
+// Sicherheitsnetz bleibt der 851-Waechter + Integritaets-Invariante (b) aus 1094:
+// bereits verbuchte Beleg-Nummern werden beim Bestaetigen geblockt — hier kann
+// also nichts doppelt in dbv2 landen. Sperren/Marker/Migration bleiben unberuehrt.
+function _dateiTeilStatus(name){
+  var teile=(db.dokumente||[]).filter(function(d){ return d.dateiname===name; });
+  var best=teile.filter(function(d){ return d.bestaetigt; }).length;
+  return { gesamt:teile.length, bestaetigt:best };
+}
+// Zeigt den Dialog; bei OK werden unbestaetigte Alt-Doks derselben Dateien entfernt
+// ("ersetzen statt ergaenzen" — verhindert doppelte Pipeline-Eintraege) und true geliefert.
+function _sperrDialogErzwingen(gesperrteFiles, normFn){
+  if(!gesperrteFiles.length) return false;
+  var zeilen=gesperrteFiles.slice(0,8).map(function(f){
+    var s=_dateiTeilStatus(f.name);
+    var st = s.gesamt ? ' ('+s.bestaetigt+' von '+s.gesamt+' vorhandenen Teilen bestätigt)' : ' (eingepflegt)'; // 1097: 'vorhandenen' — geloeschte Teile sind hier nicht zaehlbar
+    return '• '+f.name+st;
+  }).join('\n');
+  if(gesperrteFiles.length>8) zeilen+='\n… und '+(gesperrteFiles.length-8)+' weitere';
+  var ok=confirm(gesperrteFiles.length+' Datei(en) bereits eingepflegt:\n\n'+zeilen
+    +'\n\nTrotzdem erneut analysieren?\n\nEs werden neue Pipeline-Einträge erzeugt. '
+    +'Bereits verbuchte Teile blockt der Duplikatschutz beim Bestätigen.');
+  if(!ok) return false;
+  var names={};
+  gesperrteFiles.forEach(function(f){ names[f.name]=true; names[normFn(f.name)]=true; });
+  db.dokumente=(db.dokumente||[]).filter(function(d){
+    if(d.bestaetigt || !d.dateiname) return true;   // Bestaetigte NIE anfassen
+    return !(names[d.dateiname] || names[normFn(d.dateiname)]);
+  });
+  return true;
+}
+
 function dokGotFilesFolder(inp){
   var files = Array.from(inp.files);
   if(!files.length) return;
@@ -13261,10 +13327,31 @@ function dokGotFilesFolder(inp){
   });
   var skipped=files.length-neu.length;
 
+  // Build 1096: gesperrte Dateien anbieten statt stumm verwerfen
+  if(skipped>0){
+    var _gesperrt=files.filter(function(f){
+      return existingNames[f.name] || existingNamesNorm[normName(f.name)];
+    });
+    if(_sperrDialogErzwingen(_gesperrt, normName)){
+      neu=neu.concat(_gesperrt);
+      skipped=0;
+    }
+  }
+
   if(!neu.length){
-    showToast('Alles bereits importiert – '+skipped+' Dateien übersprungen');
+    showToast(skipped ? 'Keine neuen Dateien – '+skipped+' bereits eingepflegt' : 'Keine Dateien');
     inp.value=''; return;
   }
+
+  // Build 1097 (Sim-Befund S4): auch der Haupt-Scan ersetzt unbestaetigte Alt-Doks
+  // gleichen Namens (der Batch-Pfad tat das schon, Z.~13629) — sonst entstehen beim
+  // Re-Upload einer liegengelassenen Datei doppelte Pipeline-Eintraege.
+  var _neuNames={};
+  neu.forEach(function(f){ _neuNames[f.name]=true; _neuNames[normName(f.name)]=true; });
+  db.dokumente=(db.dokumente||[]).filter(function(d){
+    if(d.bestaetigt || !d.dateiname) return true;
+    return !(_neuNames[d.dateiname] || _neuNames[normName(d.dateiname)]);
+  });
 
   // ZUERST sortieren: Dispo → Abrechnung → Ausgabe
   var typOrder = function(f){
@@ -13570,7 +13657,12 @@ function _dokQueueBannerShow(){
       if(t.abrechn_dateiname){exNames[t.abrechn_dateiname]=true;exNorm[normN(t.abrechn_dateiname)]=true;}
     });
     var filtered=batch.filter(function(f){return !exNames[f.name]&&!exNorm[normN(f.name)];});
-    if(!filtered.length){showToast('Alle Dokumente bereits importiert');_dokQueueBannerShow();return;}
+    // Build 1096 (Issue #21 Stufe 1): gesperrte Dateien anbieten statt stumm verwerfen
+    var _gesperrtQ=batch.filter(function(f){return exNames[f.name]||exNorm[normN(f.name)];});
+    if(_gesperrtQ.length && _sperrDialogErzwingen(_gesperrtQ, normN)){
+      filtered=filtered.concat(_gesperrtQ);
+    }
+    if(!filtered.length){showToast('Keine neuen Dokumente'+(_gesperrtQ.length?' – '+_gesperrtQ.length+' bereits eingepflegt':''));_dokQueueBannerShow();return;}
     // Nicht-bestätigte aus Vorbatch bleiben als "offen" in db.dokumente — sichtbar im Offen-Tab
     // Duplikate (gleicher Dateiname, nicht bestätigt) entfernen damit neuer Batch sauber lädt
     var filteredNames={};
