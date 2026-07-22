@@ -4510,7 +4510,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1098 (Fehler aus 1096): Der Erzwingen-Dialog erschien beim Ordner-Routinescan
   // fuer alle 273 bekannten Dateien. Jetzt nur noch bei gezielter Auswahl:
   // keine neue Datei dabei UND hoechstens 10 gesperrte.
-  if(elH) elH.textContent = '1098';
+  // Build 1099 (Issue #21, Stufe 2 — NUR ANZEIGE): Bereits verbuchte Drehtage werden
+  // in der Sessions-Liste als solche markiert, mit Kopf-Hinweis. Vorschlaege mit stark
+  // abweichendem Titel erscheinen nicht mehr als gruener Treffer, sondern als Rueckfrage.
+  // KEINE Aenderung an dokFindTermin, Scoring, Junctions oder Einpflege-Logik.
+  if(elH) elH.textContent = '1099';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13225,6 +13229,53 @@ function dokGotFiles(inp){
 // Build 1098: Ab dieser Menge gilt ein Upload als Ordner-Routinescan — dann kein
 // Erzwingen-Dialog, sondern stilles Ueberspringen wie vor 1096.
 var _SPERRDIALOG_MAX = 10;
+
+// ══ Build 1099: NUR-LESE-Helfer fuer die Sessions-Anzeige ═══════════════════
+// Aendern NICHTS an dokFindTermin, am Scoring, an Junctions oder an der
+// Einpflege-Logik. Sie beantworten zwei Anzeigefragen:
+//   (1) Ist dieser Drehtag bereits ueber ein anderes Dokument verbucht?
+//   (2) Passt der vorgeschlagene Termin-Titel ueberhaupt zur Session?
+// Beide sind bewusst konservativ: im Zweifel "nein" -> Anzeige bleibt wie bisher.
+function _sessionSchonVerbucht(dok, s){
+  try{
+    if(!s || !s.datum || !dok) return false;
+    var belegNr = String(dok.gutschrift_nr||'').trim();
+    if(!belegNr || belegNr==='-' || belegNr==='?') return false;
+    var v2 = (dbv2 && dbv2.abrechnungen) || [];
+    // Beleg-Nr existiert bereits aus einem ANDEREN PDF (dok.id noch nicht verbucht)
+    var ab = v2.find(function(a){
+      return (a.beleg_nr||'')===belegNr && a.pdf_datei_id && a.pdf_datei_id!==dok.id && !a._ueberholt_durch;
+    });
+    if(!ab) return false;
+    // ... und fuer genau diesen Drehtag existiert schon eine Junction
+    var lnks = (dbv2 && dbv2.abrechnung_termin_links) || [];
+    return lnks.some(function(l){
+      if(l.abrechnung_id!==ab.id) return false;
+      var t=(db.termine||[]).find(function(x){ return x.id===l.termin_id; });
+      return t && String(t.datum||'')===String(s.datum);
+    });
+  }catch(e){ return false; }
+}
+// Titelvergleich: grosszuegig. Nur wenn KEINE nennenswerte Ueberschneidung besteht,
+// gilt der Titel als abweichend (dann Rueckfrage-Optik statt gruenem Haken).
+function _titelAehnlich(a, b){
+  try{
+    var norm=function(x){ return String(x||'').toLowerCase()
+      .replace(/\b(s\d+|staffel\s*\d+|folge\s*\d+|ep\.?\s*\d+|teil\s*\d+)\b/g,' ')
+      .replace(/[^a-z0-9äöüß]+/g,' ').trim(); };
+    var A=norm(a), B=norm(b);
+    if(!A || !B) return true;                 // nichts vergleichbar -> nicht stoeren
+    if(A===B || A.indexOf(B)>=0 || B.indexOf(A)>=0) return true;
+    var wa=A.split(/\s+/).filter(function(w){return w.length>2;});
+    var wb=B.split(/\s+/).filter(function(w){return w.length>2;});
+    if(!wa.length || !wb.length) return true;
+    var treffer=wa.filter(function(w){ return wb.indexOf(w)>=0; }).length;
+    if(treffer>0) return true;
+    // Praefix-Aehnlichkeit (Tippfehler/Abkuerzungen): erste 5 Zeichen gleich?
+    return wa[0].slice(0,4)===wb[0].slice(0,4); // Build 1099: 4 statt 5 — 'Arte42' vs 'arte 42'
+  }catch(e){ return true; }                   // Fehler -> wie bisher anzeigen
+}
+
 function _dateiTeilStatus(name){
   var teile=(db.dokumente||[]).filter(function(d){ return d.dateiname===name; });
   var best=teile.filter(function(d){ return d.bestaetigt; }).length;
@@ -16469,21 +16520,49 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     // ── SESSIONS-BLOCK: monats_abrechn ODER abrechn mit mehreren Aufnahmetagen ──
     if((d.typ==='monats_abrechn' || (d.typ==='abrechn' && d.sessions && d.sessions.length > 1)) && d.sessions && d.sessions.length){
       var allDone = d.sessions.every(function(s){return s._done;});
+      // Build 1099: Kopf-Hinweis, wenn diese Datei bereits vollstaendig verbucht ist.
+      // Reine Anzeige — kein Eingriff, Bestaetigen bleibt moeglich (und wird dann vom
+      // Duplikatschutz 851/1097 abgewiesen).
+      var _v1099Schon = d.sessions.filter(function(s){ return _sessionSchonVerbucht(d,s); }).length;
       body+='<div style="margin-bottom:12px">';
+      if(_v1099Schon>0){
+        body+='<div style="background:var(--card);border:1.5px solid var(--hair);border-radius:10px;'
+          +'padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.45;color:var(--ink2)">'
+          +'<b>'+(_v1099Schon===d.sessions.length ? 'Bereits vollständig verbucht' : _v1099Schon+' von '+d.sessions.length+' Drehtagen bereits verbucht')+'</b><br>'
+          +'Beleg-Nr. '+esc(d.gutschrift_nr||'')+' ist schon aus einer früheren Datei gebucht. '
+          +(_v1099Schon===d.sessions.length
+              ? 'Hier ist nichts zu tun — dieses Dokument kann gelöscht werden.'
+              : 'Nur die nicht markierten Drehtage sind offen.')
+          +'</div>';
+      }
       body+='<div style="font-size:11px;font-weight:800;color:var(--ai);letter-spacing:.5px;margin-bottom:8px">ERKANNTE TERMINE ('+d.sessions.length+')</div>';
       d.sessions.forEach(function(s, si){
         var tm=s.terminId?(db.termine||[]).find(function(t){return t.id===s.terminId;}):null;
         var isDone = !!s._done;
-        var matchColor = isDone ? 'var(--ink2)' : (tm?'var(--accent)':'var(--orange)');
-        var matchBg    = isDone ? 'var(--card)' : (tm?'var(--green2)':'var(--orange2)');
-        var matchBorder= isDone ? 'var(--hair)' : (tm?'var(--accent2)':'#e7dbc6');
+        // ── Build 1099 (rein additiv, KEINE Aenderung an dokFindTermin/Match-Logik) ──
+        // (a) Ist dieser Drehtag bereits ueber ein ANDERES Dokument verbucht? Dann wird
+        //     die Session nur informativ markiert; Zuordnung/Bestaetigen bleibt moeglich,
+        //     der 851/1097-Duplikatschutz greift ohnehin beim Bestaetigen.
+        var _v1099Verbucht = _sessionSchonVerbucht(d, s);
+        // (b) Vorgeschlagener Termin heisst voellig anders als die Session? Dann kein
+        //     gruenes Haekchen, sondern Rueckfrage-Optik — der Vorschlag bleibt unveraendert.
+        var _v1099TitelWeicht = (!isDone && tm && s.titel && !_titelAehnlich(s.titel, tm.titel||tm.studio||''));
+        var matchColor = isDone ? 'var(--ink2)' : (_v1099Verbucht ? 'var(--ink2)' : (_v1099TitelWeicht ? 'var(--orange)' : (tm?'var(--accent)':'var(--orange)')));
+        var matchBg    = isDone ? 'var(--card)' : (_v1099Verbucht ? 'var(--card)'  : (_v1099TitelWeicht ? 'var(--orange2)' : (tm?'var(--green2)':'var(--orange2)')));
+        var matchBorder= isDone ? 'var(--hair)' : (_v1099Verbucht ? 'var(--hair)'  : (_v1099TitelWeicht ? '#e7dbc6' : (tm?'var(--accent2)':'#e7dbc6')));
         var sessionOnclick = isDone ? '' :
           (tm
             ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
             : ' onclick="dokSessionGotoKalender(\''+d.id+'\','+si+')"');
         var statusLabel = isDone
           ? '✓ Gespeichert'+(tm?' · '+esc(tm.titel||tm.studio||''):'')
-          : (tm?'✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →':'⚠ Tippen zum Zuordnen');
+          : (_v1099Verbucht
+              ? '● bereits verbucht'
+              : (tm
+                  ? (_v1099TitelWeicht
+                      ? '? '+esc(tm.titel||tm.studio||'Termin')+' — Titel weicht ab →'
+                      : '✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →')
+                  : '⚠ Tippen zum Zuordnen'));
         body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(isDone?'opacity:.6':'cursor:pointer;touch-action:manipulation')+'"'+sessionOnclick+'>';
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
