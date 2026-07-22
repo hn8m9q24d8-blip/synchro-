@@ -4514,7 +4514,14 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // in der Sessions-Liste als solche markiert, mit Kopf-Hinweis. Vorschlaege mit stark
   // abweichendem Titel erscheinen nicht mehr als gruener Treffer, sondern als Rueckfrage.
   // KEINE Aenderung an dokFindTermin, Scoring, Junctions oder Einpflege-Logik.
-  if(elH) elH.textContent = '1099';
+  // Build 1100 (drei Reparaturen am Weg Ordner → Pipeline → Termin, keine Steuerlogik):
+  //  1. "Neuer Termin aus Beleg" (1083-Pfad in saveTermin) stempelt jetzt den Dateinamen.
+  //     Vorher blieb die Datei ueberall unregistriert und tauchte nach jedem
+  //     Pipeline-Leeren im Ordner-Scan wieder auf. Nachweis: Backup 22.07.2026.
+  //  2. saveMergeChanges schreibt nur noch Dokumente DIESES Termins in Log und Undo.
+  //     Die _pendingDelete-Schleife selbst bleibt unveraendert (bewusst).
+  //  3. deleteCurrentTermin gibt _dispoDateiname/abrechn_dateiname wieder frei.
+  if(elH) elH.textContent = '1100';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6055,7 +6062,9 @@ function saveMergeChanges(){
   var _lastSplitDok = null; // merken für Navigation nach der Schleife
   (db.dokumente||[]).forEach(function(dok){
     if(dok._pendingDelete){
-      deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||''});
+      // Build 1100: eigene terminId mitfuehren — die Schleife laeuft ueber ALLE Dokumente
+      // mit _pendingDelete, nicht nur ueber die dieses Termins (siehe Log/Undo unten).
+      deletedDoks.push({dokId:dok.id,beschr:dok.beschr||dok.dateiname||'',terminId:dok.terminId||null});
       // dataURL nur löschen wenn kein unbestätigtes Geschwister-Dok das Parent noch braucht
       var parentId = dok._splitFromPdf || dok.id;
       var nochGebraucht = (db.dokumente||[]).some(function(x){
@@ -6099,13 +6108,24 @@ function saveMergeChanges(){
     var fromDokId = _mergeSnapshot._fromDokId || null;
     var fromSi    = _mergeSnapshot._fromSessionIdx != null ? _mergeSnapshot._fromSessionIdx : null;
     var fromDok   = fromDokId ? (db.dokumente||[]).find(function(x){return x.id===fromDokId;}) : null;
+    // Build 1100: Nur Dokumente DIESES Termins (oder noch ohne Zuordnung) kommen in Log
+    // und Undo. Die _pendingDelete-Schleife oben laeuft bewusst weiter ueber alle — sie
+    // gibt nur Vorschaubilder frei und archiviert unter der EIGENEN terminId, das ist
+    // richtig so. Falsch war nur die Zuschreibung: am 19.07.2026 22:02 stand unter
+    // "Termin gespeichert · Cien anos de soledad · Foto gelöscht" die Abrechnung
+    // Rechnung_08-2026_mobyDok (Termin Europa 2057). Ein Undo haette diese fremde,
+    // bereits in dbv2 konsolidierte Abrechnung auf unbestaetigt zurueckgesetzt und ihren
+    // Dateinamen freigegeben (Zeile ~12351) — latenter Datenschaden, jetzt geschlossen.
+    var _eigeneDeletes = deletedDoks.filter(function(x){
+      return !x.terminId || x.terminId===ctid;
+    });
     var beschr    = fromDok
       ? 'Session verknüpft · '+(fromDok.beschr||fromDok.dateiname||'')+(t?' → '+esc(t.titel||t.studio||''):'')
-      : 'Termin gespeichert · '+(t?esc(t.titel||t.studio||''):'')+(deletedDoks.length?' · Foto gelöscht':'');
+      : 'Termin gespeichert · '+(t?esc(t.titel||t.studio||''):'')+(_eigeneDeletes.length?' · Foto gelöscht':'');
     logAction('merge_saved', beschr, {
       terminId: ctid,
       terminSnap: _mergeSnapshot,
-      deletedDoks: deletedDoks,
+      deletedDoks: _eigeneDeletes,
       fromDokId: fromDokId,
       fromSessionIdx: fromSi
     });
@@ -8099,6 +8119,12 @@ function deleteCurrentTermin(){
   // Snapshot für Undo
   if(t) logAction('termin_geloescht', 'Termin gelöscht · '+esc(t.titel||t.studio||'')+(t.datum?' · '+fd(t.datum):''),
     {terminSnap: JSON.parse(JSON.stringify(t))});
+  // Build 1100: Dateinamen des Termins merken — nach dem Loeschen freigeben, sonst bleibt
+  // die Datei dauerhaft aus dem Ordner-Scan gesperrt (dieser Loeschpfad tat es als
+  // einziger nicht, vgl. deleteDispoById/dokDeleteCurrent). _dateinameFreigeben prueft
+  // selbst, ob der Name noch echt genutzt wird — bei Sammelabrechnungen (K1b) haengt er
+  // an mehreren Terminen und bleibt dann korrekt gesperrt.
+  var _delNamen = t ? [t._dispoDateiname, t.abrechn_dateiname] : [];
   db.termine=db.termine.filter(function(x){return x.id!==ctid;});
   // Cleanup: verwaiste Referenzen auf gelöschten Termin bereinigen
   (db.abrechnungen||[]).forEach(function(ab){ if(ab.terminId===ctid) ab.terminId=null; });
@@ -8107,6 +8133,9 @@ function deleteCurrentTermin(){
     if(z.terminIds) z.terminIds=z.terminIds.filter(function(id){return id!==ctid;});
   });
   (db.dokumente||[]).forEach(function(dok){ if(dok.terminId===ctid) dok.terminId=null; });
+  // Build 1100: erst JETZT freigeben — Termin ist raus, dok.terminId genullt, damit
+  // zaehlt _dateinameFreigeben nur noch echte Nutzer (bestaetigte Docs, andere Termine).
+  _delNamen.forEach(function(n){ if(n) _dateinameFreigeben(n); });
   // Build 735: dbv2-Junctions zum gelöschten Termin entfernen
   if(dbv2 && dbv2.abrechnung_termin_links){
     dbv2.abrechnung_termin_links = dbv2.abrechnung_termin_links.filter(function(l){
@@ -8210,8 +8239,20 @@ function saveTermin(){
         t.gvl_takes = t.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
       }
       try{ if(typeof _senderAusGedaechtnis==='function') _senderAusGedaechtnis(t); }catch(e){}
-      // KEIN Stempel, KEIN importedFiles — das entsteht weiterhin erst beim Bestaetigen
-      // bzw. beim Speichern im Kalendertermin (Build 1079).
+      // Build 1100: HIER stempeln. Das widerspricht 1079 nicht — 1079 verbietet den
+      // Stempel bei Vorschau/Navigation, dies ist eine ausdrueckliche Speicheraktion des
+      // Nutzers, und dokNewTerminAusDok hat Takes/Take-Gage/Grundgage aus dem Beleg schon
+      // ins Formular uebernommen: der Termin traegt den vollen Dispo-Inhalt.
+      // Vorher blieb die Datei voellig unregistriert (nicht in importedFiles, nicht am
+      // Termin, nicht im _archivLog). Einziger Anker war _nd.terminId. Beim Pipeline-Leeren
+      // faellt der weg (dokDeleteAll loescht erst, _dateinameFreigeben prueft danach) —
+      // die Datei galt beim naechsten Ordner-Scan wieder als neu, dauerhaft im Kreis.
+      // Nachweis am Backup 22.07.2026: "Cien anos de soledad" (17.07.), Datei 5CBD5773…
+      // kam in importedFiles/_archivLog/_dispoDateiname kein einziges Mal vor.
+      // Nur echter Dateiname, nie beschr — lesbare Titel gehoeren nicht in importedFiles.
+      if(_nd.dateiname && /\.(pdf|jpg|jpeg|png|heic|heif|tiff|bmp)$/i.test(_nd.dateiname)){
+        _archiveDateiname(_nd.dateiname, t.id, _nd.typ||'dispo');
+      }
       var _ndId=_nd.id;
       dokLinkCancel();
       window._dokLinkMulti=[];
