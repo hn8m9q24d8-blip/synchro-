@@ -4507,7 +4507,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // HARTER BLOCK — vorher wurde trotz erkannter Dublette verbucht (nur ⚠-Flag), mit dem
   // Erzwingen-Dialog waere das ein Doppelbuchungspfad gewesen. (2) Haupt-Scan ersetzt
   // unbestaetigte Alt-Doks gleichen Namens. (3) Dialogtext 'vorhandenen Teilen'.
-  if(elH) elH.textContent = '1097';
+  // Build 1098 (Fehler aus 1096): Der Erzwingen-Dialog erschien beim Ordner-Routinescan
+  // fuer alle 273 bekannten Dateien. Jetzt nur noch bei gezielter Auswahl:
+  // keine neue Datei dabei UND hoechstens 10 gesperrte.
+  if(elH) elH.textContent = '1098';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13219,6 +13222,9 @@ function dokGotFiles(inp){
 // Sicherheitsnetz bleibt der 851-Waechter + Integritaets-Invariante (b) aus 1094:
 // bereits verbuchte Beleg-Nummern werden beim Bestaetigen geblockt — hier kann
 // also nichts doppelt in dbv2 landen. Sperren/Marker/Migration bleiben unberuehrt.
+// Build 1098: Ab dieser Menge gilt ein Upload als Ordner-Routinescan — dann kein
+// Erzwingen-Dialog, sondern stilles Ueberspringen wie vor 1096.
+var _SPERRDIALOG_MAX = 10;
 function _dateiTeilStatus(name){
   var teile=(db.dokumente||[]).filter(function(d){ return d.dateiname===name; });
   var best=teile.filter(function(d){ return d.bestaetigt; }).length;
@@ -13327,8 +13333,12 @@ function dokGotFilesFolder(inp){
   });
   var skipped=files.length-neu.length;
 
-  // Build 1096: gesperrte Dateien anbieten statt stumm verwerfen
-  if(skipped>0){
+  // Build 1096/1098: gesperrte Dateien anbieten statt stumm verwerfen — ABER nur bei
+  // gezielter Auswahl. Build 1098 (Fehler aus 1096): Der Ordner-Scan liest bei JEDEM
+  // Durchlauf den kompletten Ordner; dort ist stilles Ueberspringen das gewollte
+  // Verhalten. Der Dialog erschien sonst bei jedem Scan mit 273 Dateien.
+  // Bedingung: nichts Neues dabei UND ueberschaubare Menge (= bewusster Re-Upload).
+  if(skipped>0 && neu.length===0 && skipped<=_SPERRDIALOG_MAX){
     var _gesperrt=files.filter(function(f){
       return existingNames[f.name] || existingNamesNorm[normName(f.name)];
     });
@@ -13659,7 +13669,10 @@ function _dokQueueBannerShow(){
     var filtered=batch.filter(function(f){return !exNames[f.name]&&!exNorm[normN(f.name)];});
     // Build 1096 (Issue #21 Stufe 1): gesperrte Dateien anbieten statt stumm verwerfen
     var _gesperrtQ=batch.filter(function(f){return exNames[f.name]||exNorm[normN(f.name)];});
-    if(_gesperrtQ.length && _sperrDialogErzwingen(_gesperrtQ, normN)){
+    // Build 1098: wie oben — kein Dialog im Routinebetrieb, nur bei kleiner Auswahl
+    // ohne neue Dateien.
+    if(_gesperrtQ.length && !filtered.length && _gesperrtQ.length<=_SPERRDIALOG_MAX
+       && _sperrDialogErzwingen(_gesperrtQ, normN)){
       filtered=filtered.concat(_gesperrtQ);
     }
     if(!filtered.length){showToast('Keine neuen Dokumente'+(_gesperrtQ.length?' – '+_gesperrtQ.length+' bereits eingepflegt':''));_dokQueueBannerShow();return;}
