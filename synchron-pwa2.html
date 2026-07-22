@@ -1500,6 +1500,15 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 </div>
 
 <!-- SHEETS -->
+<!-- ═══════════════════════════════════════════════════════════════════════
+     TOTER DUPLIKAT-BLOCK (Audit Befund 17, Build 1095)
+     Dieser gesamte Sheet-Block ist eine ALTE KOPIE des Blocks ab ~Z.1278.
+     NICHT byte-identisch (erste Abweichung nach ~66 Zeilen: Memofeld fehlt
+     hier) und wird von getElementById NIE getroffen — erste Kopie gewinnt.
+     >>> AENDERUNGEN HIER SIND WIRKUNGSLOS. Nur im ERSTEN Block editieren. <<<
+     Nicht geloescht: Blockgrenze nicht sicher bestimmbar, Loeschen traegt
+     mehr Risiko als Nutzen (Stand Build 1095).
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div class="overlay-bg" id="termin-bg" onclick="closeTerminSheet()"></div>
 <div class="bottom-sheet" id="termin-sheet">
   <div class="bs-handle"></div>
@@ -4460,7 +4469,13 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Profil jetzt wirklich gespeichert; tote rProfil/saveProfil-Erstfassungen stillgelegt.
   // Build 1093: Regression aus 1090 — Termin-Karte zeigte bei K3-Eigenrechnungen eine
   // unechte Differenz (-USt), weil das Karten-View-Objekt ust_basis/ust_satz nicht trug.
-  if(elH) elH.textContent = '1093';
+  // Build 1094 (Audit 14+15): Integritaets-Check prueft jetzt ZUERST dbv2 (4 neue
+  // Invarianten: Dok ohne Verbuchung, doppelte Beleg-Nr, tote Junctions, 1:1-Summen).
+  // Legacy-Warnungen als '(Altbestand)' gekennzeichnet und steuerlich eingeordnet.
+  // Build 1095 (Audit 16-18): NUR Kommentare. Toter USt-VA-Zweig + _snapUst markiert;
+  // Warnbanner am toten Sheet-Duplikatblock (NICHT geloescht — Bloecke sind entgegen
+  // Audit nicht byte-identisch); Sperr-Kommentare an 4 Holvi-Altpfaden (kein dbv2-Anker).
+  if(elH) elH.textContent = '1095';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8683,6 +8698,13 @@ function isGageEingang(eingang){
   return {ja:false, grund:'Kein Muster erkannt'};
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// LEGACY-PFAD — NICHT REAKTIVIEREN (Audit Befund 18, Build 1095)
+// Kein Aufrufer (per Build 867 abgeschaltet). Schreibt nur t.status/db.zahlungen
+// und setzt NIE dbv2.zahlungs_datum (Ist-Anker!). Wieder angeschlossen wuerden
+// Zahlungen bestaetigt, die in USt-VA und Jahresabschluss NIE auftauchen.
+// Zahlungs-Persistenz laeuft ausschliesslich ueber _mev6PersistOne.
+// ═══════════════════════════════════════════════════════════════════════
 function holviShowPreview(matches, gesamt){
   var ov = document.createElement('div');
   ov.id = 'holvi-ov';
@@ -8947,6 +8969,13 @@ function holviKeineZuordnung(matchIdx){
   holviShowPreview(matches, matches.length);
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// LEGACY-PFAD — NICHT REAKTIVIEREN (Audit Befund 18, Build 1095)
+// Kein Aufrufer (per Build 867 abgeschaltet). Schreibt nur t.status/db.zahlungen
+// und setzt NIE dbv2.zahlungs_datum (Ist-Anker!). Wieder angeschlossen wuerden
+// Zahlungen bestaetigt, die in USt-VA und Jahresabschluss NIE auftauchen.
+// Zahlungs-Persistenz laeuft ausschliesslich ueber _mev6PersistOne.
+// ═══════════════════════════════════════════════════════════════════════
 function holviBestaetigen(){
   pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var matches = window._holviMatches || [];
@@ -19224,6 +19253,7 @@ function rUstVoranmeldung(){
 
   var ym = _ustYear+'-'+String(_ustMonth+1).padStart(2,'0');
   var urEinn = db.profil&&db.profil.ust!=null ? db.profil.ust : 0.07;
+  // Build 1095 (Audit Befund 16): TOTE FUNKTION — kein Aufrufer. Nicht pflegen.
   var _snapUst = function(satz){ if(Math.abs(satz-0.19)<0.02) return 0.19; if(Math.abs(satz-0.07)<0.015) return 0.07; return 0.07; /* nur 0/7/19% gültig — nie auf 8% runden */ };
 
   // ── EINNAHMEN nach ZAHLUNGSEINGANG (Ist-Versteuerung) ────────
@@ -19349,7 +19379,7 @@ function rUstVoranmeldung(){
     +'</div>'
     +'<div style="display:flex;gap:0;border-top:1px solid #FDFCFA;padding-top:10px">'
     +'<div style="flex:1;font-size:12px"><div style="color:#999;margin-bottom:2px">USt aus Einnahmen</div>'
-    +(_einnRaten&&_einnRaten.length>1 ? _einnRaten.map(function(r){return '<div style="font-size:11px"><strong style="color:var(--orange)">+'+fmtEur(Math.round((_einnGruppen[r]&&_einnGruppen[r].sumUst||0)*100)/100)+'</strong> <span style="color:#aaa">'+r+'%</span></div>';}).join('') : '<strong style="color:var(--orange)">+'+fmtEur(einnUst)+'</strong>')
+    +(/* Build 1095 (Befund 16): toter Zweig — _einnRaten wird erst in Z.~19390 befuellt, hier per var-Hoisting immer undefined; Fallback zeigt korrekte Gesamt-USt */ _einnRaten&&_einnRaten.length>1 ? _einnRaten.map(function(r){return '<div style="font-size:11px"><strong style="color:var(--orange)">+'+fmtEur(Math.round((_einnGruppen[r]&&_einnGruppen[r].sumUst||0)*100)/100)+'</strong> <span style="color:#aaa">'+r+'%</span></div>';}).join('') : '<strong style="color:var(--orange)">+'+fmtEur(einnUst)+'</strong>')
     +'</div>'
     +'<div style="flex:1;font-size:12px;text-align:right"><div style="color:#999;margin-bottom:2px">Vorsteuer Ausgaben'+(_vstMonatlich?'':' · z. Jahresende')+'</div><strong style="color:var(--accent)">'+(_vstMonatlich?'−'+fmtEur(vorstUst):fmtEur(vorstUst))+'</strong></div>'
     +'</div></div>';
@@ -20443,6 +20473,13 @@ function holviAbgleichRefresh(){
   showToast(''+db.holviAbgleich.length+' Eingänge neu gematcht · '+offen+' offen');
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// LEGACY-PFAD — NICHT REAKTIVIEREN (Audit Befund 18, Build 1095)
+// Kein Aufrufer (per Build 867 abgeschaltet). Schreibt nur t.status/db.zahlungen
+// und setzt NIE dbv2.zahlungs_datum (Ist-Anker!). Wieder angeschlossen wuerden
+// Zahlungen bestaetigt, die in USt-VA und Jahresabschluss NIE auftauchen.
+// Zahlungs-Persistenz laeuft ausschliesslich ueber _mev6PersistOne.
+// ═══════════════════════════════════════════════════════════════════════
 function holviAbgleichBestaetigen(zahlungsId){
   var liste=db.holviAbgleich||[];
   var z=liste.find(function(e){return e.id===zahlungsId;});
@@ -20765,7 +20802,69 @@ function runIntegrityCheck(silent){
   var warnings = [];
   var fixes = 0;
 
-  // 1. Aufgeteilte Original-Abrechnungen dürfen nicht in Summen eingehen
+  // ════════════════════════════════════════════════════════════════════════
+  // Build 1094 (Audit Befunde 14+15): dbv2-Invarianten ZUERST — dbv2 ist die
+  // steuerlich massgebliche Quelle. Die Legacy-Checks unten pruefen die
+  // eingefrorene Altkopie und sind als "(Altbestand)" gekennzeichnet.
+  // Manuell angelegte v2-Eintraege (ohne pdf_datei_id) sind bewusst
+  // ausgenommen — der Waechter schuetzt sie ebenso (Z. ~1900).
+  // Erststart gegen Backup 20.07. simuliert: 0 Meldungen, keine Fehlalarme.
+  // ════════════════════════════════════════════════════════════════════════
+  try{
+    var _v2abs = (dbv2 && dbv2.abrechnungen) || [];
+    var _v2aktiv = _v2abs.filter(function(a){ return !a._ueberholt_durch; });
+
+    // (a) Jedes bestaetigte Abrechn-Dokument hat >= 1 dbv2-Eintrag.
+    //     Macht Befund 4 (stiller Konsolidierungs-Fehlschlag) beim Start sichtbar.
+    var _v2ByPdf = {};
+    _v2abs.forEach(function(a){
+      if(a.pdf_datei_id){ (_v2ByPdf[a.pdf_datei_id]=_v2ByPdf[a.pdf_datei_id]||[]).push(a); }
+    });
+    (db.dokumente||[]).forEach(function(dok){
+      if(dok.bestaetigt && (dok.typ==='abrechn'||dok.typ==='monats_abrechn') && !_v2ByPdf[dok.id]){
+        warnings.push('\u26a0 dbv2: Beleg NICHT verbucht — '+esc(dok.dateiname||dok.id)+' (fehlt in USt-VA & Jahresabschluss)');
+      }
+    });
+
+    // (b) Keine zwei aktiven dbv2-Belege mit gleicher beleg_nr aus VERSCHIEDENEN PDFs.
+    //     Der 851-Schutz greift nur im Moment der Konsolidierung, nicht rueckblickend.
+    var _nrPdf = {};
+    _v2aktiv.forEach(function(a){
+      var nr=String(a.beleg_nr||'').trim();
+      if(!nr || nr==='-' || !a.pdf_datei_id) return;
+      (_nrPdf[nr]=_nrPdf[nr]||{}); _nrPdf[nr][a.pdf_datei_id]=true;
+    });
+    Object.keys(_nrPdf).forEach(function(nr){
+      var n=Object.keys(_nrPdf[nr]).length;
+      if(n>1) warnings.push('\u26a0 dbv2: Beleg-Nr '+esc(nr)+' existiert aus '+n+' verschiedenen PDFs — Doppelbuchungs-Verdacht');
+    });
+
+    // (c) Jede Junction zeigt auf existierende Abrechnung UND existierenden Termin.
+    var _abIds={}; _v2abs.forEach(function(a){ _abIds[a.id]=true; });
+    var _tIds={}; (db.termine||[]).forEach(function(t){ _tIds[t.id]=true; });
+    ((dbv2 && dbv2.abrechnung_termin_links)||[]).forEach(function(l){
+      if(l.abrechnung_id && !_abIds[l.abrechnung_id])
+        warnings.push('\u26a0 dbv2: Junction zeigt auf geloeschte Abrechnung ('+String(l.abrechnung_id).slice(0,18)+'\u2026)');
+      if(l.termin_id && !_tIds[l.termin_id])
+        warnings.push('\u26a0 dbv2: Junction zeigt auf geloeschten Termin ('+String(l.termin_id).slice(0,18)+'\u2026)');
+    });
+
+    // (d) 1:1-Faelle: v2.brutto muss dok.brutto entsprechen (Sammel/aufgeteilt ausgenommen,
+    //     dort pruefen die bestehenden Konsistenz-Checks die Teile-Summen).
+    Object.keys(_v2ByPdf).forEach(function(pdf){
+      var dok=(db.dokumente||[]).find(function(x){ return x.id===pdf; });
+      if(!dok || dok.typ==='monats_abrechn') return;
+      var dv=parseFloat(dok.brutto);
+      if(!dv) return;
+      var akt=_v2ByPdf[pdf].filter(function(a){ return !a._ueberholt_durch; });
+      if(akt.length!==1) return;
+      var s=parseFloat(akt[0].brutto)||0;
+      if(Math.abs(s-dv)>0.02)
+        warnings.push('\u26a0 dbv2: '+esc(dok.dateiname||pdf)+' — Dokument '+fmtEur(dv)+' vs. verbucht '+fmtEur(s));
+    });
+  }catch(_ivE){ console.warn('[integrity] dbv2-Block Fehler:', _ivE); }
+
+  // 1. (Altbestand) Aufgeteilte Original-Abrechnungen dürfen nicht in Summen eingehen
   (db.abrechnungen||[]).forEach(function(ab){
     if(ab.aufgeteilt && ab.aufgeteiltIn && ab.aufgeteiltIn.length){
       // Prüfen ob Teilabrechnungen existieren
@@ -20773,7 +20872,7 @@ function runIntegrityCheck(silent){
         return a._aufgeteiltVon === ab.brutto && a.dokId === ab.dokId && !a.aufgeteilt;
       });
       if(!teile.length){
-        warnings.push('⚠ Abrechnung '+ab.gutschrift_nr+': aufgeteilt-Flag ohne Teile — bitte prüfen');
+        warnings.push('⚠ (Altbestand) Abrechnung '+ab.gutschrift_nr+': aufgeteilt-Flag ohne Teile — bitte prüfen');
       }
     }
   });
@@ -20789,7 +20888,7 @@ function runIntegrityCheck(silent){
     if(abIdMap[abId].length > 1){
       var ab = (db.abrechnungen||[]).find(function(a){return a.id===abId;});
       if(ab && !ab.aufgeteilt && !ab._aufgeteiltVon){
-        warnings.push('⚠ Abrechnung '+abId+' ist '+abIdMap[abId].length+' Terminen zugeordnet — bitte prüfen');
+        warnings.push('⚠ (Altbestand) Abrechnung '+abId+' ist '+abIdMap[abId].length+' Terminen zugeordnet — bitte prüfen');
       }
     }
   });
@@ -20800,7 +20899,7 @@ function runIntegrityCheck(silent){
     if(teile.length > 1){
       var summe = Math.round(teile.reduce(function(s,a){return s+(parseFloat(a.brutto)||0);},0)*100)/100;
       if(Math.abs(summe - (parseFloat(ab.brutto)||0)) > 0.05){
-        warnings.push('⚠ Aufteilung '+ab.gutschrift_nr+': Summe Teile ('+fmtEur(summe)+') ≠ Original ('+fmtEur(ab.brutto)+')');
+        warnings.push('⚠ (Altbestand) Aufteilung '+ab.gutschrift_nr+': Summe Teile ('+fmtEur(summe)+') ≠ Original ('+fmtEur(ab.brutto)+')');
       }
     }
   });
@@ -20810,7 +20909,7 @@ function runIntegrityCheck(silent){
     if(t.abId){
       var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(!ab){
-        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): abId zeigt auf nicht-existente Abrechnung — bitte prüfen');
+        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) abId zeigt auf nicht-existente Abrechnung — bitte prüfen');
       }
     }
   });
@@ -20818,7 +20917,7 @@ function runIntegrityCheck(silent){
   // 5. Termin abgerechnet=true aber kein abId — Jahresabschluss und USt blind
   (db.termine||[]).forEach(function(t){
     if(t.abgerechnet && !t.abId){
-      warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): abgerechnet=true aber keine Abrechnung verknüpft — taucht nicht in Jahresabschluss/USt auf');
+      warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) abgerechnet=true, alte Verknuepfung fehlt — Steuerzahlen kommen aus dbv2, dort oben gemeldet falls relevant');
     }
     // Abrechnung ohne MwSt → USt-Voranmeldung schweigt
     if(t.abId){
@@ -20826,7 +20925,7 @@ function runIntegrityCheck(silent){
       if(abMwst && parseFloat(abMwst.brutto)>0 && !parseFloat(abMwst.mwst)){
         // Nur warnen wenn keine gesamt_mwst als Fallback vorhanden
         if(!parseFloat(abMwst.gesamt_mwst)){
-          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): Abrechnung hat kein MwSt-Feld — USt-Voranmeldung unvollständig');
+          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) Abrechnung ohne MwSt-Feld — USt-VA liest dbv2, kein Steuerproblem');
         }
       }
     }
@@ -22818,6 +22917,13 @@ function abScanClose(){
   document.getElementById('ab-scan-overlay').style.display='none';
   document.getElementById('ab-scan-sheet').style.display='none';
 }
+// ═══════════════════════════════════════════════════════════════════════
+// LEGACY-PFAD — NICHT REAKTIVIEREN (Audit Befund 18, Build 1095)
+// Kein Aufrufer (per Build 867 abgeschaltet). Schreibt nur t.status/db.zahlungen
+// und setzt NIE dbv2.zahlungs_datum (Ist-Anker!). Wieder angeschlossen wuerden
+// Zahlungen bestaetigt, die in USt-VA und Jahresabschluss NIE auftauchen.
+// Zahlungs-Persistenz laeuft ausschliesslich ueber _mev6PersistOne.
+// ═══════════════════════════════════════════════════════════════════════
 function abHolviOpen(){
   document.getElementById('ab-holvi-overlay').style.display='block';
   document.getElementById('ab-holvi-sheet').style.display='block';
