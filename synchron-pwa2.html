@@ -4521,7 +4521,18 @@ function v2ZaehleAbgerechneteTermine(jahr){
   //  2. saveMergeChanges schreibt nur noch Dokumente DIESES Termins in Log und Undo.
   //     Die _pendingDelete-Schleife selbst bleibt unveraendert (bewusst).
   //  3. deleteCurrentTermin gibt _dispoDateiname/abrechn_dateiname wieder frei.
-  if(elH) elH.textContent = '1100';
+  // Build 1101: Der gruene Knopf "Alle Felder uebernehmen & bestaetigen" entfaellt bei
+  // Dispo und Einzel-Abrechnung — letzter Rest des schon frueher entfernten Footer-Knopfes.
+  // Er stempelte vor dem Speichern (1079-Verlustpfad). Gueltiger Weg: "→ Öffnen" und im
+  // Termin speichern. Fuer ausgabe/sonstig bleibt er, dort ist der andere Weg ungeprueft.
+  // Build 1102 (Daten-Check, reine Lese-Aenderungen — kein Schreibpfad beruehrt):
+  //  A. Brutto-Differenz prueft alle Nicht-Storno-Verknuepfungen statt junctions[0];
+  //     mehrere aktive Abrechnungen an einem Termin werden als eigener Befund gemeldet.
+  //  B. "Fehlender Brutto-Anteil" liest dbv2 statt der veralteten db.abrechnungen
+  //     und nennt den Betrag.
+  //  C. Regel "GVL vs. KALENDER-Takes" entfernt (verglich gegen disponierte Werte).
+  //  D. Pauschale 10er-Ausnahme durch die echte Mindest-Take-Regel ersetzt.
+  if(elH) elH.textContent = '1102';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -16786,16 +16797,32 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
     if(!isMonatsAbrechn){
       if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:var(--cream2);border-radius:8px;color:#555;font-size:13px">PDF</div>';
-      var btnLabel = '✓ Alle Felder übernehmen & bestätigen';
-      var btnAction = termin
-        ? 'dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')'
-        : 'dokBestaetigen()';
-      if(termin) body += '<div style="padding:8px 0 20px">'
-        + '<button type="button" onclick="' + btnAction + '" '
+      // Build 1101: Letzter Rest des alten Footer-Knopfes. Zwei Platzhalter im Code
+      // (Zeile ~16687 und ~16755) verweisen auf ein Element "dok-footer-confirm", das im
+      // Markup nicht mehr existiert — der Knopf wurde dort schon entfernt, hier nicht.
+      // Er ist der schlechtere von zwei Wegen: dokBestaetigenMitTermin setzt bestaetigt,
+      // gibt das Foto frei und STEMPELT den Dateinamen sofort — alles bevor der Nutzer im
+      // Termin gespeichert hat. Geht er dann zurueck, rollt closeDetail den Termin zurueck
+      // und die Sperre bleibt stehen: genau der Verlustpfad, den Build 1079 geschlossen
+      // hat. Ausserdem fehlt _mergeSnapshot._fromDokId, weshalb das spaetere Speichern im
+      // Protokoll als anonymes "Termin gespeichert" statt als Verknuepfung landet.
+      // "→ Öffnen" (dokPeekTermin) merged auf Probe und ueberlaesst Stempel und Abschluss
+      // dem echten Speichern in saveMergeChanges.
+      // BEWUSST NUR fuer dispo und Einzel-abrechn entfernt — nur fuer diese beiden ist der
+      // Weg ueber den Termin nachweislich vollstaendig: saveMergeChanges schliesst das
+      // abrechn-Dok formal ab (Zeile ~6206: bestaetigt, _upsertAbrechnung, Archivierung),
+      // Dispos brauchen keinen Abschluss. Fuer ausgabe/sonstig/monats_abrechn-ohne-Sessions
+      // ist dieser Knopf derzeit der einzige Bestaetigungsweg mit Termin — die bleiben,
+      // bis der Weg dort geprueft ist (haengt an Issue #20, "Ohne Termin" hat bis heute
+      // ueberhaupt keinen Bestaetigen-Knopf, obwohl der Toast ihn ankuendigt).
+      var _wegUeberTerminReicht = d.typ==='dispo'
+        || (d.typ==='abrechn' && !(d.sessions && d.sessions.length));
+      if(termin && !_wegUeberTerminReicht) body += '<div style="padding:8px 0 20px">'
+        + '<button type="button" onclick="dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')" '
         + 'style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:14px;'
         + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
         + '-webkit-tap-highlight-color:transparent;display:block">'
-        + btnLabel + '</button></div>';
+        + '✓ Alle Felder übernehmen &amp; bestätigen</button></div>';
     }
   }
 
@@ -21217,28 +21244,32 @@ function runIntegrityCheck(silent){
 
   // ── NEUE INTELLIGENTE PRÜFUNGEN ──────────────────────────────
 
-  // GVL-Takes vs. Kalender-Takes Abgleich
-  (db.termine||[]).forEach(function(t){
-    if(!t.gvl_takes_detail || !t.gvl_takes_detail.length) return;
-    var gvlGesamt = t.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
-    var kalTakes = parseInt(t.takes)||0;
-    if(gvlGesamt !== kalTakes && kalTakes > 0 && gvlGesamt > 0){
-      warnings.push('⚠ GVL/Takes Differenz: '+esc(t.titel||t.studio||t.datum||'?')+' ('+fd(t.datum)+'): GVL-Summe '+gvlGesamt+' ≠ Kalender-Takes '+kalTakes);
-    }
-  });
-
-  // GVL-Takes vs. Abrechnungs-Takes Abgleich
+  // Build 1102: Die frühere Regel "GVL-Takes vs. KALENDER-Takes" ist entfallen.
+  // Sie verglich die GVL-Meldung gegen t.takes — das ist der DISPONIERTE Wert aus der
+  // Dispo ("disponiert 3 + zusaetzlich 0 - entfallen 0"), nicht der abgerechnete.
+  // Eine Abweichung ist dort der Normalfall (Takes kommen am Drehtag dazu oder fallen
+  // weg) und kein Befund. Nachweis am Backup 23.07.2026: die Regel erzeugte 6 Meldungen,
+  // davon 4 (Navy CIS 08.12./15.12./17.03., Jackass) mit GVL == takes_abgerechnet — also
+  // vollstaendig konsistente Daten — und 2 (Project Hail Mary, Rookie Blue), die die
+  // Regel unten ohnehin meldet. Null eigenstaendige Befunde, 6 Meldungen Rauschen.
+  // Massgeblich ist allein der Vergleich GVL gegen ABGERECHNET.
   (db.termine||[]).forEach(function(t){
     if(!t.gvl_takes_detail || !t.gvl_takes_detail.length) return;
     var gvlGesamt = t.gvl_takes_detail.reduce(function(s,e){return s+(parseInt(e.takes)||0);},0);
     var abTakes = parseInt(t.takes_abgerechnet)||0;
-    if(abTakes > 0 && gvlGesamt !== abTakes){
-      // 1-10-Regel erlaubt Differenz von 10
-      var diff = Math.abs(gvlGesamt - abTakes);
-      if(diff !== 10 && diff > 0){
-        warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes);
-      }
-    }
+    if(abTakes <= 0 || gvlGesamt <= 0 || gvlGesamt === abTakes) return;
+    // Build 1102: echte Mindest-Take-Regel statt pauschaler 10er-Ausnahme.
+    // Vorher stand hier "if(diff !== 10)" mit der Begruendung "1-10-Regel". Das war eine
+    // Fehlanwendung: die Mindest-Take-Regel macht aus WENIGEN Takes zehn (rawT<10 → 10,
+    // vgl. billT weiter oben), sie kann keinen Versatz von +10 auf dreistelligen Werten
+    // erklaeren. Die Ausnahme unterdrueckte am Backup 23.07.2026 genau einen Fall:
+    // The Artful Dodger (21.11.2025), GVL 3 ≠ abgerechnet 13 — und der ist ein echter
+    // Parser-Fehler (3 disponierte Takes + Mindest 10 wurden addiert statt ersetzt;
+    // dort steht zudem kommgage_abgerechnet 127, das ist der Brutto- und nicht der
+    // Grundgagenwert). Die Ausnahme verdeckte also genau den Fall, den sie erklaeren
+    // sollte. Korrekt greift die Regel nur, wenn wenige Takes auf 10 aufgerundet wurden.
+    if(gvlGesamt < 10 && abTakes === 10) return;
+    warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes);
   });
 
   // Doppelte Dispos am selben Termin
@@ -21257,25 +21288,45 @@ function runIntegrityCheck(silent){
   // Build 741: v2-aware. Bei Sammel-GS muss gegen den Junction-Anteil verglichen werden,
   // nicht gegen das Master-Brutto. Sonst zeigt der Check bei jedem Sammel-Termin
   // eine falsche Differenz.
+  // Build 1102: nicht mehr ueber v2TerminView. Das nimmt junctions[0] — bei einem Termin
+  // mit mehreren Abrechnungen also eine willkuerliche. Am Backup 23.07.2026 fuehrte das
+  // zu zwei Falschmeldungen: Bad Apples (28.03.2025) haengt an Storno 839/20260302 (−396)
+  // UND Neuberechnung 839/20260303 (495); verglichen wurde gegen die Storno-Junction.
+  // Schlimmer war die Gegenrichtung: Amsterdam Empire (18.09.2025) hat dieselbe
+  // Storno/Neuberechnung-Paarung, dort ist der Anteil der ERSTEN Junction leer — die
+  // Regel stieg bei "anteil == null" kommentarlos aus und pruefte die zweite nie.
+  // Nicht gemeldet hiess dort: nicht geprueft.
   (db.termine||[]).forEach(function(t){
     if(!t.brutto_termin) return;
 
-    // v2-Pfad: Junction prüfen
-    var v2view = null;
-    try { v2view = (typeof v2TerminView==='function') ? v2TerminView(t.id) : null; } catch(e){}
+    var alleJ = (typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links)
+      ? dbv2.abrechnung_termin_links.filter(function(l){ return l.termin_id===t.id; })
+      : [];
 
-    if(v2view && v2view.istAbgerechnet && v2view.quelle==='v2'){
-      // v2-Daten authoritative
-      var anteil = v2view.brutto_anteil;
-      if(anteil == null) return; // PDF weist keinen Anteil aus → kein Vergleich möglich (kein Fehler)
-      var diff = Math.abs((parseFloat(t.brutto_termin)||0) - parseFloat(anteil));
-      if(diff > 1.5){ // Toleranz wie bei Konsistenz-Check
+    if(alleJ.length){
+      // Stornierte Abrechnungen zaehlen nicht — nach Storno + Neuberechnung ist der
+      // Neuberechnungs-Anteil massgeblich, der Storno hebt nur das Alte auf.
+      var aktiv = alleJ.filter(function(l){
+        var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; });
+        return a && !a.ist_storno;
+      });
+      if(!aktiv.length) return;
+      if(aktiv.length > 1){
+        // Kein stiller Vergleich gegen eine willkuerlich gewaehlte Abrechnung — das ist
+        // ein eigener Befund und gehoert vom Menschen entschieden.
+        warnings.push('⚠ Mehrere Abrechnungen: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+aktiv.length+' Abrechnungen an einem Termin — bitte pruefen welche gilt');
+        return;
+      }
+      var anteil = aktiv[0].brutto_anteil_display;
+      if(anteil == null || anteil === '') return; // PDF weist keinen Anteil aus → kein Fehler
+      if(Math.abs((parseFloat(t.brutto_termin)||0) - parseFloat(anteil)) > 1.5){
         warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Anteil aus Abrechnung '+fmtEur(anteil));
       }
       return;
     }
 
-    // Legacy-Pfad: alte db.abrechnungen
+    // Legacy-Pfad: alte db.abrechnungen — greift nur noch, wenn dbv2 zu diesem Termin
+    // ueberhaupt nichts fuehrt.
     if(!t.abId) return;
     var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
     if(!ab) return;
@@ -21348,13 +21399,27 @@ function runIntegrityCheck(silent){
     }
   });
 
-  // 4. Termine mit abId aber kein brutto_termin gesetzt
+  // 4. Termine ohne brutto_termin, obwohl eine Abrechnung existiert
+  // Build 1102: liest dbv2 statt db.abrechnungen. Die Legacy-Tabelle ist Write-only
+  // ("Muelltonne") und veraltet — bei Barsoi Werbung (12.11.2025) steht dort 12.309 €,
+  // in dbv2 14.647,71 €. Die alte Meldung nannte keinen Wert und forderte pauschal
+  // "bitte nochmal einpflegen", obwohl der richtige Anteil in dbv2 laengst steht.
+  // Jetzt wird der dbv2-Wert mitgegeben, damit du ihn direkt eintragen kannst statt
+  // den Beleg erneut zu suchen. t.brutto_termin ist zwar abgeleitet, wird aber von
+  // mehreren Uebersichten direkt gelesen — fehlt er, zaehlen die zu niedrig.
   (db.termine||[]).forEach(function(t){
-    if(!t.abId || t.brutto_termin) return;
-    var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
-    if(ab && parseFloat(ab.brutto)>0){
-      warnings.push('⚠ Fehlender Brutto-Anteil: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): hat Abrechnung aber kein brutto_termin — bitte nochmal einpflegen');
-    }
+    if(t.brutto_termin) return;
+    var js = (typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links)
+      ? dbv2.abrechnung_termin_links.filter(function(l){
+          if(l.termin_id!==t.id) return false;
+          var a=(dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; });
+          return a && !a.ist_storno;
+        })
+      : [];
+    if(js.length !== 1) return; // 0 = nichts abgerechnet, >1 meldet Regel 1 schon
+    var an = js[0].brutto_anteil_display;
+    if(an == null || an === '' || !(parseFloat(an)>0)) return;
+    warnings.push('⚠ Fehlender Brutto-Anteil: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Abrechnung weist '+fmtEur(an)+' aus, am Termin fehlt der Wert');
   });
 
   // 5. Jahresabschluss-Tabelle Quer-Summen-Check
@@ -21440,7 +21505,9 @@ function runIntegrityCheckAndShow(){
     // Kategorien trennen — DISJUNKT (Build 885): jede Warnung genau eine Kategorie,
     // Priorität Struktur → Finanz → Sonstiges. Sonst landete z.B. "Fehlender
     // Brutto-Anteil" in beiden (Match auf 'Fehlender' UND 'Brutto').
-    var _istStruktur = function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0||w.indexOf('Doppelte')>=0||w.indexOf('Fehlender')>=0; };
+    // Build 1102: 'Mehrere Abrechnungen' ist ein Strukturbefund (ein Termin haengt an
+    // mehreren aktiven Abrechnungen), kein Zahlenfehler — sonst landet er in Sonstiges.
+    var _istStruktur = function(w){ return w.indexOf('abId')>=0||w.indexOf('aufgeteilt')>=0||w.indexOf('Aufteilung')>=0||w.indexOf('verwaist')>=0||w.indexOf('Doppelte')>=0||w.indexOf('Mehrere Abrechnungen')>=0||w.indexOf('Fehlender')>=0; };
     var _istFinanz = function(w){ return w.indexOf('MwSt')>=0||w.indexOf('Zahlung')>=0||w.indexOf('zahlungsdatum')>=0||w.indexOf('bezahlt')>=0||w.indexOf('Brutto')>=0||w.indexOf('Jahresabschluss')>=0||w.indexOf('Tabelle')>=0||w.indexOf('SV-Summe')>=0||w.indexOf('Monats-GS')>=0; };
     var strukturFehler = warnings.filter(_istStruktur);
     var finanzFehler = warnings.filter(function(w){ return !_istStruktur(w) && _istFinanz(w); });
