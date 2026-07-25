@@ -600,7 +600,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     </div>
   </div>
   <div class="scroll" style="padding:0 18px 40px;font-size:14px;line-height:1.7;color:var(--ink2)">
-    <p style="color:var(--ink3);font-size:12px;margin:4px 0 18px">Stand: Juli 2026 · Entwurf, noch nicht juristisch geprüft</p>
+    <div style="height:8px"></div>
 
     <div class="group-lbl" style="margin:0 0 6px">Wer verarbeitet die Daten</div>
     <p>Verantwortlich für diese App ist Tim Knauer, Körtestr. 35, 10965 Berlin, tknauer.synchro@gmail.com. Die App wird ohne Gewinnabsicht bereitgestellt.</p>
@@ -617,8 +617,6 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl" style="margin:18px 0 6px">Deine Rechte</div>
     <p>Da alle Daten lokal auf deinem Gerät liegen und der Anbieter keinen Zugriff darauf hat, hast du die volle Kontrolle: Du kannst sie jederzeit einsehen, exportieren, ändern und löschen. Fragen zur Verarbeitung durch Anthropic richtest du an Anthropic.</p>
-
-    <p style="color:var(--ink3);font-size:12px;margin-top:22px">Dieser Text ist ein Entwurf und ersetzt keine Rechtsberatung. Vor einer Weitergabe an weitere Nutzerinnen und Nutzer sollte er von einer datenschutzkundigen Person geprüft werden — insbesondere wegen der Übermittlung von Belegdaten an einen US-Dienstleister.</p>
   </div>
 </div>
 
@@ -632,7 +630,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     </div>
   </div>
   <div class="scroll" style="padding:0 18px 40px;font-size:14px;line-height:1.7;color:var(--ink2)">
-    <p style="color:var(--ink3);font-size:12px;margin:4px 0 18px">Stand: Juli 2026 · Entwurf, noch nicht juristisch geprüft</p>
+    <div style="height:8px"></div>
 
     <div class="group-lbl" style="margin:0 0 6px">Anbieter</div>
     <p>Tim Knauer<br>Körtestr. 35<br>10965 Berlin</p>
@@ -642,8 +640,6 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl" style="margin:18px 0 6px">Umsatzsteuer-Identifikationsnummer</div>
     <p>— (falls vorhanden, hier eintragen)</p>
-
-    <p style="color:var(--ink3);font-size:12px;margin-top:22px">Dieser Text ist ein Entwurf. Ob und in welchem Umfang eine Impressumspflicht besteht, hängt von der Art der Bereitstellung ab und sollte im Zweifel fachlich geklärt werden.</p>
   </div>
 </div>
 
@@ -4598,7 +4594,10 @@ function v2ZaehleAbgerechneteTermine(jahr){
   //     Gagenscheinen") aus der Profil-Fusszeile entfernt — gehoeren ins Onboarding, nicht
   //     dauerhaft ins Profil. Texte sind gemerkt und werden beim Onboarding-Bau wieder
   //     eingesetzt (ggf. neu formuliert).
-  if(elH) elH.textContent = '1104';
+  // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
+  //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
+  //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
+  if(elH) elH.textContent = '1106';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
