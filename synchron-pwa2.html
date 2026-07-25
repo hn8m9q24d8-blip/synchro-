@@ -576,21 +576,75 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="settings-row" onclick="confirmReset()"><div class="sr-left"><div><div class="sr-label" style="color:var(--rose)">Alle Daten löschen</div></div></div><div class="sr-right" style="color:var(--rose)">›</div></div>
     </div>
 
-    <div class="settings-group" style="padding:16px;font-size:12px;color:var(--ink2);line-height:1.65">
-      <div class="group-lbl" style="margin:0 0 6px">Als iPhone-App installieren</div>
-      In Safari öffnen → Teilen-Symbol → „Zum Home-Bildschirm“. Danach öffnet sich die App wie eine native App, ohne Browser-Leiste.
-    </div>
-    <div class="settings-group" style="padding:16px;font-size:12px;color:var(--ink2);line-height:1.65">
-      <div class="group-lbl" style="margin:0 0 6px">E-Mails mit Gagenscheinen</div>
-      Mail öffnen → Anhang antippen → Teilen → „In Synchron öffnen“ — oder Datei speichern und in der App hochladen. Direkter Postfach-Zugriff ist im Browser nicht möglich; der Upload-Weg ist der sichere Weg.
-    </div>
     <div style="text-align:center;padding:10px 0 4px;font-size:11px;color:var(--ink3);line-height:1.7">
       Alle Daten lokal auf deinem Gerät · Kein Server · Kein Abo<br>
-      <span style="color:var(--accent);font-weight:600">Synchron</span>
+      <span style="color:var(--accent);font-weight:600">Synchron</span><br>
+      <span style="display:inline-block;margin-top:8px">
+        <span onclick="switchView('datenschutz')" style="color:var(--ink2);text-decoration:underline;cursor:pointer">Datenschutz</span>
+        &nbsp;·&nbsp;
+        <span onclick="switchView('impressum')" style="color:var(--ink2);text-decoration:underline;cursor:pointer">Impressum</span>
+      </span>
     </div>
     <div style="height:8px"></div>
   </div>
 </div>
+</div>
+
+
+<!-- ══════ DATENSCHUTZ ══════════════════════════════════ -->
+<div id="view-datenschutz" class="view">
+  <div class="app-header">
+    <div class="header-left" style="display:flex;align-items:center;gap:10px">
+      <div onclick="switchView('profil')" style="cursor:pointer;font-size:22px;line-height:1">‹</div>
+      <div class="header-title">Datenschutz</div>
+    </div>
+  </div>
+  <div class="scroll" style="padding:0 18px 40px;font-size:14px;line-height:1.7;color:var(--ink2)">
+    <p style="color:var(--ink3);font-size:12px;margin:4px 0 18px">Stand: Juli 2026 · Entwurf, noch nicht juristisch geprüft</p>
+
+    <div class="group-lbl" style="margin:0 0 6px">Wer verarbeitet die Daten</div>
+    <p>Verantwortlich für diese App ist Tim Knauer, Körtestr. 35, 10965 Berlin, tknauer.synchro@gmail.com. Die App wird ohne Gewinnabsicht bereitgestellt.</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">Wo deine Daten liegen</div>
+    <p>Alle Termine, Belege, Abrechnungen und Profilangaben werden ausschließlich lokal im Speicher deines Geräts (localStorage deines Browsers) gespeichert. Es gibt keinen Server, kein Nutzerkonto und keine Übertragung an den Anbieter. Wer die App deinstalliert oder „Alle Daten löschen“ wählt, entfernt die Daten vollständig. Sicherungen, die du exportierst, liegen dort, wohin du sie speicherst (z. B. iCloud) — dafür bist du selbst verantwortlich.</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">KI-Analyse — hier verlassen Daten das Gerät</div>
+    <p>Wenn du die KI-Analyse eines Belegs startest, wird der Inhalt des jeweiligen Belegs (Bild oder PDF, inklusive der darauf sichtbaren personenbezogenen Daten wie Name, Rolle, Honorar) an die Programmierschnittstelle (API) von Anthropic übertragen und dort automatisiert ausgewertet. Anbieter ist Anthropic, PBC, mit Sitz in den USA. Die Übertragung ist für die automatische Erkennung der Belegdaten technisch notwendig. Sie erfolgt nur, wenn du die Analyse aktiv auslöst, und nur mit dem von dir hinterlegten API-Schlüssel. Es werden keine Belege ohne dein Zutun übertragen.</p>
+    <p>Für die Verarbeitung durch Anthropic gelten deren Datenschutzbestimmungen und die Bedingungen der Anthropic-API. Eine Übermittlung in die USA ist mit datenschutzrechtlichen Besonderheiten verbunden; informiere dich vor der Nutzung über die aktuellen Bedingungen von Anthropic.</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">Kalender-Sync</div>
+    <p>Wenn du die Kalender-Synchronisation einrichtest, ruft die App die von dir angegebene iCal-Adresse ab, um Termine zu importieren. Es werden keine Kalenderdaten an den Anbieter der App übertragen.</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">Deine Rechte</div>
+    <p>Da alle Daten lokal auf deinem Gerät liegen und der Anbieter keinen Zugriff darauf hat, hast du die volle Kontrolle: Du kannst sie jederzeit einsehen, exportieren, ändern und löschen. Fragen zur Verarbeitung durch Anthropic richtest du an Anthropic.</p>
+
+    <p style="color:var(--ink3);font-size:12px;margin-top:22px">Dieser Text ist ein Entwurf und ersetzt keine Rechtsberatung. Vor einer Weitergabe an weitere Nutzerinnen und Nutzer sollte er von einer datenschutzkundigen Person geprüft werden — insbesondere wegen der Übermittlung von Belegdaten an einen US-Dienstleister.</p>
+  </div>
+</div>
+
+
+<!-- ══════ IMPRESSUM ══════════════════════════════════ -->
+<div id="view-impressum" class="view">
+  <div class="app-header">
+    <div class="header-left" style="display:flex;align-items:center;gap:10px">
+      <div onclick="switchView('profil')" style="cursor:pointer;font-size:22px;line-height:1">‹</div>
+      <div class="header-title">Impressum</div>
+    </div>
+  </div>
+  <div class="scroll" style="padding:0 18px 40px;font-size:14px;line-height:1.7;color:var(--ink2)">
+    <p style="color:var(--ink3);font-size:12px;margin:4px 0 18px">Stand: Juli 2026 · Entwurf, noch nicht juristisch geprüft</p>
+
+    <div class="group-lbl" style="margin:0 0 6px">Anbieter</div>
+    <p>Tim Knauer<br>Körtestr. 35<br>10965 Berlin</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">Kontakt</div>
+    <p>tknauer.synchro@gmail.com</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">Umsatzsteuer-Identifikationsnummer</div>
+    <p>— (falls vorhanden, hier eintragen)</p>
+
+    <p style="color:var(--ink3);font-size:12px;margin-top:22px">Dieser Text ist ein Entwurf. Ob und in welchem Umfang eine Impressumspflicht besteht, hängt von der Art der Bereitstellung ab und sollte im Zweifel fachlich geklärt werden.</p>
+  </div>
 </div>
 
 
@@ -880,7 +934,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div onclick="vorsteuerJahrExport()" title="Vorsteuer für das ganze Jahr" style="width:40px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--cream2);border:1px solid var(--hair);border-radius:9px;cursor:pointer;color:var(--ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/></svg></div>
     </div>
   </div>
-  <div id="ust-scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(env(safe-area-inset-bottom)+90px)"></div>
+  <div id="ust-scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(env(safe-area-inset-bottom) + 90px)"></div>
 </div>
 
 
@@ -4532,7 +4586,19 @@ function v2ZaehleAbgerechneteTermine(jahr){
   //     und nennt den Betrag.
   //  C. Regel "GVL vs. KALENDER-Takes" entfernt (verglich gegen disponierte Werte).
   //  D. Pauschale 10er-Ausnahme durch die echte Mindest-Take-Regel ersetzt.
-  if(elH) elH.textContent = '1102';
+  //  E. CSS: USt-Scroll-Polster (Z. 883) — calc(env(...)+90px) war ungueltig (fehlende
+  //     Leerzeichen um '+'), Polster fiel auf 0, letzte Ausgaben-Zeile lag hinter dem
+  //     Tab-Balken. Jetzt calc(env(...) + 90px). Einzelfall, nicht kopiert.
+  // Build 1103: Datenschutz + Impressum als zwei Textseiten (view-datenschutz,
+  //     view-impressum), erreichbar ueber zwei Links in der Profil-Fusszeile. Beta-Blocker.
+  //     Beide sind ENTWUERFE, noch nicht juristisch geprueft — Datenschutz benennt die
+  //     Uebermittlung von Belegdaten an die Anthropic-API (US) explizit. USt-IdNr im
+  //     Impressum als Kann-Angabe (Platzhalter). Reines Markup, kein Datenpfad beruehrt.
+  // Build 1104: Die zwei Erstnutzer-Kacheln ("Als iPhone-App installieren", "E-Mails mit
+  //     Gagenscheinen") aus der Profil-Fusszeile entfernt — gehoeren ins Onboarding, nicht
+  //     dauerhaft ins Profil. Texte sind gemerkt und werden beim Onboarding-Bau wieder
+  //     eingesetzt (ggf. neu formuliert).
+  if(elH) elH.textContent = '1104';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -12055,6 +12121,7 @@ function switchView(v){
     'rechnungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
     'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
+    'datenschutz':'profil','impressum':'profil',
     'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil','jahresabschluss':'buch'
   };
   var navBtn = document.getElementById('nav-'+(navMap[v]||v));
