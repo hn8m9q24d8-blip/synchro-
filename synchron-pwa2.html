@@ -602,7 +602,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div class="scroll" style="padding:0 18px 40px;font-size:14px;line-height:1.7;color:var(--ink2)">
     <div style="height:8px"></div>
 
-    <div class="group-lbl" style="margin:0 0 6px">Wer verarbeitet die Daten</div>
+    <div class="group-lbl" style="margin:0 0 6px">Verantwortlicher</div>
     <p>Verantwortlich für diese App ist Tim Knauer, Körtestr. 35, 10965 Berlin, tknauer.synchro@gmail.com. Die App wird ohne Gewinnabsicht bereitgestellt.</p>
 
     <div class="group-lbl" style="margin:18px 0 6px">Wo deine Daten liegen</div>
@@ -637,9 +637,6 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl" style="margin:18px 0 6px">Kontakt</div>
     <p>tknauer.synchro@gmail.com</p>
-
-    <div class="group-lbl" style="margin:18px 0 6px">Umsatzsteuer-Identifikationsnummer</div>
-    <p>— (falls vorhanden, hier eintragen)</p>
   </div>
 </div>
 
@@ -4597,7 +4594,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1107';
+  if(elH) elH.textContent = '1110';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5422,7 +5419,7 @@ function openDetail(id){
   if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
     gvlHtml='<div class="info-card" style="border-left:3px solid var(--accent)" onclick="gvlTerminBearbeiten(\''+id+'\')">'
       +'<div class="info-card-header"><span>GVL-Übersicht</span>'
-      +'<span style="font-size:10px;color:var(--ink3);font-weight:500">bearbeiten ›</span></div>'
+      +'<span style="font-size:10px;color:var(--ink3);font-weight:500">›</span></div>'
       +'<div style="padding:0 16px 14px">';
     if(gvlDispo){
       if(gvlDispo.gvl_staffel_header) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(gvlDispo.gvl_staffel_header)+'</div></div>';
