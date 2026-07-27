@@ -4618,7 +4618,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1120';
+  if(elH) elH.textContent = '1121';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5591,22 +5591,36 @@ function openDetail(id){
       var kommgage2 = parseFloat(t.kommgage)||0;
       var rate2     = parseFloat(t.rate)||0;
       // Arena/Streaming 1-10: grundgage = kommgage + 10×rate
-      var is1to10GG = _effGG > 0 && Math.abs(_effGG - (kommgage2 + 10*(_effRate||rate2))) < 1.5;
+      // Build 1121: Bei gemischten Sammelbelegen traegt die Junction die Take-Rate
+      // einer FREMDEN Position — die Konsolidierung merkt sich in Z. 2861 nur das
+      // Maximum je Beleg, nicht die Rate je Position. Deshalb beide Kandidaten pruefen:
+      // eigene Termin-Rate und Abrechnungs-Rate.
+      var _paket1 = kommgage2 + 10*rate2;
+      var _paket2 = kommgage2 + 10*(_effRate||rate2);
+      var is1to10GG = _effGG > 0 && (Math.abs(_effGG - _paket1) < 1.5 || Math.abs(_effGG - _paket2) < 1.5);
+      // Geht die Pauschale nur mit der EIGENEN Rate auf, stammt die Abrechnungs-Rate
+      // aus einer anderen Position desselben Belegs — dann ist sie kein Widerspruch.
+      var _fremdeRate = is1to10GG && Math.abs(_effGG - _paket1) < 1.5
+                        && Math.abs((_effRate||rate2) - rate2) > 0.01;
       // Echte Takes aus Abrechnung = _effTakes (ohne 10-Paket)
       // Kalender-Takes = rawTakes2 (inkl. 10-Paket, also _effTakes + 10)
       var is1to10Takes = is1to10GG && Math.abs(rawTakes2 - (_effTakes + 10)) < 1;
+      // Zehnerpauschale: unter 10 Takes disponiert, genau 10 abgerechnet. Das ist
+      // Uebereinstimmung, keine Abweichung — billTakes (Z. 5102) rechnet schon so.
+      var _takesPaketOk = _effTakes > 0 && _effTakes === billTakes;
 
       // netBruttoOk neu berechnen mit Fallback
       if(hasAbrFallback && !ab){
         netBruttoOk = Math.abs(net - _effBrutto) < 0.02;
         // Mismatch nur wenn NICHT durch 1-10-Regel erklärbar
-        if(_effTakes > 0) takesMismatch = (!is1to10Takes && Math.abs(_effTakes - total) > 0) ? (_effTakes - total) : 0;
+        if(_effTakes > 0) takesMismatch = (!is1to10Takes && !_takesPaketOk && Math.abs(_effTakes - total) > 0) ? (_effTakes - total) : 0;
         if(_effGG > 0)    kommMismatch  = !is1to10GG && Math.abs(_effGG - kommgage2) > 0.5;
-        if(_effRate > 0)  rateMismatch  = Math.abs(_effRate - rate2) > 0.01;
+        if(_effRate > 0)  rateMismatch  = !_fremdeRate && Math.abs(_effRate - rate2) > 0.01;
       } else if(ab) {
         // auch für ab-Pfad 1-10 prüfen
-        if(is1to10Takes) takesMismatch = 0;
+        if(is1to10Takes || _takesPaketOk) takesMismatch = 0;
         if(is1to10GG)    kommMismatch  = false;
+        if(_fremdeRate)  rateMismatch  = false;
       }
 
       // 1-10-Regel-Erkennung für Brutto-Diff (Studio zahlt nur echte Takes)
