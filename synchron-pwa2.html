@@ -4618,7 +4618,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1121';
+  if(elH) elH.textContent = '1122';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5425,9 +5425,15 @@ function openDetail(id){
     +'</div>';
 
   // ── MEMO FELD (editierbar) ─────────────────────────────────
+  // Build 1122: Ohne Inhalt bleibt das Feld zugeklappt — ein leeres Eingabefeld
+  // ist Laerm. Ein Tipp auf die Kopfzeile klappt es auf und setzt den Fokus.
+  var _memoLeer = !(t.memo||'').trim();
   var memoHtml='<div class="info-card">'
-    +'<div class="info-card-header"><span>Notiz / Memo</span></div>'
-    +'<div style="padding:8px 16px 14px">'
+    +'<div class="info-card-header" style="cursor:pointer" onclick="memoAufklappen()">'
+      +'<span>Notiz / Memo</span>'
+      +(_memoLeer?'<span style="font-size:10px;color:var(--ink3);font-weight:500">hinzufügen +</span>':'')
+    +'</div>'
+    +'<div id="dp-memo-wrap" style="padding:8px 16px 14px'+(_memoLeer?';display:none':'')+'">'
     +'<textarea id="dp-memo-field" rows="3" placeholder="Notizen zum Termin... (wird automatisch gespeichert)" '
     +'onblur="saveMemoFromDetail(\''+id+'\')" '
     +'style="width:100%;border:1.5px solid var(--hair);border-radius:10px;padding:10px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none">'
@@ -5713,7 +5719,11 @@ function openDetail(id){
     var _abRate = parseFloat(ab.take_gage)||0;
     // Rückwärts: aus abgerechneter Rate Komm-Gage ableiten
     var _erwartetKomm = _abRate>0 ? (kommGageFromRate ? (kommGageFromRate(_abRate)||{komm:_tKomm}).komm : _tKomm) : _tKomm;
-    var _gg1to10 = _erwartetKomm>0 && _abRate>0 && Math.abs(_abGG-(_erwartetKomm+10*_abRate))<1.5;
+    // Build 1122: Bei gemischten Sammelbelegen stammt _abRate aus einer fremden
+    // Position (Konsolidierung Z. 2861 nimmt das Maximum je Beleg). Deshalb auch
+    // gegen den EIGENEN Tarif des Termins pruefen.
+    var _gg1to10 = (_erwartetKomm>0 && _abRate>0 && Math.abs(_abGG-(_erwartetKomm+10*_abRate))<1.5)
+                || (_tKomm>0 && _tRate>0 && _abGG>0 && Math.abs(_abGG-(_tKomm+10*_tRate))<1.5);
     var _billT = _tTakes>0&&_tTakes<10?10:_tTakes;
     var _erw = _erwartetKomm>0&&(_abRate||_tRate)>0 ? Math.round((_erwartetKomm+_billT*(_abRate||_tRate))*100)/100 : 0;
     var _kommOk = _gg1to10 || (_erw>0 && Math.abs(_abGG-_erw)<1.5);
@@ -5833,8 +5843,12 @@ function openDetail(id){
     var erwartetKommGage = abgeleitetesProfile ? abgeleitetesProfile.komm : tKomm;
 
     // Grundgage enthält 1-10 Regel wenn: abGG ≈ erwartetKommGage + 10×abRate
-    var ggHat1to10 = erwartetKommGage>0 && abRate>0 && abGG>0
-      && Math.abs(abGG-(erwartetKommGage+10*abRate))<1.5;
+    // Build 1122: zweiter Kandidat mit dem eigenen Tarif des Termins, sonst
+    // greift die Heilung bei gemischten Sammelbelegen nicht (Under Salt Marsh).
+    var ggHat1to10 = (erwartetKommGage>0 && abRate>0 && abGG>0
+                       && Math.abs(abGG-(erwartetKommGage+10*abRate))<1.5)
+                  || (tKomm>0 && tRate>0 && abGG>0
+                       && Math.abs(abGG-(tKomm+10*tRate))<1.5);
     // Oder: dispTakes < 10 → billed as 10
     var billT = tTakes>0&&tTakes<10?10:tTakes;
     var erw1to10 = erwartetKommGage>0&&(abRate||tRate)>0
@@ -7916,6 +7930,16 @@ function dokPeekTermin(terminId){
     openDetail(_terminId);
   };
   setTimeout(_tryOpen, 350);
+}
+
+function memoAufklappen(){
+  var w=document.getElementById('dp-memo-wrap');
+  if(!w) return;
+  if(w.style.display==='none'){
+    w.style.display='';
+    var f=document.getElementById('dp-memo-field');
+    if(f) f.focus();
+  }
 }
 
 function saveMemoFromDetail(terminId){
