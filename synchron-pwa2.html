@@ -3146,6 +3146,39 @@ function _konsolidiereDokumentNachV2(dokId){
       checks.posten = { status:'nicht_pruefbar', grund:'keine Posten-Werte' };
     }
 
+    // (6) Build 1124: TAKE-DECKUNG je Termin.
+    // Warum: Verschmelzen mehrere Positionszeilen eines Belegs faelschlich zu EINER
+    // Session, wandern deren Takes zusammen auf einen Termin. Brutto und USt bleiben
+    // dabei stimmig — nur die Verteilung ist falsch. Kein anderer Check sieht das.
+    // Beleg: VSI 528/20260701 (28.07.2026) — Junction trug 322 Takes, der verknuepfte
+    // Termin 73. Gegen Backup 27.07. geprueft: 127 Junctions mit Takes, genau 1 Treffer
+    // bei Schwelle 20 (2559/20260706, echte Differenz 26 -> 105).
+    // REINE LESEPRUEFUNG — schreibt nichts.
+    try{
+      var _takeAuff = [];
+      junctions_dieser_ab.forEach(function(lnk){
+        var _t = (db.termine||[]).find(function(x){ return x.id === lnk.termin_id; });
+        if(!_t) return;
+        var _abT = parseInt(lnk.takes_anteil) || 0;
+        var _tT  = parseInt(_t.takes) || 0;
+        if(_abT <= 0 || _tT <= 0) return;
+        var _billT = (_tT > 0 && _tT < 10) ? 10 : _tT;   // Zehnerpauschale wie Z. 5102
+        var _diff  = _abT - _billT;
+        if(_diff > 20) _takeAuff.push({ termin:_t.titel||'', dispo:_billT, abgerechnet:_abT, diff:_diff });
+      });
+      if(_takeAuff.length){
+        checks.takeDeckung = {
+          status: 'abweichung',
+          grund: _takeAuff.map(function(x){
+            return x.termin+': '+x.dispo+' disponiert, '+x.abgerechnet+' abgerechnet (+'+x.diff+')';
+          }).join(' · '),
+          hinweis: 'Mehr Takes abgerechnet als disponiert — moeglicherweise wurden mehrere Termine zu einem zusammengefasst.'
+        };
+      } else {
+        checks.takeDeckung = { status:'ok' };
+      }
+    }catch(e){ checks.takeDeckung = { status:'nicht_pruefbar', grund:'Take-Vergleich fehlgeschlagen' }; }
+
     // Build 851: globales GS-Nr-Duplikat → harter Konsistenz-Fehler
     if(_gsDup851){
       checks.gsNrDuplikat = { status:'doppelzaehlung_verdacht',
@@ -4618,7 +4651,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1122';
+  if(elH) elH.textContent = '1124';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -14511,6 +14544,22 @@ function dokAnalyseDoc(d, key, cb){
     +'\n'
     +'  AUCH WENN VERSCHIEDENE DATEN (26.02. und 10.03.) → TROTZDEM monats_abrechn mit 2 sessions!\n'
     +'  NICHT monats_abrechn wenn: nur ein von:/bis: Datum und nur EINE Gutschrift\n'
+    +'\n'
+    +'\n'
+    +'  ⚠ BETRAGSGLEICHE POSITIONSZEILEN NIEMALS VERSCHMELZEN:\n'
+    +'  Zwei Positionszeilen mit DEMSELBEN Betrag sind trotzdem GETRENNTE sessions,\n'
+    +'  wenn sie sich im Datum ODER im Filmtitel ODER in der Rolle unterscheiden.\n'
+    +'  Beispiel (VSI 528/20260701, eine Gutschrift, drei Aufnahmetermine):\n'
+    +'    + Grundgage Streaming 06.07.2026  1 x 85,00   Jose Arcadio / Cien anos de soledad S2\n'
+    +'    + Grundgage Streaming 06.07.2026  1 x 85,00   DANGER / Medusa S2\n'
+    +'    + Grundgage Streaming 07.07.2026  1 x 85,00   DANGER / Medusa S2\n'
+    +'  Das sind DREI Grundgagen fuer DREI Termine — nicht eine.\n'
+    +'  Die zugehoerigen Takegage-Zeilen (73 / 101 / 148 Takes) gehoeren je zu der\n'
+    +'  Grundgage mit GLEICHEM Datum UND GLEICHEM Filmtitel.\n'
+    +'  → sessions: drei Eintraege mit brutto_termin 391.60 / 509.20 / 706.60\n'
+    +'  → NIEMALS Takes addieren (73+101+148=322 waere FALSCH)\n'
+    +'  → typ und Klassifizierung bleiben davon UNBERUEHRT — diese Regel sagt nur,\n'
+    +'    wie Positionszeilen zu sessions gebuendelt werden.\n'
     +'  studio = der KURZNAME des Synchronstudios (z.B. "FFS", "VSI", "Arena", "TNT", "Interopa") — NICHT der Atelierraum\n'
     +'  gutschrift_nr = Gutschrifts-Nr. EXAKT wie auf dem Dokument (z.B. "528/202512", "2449/202603", "3298/20260301")\n'
     +'    → Niemals kürzen oder umformatieren — exakt übernehmen!\n'
