@@ -4651,7 +4651,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1124';
+  if(elH) elH.textContent = '1125';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5464,7 +5464,7 @@ function openDetail(id){
   var memoHtml='<div class="info-card">'
     +'<div class="info-card-header" style="cursor:pointer" onclick="memoAufklappen()">'
       +'<span>Notiz / Memo</span>'
-      +(_memoLeer?'<span style="font-size:10px;color:var(--ink3);font-weight:500">hinzufügen +</span>':'')
+      +(_memoLeer?'<span style="font-size:13px;color:var(--ink3);font-weight:600;line-height:1">+</span>':'')
     +'</div>'
     +'<div id="dp-memo-wrap" style="padding:8px 16px 14px'+(_memoLeer?';display:none':'')+'">'
     +'<textarea id="dp-memo-field" rows="3" placeholder="Notizen zum Termin... (wird automatisch gespeichert)" '
@@ -16994,7 +16994,9 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     // Bei Monatsabrechnungen mit Sessions zählt nur der blaue "Alle übernehmen"-Button
     var isMonatsAbrechn = d.typ==='monats_abrechn' && d.sessions && d.sessions.length;
     if(!isMonatsAbrechn){
-      if(d.mime==='application/pdf') body+='<div style="text-align:center;padding:16px;background:var(--cream2);border-radius:8px;color:#555;font-size:13px">PDF</div>';
+      // Build 1125: PDF-Platzhalter-Kachel entfernt — funktionslos (kein onclick),
+      // die echte Vorschau mit Vollbild steht seit langem am Kopf der Seite.
+      // Zweiter toter Rest derselben Aufraeumaktion wie der Footer-Knopf (Build 1101).
       // Build 1101: Letzter Rest des alten Footer-Knopfes. Zwei Platzhalter im Code
       // (Zeile ~16687 und ~16755) verweisen auf ein Element "dok-footer-confirm", das im
       // Markup nicht mehr existiert — der Knopf wurde dort schon entfernt, hier nicht.
