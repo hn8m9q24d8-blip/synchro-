@@ -1209,7 +1209,30 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="settings-row" onclick="switchView('pers-daten')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" style="flex:none;margin-right:13px" aria-hidden="true" viewBox="0 0 24 24"><defs><filter id="kris32" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris32)"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.6c1.6 1.4 1.6 3.6 0 5.4-1.6-1.8-1.6-4 0-5.4zM6.6 12c1.4-1.6 3.6-1.6 5.4 0-1.8 1.6-4 1.6-5.4 0zM12 17.4c-1.6-1.4-1.6-3.6 0-5.4 1.6 1.8 1.6 4 0 5.4zM17.4 12c-1.4 1.6-3.6 1.6-5.4 0 1.8-1.6 4-1.6 5.4 0z"/></g></svg><div><div class="sr-label">Persönliche Daten</div><div class="sr-sub">Name · Anschrift · Steuernummer</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('bankverbindung')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" style="flex:none;margin-right:13px" aria-hidden="true" viewBox="0 0 24 24"><defs><filter id="kris33" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris33)"><path d="M3.2 17.8 9 8.1l3.4 5.3 2.6-3.2 5.8 7.7z"/><path d="M9 8.2l1.6 2.4 1.4-1.8" opacity=".55"/></g></svg><div><div class="sr-label">Rechnungs-Bankverbindung</div><div class="sr-sub">IBAN für deine Rechnungen</div></div></div><div class="sr-right">›</div></div>
       <div class="settings-row" onclick="switchView('finanzamt')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" style="flex:none;margin-right:13px" aria-hidden="true" viewBox="0 0 24 24"><defs><filter id="kris34" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris34)"><rect x="5.5" y="5.5" width="13" height="13" rx="2.5"/><path d="M12 9v6M9.5 12h5" opacity=".55"/></g></svg><div><div class="sr-label">Finanzamt</div><div class="sr-sub">Steuernummer · zuständiges Amt</div></div></div><div class="sr-right">›</div></div>
+      <div class="settings-row" onclick="switchView('gagensaetze')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 17.5h15M4.5 12.5h15M4.5 7.5h15"/><path d="M8.5 5.6v3.8M14 10.6v3.8M10.5 15.6v3.8" opacity=".5"/></g></svg><div><div class="sr-label">Gagensätze</div><div class="sr-sub">TV · Streaming · Kino · eigene Tarife</div></div></div><div class="sr-right" id="sd-tarife-val" style="font-size:12px;color:var(--ink2)">–</div></div>
       <div class="settings-row" onclick="setBuchhaltungAb()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 6.4h15.6v13.4H4.2z"/><path d="M4.2 10.4h15.6M8.4 4.3v4M15.6 4.3v4"/><path d="M8.2 14.6l2.6 2.6 5-5.3" opacity=".5"/></g></svg><div><div class="sr-label">Buchhaltung ab</div><div class="sr-sub">Ab wann du mit dieser App buchst</div></div></div><div class="sr-right" id="sd-buchab-val" style="font-size:12px;color:var(--ink2)">–</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ GAGENSÄTZE (Build 1126) ═══════════════════════ -->
+<div id="view-gagensaetze" class="view" style="overflow:hidden">
+  <div class="app-header">
+    <div class="header-left" style="display:flex;align-items:center;gap:12px">
+      <div onclick="switchView('stammdaten')" style="font-size:22px;color:var(--ink2);cursor:pointer;padding:4px 8px 4px 0">‹</div>
+      <div class="header-title">Gagensätze</div>
+    </div>
+    <div onclick="tarifNeu()" style="color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">+ Tarif</div>
+  </div>
+  <div class="view-scroll" style="padding:12px 16px 100px;display:flex;flex-direction:column;gap:10px">
+    <div style="font-size:12px;color:var(--ink2);line-height:1.55;padding:2px 2px 4px">
+      Diese Sätze erscheinen als Kacheln im Termin und werden für die Erkennung
+      deiner Abrechnungen verwendet. Änderungen wirken sofort — bereits erfasste
+      Termine behalten ihre gespeicherten Werte.
+    </div>
+    <div id="tarife-liste" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div onclick="tarifeZuruecksetzen()" style="text-align:center;font-size:12px;color:var(--ink3);cursor:pointer;padding:14px 0 4px">
+      Auf Standardsätze zurücksetzen
     </div>
   </div>
 </div>
@@ -1842,7 +1865,7 @@ function ddb(){
     dokumente:[],
     zahlungen:[],
     rechnungen:[],
-    profil:{name:'',beruf:'Synchronsprecher·in',ust:0.07,strasse:'',plz:'',ort:'',iban:'',bic:'',bank:'',steuernr:'',ustid:'',famt:'',svnr:'',kk:''},
+    profil:{name:'',beruf:'Synchronsprecher·in',ust:0.07,strasse:'',plz:'',ort:'',iban:'',bic:'',bank:'',steuernr:'',ustid:'',famt:'',svnr:'',kk:'',tarife:_tarifeStandard()},
     gagenprofile:[],
     gvlSendedaten:[],
     _calImported:[]
@@ -2423,12 +2446,67 @@ function _erkenneTarif(grundgage, takegage){
 //   (C) Voll-Format direkt:       gg=80         → TV mit tk Takes (1:1)
 //   (D) Brutto-Match:             br = std-GG + N×std-Rate → erkannt
 // Liefert null wenn nichts greift (echter Sonderfall).
-function _rekonstruiereTarif(gg, tg, tk, br){
-  var TARIFE = [
-    {name:'TV',        kg:80,  rate:4.00, paket:120},
-    {name:'Streaming', kg:85,  rate:4.20, paket:127},
-    {name:'Kino',      kg:100, rate:5.00, paket:150}
+/* ── Build 1126: EINE Quelle fuer Tarife ───────────────────────────────
+   Vorher standen die Saetze an drei Stellen getrennt: _rekonstruiereTarif
+   (3 Tarife mit Paketwert), kommGageFromRate (5 Tarife) und die Kacheln im
+   Termin-Sheet (hingeschriebene Zeichenketten). Jede Aenderung musste dreimal
+   nachgezogen werden — und fuer Beta-Nutzer mit anderen Saetzen war nichts
+   davon erreichbar.
+
+   kachel:true  = erscheint als Kachel im Termin UND in der Paket-Erkennung.
+                  Das sind genau die drei, die _rekonstruiereTarif bisher kannte.
+   kachel:false = nur fuer kommGageFromRate, wie bisher die zwei Zusatzsaetze.
+                  NICHT in die Paket-Erkennung aufnehmen, sonst aendert sich
+                  das Erkennungsverhalten gegenueber dem Bestand.
+   paketRegel   = gilt die 1-10-Regel? Manche Auftraggeber rechnen ohne sie.
+   paket        = Pauschale fuer bis zu 10 Takes. Fehlt sie, wird sie aus
+                  kommgage + 10 x rate gerechnet.                            */
+function _tarifeStandard(){
+  return [
+    {id:'tv',        name:'TV',         kommgage:80,  rate:4.00, paket:120, paketRegel:true, kachel:true},
+    {id:'streaming', name:'Streaming',  kommgage:85,  rate:4.20, paket:127, paketRegel:true, kachel:true},
+    {id:'kino',      name:'Kino',       kommgage:100, rate:5.00, paket:150, paketRegel:true, kachel:true},
+    {id:'streamingP',name:'Streaming+', kommgage:90,  rate:4.50, paket:null,paketRegel:true, kachel:false},
+    {id:'tvklein',   name:'TV-klein',   kommgage:70,  rate:3.50, paket:null,paketRegel:true, kachel:false}
   ];
+}
+function _tarife(){
+  var t = (typeof db!=='undefined' && db.profil && db.profil.tarife) || null;
+  if(!t || !t.length) return _tarifeStandard();
+  return t.map(function(x){
+    var kg = parseFloat(x.kommgage)||0, r = parseFloat(x.rate)||0;
+    var pk = (x.paket===null||x.paket===undefined||x.paket==='') ? null : (parseFloat(x.paket)||0);
+    return {
+      id:         x.id || (x.name||'').toLowerCase().replace(/[^a-z0-9]/g,''),
+      name:       x.name || '—',
+      kommgage:   kg,
+      rate:       r,
+      paket:      (pk!==null && pk>0) ? pk : (kg>0&&r>0 ? Math.round((kg+10*r)*100)/100 : null),
+      paketRegel: x.paketRegel !== false,
+      kachel:     x.kachel !== false
+    };
+  });
+}
+/* Nur die Kachel-Tarife — diese Menge muss der frueheren TARIFE-Tabelle
+   entsprechen, sonst veraendert sich die Paket-Erkennung. */
+function _tarifeKachel(){
+  return _tarife().filter(function(t){ return t.kachel && t.paket>0; });
+}
+/* Gilt fuer diesen Termin die 1-10-Regel? Ohne passenden Tarif: ja (wie bisher). */
+function _paketRegelGilt(kommgage, rate){
+  var L = _tarife(), i, t;
+  for(i=0;i<L.length;i++){
+    t = L[i];
+    if(Math.abs(t.kommgage - (parseFloat(kommgage)||0)) <= 1
+       && Math.abs(t.rate - (parseFloat(rate)||0)) <= 0.01) return t.paketRegel !== false;
+  }
+  return true;
+}
+
+function _rekonstruiereTarif(gg, tg, tk, br){
+  var TARIFE = _tarifeKachel().map(function(t){
+    return {name:t.name, kg:t.kommgage, rate:t.rate, paket:t.paket};
+  });
   gg = parseFloat(gg)||0;
   tg = parseFloat(tg)||0;
   tk = parseInt(tk)||0;
@@ -4651,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1125';
+  if(elH) elH.textContent = '1127';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5543,17 +5621,42 @@ function openDetail(id){
     +'<div onclick="incrementTake()" style="width:44px;height:44px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent">+</div>'
     +'</div>'
     +'</div>'
-    +'<div style="padding:0 16px 8px;display:flex;gap:8px">'
-    +'<div onclick="setGagePreset(\''+id+'\',80,4)" style="flex:1;background:var(--cream2);border:1.5px solid '+(parseFloat(t.kommgage)===80&&parseFloat(t.rate)===4?'var(--ink2)':'var(--hair)')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:600;color:var(--ink)">TV</div><div style="font-size:11px;color:var(--ink2);margin-top:1px">80€ / 4,00€</div></div>'
-    +'<div onclick="setGagePreset(\''+id+'\',85,4.2)" style="flex:1;background:var(--green2);border:2px solid '+(parseFloat(t.kommgage)===85&&parseFloat(t.rate)===4.2?'var(--accent)':'var(--accent2)')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:600;color:var(--accent)">Streaming</div><div style="font-size:11px;color:var(--ink2);margin-top:1px">85€ / 4,20€</div></div>'
-    +'<div onclick="setGagePreset(\''+id+'\',100,5)" style="flex:1;background:#f2ece3;border:1.5px solid '+(parseFloat(t.kommgage)===100&&parseFloat(t.rate)===5?'var(--warm)':'#e0d3c0')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:600;color:#a67c52">Kino</div><div style="font-size:11px;color:var(--ink2);margin-top:1px">100€ / 5,00€</div></div>'
-    +'<div onclick="openSonderGageSheet(\''+id+'\')" style="flex:1;background:var(--yellow2);border:1.5px solid '+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?'#8a6a3f':'var(--warm)')+';border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
-    +'<div style="font-size:11px;font-weight:700;color:#8a6a3f">Sonder</div>'
-    +'<div style="font-size:11px;color:#555;margin-top:1px">'+(t.kommgage&&t.kommgage!==80&&t.kommgage!==85&&t.kommgage!==100?(t.kommgage+'€'):'individuell')+'</div></div>'
-    +'</div>'
+    /* Build 1126: Kacheln kommen aus _tarife() statt aus hingeschriebenen
+       Zeichenketten. Beta-Nutzer mit anderen Saetzen sehen damit ihre eigenen.
+       Reihenfolge und Farben bleiben wie bisher: erste Kachel neutral, zweite
+       gruen hervorgehoben, dritte warm. Weitere Tarife erben die dritte Farbe. */
+    + (function(){
+        var _tk = _tarifeKachel();
+        var _stile = [
+          {bg:'var(--cream2)', an:'var(--ink2)',  aus:'var(--hair)',    bw:'1.5px', tf:'var(--ink)'},
+          {bg:'var(--green2)', an:'var(--accent)',aus:'var(--accent2)', bw:'2px',   tf:'var(--accent)'},
+          {bg:'#f2ece3',       an:'var(--warm)',  aus:'#e0d3c0',        bw:'1.5px', tf:'#a67c52'}
+        ];
+        var _tKg = parseFloat(t.kommgage), _tR = parseFloat(t.rate);
+        var _istStandard = false;
+        var _html = '<div style="padding:0 16px 8px;display:flex;gap:8px">';
+        _tk.forEach(function(tf, i){
+          var s = _stile[Math.min(i, _stile.length-1)];
+          var aktiv = (_tKg === tf.kommgage && _tR === tf.rate);
+          if(aktiv) _istStandard = true;
+          _html += '<div onclick="setGagePreset(\''+id+'\','+tf.kommgage+','+tf.rate+')"'
+                +  ' style="flex:1;background:'+s.bg+';border:'+s.bw+' solid '+(aktiv?s.an:s.aus)+';'
+                +  'border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
+                +  '<div style="font-size:11px;font-weight:600;color:'+s.tf+'">'+esc(tf.name)+'</div>'
+                +  '<div style="font-size:11px;color:var(--ink2);margin-top:1px">'
+                +  Math.round(tf.kommgage)+'€ / '+tf.rate.toFixed(2).replace('.',',')+'€</div></div>';
+        });
+        /* Sonder ist aktiv, sobald eine Gage gesetzt ist, die zu keinem Tarif passt. */
+        var _sonderAktiv = !!t.kommgage && !_istStandard;
+        _html += '<div onclick="openSonderGageSheet(\''+id+'\')"'
+              +  ' style="flex:1;background:var(--yellow2);border:1.5px solid '+(_sonderAktiv?'#8a6a3f':'var(--warm)')+';'
+              +  'border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
+              +  '<div style="font-size:11px;font-weight:700;color:#8a6a3f">Sonder</div>'
+              +  '<div style="font-size:11px;color:#555;margin-top:1px">'
+              +  (_sonderAktiv ? (Math.round(t.kommgage)+'€') : 'individuell')+'</div>'
+              +  '</div></div>';
+        return _html;
+      })()
     +'<div style="padding:0 16px 10px">'
     +'<button type="button" id="gage-recherche-btn" onclick="terminGageRecherche(\''+id+'\')" style="width:100%;background:#f5f0e8;border:1.5px solid #d4b896;color:#7a5c3a;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">TV / Streaming recherchieren</button>'
     +'<div id="gage-recherche-result" style="margin-top:8px;display:none"></div>'
@@ -8538,14 +8641,11 @@ function erkenneSender(kuerzel){
 }
 
 function kommGageFromRate(takeGage){
-  // Standard Synchron-Tarife (können sich ändern)
-  var tarife = [
-    {rate:4.00, komm:80,  name:'TV'},
-    {rate:4.20, komm:85,  name:'Streaming'},
-    {rate:5.00, komm:100, name:'Kino'},
-    {rate:4.50, komm:90,  name:'Streaming+'},
-    {rate:3.50, komm:70,  name:'TV-klein'}
-  ];
+  // Build 1126: aus _tarife() statt eigener Liste. Standardmaessig dieselben
+  // fuenf Saetze wie vorher — inklusive Streaming+ und TV-klein.
+  var tarife = _tarife().map(function(t){
+    return {rate:t.rate, komm:t.kommgage, name:t.name};
+  });
   // Auch aus db.gagenprofile suchen falls vorhanden
   (db.gagenprofile||[]).forEach(function(gp){
     if(gp.rate>0 && gp.kommgage>0) tarife.push({rate:gp.rate, komm:gp.kommgage, name:gp.name});
@@ -11198,6 +11298,106 @@ function rHeute(){
 
 
 
+/* ══ Build 1126/1127: Gagensätze bearbeiten ════════════════════════════
+   Die Sätze liegen in db.profil.tarife und sind die EINZIGE Quelle für
+   Kacheln, Paket-Erkennung und Ratenzuordnung (_tarife, Z. ~2427).
+   Bestehende Termine behalten ihre gespeicherten kommgage/rate — eine
+   Änderung hier wirkt nur auf neue Eingaben und auf die Erkennung.        */
+function _tarifeSchreiben(list){
+  db.profil = db.profil || {};
+  db.profil.tarife = list;
+  save(db);
+  rGagensaetze();
+  var v = document.getElementById('sd-tarife-val');
+  if(v) v.textContent = list.length + (list.length===1?' Satz':' Sätze');
+}
+function tarifFeld(i, feld, wert){
+  var L = _tarife();
+  if(!L[i]) return;
+  if(feld==='name'){
+    L[i].name = String(wert||'').slice(0,24) || '—';
+  } else if(feld==='paketRegel'){
+    L[i].paketRegel = !!wert;
+  } else if(feld==='kachel'){
+    L[i].kachel = !!wert;
+  } else {
+    var z = parseFloat(String(wert).replace(',','.'));
+    if(isNaN(z) || z < 0) z = 0;
+    L[i][feld] = z;
+    // Paket folgt der Rechnung, solange es nicht ausdrücklich abweicht
+    if(feld==='kommgage' || feld==='rate'){
+      L[i].paket = Math.round((L[i].kommgage + 10*L[i].rate)*100)/100;
+    }
+  }
+  _tarifeSchreiben(L);
+}
+function tarifNeu(){
+  var L = _tarife();
+  if(L.length >= 12){ showToast('Mehr als 12 Sätze werden unübersichtlich'); return; }
+  L.push({id:'t'+Date.now(), name:'Neuer Satz', kommgage:0, rate:0, paket:null, paketRegel:true, kachel:true});
+  _tarifeSchreiben(L);
+}
+function tarifLoeschen(i){
+  var L = _tarife();
+  if(!L[i]) return;
+  if(!confirm('Tarif „'+L[i].name+'" löschen?\n\nBereits erfasste Termine behalten ihre Werte.')) return;
+  L.splice(i,1);
+  _tarifeSchreiben(L);
+}
+function tarifeZuruecksetzen(){
+  if(!confirm('Alle Gagensätze auf die Standardwerte zurücksetzen?\n\nBereits erfasste Termine bleiben unverändert.')) return;
+  _tarifeSchreiben(_tarifeStandard());
+}
+function rGagensaetze(){
+  var box = document.getElementById('tarife-liste');
+  if(!box) return;
+  var L = _tarife();
+  var v = document.getElementById('sd-tarife-val');
+  if(v) v.textContent = L.length + (L.length===1?' Satz':' Sätze');
+  if(!L.length){
+    box.innerHTML = '<div class="empty-state">'+_ukiyo('kuvert')
+      +'<div class="empty-title">Keine Gagensätze</div>'
+      +'<div class="empty-sub">Tippe oben auf „+ Tarif"</div></div>';
+    return;
+  }
+  box.innerHTML = L.map(function(t, i){
+    var inp = 'width:100%;border:1.5px solid var(--hair);border-radius:9px;padding:9px 10px;font-size:14px;font-family:inherit;box-sizing:border-box;outline:none;background:var(--card)';
+    var lbl = 'font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600;margin-bottom:4px';
+    return '<div class="info-card">'
+      + '<div class="info-card-header"><span>'+esc(t.name)+'</span>'
+      +   '<span onclick="tarifLoeschen('+i+')" style="color:var(--clay);cursor:pointer;font-weight:600">Löschen</span></div>'
+      + '<div style="padding:10px 16px 14px;display:flex;flex-direction:column;gap:10px">'
+      +   '<div><div style="'+lbl+'">Bezeichnung</div>'
+      +     '<input type="text" value="'+esc(t.name)+'" style="'+inp+'"'
+      +     ' onchange="tarifFeld('+i+',\'name\',this.value)"></div>'
+      +   '<div style="display:flex;gap:10px">'
+      +     '<div style="flex:1"><div style="'+lbl+'">Grundgage €</div>'
+      +       '<input type="text" inputmode="decimal" value="'+t.kommgage+'" style="'+inp+'"'
+      +       ' onchange="tarifFeld('+i+',\'kommgage\',this.value)"></div>'
+      +     '<div style="flex:1"><div style="'+lbl+'">je Take €</div>'
+      +       '<input type="text" inputmode="decimal" value="'+t.rate+'" style="'+inp+'"'
+      +       ' onchange="tarifFeld('+i+',\'rate\',this.value)"></div>'
+      +   '</div>'
+      +   '<div style="display:flex;gap:10px;align-items:flex-end">'
+      +     '<div style="flex:1"><div style="'+lbl+'">Pauschale 1–10 Takes €</div>'
+      +       '<input type="text" inputmode="decimal" value="'+(t.paket||'')+'" style="'+inp+'"'
+      +       ' onchange="tarifFeld('+i+',\'paket\',this.value)"></div>'
+      +     '<label style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;padding-bottom:9px;cursor:pointer">'
+      +       '<input type="checkbox" '+(t.paketRegel?'checked':'')+' style="width:18px;height:18px;accent-color:var(--accent)"'
+      +       ' onchange="tarifFeld('+i+',\'paketRegel\',this.checked)">1–10-Regel gilt</label>'
+      +   '</div>'
+      +   '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">'
+      +     '<input type="checkbox" '+(t.kachel?'checked':'')+' style="width:18px;height:18px;accent-color:var(--accent)"'
+      +     ' onchange="tarifFeld('+i+',\'kachel\',this.checked)">Als Kachel im Termin zeigen</label>'
+      +   '<div style="font-size:11px;color:var(--ink3);line-height:1.5">'
+      +     (t.paketRegel
+        ? 'Bis 10 Takes werden '+fmtEur(t.paket||0)+' abgerechnet, darüber '+fmtEur(t.rate)+' je weiterem Take.'
+        : 'Jeder Take wird einzeln mit '+fmtEur(t.rate)+' abgerechnet.')
+      +   '</div>'
+      + '</div></div>';
+  }).join('');
+}
+
 function rStandardgagen(){
   var list=document.getElementById('standardgagen-list');
   if(!list)return;
@@ -12235,7 +12435,7 @@ function switchView(v){
     'buchhaltung':'buch','verdienstübersicht':'buch','abrechnungen':'buch','ust-voranmeldung':'buch','dokumente':'buch','mahnwesen':'buch','undo':'buch','holvi-abgleich':'buch',
     'rechnungen':'buch','gagenabrechnungen':'buch','stammdaten':'profil',
     'standardgagen':'profil','voranmeldungen':'profil','statistiken':'profil',
-    'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil',
+    'pers-daten':'profil','bankverbindung':'profil','sozialversicherung':'profil','gagensaetze':'profil',
     'datenschutz':'profil','impressum':'profil',
     'finanzamt':'profil','umsatzsteuer':'profil','sozialabgaben':'profil','jahresabschluss':'buch'
   };
@@ -12265,6 +12465,8 @@ function switchView(v){
   else if(v==='rechnungen'){rRechnungen();}
   else if(v==='stammdaten'){ try{_buchabAnzeigen();}catch(e){} } // static
   else if(v==='standardgagen'){rStandardgagen();}
+  else if(v==='gagensaetze'){rGagensaetze();}
+  else if(v==='stammdaten'){ var _tv=document.getElementById('sd-tarife-val'); if(_tv){ var _n=_tarife().length; _tv.textContent=_n+(_n===1?' Satz':' Sätze'); } }
   else if(v==='pers-daten'){rPersDaten();}
   else if(v==='bankverbindung'){rBankverbindung();}
   else if(v==='umsatzsteuer'){rUstStat();}
