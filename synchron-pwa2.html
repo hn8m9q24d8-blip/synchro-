@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1127';
+  if(elH) elH.textContent = '1129';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -16239,6 +16239,24 @@ function _exifDatum(dataURL){
 // Build 1042: Read-only-Vorschau der erkannten Daten — zeigt NUR gefuellte Felder.
 // Leere Felder (Datum, Regie, Beginn, Ende, Folge ...) werden weggelassen.
 // Klick auf den Header oeffnet den vollen Editor (window._dokEditOpen).
+/* Build 1129: Der Steuersatz stand als "MwSt x%" falsch dran, weil er aus
+   mwst/netto gerechnet wurde. Bei Gutschriften liegt die USt aber AUF der
+   Bruttogage ("Mehrwertsteuer 7% von 1.607,40"), das Netto ist erst nach den
+   SV-Abzuegen. Bei Eigenrechnungen steckt sie IM Betrag.
+   Gegen 137 Belege gemessen: mit SV trifft die Brutto-Regel 125 von 125,
+   ohne SV die Netto-Regel 12 von 12. Dieselbe Weiche wie bei der
+   Auszahlungsformel (Build 1120). */
+function _mwstLabel(d){
+  var m = parseFloat(d.mwst);
+  if(isNaN(m) || m === 0) return 'MwSt \u20ac';
+  if(d.ustSatz) return 'MwSt ' + Math.round(d.ustSatz*100) + '% \u20ac';
+  var sv = (parseFloat(d.kv_abzug)||0)+(parseFloat(d.rv_abzug)||0)+(parseFloat(d.pv_abzug)||0);
+  var bez = Math.abs(sv) > 0.005 ? (parseFloat(d.brutto)||0) : (parseFloat(d.netto)||0);
+  if(!bez) bez = (parseFloat(d.brutto)||0);
+  if(!bez) return 'MwSt \u20ac';
+  return 'MwSt ' + Math.round(Math.abs(m)/Math.abs(bez)*100) + '% \u20ac';
+}
+
 function _dokDispBlock(d){
   // Build 1046: Felder direkt editierbar (kein Extra-Klick noetig). Es werden nur
   // gefuellte Felder gezeigt; Datum erscheint immer (zum Nachtragen). GVL-Werte
@@ -16263,7 +16281,32 @@ function _dokDispBlock(d){
   o+=row('rv_abzug','Rentenvers. (RV) \u20ac',d.rv_abzug||'');
   o+=row('pv_abzug','Pflegevers. (PV) \u20ac',d.pv_abzug||'');
   o+=row('netto','Netto \u20ac',d.netto||'');
+  // Build 1129: mwst steckte nur im Editor (Z. ~16823) — dabei liefert die KI es
+  // in 139 von 140 Dokumenten. Zwischen Netto und Auszahlung, wie auf dem Beleg.
+  // Beschriftung wie im Editor: Satz aus ustSatz, sonst aus mwst/netto gerechnet.
+  // Bei Ausgaben NICHT hier — dort steht der Wert unten als "Vorsteuer x%".
+  if(d.typ!=='ausgabe' && (d.mwst||d.mwst===0) && d.mwst!==''){
+    o+=row('mwst',_mwstLabel(d),d.mwst);
+  }
   o+=row('auszahlung','Auszahlung \u20ac',d.auszahlung||'');
+  // Build 1128: Bei Ausgaben fehlten Kategorie und Vorsteuer in der Leseansicht —
+  // sie standen nur im Editor (Z. ~16836/16846), also erst nach einem Tap auf die
+  // Kopfzeile. Erkannte Werte gehoeren sofort sichtbar; leere Felder bleiben wie
+  // bisher hinter dem Editor.
+  if(d.typ==='ausgabe'){
+    var _katMapD={equipment:'Technik/Equipment',software:'Software/Abos',
+      fahrt:'Fahrtkosten',bewirtung:'Bewirtung',buero:'Büro',weiterbildung:'Weiterbildung',
+      marketing:'Marketing',steuer_recht:'Steuer/Recht',
+      versicherung:'Versicherung',kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
+    if(d.ausgabe_kat) o+=_dispRow('Kategorie', _katMapD[d.ausgabe_kat]||'Sonstiges');
+    var _bruttoD = parseFloat(d.brutto)||0;
+    var _satzD   = d.ustSatz!=null ? d.ustSatz : null;
+    var _vstD    = (d.mwst!=null && d.mwst!=='') ? parseFloat(d.mwst)
+                 : (_satzD!=null && _bruttoD>0 ? Math.round((_bruttoD-_bruttoD/(1+_satzD))*100)/100 : null);
+    if(_vstD!=null && !isNaN(_vstD)){
+      o+=_dispRow('Vorsteuer'+(_satzD!=null?' '+Math.round(_satzD*100)+'%':''), fmtEur(_vstD), 'var(--accent)');
+    }
+  }
   if(d.gvl_staffel||d.gvl_staffel_header) o+=_gvlDispRow('Staffel', d.gvl_staffel||d.gvl_staffel_header, d.id);
   // Build 1081: Liegen GVL-Details vor, ersetzen Kacheln die Einzelzeilen "Folge"/"Takes GVL"
   // — gleiche Optik wie im Kalendertermin. Tippen oeffnet das gewohnte GVL-Menue.
@@ -16818,8 +16861,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       body+=_editRow('pv_abzug','Pflegevers. (PV) €',d.pv_abzug||'');
       body+=_editRow('netto','Netto €',d.netto||'');
       var mwstLabel1='MwSt €';
-      if(d.ustSatz) mwstLabel1='MwSt '+Math.round(d.ustSatz*100)+'% €';
-      else if(d.mwst&&d.netto&&parseFloat(d.netto)>0) mwstLabel1='MwSt '+Math.round((parseFloat(d.mwst)/parseFloat(d.netto))*100)+'% €';
+      mwstLabel1 = _mwstLabel(d);   // Build 1129: war aus mwst/netto gerechnet, s. _mwstLabel
       body+=_editRow('mwst',mwstLabel1,d.mwst||'');
       body+=_editRow('auszahlung','Auszahlung €',d.auszahlung||'');
     }
