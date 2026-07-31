@@ -2770,6 +2770,7 @@ function _konsolidiereDokumentNachV2(dokId){
     // Flag lebt am Dokument (d.ust_frei) und fließt durch jede (Re-)Konsolidierung.
     // steuerfrei ⇒ keine Ausgangssteuer, Basis = volles Brutto, eigene Zeile in der USt-VA.
     v2Ab.steuerfrei          = !!d.ust_frei;
+    v2Ab.drittland           = !!d.ust_drittland;   // Build 1131
     if(v2Ab.steuerfrei){
       v2Ab.ust_betrag = 0;
       v2Ab.ust_satz   = 0;
@@ -4729,7 +4730,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1129';
+  if(elH) elH.textContent = '1133';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7069,12 +7070,44 @@ function gvlDokSave(btn){
 // Dokument und fließt durch jede (Re-)Konsolidierung in dbv2:
 // ust_betrag=0, ust_satz=0, brutto = Bemessungsgrundlage → eigene Zeile
 // "steuerfreie Umsätze" in der USt-VA (Vorgabe Steuerberaterin 06/2026).
+/* Build 1131: Leistung ins Drittland (Bestaetigung Steuerberaterin 29.07.2026
+   zur Netflix-Beteiligungszahlung). Leistungsempfaenger ausserhalb der EU:
+   keine deutsche Umsatzsteuer, aber NICHT dasselbe wie steuerfrei —
+   in der Voranmeldung eine eigene Zeile. Die App kennzeichnet den Beleg nur;
+   die Zuordnung in der Voranmeldung macht die Steuerberatung.
+   Technisch wie ust_frei: ust=0, Brutto = Bemessungsgrundlage. */
+function dokNotizAufklappen(){
+  var w=document.getElementById('dok-notiz-wrap');
+  if(!w) return;
+  if(w.style.display==='none'){
+    w.style.display='';
+    var f=document.getElementById('dok-notiz-field');
+    if(f) f.focus();
+  }
+}
+
+function dokToggleDrittland(dokId){
+  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
+  if(!d) return;
+  try{ pushSnapshotVorAktion('Drittland umschalten'); }catch(e){}
+  d.ust_drittland = !d.ust_drittland;
+  if(d.ust_drittland){ d.mwst = 0; d.ust_frei = false; }
+  save(db);
+  if(d.bestaetigt){
+    try{ _autoKonsolidiereNachBestaetigen(dokId); }catch(e){ console.warn('[1131] Re-Konsolidierung', e); }
+  }
+  showToast(d.ust_drittland
+    ? '✓ Leistung ins Drittland — keine deutsche USt'
+    : 'Drittland aus — MwSt ggf. manuell setzen');
+  dokOpenDetail(dokId);
+}
+
 function dokToggleUstFrei(dokId){
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
   try{ pushSnapshotVorAktion('USt-frei umschalten'); }catch(e){}
   d.ust_frei = !d.ust_frei;
-  if(d.ust_frei) d.mwst = 0;
+  if(d.ust_frei){ d.mwst = 0; d.ust_drittland = false; }   // Build 1131: schliesst sich aus
   save(db);
   if(d.bestaetigt){
     try{ _autoKonsolidiereNachBestaetigen(dokId); }catch(e){ console.warn('[844] Re-Konsolidierung', e); }
@@ -9479,9 +9512,11 @@ function doExportCSV(){
   // Basis: db.dokumente (typ=abrechn/monats_abrechn, bestaetigt)
   // Jedes Dokument = eine Gutschrift = eine CSV-Zeile — keine Doppelungen durch Termine
   rows.push(['=== EINNAHMEN '+jahr+' ===','','','','','','','','']);
-  rows.push(['Zahlungsdatum','Leistungsdatum','Studio','Produktion','Gutschrift-Nr.','Brutto €','SV-Abzüge €','USt '+Math.round(ur*100)+'% €','Auszahlung €']);
+  // Build 1131: Spalte "Art" — kennzeichnet steuerfreie Umsaetze und Leistungen
+  // ins Drittland, damit die Steuerberatung sie in der Voranmeldung zuordnen kann.
+  rows.push(['Zahlungsdatum','Leistungsdatum','Studio','Produktion','Gutschrift-Nr.','Art','Brutto €','SV-Abzüge €','USt '+Math.round(ur*100)+'% €','Auszahlung €']);
 
-  var einnahmenGesamt=0, einnahmenUst=0;
+  var einnahmenGesamt=0, einnahmenUst=0, csvDrittland=0, csvSteuerfrei=0;
 
   // Alle bestätigten Abrechnungs-Dokumente des Jahres
   var csvDoks = (db.dokumente||[]).filter(function(dok){
@@ -9540,27 +9575,36 @@ function doExportCSV(){
       else prod = 'Monats-Gutschrift ('+dok.sessions.length+' Termine)';
     }
 
+    var artCsv = dok.ust_drittland ? 'Drittland (nicht steuerbar)'
+               : (dok.ust_frei ? 'steuerfrei (0%)' : '');
     rows.push([
       dok._csvZahlDat||'',
       dok.datum||'',
       dok.studio||'',
       prod,
       gutNr,
+      artCsv,
       brutto.toFixed(2).replace('.',','),
       sv ? ('-'+sv.toFixed(2).replace('.',',')) : '-',
       mwst.toFixed(2).replace('.',','),
-      auszahlung ? auszahlung.toFixed(2).replace('.',',') : ''
+      auszahlung ? auszahlung.toFixed(2).replace('.',',') : '',
+      (dok.notiz||'').replace(/[\r\n]+/g,' ')   // Build 1133
     ]);
     einnahmenGesamt += brutto;
     einnahmenUst    += mwst;
+    if(dok.ust_drittland) csvDrittland  += brutto;
+    else if(dok.ust_frei) csvSteuerfrei += brutto;
   });
 
-  rows.push(['SUMME Einnahmen','','','','',einnahmenGesamt.toFixed(2).replace('.',','),'','',einnahmenUst.toFixed(2).replace('.',',')]);
+  rows.push(['SUMME Einnahmen','','','','','',einnahmenGesamt.toFixed(2).replace('.',','),'','',einnahmenUst.toFixed(2).replace('.',',')]);
+  // Build 1131: Sondersummen getrennt ausweisen, damit sie nicht in den 7%-Zeilen untergehen
+  if(csvDrittland) rows.push(['davon Leistungen ins Drittland (nicht steuerbar)','','','','','',csvDrittland.toFixed(2).replace('.',','),'','','']);
+  if(csvSteuerfrei) rows.push(['davon steuerfreie Umsätze (0% USt)','','','','','',csvSteuerfrei.toFixed(2).replace('.',','),'','','']);
   rows.push(['','','','','','','','','']);
 
   // ── AUSGABEN ──────────────────────────────────────────────
   rows.push(['=== AUSGABEN '+jahr+' ===','','','','','','','','']);
-  rows.push(['Datum','Beschreibung','Kategorie','Brutto €','Netto €','Vorsteuer €','USt-Satz','','']);
+  rows.push(['Datum','Beschreibung','Kategorie','Brutto €','Netto €','Vorsteuer €','USt-Satz','Notiz','']);
 
   var ausgabenGesamt=0, ausgabenVst=0;
   var katLabels={equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
@@ -9583,7 +9627,9 @@ function doExportCSV(){
       brutto.toFixed(2).replace('.',','),
       netto.toFixed(2).replace('.',','),
       mwst.toFixed(2).replace('.',','),
-      satz,'',''
+      satz,
+      (a.notiz||'').replace(/[\r\n]+/g,' '),   // Build 1133: aus dem Beleg uebernommen
+      ''
     ]);
     ausgabenGesamt+=brutto;
     ausgabenVst+=mwst;
@@ -14238,6 +14284,53 @@ function dokSetKat(kat){
 }
 
 // ── FOOTER BESTÄTIGEN-BUTTON (fester onclick, liest _dokCurrentId) ──────────
+/* Build 1130: Ausgabe erst beim Bestaetigen anlegen.
+   Nimmt die aktuellen Werte des Dokuments (also inkl. Korrekturen, die der
+   Nutzer vor dem Bestaetigen gemacht hat), nicht die der Erstanalyse.
+   Dublettenschutz wie zuvor (Dateiname, sonst Datum + Betrag + Beschreibung). */
+function _ausgabeAusDokAnlegen(d){
+  if(!d || d.typ!=='ausgabe') return;
+  if(d.ausgabeId) return;                       // schon gebucht
+  var brutto = parseFloat(d.brutto)||0;
+  if(!brutto || !d.datum) return;               // ohne Betrag/Datum nicht buchbar
+  var satz   = d.ustSatz!=null ? d.ustSatz : 0.19;
+  var vst    = (d.mwst!=null && d.mwst!=='') ? parseFloat(d.mwst)
+             : Math.round((brutto - brutto/(1+satz))*100)/100;
+  var netto  = (d.netto!=null && d.netto!=='') ? parseFloat(d.netto)
+             : Math.round((brutto - vst)*100)/100;
+  var katMap = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
+    bewirtung:'Bewirtung',buero:'Büro',weiterbildung:'Weiterbildung',marketing:'Marketing',
+    steuer_recht:'Steuer/Recht',versicherung:'Versicherung',
+    kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
+  var kat = (d.ausgabe_kat && katMap[d.ausgabe_kat]) || 'Sonstiges';
+  if(!db.ausgaben) db.ausgaben=[];
+  var dup = db.ausgaben.find(function(x){
+    if(d.dateiname && x.dateiname) return x.dateiname === d.dateiname;
+    return x.datum === d.datum
+        && Math.abs((parseFloat(x.brutto)||0) - brutto) < 0.005
+        && (x.beschr||'') === (d.beschr||'');
+  });
+  if(dup){
+    d.ausgabeId = dup.id;
+    showToast('Ausgabe war bereits erfasst — nicht doppelt gebucht');
+    return;
+  }
+  var agId = 'ag'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  db.ausgaben.push({
+    id:agId, beschr:d.beschr, datum:d.datum,
+    brutto:brutto, netto:netto,
+    ustSatz:satz, vorsteuer:vst,
+    kat:kat, ausgabe_kat_raw:d.ausgabe_kat||'sonstiges',
+    belegImg:(d.mime!=='application/pdf'?(d.thumb||null):null),
+    dateiname:d.dateiname||null,
+    notiz:(d.notiz||''),                       // Build 1133: wandert in den CSV-Export
+    erstelltAm:new Date().toISOString()
+  });
+  d.ausgabeId = agId;
+  delete d._agVorschau;
+  showToast('✓ Ausgabe gebucht · '+fmtEur(brutto)+' · VSt '+fmtEur(vst));
+}
+
 function dokFooterBestaetigen(){
   var d = (db.dokumente||[]).find(function(x){ return x.id===_dokCurrentId; });
   if(!d){ showToast('Kein Dokument ausgewählt'); return; }
@@ -14255,6 +14348,7 @@ function dokBestaetigen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
   _applyEditedFields(d);
+  _ausgabeAusDokAnlegen(d);   // Build 1130: Ausgaben erst hier buchen
   var undoSnap={dokId:d.id,typVorher:d.typ,terminId:d.terminId||null};
   d.bestaetigt=true; d.awaitConfirm=false;
   // dataURL nur löschen wenn kein Split-Dok mehr drauf verweist
@@ -15512,6 +15606,15 @@ function dokAnalyseDoc(d, key, cb){
         else { mwstAg = Math.round((bruttoAg - bruttoAg/(1+ustSatzAg))*100)/100; }
         if(d.netto){ nettoAg = parseFloat(d.netto); }
         else { nettoAg = Math.round((bruttoAg - mwstAg)*100)/100; }
+        // Build 1130: Die Ausgabe wurde hier frueher SOFORT nach der KI-Analyse in
+        // db.ausgaben geschrieben — ohne Bestaetigung, waehrend der Nutzer die
+        // erkannten Werte noch pruefte. Korrekturen am Dokument wirkten danach nicht
+        // mehr auf den bereits gebuchten Eintrag. Gutschriften verlangen umgekehrt
+        // immer ein "Bestaetigen". Jetzt gilt das auch fuer Ausgaben: hier werden die
+        // Werte nur VORGEMERKT, gebucht wird in _ausgabeAusDokAnlegen() beim
+        // Bestaetigen (dokBestaetigen / dokBestaetigenMitTermin).
+        d._agVorschau = { brutto:bruttoAg, netto:nettoAg, ustSatz:ustSatzAg, vorsteuer:mwstAg };
+        if(false){
         if(!db.ausgaben) db.ausgaben=[];
         var agId = 'ag'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
         var katMap = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
@@ -15544,6 +15647,7 @@ function dokAnalyseDoc(d, key, cb){
           erstelltAm:new Date().toISOString()
         });
         d.ausgabeId = agId;
+        }
         }
       }
     }catch(e){ 
@@ -16980,6 +17084,27 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       +'style="width:100%;background:rgba(255,255,255,.7);color:var(--accent);border:1.5px solid var(--accent2);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">'
       +'Falsch klassifiziert? → Typ ändern'
       +'</button></div>';
+    /* Build 1133: Freitext am Beleg. Beim Pruefen der KI-Auswertung ausfuellbar,
+       also genau dann, wenn man sich Gedanken ueber den Beleg macht — nicht erst
+       zum Jahresabschluss. Deckt ab, was kein eigenes Feld hat: Anlass und
+       Teilnehmer bei Bewirtungen, Aufschluesselung von Sammelzahlungen
+       (Netflix: drei Produktionen in einer Summe), Fragen an die Steuerberatung.
+       Wandert in die CSV-Spalte "Notiz" des Jahresexports.
+       Zugeklappt wenn leer, wie beim Termin (Build 1122). */
+    (function(){
+      var _nLeer = !(d.notiz||'').trim();
+      body+='<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #bbf7d0">'
+        +'<div onclick="dokNotizAufklappen()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">'
+          +'<div style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.04em">NOTIZ ZUM BELEG</div>'
+          +(_nLeer?'<div style="font-size:13px;color:var(--ink3);font-weight:600;line-height:1">+</div>':'')
+        +'</div>'
+        +'<div id="dok-notiz-wrap" style="margin-top:8px'+(_nLeer?';display:none':'')+'">'
+          +'<textarea id="dok-notiz-field" rows="3" placeholder="z. B. Anlass und Teilnehmer, Aufschlüsselung, Frage an die Steuerberatung"'
+          +' style="width:100%;border:1.5px solid var(--accent2);border-radius:8px;padding:8px 10px;font-size:13px;'
+          +'font-family:inherit;resize:vertical;box-sizing:border-box;outline:none;background:rgba(255,255,255,.7)">'
+          +esc(d.notiz||'')+'</textarea>'
+        +'</div></div>';
+    })();
     body+='</div>';
 
     // ── Produktions-Info-Box ──
@@ -17321,6 +17446,11 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       body += '<div onclick="dokToggleUstFrei(\''+d.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--cream2);cursor:pointer;touch-action:manipulation">'
         +'<div style="font-size:12px;color:#666">§ USt-frei (0 %)</div>'
         +'<div style="font-size:12px;font-weight:800;color:'+(d.ust_frei?'var(--purple)':'#bbb')+'">'+(d.ust_frei?'✓ steuerfrei':'aus')+'</div>'
+        +'</div>';
+      // Build 1131: Drittland — eigene Zeile in der Voranmeldung, nicht "steuerfrei"
+      body += '<div onclick="dokToggleDrittland(\''+d.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--cream2);cursor:pointer">'
+        +'<div style="font-size:12px;color:#666">Leistung ins Drittland</div>'
+        +'<div style="font-size:12px;font-weight:800;color:'+(d.ust_drittland?'var(--warm)':'#bbb')+'">'+(d.ust_drittland?'✓ Drittland':'aus')+'</div>'
         +'</div>';
     }
     body += '</div>';
@@ -18903,6 +19033,10 @@ function _applyEditedFields(d){
     var el=document.getElementById('dedit-'+f);
     if(el && el.value!=='') d[f]=el.value;
   });
+  // Build 1133: Notiz uebernehmen — auch wenn geleert (anders als die Felder oben,
+  // die bei leerem Wert den Bestand behalten).
+  var _nEl=document.getElementById('dok-notiz-field');
+  if(_nEl) d.notiz = _nEl.value.trim();
   // Takes geändert → gvl_takes_detail letzte Folge + gvl_takes anpassen
   var newTakes = parseInt(d.takes)||0;
   if(newTakes !== oldTakes && newTakes > 0){
@@ -19052,6 +19186,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!d) return;
   _applyEditedFields(d);
+  _ausgabeAusDokAnlegen(d);   // Build 1130: auch auf diesem Pfad buchen
 
   // Snapshot für Undo
   var tSnap = t ? JSON.parse(JSON.stringify(t)) : null;
@@ -19976,13 +20111,18 @@ function rUstVoranmeldung(){
       // Build 844: steuerfreie Umsätze (z.B. GVL Privatkopie) — 0% , keine Ausgangssteuer,
       // brutto = Bemessungsgrundlage für die Zeile "steuerfreie Umsätze" der USt-VA.
       if(a.steuerfrei){ satz=0; ust=0; }
+      // Build 1131: Leistung ins Drittland — keine deutsche USt, aber NICHT steuerfrei.
+      // Eigene Zeile in der Voranmeldung; Zuordnung macht die Steuerberatung.
+      if(a.drittland){ satz=0; ust=0; }
       einnNetto+=brutto; einnUstEcht+=ust;
       var r=abrIdx[a.abrechner_id];
       var nm=r?(r.name||r.anzeigename||''):'';
       var lbl=nm?(a.beleg_nr?nm+' · '+a.beleg_nr:nm):(a.beleg_nr||'(Beleg)');
       einnZeilen.push({
         label: esc(lbl),
-        sub: (a.steuerfrei?'steuerfrei (0%)':(String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||''))),
+        sub: (a.drittland?'Drittland (nicht steuerbar)'
+             :(a.steuerfrei?'steuerfrei (0%)'
+             :(String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||'')))),
         zahlDatum: zd, netto: brutto, ust: ust, ust_satz: satz
       });
     });
@@ -24904,9 +25044,10 @@ function _mev7Buckets(){
     if(!a.zahlungs_datum) return;
     if(a._ueberholt_durch) return;            // Build 825: überholte K4-Korrektur nie zählen
     var m=String(a.zahlungs_datum).slice(0,7);
-    if(!by[m]) by[m]={u7:0,u19:0,k4:0,frei:0,n:0};
+    if(!by[m]) by[m]={u7:0,u19:0,k4:0,frei:0,dl:0,n:0};   // Build 1131: dl = Drittland
     var ust=parseFloat(a.ust_betrag);
-    if(a.steuerfrei){ by[m].frei+=_v2Basis(a); } // Build 1089: Bemessungsgrundlage  // Build 844: Bemessungsgrundlage, keine USt
+    if(a.drittland){ by[m].dl+=_v2Basis(a); }    // Build 1131: nicht steuerbar, eigene Zeile
+    else if(a.steuerfrei){ by[m].frei+=_v2Basis(a); } // Build 1089: Bemessungsgrundlage  // Build 844: Bemessungsgrundlage, keine USt
     else if(String(a.klasse)==='4'){
       if(!(ust>0)) ust=Math.round((parseFloat(a.brutto)||0)*0.07*100)/100;  // K4: 7% auf brutto (Konto 996)
       by[m].k4+=ust;
@@ -24923,10 +25064,11 @@ function _mev7Text(){
     .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
   var L=[]; L.push('═══ PHASE 7 · USt AUS BELEGEN (Ist-Versteuerung §20'+(_mev7ShowVst?', mit Vorsteuer → Zahllast':', ohne Vorsteuer')+') ═══'); L.push('');
   monate.forEach(function(m){
-    var d=by[m]||{u7:0,u19:0,k4:0,frei:0,n:0}; var ds=d.u7+d.u19+d.k4;
+    var d=by[m]||{u7:0,u19:0,k4:0,frei:0,dl:0,n:0}; var ds=d.u7+d.u19+d.k4;
     L.push('── '+m+' ('+(d.n||0)+' Belege) ──');
     L.push('  USt  7%='+d.u7.toFixed(2)+'  19%='+d.u19.toFixed(2)+'  StudioHH='+d.k4.toFixed(2)+'  Σ='+ds.toFixed(2));
     if(d.frei) L.push('  steuerfreie Umsätze='+d.frei.toFixed(2)+' (Bemessungsgrundlage, 0% USt)');
+    if(d.dl)   L.push('  Leistungen ins Drittland='+d.dl.toFixed(2)+' (nicht steuerbar, keine deutsche USt)');
     if(_mev7ShowVst){
       var v=Math.round((vst[m]||0)*100)/100;
       L.push('  − Vorsteuer='+v.toFixed(2)+'   = Zahllast='+(Math.round((ds-v)*100)/100).toFixed(2));
