@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1141';
+  if(elH) elH.textContent = '1142';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -14324,7 +14324,12 @@ function _ausgabeAusDokAnlegen(d){
 function dokFooterBestaetigen(){
   var d = (db.dokumente||[]).find(function(x){ return x.id===_dokCurrentId; });
   if(!d){ showToast('Kein Dokument ausgewählt'); return; }
-  var termin = d.terminId ? (db.termine||[]).find(function(x){ return x.id===d.terminId; }) : null;
+  // Build 1142: _keinTermin hat Vorrang. Beim Netflix-Beleg stand terminId trotz
+  // "Keinen Termin zuordnen" noch auf einem Vorschlag (Medusa 15.07.) — der Router
+  // nahm deshalb den Termin-Pfad und lief in dokMergeIntoTermin.
+  var termin = (!d._keinTermin && d.terminId)
+    ? (db.termine||[]).find(function(x){ return x.id===d.terminId; })
+    : null;
   if(termin){
     dokBestaetigenMitTermin(d.id, termin.id);
   } else {
@@ -25253,6 +25258,9 @@ function dokKeinTerminZuordnen(dokId){
   if(typeof pushSnapshotVorAktion==='function') pushSnapshotVorAktion();
   d._keinTermin = true;
   d.terminId = null;
+  // Build 1142: auch die Vorschlagsauswahl loeschen, sonst setzt der Renderer
+  // beim naechsten Aufbau wieder eine terminId (Z. ~17318 / _dokTermOpt).
+  try{ if(window._dokTermOpt) delete window._dokTermOpt[dokId]; }catch(e){}
   if(Array.isArray(d.sessions)) d.sessions.forEach(function(s){ s.terminId = null; });
   save(db);
   if(typeof dokOpenDetail==='function') dokOpenDetail(dokId);
