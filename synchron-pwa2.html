@@ -4730,7 +4730,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1133';
+  if(elH) elH.textContent = '1135';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -17084,6 +17084,13 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       +'style="width:100%;background:rgba(255,255,255,.7);color:var(--accent);border:1.5px solid var(--accent2);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">'
       +'Falsch klassifiziert? → Typ ändern'
       +'</button></div>';
+    /* Build 1135: Schalterpaar (USt-frei / Drittland) hier wieder entfernt.
+       Es erschien bei JEDEM Abrechnungsbeleg — rund 200 im Jahr — fuer einen
+       Fall, der einmal jaehrlich vorkommt. Das Notizfeld darunter deckt ihn ab,
+       und die Notiz steht im Jahresexport in der Zeile des Belegs.
+       Der Schalter bleibt in der zweiten Karte (Z. ~17451) erreichbar, das
+       Kennzeichen ust_drittland und seine Auswertung in USt-VA, Phase 7 und
+       CSV (Builds 1131/1132) bleiben unveraendert bestehen. */
     /* Build 1133: Freitext am Beleg. Beim Pruefen der KI-Auswertung ausfuellbar,
        also genau dann, wenn man sich Gedanken ueber den Beleg macht — nicht erst
        zum Jahresabschluss. Deckt ab, was kein eigenes Feld hat: Anlass und
