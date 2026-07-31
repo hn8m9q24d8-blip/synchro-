@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1140';
+  if(elH) elH.textContent = '1141';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -19529,8 +19529,16 @@ function dokMergeIntoTermin(d, termin){
         termin.kommgage_differenz = 0;
       }
       // USt aus Abrechnung erkennen
-      if(newAb.mwst&&netto>0){
-        var erkUst=Math.round((newAb.mwst/netto)*100)/100;
+      // Build 1141: stand hier als newAb.mwst — eine Variable aus
+      // dokBestaetigenMonat (Z. ~18744), die in dieser Funktion nicht existiert.
+      // Alter Kopierfehler, schon im Stand 1107 vorhanden; loeste beim Bestaetigen
+      // "ReferenceError: Can't find variable: newAb" aus.
+      // Bezugsgroesse wie in _mwstLabel: mit SV-Abzuegen liegt die USt AUF dem
+      // Brutto, ohne SV steckt sie im Betrag. An 137 Belegen gemessen.
+      var _svDok  = (parseFloat(d.kv_abzug)||0)+(parseFloat(d.rv_abzug)||0)+(parseFloat(d.pv_abzug)||0);
+      var _bezDok = Math.abs(_svDok) > 0.005 ? brutto : netto;
+      if(d.mwst && _bezDok>0){
+        var erkUst=Math.round((Math.abs(parseFloat(d.mwst))/Math.abs(_bezDok))*100)/100;
         if(erkUst>0&&erkUst<=0.2&&(!db.profil||!db.profil.ust)){
           if(!db.profil)db.profil={};
           db.profil.ust=erkUst;
