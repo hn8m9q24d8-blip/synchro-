@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1139';
+  if(elH) elH.textContent = '1140';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7069,6 +7069,32 @@ function gvlDokSave(btn){
 // Dokument und fließt durch jede (Re-)Konsolidierung in dbv2:
 // ust_betrag=0, ust_satz=0, brutto = Bemessungsgrundlage → eigene Zeile
 // "steuerfreie Umsätze" in der USt-VA (Vorgabe Steuerberaterin 06/2026).
+/* Build 1136/1140: schreibt die Notiz sofort ans Dokument — ohne Rendern und
+   ohne Toast, damit es beim Tippen nicht stoert. Ohne das ging der Text verloren,
+   sobald ein Knopf die Ansicht neu aufbaute (z. B. "Keinen Termin zuordnen").
+   Build 1140: Beide Funktionen waren beim Drittland-Rueckbau (1139) versehentlich
+   mitgeloescht worden — sie lagen im geloeschten Bereich. */
+function dokNotizSpeichern(dokId){
+  var f = document.getElementById('dok-notiz-field');
+  if(!f) return;
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d) return;
+  var neu = f.value.trim();
+  if((d.notiz||'') === neu) return;
+  d.notiz = neu;
+  save(db);
+}
+
+function dokNotizAufklappen(){
+  var w = document.getElementById('dok-notiz-wrap');
+  if(!w) return;
+  if(w.style.display === 'none'){
+    w.style.display = '';
+    var f = document.getElementById('dok-notiz-field');
+    if(f) f.focus();
+  }
+}
+
 function dokToggleUstFrei(dokId){
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
