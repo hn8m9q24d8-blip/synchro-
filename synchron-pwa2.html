@@ -2770,7 +2770,6 @@ function _konsolidiereDokumentNachV2(dokId){
     // Flag lebt am Dokument (d.ust_frei) und fließt durch jede (Re-)Konsolidierung.
     // steuerfrei ⇒ keine Ausgangssteuer, Basis = volles Brutto, eigene Zeile in der USt-VA.
     v2Ab.steuerfrei          = !!d.ust_frei;
-    v2Ab.drittland           = !!d.ust_drittland;   // Build 1131
     if(v2Ab.steuerfrei){
       v2Ab.ust_betrag = 0;
       v2Ab.ust_satz   = 0;
@@ -4730,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1135';
+  if(elH) elH.textContent = '1139';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7070,44 +7069,12 @@ function gvlDokSave(btn){
 // Dokument und fließt durch jede (Re-)Konsolidierung in dbv2:
 // ust_betrag=0, ust_satz=0, brutto = Bemessungsgrundlage → eigene Zeile
 // "steuerfreie Umsätze" in der USt-VA (Vorgabe Steuerberaterin 06/2026).
-/* Build 1131: Leistung ins Drittland (Bestaetigung Steuerberaterin 29.07.2026
-   zur Netflix-Beteiligungszahlung). Leistungsempfaenger ausserhalb der EU:
-   keine deutsche Umsatzsteuer, aber NICHT dasselbe wie steuerfrei —
-   in der Voranmeldung eine eigene Zeile. Die App kennzeichnet den Beleg nur;
-   die Zuordnung in der Voranmeldung macht die Steuerberatung.
-   Technisch wie ust_frei: ust=0, Brutto = Bemessungsgrundlage. */
-function dokNotizAufklappen(){
-  var w=document.getElementById('dok-notiz-wrap');
-  if(!w) return;
-  if(w.style.display==='none'){
-    w.style.display='';
-    var f=document.getElementById('dok-notiz-field');
-    if(f) f.focus();
-  }
-}
-
-function dokToggleDrittland(dokId){
-  var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
-  if(!d) return;
-  try{ pushSnapshotVorAktion('Drittland umschalten'); }catch(e){}
-  d.ust_drittland = !d.ust_drittland;
-  if(d.ust_drittland){ d.mwst = 0; d.ust_frei = false; }
-  save(db);
-  if(d.bestaetigt){
-    try{ _autoKonsolidiereNachBestaetigen(dokId); }catch(e){ console.warn('[1131] Re-Konsolidierung', e); }
-  }
-  showToast(d.ust_drittland
-    ? '✓ Leistung ins Drittland — keine deutsche USt'
-    : 'Drittland aus — MwSt ggf. manuell setzen');
-  dokOpenDetail(dokId);
-}
-
 function dokToggleUstFrei(dokId){
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
   try{ pushSnapshotVorAktion('USt-frei umschalten'); }catch(e){}
   d.ust_frei = !d.ust_frei;
-  if(d.ust_frei){ d.mwst = 0; d.ust_drittland = false; }   // Build 1131: schliesst sich aus
+  if(d.ust_frei) d.mwst = 0;
   save(db);
   if(d.bestaetigt){
     try{ _autoKonsolidiereNachBestaetigen(dokId); }catch(e){ console.warn('[844] Re-Konsolidierung', e); }
@@ -9512,11 +9479,11 @@ function doExportCSV(){
   // Basis: db.dokumente (typ=abrechn/monats_abrechn, bestaetigt)
   // Jedes Dokument = eine Gutschrift = eine CSV-Zeile — keine Doppelungen durch Termine
   rows.push(['=== EINNAHMEN '+jahr+' ===','','','','','','','','']);
-  // Build 1131: Spalte "Art" — kennzeichnet steuerfreie Umsaetze und Leistungen
-  // ins Drittland, damit die Steuerberatung sie in der Voranmeldung zuordnen kann.
+  // Build 1131/1139: Spalte "Art" — kennzeichnet steuerfreie Umsaetze.
+  // Die Drittland-Variante ist zurueckgebaut; solche Faelle stehen in der Notiz.
   rows.push(['Zahlungsdatum','Leistungsdatum','Studio','Produktion','Gutschrift-Nr.','Art','Brutto €','SV-Abzüge €','USt '+Math.round(ur*100)+'% €','Auszahlung €']);
 
-  var einnahmenGesamt=0, einnahmenUst=0, csvDrittland=0, csvSteuerfrei=0;
+  var einnahmenGesamt=0, einnahmenUst=0, csvSteuerfrei=0;
 
   // Alle bestätigten Abrechnungs-Dokumente des Jahres
   var csvDoks = (db.dokumente||[]).filter(function(dok){
@@ -9575,8 +9542,7 @@ function doExportCSV(){
       else prod = 'Monats-Gutschrift ('+dok.sessions.length+' Termine)';
     }
 
-    var artCsv = dok.ust_drittland ? 'Drittland (nicht steuerbar)'
-               : (dok.ust_frei ? 'steuerfrei (0%)' : '');
+    var artCsv = dok.ust_frei ? 'steuerfrei (0%)' : '';
     rows.push([
       dok._csvZahlDat||'',
       dok.datum||'',
@@ -9592,13 +9558,11 @@ function doExportCSV(){
     ]);
     einnahmenGesamt += brutto;
     einnahmenUst    += mwst;
-    if(dok.ust_drittland) csvDrittland  += brutto;
-    else if(dok.ust_frei) csvSteuerfrei += brutto;
+    if(dok.ust_frei) csvSteuerfrei += brutto;
   });
 
   rows.push(['SUMME Einnahmen','','','','','',einnahmenGesamt.toFixed(2).replace('.',','),'','',einnahmenUst.toFixed(2).replace('.',',')]);
   // Build 1131: Sondersummen getrennt ausweisen, damit sie nicht in den 7%-Zeilen untergehen
-  if(csvDrittland) rows.push(['davon Leistungen ins Drittland (nicht steuerbar)','','','','','',csvDrittland.toFixed(2).replace('.',','),'','','']);
   if(csvSteuerfrei) rows.push(['davon steuerfreie Umsätze (0% USt)','','','','','',csvSteuerfrei.toFixed(2).replace('.',','),'','','']);
   rows.push(['','','','','','','','','']);
 
@@ -17084,13 +17048,14 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       +'style="width:100%;background:rgba(255,255,255,.7);color:var(--accent);border:1.5px solid var(--accent2);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">'
       +'Falsch klassifiziert? → Typ ändern'
       +'</button></div>';
-    /* Build 1135: Schalterpaar (USt-frei / Drittland) hier wieder entfernt.
-       Es erschien bei JEDEM Abrechnungsbeleg — rund 200 im Jahr — fuer einen
-       Fall, der einmal jaehrlich vorkommt. Das Notizfeld darunter deckt ihn ab,
-       und die Notiz steht im Jahresexport in der Zeile des Belegs.
-       Der Schalter bleibt in der zweiten Karte (Z. ~17451) erreichbar, das
-       Kennzeichen ust_drittland und seine Auswertung in USt-VA, Phase 7 und
-       CSV (Builds 1131/1132) bleiben unveraendert bestehen. */
+    /* Build 1138: Schalterpaar endgueltig aus der Hauptansicht.
+       Die KI setzt ust_frei bei der GVL-Privatkopie selbst (Prompt Z. ~14566,
+       Vorgabe Steuerberatung) — der Schalter waere dort nur Laerm, und bei den
+       uebrigen Belegen ohnehin. Fuer Netflix-Royalties reicht die Notiz, die im
+       Jahresexport in der Zeile des Belegs steht.
+       Build 1139: Auch das Kennzeichen ust_drittland und seine Auswertung sind
+       zurueckgebaut — sie waren ohne Setzweg toter Code. Solche Faelle stehen in
+       der Notiz, die im Jahresexport in der Zeile des Belegs erscheint. */
     /* Build 1133: Freitext am Beleg. Beim Pruefen der KI-Auswertung ausfuellbar,
        also genau dann, wenn man sich Gedanken ueber den Beleg macht — nicht erst
        zum Jahresabschluss. Deckt ab, was kein eigenes Feld hat: Anlass und
@@ -17107,6 +17072,10 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         +'</div>'
         +'<div id="dok-notiz-wrap" style="margin-top:8px'+(_nLeer?';display:none':'')+'">'
           +'<textarea id="dok-notiz-field" rows="3" placeholder="z. B. Anlass und Teilnehmer, Aufschlüsselung, Frage an die Steuerberatung"'
+          /* Build 1136: Ohne dieses onblur ging die Notiz verloren, sobald ein Knopf
+             die Ansicht neu aufbaute (z. B. "Keinen Termin zuordnen") — der Text
+             stand nur im Feld, nicht am Dokument. */
+          +' onblur="dokNotizSpeichern(\''+d.id+'\')"'
           +' style="width:100%;border:1.5px solid var(--accent2);border-radius:8px;padding:8px 10px;font-size:13px;'
           +'font-family:inherit;resize:vertical;box-sizing:border-box;outline:none;background:rgba(255,255,255,.7)">'
           +esc(d.notiz||'')+'</textarea>'
@@ -17236,6 +17205,15 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         + '<div style="font-size:12px;color:var(--ink)">Wird als Einnahme ohne Termin gebucht — kein Aufnahmetermin nötig. USt zählt im Monat des Zahlungseingangs (Ist).</div>'
         + '<button type="button" onclick="dokDochTerminZuordnen(\''+d.id+'\')" style="margin-top:8px;background:#fff;color:var(--ai);border:1.5px solid #E7E3DA;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Doch Termin zuordnen</button>'
         + '</div>';
+      /* Build 1136: Bestaetigen-Knopf. Fehlte hier seit Build 839 — der Toast
+         kuendigte ihn an ("du kannst jetzt bestaetigen"), es gab ihn aber nicht.
+         Stand als Restpunkt in der Uebergabe, aufgetreten am Netflix-Beleg. */
+      body += '<div style="padding:8px 0 20px">'
+        + '<button type="button" onclick="dokFooterBestaetigen()" '
+        + 'style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:14px;'
+        + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
+        + '-webkit-tap-highlight-color:transparent;display:block">'
+        + '✓ Ohne Termin buchen &amp; bestätigen</button></div>';
     } else if(termin){
       // Prüfen ob Termin bereits eine Dispo hat
       var terminHatDispo = !!(termin.dispoImg || (db.dokumente||[]).find(function(x){
@@ -17453,11 +17431,6 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       body += '<div onclick="dokToggleUstFrei(\''+d.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--cream2);cursor:pointer;touch-action:manipulation">'
         +'<div style="font-size:12px;color:#666">§ USt-frei (0 %)</div>'
         +'<div style="font-size:12px;font-weight:800;color:'+(d.ust_frei?'var(--purple)':'#bbb')+'">'+(d.ust_frei?'✓ steuerfrei':'aus')+'</div>'
-        +'</div>';
-      // Build 1131: Drittland — eigene Zeile in der Voranmeldung, nicht "steuerfrei"
-      body += '<div onclick="dokToggleDrittland(\''+d.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--cream2);cursor:pointer">'
-        +'<div style="font-size:12px;color:#666">Leistung ins Drittland</div>'
-        +'<div style="font-size:12px;font-weight:800;color:'+(d.ust_drittland?'var(--warm)':'#bbb')+'">'+(d.ust_drittland?'✓ Drittland':'aus')+'</div>'
         +'</div>';
     }
     body += '</div>';
@@ -20118,18 +20091,13 @@ function rUstVoranmeldung(){
       // Build 844: steuerfreie Umsätze (z.B. GVL Privatkopie) — 0% , keine Ausgangssteuer,
       // brutto = Bemessungsgrundlage für die Zeile "steuerfreie Umsätze" der USt-VA.
       if(a.steuerfrei){ satz=0; ust=0; }
-      // Build 1131: Leistung ins Drittland — keine deutsche USt, aber NICHT steuerfrei.
-      // Eigene Zeile in der Voranmeldung; Zuordnung macht die Steuerberatung.
-      if(a.drittland){ satz=0; ust=0; }
       einnNetto+=brutto; einnUstEcht+=ust;
       var r=abrIdx[a.abrechner_id];
       var nm=r?(r.name||r.anzeigename||''):'';
       var lbl=nm?(a.beleg_nr?nm+' · '+a.beleg_nr:nm):(a.beleg_nr||'(Beleg)');
       einnZeilen.push({
         label: esc(lbl),
-        sub: (a.drittland?'Drittland (nicht steuerbar)'
-             :(a.steuerfrei?'steuerfrei (0%)'
-             :(String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||'')))),
+        sub: (a.steuerfrei?'steuerfrei (0%)':(String(a.klasse)==='4'?'Studio HH (7%)':'K'+(a.klasse||''))),
         zahlDatum: zd, netto: brutto, ust: ust, ust_satz: satz
       });
     });
@@ -25051,10 +25019,9 @@ function _mev7Buckets(){
     if(!a.zahlungs_datum) return;
     if(a._ueberholt_durch) return;            // Build 825: überholte K4-Korrektur nie zählen
     var m=String(a.zahlungs_datum).slice(0,7);
-    if(!by[m]) by[m]={u7:0,u19:0,k4:0,frei:0,dl:0,n:0};   // Build 1131: dl = Drittland
+    if(!by[m]) by[m]={u7:0,u19:0,k4:0,frei:0,n:0};
     var ust=parseFloat(a.ust_betrag);
-    if(a.drittland){ by[m].dl+=_v2Basis(a); }    // Build 1131: nicht steuerbar, eigene Zeile
-    else if(a.steuerfrei){ by[m].frei+=_v2Basis(a); } // Build 1089: Bemessungsgrundlage  // Build 844: Bemessungsgrundlage, keine USt
+    if(a.steuerfrei){ by[m].frei+=_v2Basis(a); } // Build 1089: Bemessungsgrundlage  // Build 844: Bemessungsgrundlage, keine USt
     else if(String(a.klasse)==='4'){
       if(!(ust>0)) ust=Math.round((parseFloat(a.brutto)||0)*0.07*100)/100;  // K4: 7% auf brutto (Konto 996)
       by[m].k4+=ust;
@@ -25071,11 +25038,10 @@ function _mev7Text(){
     .filter(function(v,i,s){return s.indexOf(v)===i;}).sort();
   var L=[]; L.push('═══ PHASE 7 · USt AUS BELEGEN (Ist-Versteuerung §20'+(_mev7ShowVst?', mit Vorsteuer → Zahllast':', ohne Vorsteuer')+') ═══'); L.push('');
   monate.forEach(function(m){
-    var d=by[m]||{u7:0,u19:0,k4:0,frei:0,dl:0,n:0}; var ds=d.u7+d.u19+d.k4;
+    var d=by[m]||{u7:0,u19:0,k4:0,frei:0,n:0}; var ds=d.u7+d.u19+d.k4;
     L.push('── '+m+' ('+(d.n||0)+' Belege) ──');
     L.push('  USt  7%='+d.u7.toFixed(2)+'  19%='+d.u19.toFixed(2)+'  StudioHH='+d.k4.toFixed(2)+'  Σ='+ds.toFixed(2));
     if(d.frei) L.push('  steuerfreie Umsätze='+d.frei.toFixed(2)+' (Bemessungsgrundlage, 0% USt)');
-    if(d.dl)   L.push('  Leistungen ins Drittland='+d.dl.toFixed(2)+' (nicht steuerbar, keine deutsche USt)');
     if(_mev7ShowVst){
       var v=Math.round((vst[m]||0)*100)/100;
       L.push('  − Vorsteuer='+v.toFixed(2)+'   = Zahllast='+(Math.round((ds-v)*100)/100).toFixed(2));
