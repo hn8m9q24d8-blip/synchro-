@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1142';
+  if(elH) elH.textContent = '1143';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8932,8 +8932,13 @@ function exportData(){
   // Build 747: dbv2 mit exportieren — sonst gehen alle Abrechnungen-v2 beim Restore verloren.
   // Das v2-Schema ist seit dem Umbau die Hauptquelle für Jahresabschluss/USt-VA.
   var exportDbv2 = (typeof dbv2 !== 'undefined') ? JSON.parse(JSON.stringify(dbv2)) : null;
+  // Build 1143: _build mitschreiben. Ohne das ist bei einer spaeteren Analyse nicht
+  // feststellbar, welcher Code den Stand erzeugt hat — am 02.08. wurde gegen 1107 aus
+  // dem Projektwissen geprueft, waehrend real 1142 lief.
+  var _bnEl = document.getElementById('heute-build-nr');
   var bundle = {
     _format: 'synchron-bundle-v2',
+    _build: _bnEl ? (_bnEl.textContent||'').trim() : null,
     _exportiert_am: new Date().toISOString(),
     db: exportDb,
     dbv2: exportDbv2
@@ -12724,6 +12729,33 @@ function undoAction(actionId){
           });
         }
         if(action.undoData.dokId && dbv2 && dbv2.abrechnungen){
+          // ─── Build 1143: entferntIds wurde ab Build 776 viermal benutzt (Junctions
+          // sammeln + filtern), aber NIE deklariert, und die dbv2-Loeschung selbst
+          // fehlte komplett. Folge: ReferenceError mitten im try → catch → weder
+          // dbv2-Beleg noch Junction noch Termin-Reset noch Dokument-Loeschung liefen,
+          // und db.actionLog.splice/save(db) am Ende wurden nie erreicht. Der Log-
+          // Eintrag blieb stehen, die Legacy-Filter oben hatten aber schon mutiert.
+          // Simuliert gegen Backup 2026-08-01, Aktion "Dok bestaetigt · Netflix":
+          // 141 Doks / 141 dbv2 / 174 Junctions vorher wie nachher, save-Aufrufe 0,
+          // Toast "entferntIds is not defined". Der Snapshot-Pfad (Build 778) hat das
+          // verdeckt, weil er im selben Session-Fenster immer zuerst griff.
+          // Scope = exakt der Scope der Dokument-Loeschung weiter unten (Dok selbst +
+          // Split-Kinder), sonst bleiben dbv2-Geister ohne PDF zurueck.
+          var _delDokIds = [action.undoData.dokId];
+          (db.dokumente||[]).forEach(function(x){
+            if(x._splitFromPdf === action.undoData.dokId || x._splitGroup === action.undoData.dokId){
+              if(_delDokIds.indexOf(x.id) < 0) _delDokIds.push(x.id);
+            }
+          });
+          var entferntIds = [];
+          dbv2.abrechnungen.forEach(function(a){
+            if(_delDokIds.indexOf(a.pdf_datei_id) >= 0) entferntIds.push(a.id);
+          });
+          if(entferntIds.length){
+            dbv2.abrechnungen = dbv2.abrechnungen.filter(function(a){
+              return entferntIds.indexOf(a.id) < 0;
+            });
+          }
           // Build 776: betroffene Termin-IDs aus den Junctions SAMMELN bevor
           // wir sie löschen — damit wir gleich ALLE Termine zurücksetzen können.
           var _betroffeneTerminIds = [];
@@ -16588,7 +16620,15 @@ function dokOpenDetail(id, _keepEdit){
   } else { img.style.display='none'; }
 
   // Termin holen — falls noch nicht verknüpft, jetzt noch versuchen
-  if(!d.terminId && (d.typ==='dispo'||d.typ==='abrechn') && d.datum){
+  // Build 1143: !d._keinTermin ergaenzt. DAS war die Ursache des Netflix-Falls und
+  // NICHT die Stelle, die 1142 abgesichert hat (dort Router + _dokTermOpt, Z. ~14330
+  // / ~25262). dokKeinTerminZuordnen() nullt terminId und ruft am Ende selbst
+  // dokOpenDetail() auf — diese Zeile setzte die Zuordnung eine Zeile spaeter wieder.
+  // Belegt: Beleg 4164143 (Remittance.pdf, 15.07.2026) hatte im Backup 01.08.
+  // _keinTermin:true UND terminId auf Termin "Medusa" 15.07. Score 12 (Datum +30,
+  // Studio-Mismatch -8, Titel-Mismatch -10) reicht ueber die Schwelle 8, obwohl
+  // "Netflix US"/"Royalties" und "VSI"/"Medusa" beide klar widersprechen.
+  if(!d.terminId && !d._keinTermin && (d.typ==='dispo'||d.typ==='abrechn') && d.datum){
     var _m=dokFindTermin(d.datum, d.studio||'', d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'', null, d.typ==='abrechn');
     if(_m){ d.terminId=_m.id; save(db); }
   }
@@ -25262,6 +25302,25 @@ function dokKeinTerminZuordnen(dokId){
   // beim naechsten Aufbau wieder eine terminId (Z. ~17318 / _dokTermOpt).
   try{ if(window._dokTermOpt) delete window._dokTermOpt[dokId]; }catch(e){}
   if(Array.isArray(d.sessions)) d.sessions.forEach(function(s){ s.terminId = null; });
+  // Build 1143: bereits bestehende Junctions mitloeschen. _konsolidiereDokumentNachV2
+  // macht ausschliesslich Upsert und entfernt nie eine Junction, die nicht mehr
+  // gebraucht wird. Bei einem schon bestaetigten Beleg blieb die alte Verknuepfung
+  // deshalb im Jahresabschluss stehen, auch nachdem terminId genullt war.
+  // Belegt: lnk_msa1fvux_j2t23e (Beleg 4164143 → Termin "Medusa" 15.07.) im Backup
+  // 2026-08-01, obwohl d._keinTermin bereits true war.
+  try{
+    if(typeof dbv2 !== 'undefined' && dbv2 && dbv2.abrechnungen && dbv2.abrechnung_termin_links){
+      var _abIds = dbv2.abrechnungen
+        .filter(function(a){ return a.pdf_datei_id === dokId; })
+        .map(function(a){ return a.id; });
+      if(_abIds.length){
+        dbv2.abrechnung_termin_links = dbv2.abrechnung_termin_links.filter(function(l){
+          return _abIds.indexOf(l.abrechnung_id) < 0;
+        });
+        saveV2(dbv2);
+      }
+    }
+  }catch(e){ console.warn('[1143] Junction-Prune keinTermin:', e); }
   save(db);
   if(typeof dokOpenDetail==='function') dokOpenDetail(dokId);
   showToast('Ohne Termin — du kannst jetzt bestätigen');
