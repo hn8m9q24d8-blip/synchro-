@@ -4051,7 +4051,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Termine leer=Sprecher, Suche=Drehtag, Tag-leer=Drehtag, Merkliste=Mond,
   // Dispos=Skript, Gagen=Kuvert, Zahlungen/Einnahmen=Welle, Rechnungen=Rechnung.
   // Statischer Termine-Slot per Init. Reine Anzeige, kein State.
-  var _te=document.getElementById('termine-empty-art'); if(_te&&!_te.innerHTML) _te.innerHTML=_ukiyo('sprecher');
+  var _te=document.getElementById('termine-empty-art'); if(_te&&!_te.innerHTML) _te.innerHTML=_sumiMikro();
   // Build 925: GVL-Empty=Lampion, Belege-Empty=Klappe nachgezogen (beide
   // mehrteiliges Markup). _ukiyo um lampion+klappe ergaenzt. Damit tragen alle
   // 11 Empty-States der App einen Ukiyo-e-Druck. Reine Anzeige.
@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1143';
+  if(elH) elH.textContent = '1144';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -4951,7 +4951,7 @@ function rTermine(){
       header.textContent=dp?dayNames[dp.getDay()]+', '+fd(calSelectedDate):'';
     }
     if(!dayItems.length){
-      list.innerHTML='<div class="empty-state"><svg viewBox="0 0 320 200" style="width:min(230px,64%);height:auto;display:block;margin:0 auto 4px" aria-hidden="true"><defs><filter id="sumiEmpty" filterUnits="userSpaceOnUse" x="-30" y="-30" width="380" height="280"><feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/><feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/><feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/><feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer><feComposite in="disp" in2="dryA" operator="in" result="torn"/><feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/><feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer><feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/><feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/><feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer><feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge></filter></defs><g filter="url(#sumiEmpty)"><path fill="#201e1a" stroke="none" d="M160 34c-15 0-25 11-26 29l-1 26c0 19 9 32 27 32s26-13 26-32l-1-27c-1-17-10-28-25-28zm0 8c11 0 17 8 18 21l1 26c0 14-6 24-19 24s-19-10-19-24l1-25c1-14 7-22 18-22z" opacity=".95"/><path fill="none" stroke="#8A857C" stroke-width="1.6" stroke-linecap="round" d="M142 60c11-2 25-2 36 0M141 74l38 .3M141 88c12 2 26 2 38 0M143 102l34 .2" opacity=".55" stroke-dasharray="6 2.5 3 3.5"/><path fill="#201e1a" stroke="none" d="M122 90c-3 0-4 3-3 6 4 22 18 36 39 38v22c-11 1-19 4-24 9-2 2 0 5 3 4 12-4 34-4 46 0 3 1 5-2 3-4-5-5-13-8-24-9v-22c21-2 35-16 39-38 1-3-1-6-4-6-2 0-3 2-4 4-4 18-16 29-32 29s-28-11-32-29c-1-2-3-4-7-4z" opacity=".9"/><ellipse cx="118" cy="94" rx="6" ry="4.5" fill="#201e1a" stroke="none" transform="rotate(-24 118 94)" opacity=".9"/></g></svg><div class="empty-title" style="font-family:var(--serif);font-weight:500">Ein freier Tag.</div></div>';
+      list.innerHTML='<div class="empty-state">'+_sumiMikro()+'<div class="empty-title" style="font-family:var(--serif);font-weight:500">Ein freier Tag.</div></div>';
       return;
     }
     list.innerHTML=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
@@ -4973,7 +4973,7 @@ function rTermine(){
     // Show next 5 upcoming
     var upcoming=all.filter(function(t){return t.datum>=ti;}).slice(0,5);
     if(!upcoming.length){
-      list.innerHTML='<div class="empty-state">'+_ukiyo('sprecher')+'<div class="empty-title">Noch keine Termine</div><div class="empty-sub">Tippe auf + um deinen ersten Termin einzutragen.</div></div>';
+      list.innerHTML='<div class="empty-state">'+_sumiMikro()+'<div class="empty-title" style="font-family:var(--serif);font-weight:500">Noch keine Termine</div><div class="empty-sub">Tippe auf + um deinen ersten Termin einzutragen.</div></div>';
     }else{
       list.innerHTML='<div class="section-label" style="margin:12px 16px 4px">Nächste Termine</div>'+upcoming.map(function(t){return tCard(t);}).join('');
     }
@@ -11132,6 +11132,18 @@ function _tusche(name){
     +'<defs><filter id="tuscheIn" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%"> <feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/> <feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/> <feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/> <feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer> <feComposite in="disp" in2="dryA" operator="in" result="torn"/> <feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/> <feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer> <feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/> <feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/> <feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer> <feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge> </filter></defs><g filter="url(#tuscheIn)">'+b+'</g></svg>';
 }
 // Build 924: Ukiyo-e-Drucke als Empty-State-Illustrationen (Moodboard IV).
+function _sumiMikro(){
+  // Build 1143: Termine-Leerzustand vereinheitlicht. Es gab zwei verschiedene
+  // Motive — das ruhende Mikrofon (Build 975) nur bei ausgewaehltem Tag, und
+  // _ukiyo('sprecher') bei Monatsansicht ohne Termine sowie im statischen
+  // Leerzustand. Auf dem iPhone sahen die beiden unterschiedlich aus. Jetzt
+  // ueberall dasselbe Mikrofon. Filter-ID wird pro Aufruf eindeutig, damit
+  // mehrere Instanzen im DOM sich nicht gegenseitig die Referenz klauen.
+  _sumiMikro._n = (_sumiMikro._n||0) + 1;
+  var _id = 'sumiEmpty' + _sumiMikro._n;
+  return '<svg viewBox="0 0 320 200" style="width:min(230px,64%);height:auto;display:block;margin:0 auto 4px" aria-hidden="true"><defs><filter id="'+_id+'" filterUnits="userSpaceOnUse" x="-30" y="-30" width="380" height="280"><feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/><feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" result="disp"/><feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/><feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 0 1 1 1 1 1 1"/></feComponentTransfer><feComposite in="disp" in2="dryA" operator="in" result="torn"/><feTurbulence type="fractalNoise" baseFrequency=".12" numOctaves="2" seed="21" result="cloud"/><feComponentTransfer in="cloud" result="cloudA"><feFuncA type="table" tableValues="0.25 0.55 0.85 1"/></feComponentTransfer><feComposite in="torn" in2="cloudA" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="body"/><feGaussianBlur in="disp" stdDeviation="1.1" result="bleedRaw"/><feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.28"/></feComponentTransfer><feMerge><feMergeNode in="bleed"/><feMergeNode in="body"/></feMerge></filter></defs><g filter="url(#'+_id+')"><path fill="#201e1a" stroke="none" d="M160 34c-15 0-25 11-26 29l-1 26c0 19 9 32 27 32s26-13 26-32l-1-27c-1-17-10-28-25-28zm0 8c11 0 17 8 18 21l1 26c0 14-6 24-19 24s-19-10-19-24l1-25c1-14 7-22 18-22z" opacity=".95"/><path fill="none" stroke="#8A857C" stroke-width="1.6" stroke-linecap="round" d="M142 60c11-2 25-2 36 0M141 74l38 .3M141 88c12 2 26 2 38 0M143 102l34 .2" opacity=".55" stroke-dasharray="6 2.5 3 3.5"/><path fill="#201e1a" stroke="none" d="M122 90c-3 0-4 3-3 6 4 22 18 36 39 38v22c-11 1-19 4-24 9-2 2 0 5 3 4 12-4 34-4 46 0 3 1 5-2 3-4-5-5-13-8-24-9v-22c21-2 35-16 39-38 1-3-1-6-4-6-2 0-3 2-4 4-4 18-16 29-32 29s-28-11-32-29c-1-2-3-4-7-4z" opacity=".9"/><ellipse cx="118" cy="94" rx="6" ry="4.5" fill="#201e1a" stroke="none" transform="rotate(-24 118 94)" opacity=".9"/></g></svg>';
+}
+
 function _ukiyo(name){
   // Build 937: auf Tusche-Silhouetten umgeleitet (Handwerk-Look). Namensmapping.
   var map={sprecher:'mikrofon',drehtag:'drehtag',skript:'skript',welle:'welle',
