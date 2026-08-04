@@ -4729,7 +4729,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1144';
+  if(elH) elH.textContent = '1145';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -24748,7 +24748,35 @@ function _mev6Extract(text){
       else break;
       j++;
     }
-    if(digits.length===8) einzel.push(pref+'/'+digits);
+    if(digits.length===8){
+      einzel.push(pref+'/'+digits);
+      // Build 1145: Fortsetzungs-Tokens direkt nach diesem Einzel-Treffer einsammeln.
+      // Bank-VZ kuerzt bei Sammelueberweisungen den Prefix oft nicht erneut:
+      // "134/20250701, 0801, 0901" statt "134/20250701, 134/20250801, 134/20250901".
+      // Beleg: TNT-Zahlung 23.07.2026, 460,62 EUR — nur der erste von drei GS-Verweisen
+      // wurde erkannt, die anderen beiden fielen unter "kein Slash" durchs Raster und
+      // die Diagnose zeigte faelschlich nur 1 statt 3 Referenzen als BELEG-LUECKE.
+      // Rein additive Erkennung — geht in denselben pick()-Pfad wie jeder ausgeschriebene
+      // Einzel-Beleg, keine neue Vertrauensstufe. Jahreswechsel wird erkannt (Monat faellt
+      // gegenueber Vorgaenger -> Jahr +1). Regression gegen alle 175 echten VZ-Texte im
+      // Backup 2026-08-02: 0 Abweichungen zum Vorher-Zustand.
+      var _lastY=parseInt(digits.substr(0,4),10), _lastM=parseInt(digits.substr(4,2),10), _k=j;
+      while(true){
+        var _k2=_k;
+        while(_k2<text.length && text.charAt(_k2)===' ') _k2++;
+        if(text.charAt(_k2) !== ',') break;
+        _k2++;
+        while(_k2<text.length && text.charAt(_k2)===' ') _k2++;
+        var _cd='';
+        while(_k2<text.length && _cd.length<4 && text.charAt(_k2)>='0' && text.charAt(_k2)<='9'){ _cd+=text.charAt(_k2); _k2++; }
+        if(_cd.length!==4 || (_k2<text.length && text.charAt(_k2)>='0' && text.charAt(_k2)<='9')) break;
+        var _mm=parseInt(_cd.substr(0,2),10);
+        if(_mm<1||_mm>12) break;
+        var _yr=_lastY; if(_mm<_lastM) _yr++;
+        einzel.push(pref+'/'+_yr+_cd);
+        _lastM=_mm; _lastY=_yr; _k=_k2;
+      }
+    }
     else if(digits.length===6) monats.push(pref+'/'+digits);
     else if(digits.length===4 && digits.substr(0,2)==='20' && /^\d{1,3}$/.test(pref)) nnyyyy.push(pref+'/'+digits);
   }
