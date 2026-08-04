@@ -2894,6 +2894,50 @@ function _konsolidiereDokumentNachV2(dokId){
     }
     // ═══════════════════════════════════════════════════════════════
 
+    // ── Build 1146: LÜCKE SCHLIESSEN ─────────────────────────────
+    // Fall TNT 134/20250801 (17.07.2025): KI liest Paketformat "Takegage 1-10
+    // ... 1 x 42,00 = 42,00" nicht als 10 Takes, sondern takes:0/brutto_termin:0.
+    // Die Grundgage (85) bleibt korrekt, die 42 EUR verschwinden spurlos.
+    // Schliesst NUR die Lücke rechnerisch aus bereits gelesenen PDF-Werten:
+    // Gesamt-Beleg-Brutto (d.brutto) minus Summe der bekannten Sessions.
+    // KEIN Tarif-Rateraten — die Rate (take_gage) muss schon an der Session
+    // stehen. Greift nur, wenn GENAU EINE Session in der Gruppe unbekannt ist
+    // und die Ableitung auf eine glatte Take-Zahl fuehrt (Toleranz 0,05).
+    // Regression gegen Backup 2026-08-04 (25 Dokumente, 16 mit >1 Session):
+    // greift bei GENAU 1 von 25 real existierenden Faellen — exakt dem TNT-Fall,
+    // ergibt dort 10 Takes (rechnerisch exakt). Bei allen anderen entweder gar
+    // nicht ausgeloest oder durch die takesGuess>0-Bedingung sauber verworfen.
+    var gruppenSessionsEff = gruppenSessions;
+    (function(){
+      var _total = parseFloat(d.brutto);
+      if(!_total) return;
+      var _zero = [], _sumKnown = 0, _hatBekannte = false;
+      gruppenSessions.forEach(function(s){
+        var b = parseFloat(s.brutto_termin);
+        if(b > 0){ _sumKnown += b; _hatBekannte = true; }
+        else { _zero.push(s); }
+      });
+      if(_zero.length !== 1 || !_hatBekannte) return;
+      var _gap = _total - _sumKnown;
+      var s0 = _zero[0];
+      var _gg = parseFloat(s0.grundgage) || 0;
+      var _rate = parseFloat(s0.take_gage) || 0;
+      if(!_rate) return;
+      var _restTakegage = _gap - _gg;
+      var _takesGuess = _restTakegage / _rate;
+      if(!(_takesGuess > 0) || Math.abs(_takesGuess - Math.round(_takesGuess)) > 0.05) return;
+      // Nur eine LOKALE Kopie patchen — die Roh-Session am Dokument bleibt
+      // unangetastet (Prüfspur erhalten, "geprüft nicht geraten").
+      gruppenSessionsEff = gruppenSessions.map(function(s){
+        if(s !== s0) return s;
+        var kopie = Object.assign({}, s);
+        kopie.brutto_termin = _gap;
+        kopie.takes = Math.round(_takesGuess);
+        kopie._luecke_geschlossen = true; // nur fuer Diagnose, nicht persistiert
+        return kopie;
+      });
+    })();
+
     // Junctions für alle Sessions mit terminId
     if(!dbv2.abrechnung_termin_links) dbv2.abrechnung_termin_links = [];
 
@@ -2906,7 +2950,7 @@ function _konsolidiereDokumentNachV2(dokId){
     // (Grundgage-Zeile + Takegage-Zeile derselben terminId).
     // Hier vorab zusammenfassen, damit pro Termin EINE Junction entsteht.
     var sessionsPerTermin = {};
-    gruppenSessions.forEach(function(s){
+    gruppenSessionsEff.forEach(function(s){
       if(!s.terminId) return;
       var tid = s.terminId;
       if(!sessionsPerTermin[tid]) sessionsPerTermin[tid] = [];
@@ -2924,8 +2968,46 @@ function _konsolidiereDokumentNachV2(dokId){
       var maxRate = 0;                             // Höchste Rate (für Anzeige)
       var maxGG_einzel = 0;                        // Höchste einzelne GG (für _rec)
 
+      // Build 1146: Takes je nach Konstellation summieren oder maximieren.
+      // Ursprung Build 737 (iyuno/Klasse 1b): 2 Sessions = 2 PDF-Zeilen DERSELBEN
+      // Produktion (Grundgage-Zeile + Takegage-Zeile) → Maximum ist richtig,
+      // sonst würde eine leere Zeile die echte Take-Zahl verdoppeln.
+      // Neuer Fall TNT (Kombi-Termin, z.B. "Super Cube + Witch Watch"): mehrere
+      // Sessions mit UNTERSCHIEDLICHEN Titeln am selben Termin sind zwei echte,
+      // additive Produktionen im selben Aufnahmeblock → Summe ist richtig.
+      // Regression gegen Backup 2026-08-04: in den real vorhandenen 16 Mehrfach-
+      // Sessions-Dokumenten teilt sich aktuell KEIN terminId mehrere Sessions
+      // (0 Treffer) — diese Änderung ist für den kompletten Altbestand ein reines
+      // No-Op, wirkt sich nur auf künftig korrekt zusammengelegte Kombi-Termine aus.
+      var _titelInGruppe = {};
+      sList.forEach(function(s){ if(s.titel) _titelInGruppe[s.titel]=1; });
+      var _mehrereTitel = Object.keys(_titelInGruppe).length > 1;
+      var _takesProTitel = {};
+
       sList.forEach(function(s){
-        var sB  = parseFloat(s.brutto)    || 0;
+        // Build 1146 (Fix D): echte Mehrfach-Sessions tragen das Feld brutto_termin,
+        // nicht brutto (das gibt es nur bei der synthetischen Ein-Session-Fallback-
+        // Konstruktion oben in dieser Funktion). sB las bisher IMMER s.brutto —
+        // bei echten KI-Sessions dadurch IMMER 0, hatBrutto IMMER false.
+        // Root-Cause des historischen City-of-God/The-Boys-Befunds (Build 726):
+        // beide Sessions hatten brutto_termin:127 bereits korrekt von der KI
+        // gesetzt (85 Grundgage + 10 Takes × 4,20, "1-10"-Fall), wurde aber nie
+        // gelesen — Junction zeigte 85 statt 127. Kein Rate-Raten noetig, der
+        // Wert war schon da. Verifiziert an Backup 2026-08-04: dok17778810055110yei,
+        // Sessions "City of God 1"/"The Boys -5-", beide brutto_termin=127.
+        //
+        // SPERRE: Termin "Happy Valley 3" (Taunus, 2229/202603) im selben Backup
+        // zeigt denselben Effekt (80 → 548), ABER dort steht am Termin bereits
+        // differenz_geklaert:true vom 04.05.2026 — eine fruehere MANUELLE
+        // Pruefung/Entscheidung. Automatisch drueberschreiben waere falsch,
+        // selbst wenn der rechnerische Wert vermutlich richtiger ist. Bei
+        // bereits geklaerten Terminen bleibt deshalb der bisherige Rechenweg
+        // (summeGG+summeTakegage unten) aktiv, s.brutto_termin wird ignoriert.
+        var _termGeklaert = (function(){
+          var t = (db.termine||[]).find(function(x){ return x.id === s.terminId; });
+          return t && t.differenz_geklaert === true;
+        })();
+        var sB  = _termGeklaert ? 0 : (parseFloat(s.brutto_termin) || parseFloat(s.brutto) || 0);
         var sGG = parseFloat(s.grundgage) || 0;
         var sR  = parseFloat(s.take_gage) || 0;
         var sT  = parseInt(s.takes)       || 0;
@@ -2935,9 +3017,17 @@ function _konsolidiereDokumentNachV2(dokId){
           if(sGG > maxGG_einzel) maxGG_einzel = sGG;
         }
         if(sT > 0 && sR > 0){ summeTakegage += sT * sR; hatTakegage = true; }
-        if(sT > anyTakes) anyTakes = sT;
+        if(_mehrereTitel){
+          var _tk = s.titel || '';
+          if(sT > (_takesProTitel[_tk]||0)) _takesProTitel[_tk] = sT; // pro Titel: Maximum (Split-Zeilen-Schutz bleibt)
+        } else {
+          if(sT > anyTakes) anyTakes = sT; // unveränderter Alt-Pfad: ein Titel, Maximum
+        }
         if(sR > maxRate)  maxRate  = sR;
       });
+      if(_mehrereTitel){
+        anyTakes = Object.keys(_takesProTitel).reduce(function(sum,k){ return sum + _takesProTitel[k]; }, 0);
+      }
 
       // bruttoAnteilFinal: bevorzugt explizit gelesene Brutto-Summe (PDF-Wert).
       // Sonst: Summe der einzelnen Posten (GG + Takegage). Beides aus dem PDF gelesen.
@@ -3194,7 +3284,19 @@ function _konsolidiereDokumentNachV2(dokId){
     // (5) Posten-Summe pro GNR (Σ alle Sessions: grundgage + takes×rate) ≈ ab.brutto
     var postenSumme = 0;
     gruppenSessions.forEach(function(s){
-      var sB  = parseFloat(s.brutto)    || 0;
+      // Build 1146 (Fix D): gleicher Feldnamen-Bug wie im Pairing-Block —
+      // hier las die Konsistenzprüfung selbst nie den echten Wert und konnte
+      // Faelle wie City of God/The Boys (85 statt 127) deshalb nie als
+      // Abweichung erkennen. Nach dem Fix können hier bei bestehenden,
+      // bereits bestätigten Belegen NEUE Warnungen auftauchen — das sind keine
+      // neuen Fehler, sondern bisher verdeckte, jetzt sichtbar gemachte.
+      // Gleiche Sperre wie im Pairing-Block: bei differenz_geklaert:true nicht
+      // erneut anmahnen, was schon geprueft wurde.
+      var _termGeklaertPS = (function(){
+        var t = (db.termine||[]).find(function(x){ return x.id === s.terminId; });
+        return t && t.differenz_geklaert === true;
+      })();
+      var sB  = _termGeklaertPS ? 0 : (parseFloat(s.brutto_termin) || parseFloat(s.brutto) || 0);
       var sGG = parseFloat(s.grundgage) || 0;
       var sR  = parseFloat(s.take_gage) || 0;
       var sT  = parseInt(s.takes)       || 0;
@@ -4729,7 +4831,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1145';
+  if(elH) elH.textContent = '1146';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18231,12 +18333,16 @@ function dokLinkCancel(){
 function dokSessionGotoKalender(dokId, si){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions||!d.sessions[si]) return;
-  // Build 771: Inline-Sheet NUR für Studio Hamburg. Alle anderen Studios
-  // behalten den bewährten Kalender-Weg unverändert (User: "alles andere geht").
-  if(d.studio !== 'Studio Hamburg'){
-    _dokSessionGotoKalenderLegacy(dokId, si);
-    return;
-  }
+  // Build 1146: Gate entfernt. War seit Build 771 auf Studio Hamburg beschränkt
+  // ("alle anderen Studios behalten den bewährten Kalender-Weg") — der Legacy-Weg
+  // (_dokSessionGotoKalenderLegacy) zeigt aber keine Kandidatenliste, nur einen
+  // Banner + rohe Kalenderansicht, in der man den richtigen Termin selbst suchen
+  // muss. Realer Fall TNT 17.07.2025: Session "Super Cube" landete automatisch am
+  // falschen Termin (EVA Franklinstr., anderes Studio) statt am bereits
+  // bestehenden Kombi-Termin "TNT / Super Cube + Witch Watch" — die App warnte
+  // korrekt ("Titel weicht ab"), bot aber keinen bequemen Weg zur Korrektur.
+  // Diese Funktion selbst entscheidet nichts automatisch — sie zeigt nur
+  // Kandidaten, Auswahl bleibt manuell (dokSessionLinkSheetPick).
   var s=d.sessions[si];
   _pendingDokLink=dokId;
   _pendingSessionIdx=si;
