@@ -4831,7 +4831,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1146';
+  if(elH) elH.textContent = '1147';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13881,6 +13881,38 @@ function _titelAehnlich(a, b){
     var norm=function(x){ return String(x||'').toLowerCase()
       .replace(/\b(s\d+|staffel\s*\d+|folge\s*\d+|ep\.?\s*\d+|teil\s*\d+)\b/g,' ')
       .replace(/[^a-z0-9äöüß]+/g,' ').trim(); };
+
+    // Build 1147 (Fix F): Kombi-Termintitel zerlegen. Dispo-Bezeichnungen nennen
+    // bei zwei Produktionen im selben Aufnahmeblock BEIDE Titel, getrennt durch
+    // " + " und oft mit Studio-Praefix davor:
+    //   "TNT / Super Cube + Witch Watch"
+    // Bisher wurde der ganze String als EIN Titel verglichen — "Super Cube" gegen
+    // "TNT / Super Cube + Witch Watch" scheiterte an der Wortueberschneidungs-
+    // Pruefung nicht, aber der umgekehrte Fall und die Praefix-Heuristik wurden
+    // unzuverlaessig. Jetzt wird jeder Teiltitel einzeln geprueft; passt einer,
+    // gilt der Titel als aehnlich. Rein additiv: kann nur MEHR Treffer liefern,
+    // nie einen bisherigen Treffer entfernen.
+    // Verifiziert an Backup 2026-08-04: genau 1 von 376 Terminen hat einen
+    // "+"-Kombititel (17.07.2025 "TNT / Super Cube + Witch Watch") — die
+    // Aenderung ist fuer den gesamten uebrigen Bestand ein No-Op.
+    var _teile=function(x){
+      var s=String(x||'');
+      // Studio-Praefix "XYZ / " abtrennen, falls vorhanden (nur erster Slash)
+      var m=s.match(/^[^\/]{1,20}\/(.+)$/);
+      if(m) s=m[1];
+      return s.split(/\s\+\s/).map(function(p){ return norm(p); })
+              .filter(function(p){ return p.length>0; });
+    };
+    var teileA=_teile(a), teileB=_teile(b);
+    if(teileA.length>1 || teileB.length>1){
+      for(var ia=0; ia<teileA.length; ia++){
+        for(var ib=0; ib<teileB.length; ib++){
+          var pa=teileA[ia], pb=teileB[ib];
+          if(pa===pb || pa.indexOf(pb)>=0 || pb.indexOf(pa)>=0) return true;
+        }
+      }
+    }
+
     var A=norm(a), B=norm(b);
     if(!A || !B) return true;                 // nichts vergleichbar -> nicht stoeren
     if(A===B || A.indexOf(B)>=0 || B.indexOf(A)>=0) return true;
@@ -16400,6 +16432,25 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     // gleichen Tag + Studio) der Titel klar den Ausschlag gibt.
     if(titel && t.titel){
       var ov=_studioScore(titel,t.titel);
+      // Build 1147 (Fix F2): Bei Kombi-Termintiteln ("TNT / Super Cube + Witch
+      // Watch") zusaetzlich jeden Teiltitel einzeln bewerten und den besten Wert
+      // nehmen. Der Gesamtstring verwaessert sonst die Aehnlichkeit so stark, dass
+      // "Super Cube" gegen den eigenen Kombi-Termin schlechter abschneidet als
+      // gegen einen fremden Termin am selben Tag (realer Fall 17.07.2025: Session
+      // landete bei EVA statt beim TNT-Kombi-Termin). Nur nach oben korrigierend —
+      // ein bereits hoher ov bleibt unveraendert, es kann kein Treffer verloren
+      // gehen. 1 von 376 Terminen im Backup 2026-08-04 hat so einen Titel.
+      if(String(t.titel).indexOf(' + ') >= 0){
+        var _roh=String(t.titel);
+        var _pm=_roh.match(/^[^\/]{1,20}\/(.+)$/);
+        if(_pm) _roh=_pm[1];
+        _roh.split(/\s\+\s/).forEach(function(_teil){
+          _teil=String(_teil||'').trim();
+          if(!_teil) return;
+          var _ovT=_studioScore(titel, _teil);
+          if(_ovT > ov) ov=_ovT;
+        });
+      }
       if(ov >= 0.85) sc+=22;        // Praktisch exakter Match → starker Bonus
       else if(ov >= 0.5) sc+=Math.round(ov*20); // Klarer Match
       else if(ov >= 0.2) sc+=Math.round(ov*8);  // Schwacher Match
@@ -17330,8 +17381,20 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         var matchColor = isDone ? 'var(--ink2)' : (_v1099Verbucht ? 'var(--ink2)' : (_v1099TitelWeicht ? 'var(--orange)' : (tm?'var(--accent)':'var(--orange)')));
         var matchBg    = isDone ? 'var(--card)' : (_v1099Verbucht ? 'var(--card)'  : (_v1099TitelWeicht ? 'var(--orange2)' : (tm?'var(--green2)':'var(--orange2)')));
         var matchBorder= isDone ? 'var(--hair)' : (_v1099Verbucht ? 'var(--hair)'  : (_v1099TitelWeicht ? '#e7dbc6' : (tm?'var(--accent2)':'#e7dbc6')));
+        // Build 1147 (Fix E): Bei "Titel weicht ab" fuehrt Tippen jetzt in die
+        // Kandidatenliste (dokSessionGotoKalender) statt in die Peek-Vorschau des
+        // bereits (falsch) zugeordneten Termins.
+        // Realer Fall TNT 134/20250801: Session "Super Cube" 17.07.2025 war
+        // automatisch dem EVA-Termin (anderes Studio, 09:30) zugeordnet statt dem
+        // TNT-Kombi-Termin "TNT / Super Cube + Witch Watch" (12:20). Die App warnte
+        // korrekt, aber JEDER Weg zur Korrektur war blockiert: solange irgendein
+        // Termin zugeordnet war, oeffnete die Zeile nur die Peek-Vorschau.
+        // Build 1146 (Fix A) hatte nur das Studio-Hamburg-Gate in
+        // dokSessionGotoKalender entfernt — half hier nicht, weil die Funktion
+        // gar nicht erst erreicht wurde. Gruener Haken-Fall bleibt unveraendert
+        // bei Peek, damit korrekte Zuordnungen nicht schwerer bedienbar werden.
         var sessionOnclick = isDone ? '' :
-          (tm
+          ((tm && !_v1099TitelWeicht)
             ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
             : ' onclick="dokSessionGotoKalender(\''+d.id+'\','+si+')"');
         var statusLabel = isDone
