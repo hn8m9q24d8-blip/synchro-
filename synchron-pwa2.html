@@ -2675,6 +2675,23 @@ function _konsolidiereDokumentNachV2(dokId){
     var daten = gruppenSessions.map(function(s){return s.datum;}).filter(Boolean).sort();
     var vonDat = daten[0] || d.datum || '';
     var bisDat = daten[daten.length-1] || d.datum || '';
+    // Build 1149: Letzter Fallback — Datum des verknuepften Termins.
+    // Belege ohne Sessions UND ohne eigenes Datum (typisch: Honorarvereinbarungen
+    // als Foto/Scan, bei denen die KI kein Aufnahmedatum findet) blieben bisher
+    // ganz ohne Leistungsdatum, obwohl d.terminId sauber auf einen Kalendertermin
+    // zeigt. Realer Fall: AS-OD-26-30 (AS Hoerspiel, 1.200 EUR netto) — Junction
+    // auf Termin 02.06.2026 "Hoerspiel" vorhanden, leistungs_datum_von aber "".
+    // Der Jahresabschluss filtert solche Belege normalerweise raus; hier rettete
+    // nur das separat gesetzte steuer_jahr die Anzeige — Zufall, nicht Logik.
+    // Rein additiv: greift ausschliesslich, wenn beide bisherigen Quellen leer
+    // sind. Es wird NICHTS geraten, das Datum kommt aus dem verknuepften Termin.
+    if(!vonDat && d.terminId){
+      var _tLeist = (db.termine||[]).find(function(t){ return t.id === d.terminId; });
+      if(_tLeist && _tLeist.datum){
+        vonDat = _tLeist.datum;
+        if(!bisDat) bisDat = _tLeist.datum;
+      }
+    }
     var leistMonat = vonDat ? vonDat.slice(0,7) : null;
 
     // Gesamt-Finanzwerte: aus Dokument-Ebene (nicht aus Sessions zusammensummieren —
@@ -4831,7 +4848,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1148';
+  if(elH) elH.textContent = '1149';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
