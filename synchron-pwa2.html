@@ -2523,7 +2523,25 @@ function _paketRegelGilt(kommgage, rate){
     if(Math.abs(t.kommgage - (parseFloat(kommgage)||0)) <= 1
        && Math.abs(t.rate - (parseFloat(rate)||0)) <= 0.01) return t.paketRegel !== false;
   }
-  return true;
+  // Build 1151: Ohne passenden Tarif gilt die 1-10-Regel NICHT mehr (vorher: doch).
+  // Die 1-10-Regel ist Bestandteil des aktuellen Tarifvertrags. Eine Gage, die in
+  // keiner hinterlegten Tarifzeile steht, folgt per Definition einem anderen (oder
+  // gar keinem) Tarif — dann die Regel trotzdem anzuwenden, ist eine Annahme ueber
+  // einen Vertrag, den die App nicht kennt, und erfindet Betraege.
+  // Realer Fehlerfall (VSI 2012, Beleg 528/20120301): Grund-Gage 60,00 + 7 Takes
+  // x 3,00 = 81,00 EUR laut PDF. Die App zeigte "7 (->10) Takes x 3,00" und damit
+  // 90,00 EUR — 9,00 EUR zu viel, weil 60/3,00 in keinem Tarif steht und der
+  // Fallback die Regel bejahte.
+  // Regressionslage: alle fuenf Standardtarife (TV 80/4,00 · Streaming 85/4,20 ·
+  // Kino 100/5,00 · Streaming+ 90/4,50 · TV-klein 70/3,50) haben paketRegel:true
+  // und liefern ihr Ergebnis ueber den Tariftreffer OBERHALB dieser Zeile. Der
+  // Fallback wird von ihnen nie erreicht — die Aenderung kann heutige Belege
+  // nicht beeinflussen.
+  // Bewusste Nebenwirkung: Eine kuenftige Sondergage MIT 1-10-Regel, die nicht als
+  // Tarif angelegt ist, wird jetzt zu niedrig statt zu hoch gerechnet. Das ist die
+  // sicherere Richtung — zu wenig faellt beim Beleg-Abgleich auf, zu viel nicht.
+  // Abhilfe in dem Fall: Tarif im Profil anlegen.
+  return false;
 }
 
 function _rekonstruiereTarif(gg, tg, tk, br){
@@ -4871,7 +4889,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1150';
+  if(elH) elH.textContent = '1151';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13823,6 +13841,32 @@ function rDokumente(){
         ueberholtBadge = '<span style="font-size:10px;font-weight:700;color:#8a6a3f;background:var(--orange2);border:1px solid var(--orange);padding:2px 6px;border-radius:6px">⚠ überholt</span>';
       }
     } catch(e){ /* silent */ }
+    // ── Build 1151: Split-Badge "2 von 5" in der Listenzeile ──────────────
+    // _splitIdx/_splitTotal existieren seit Build 726, wurden aber nur im
+    // Detail-Titel (Z. ~16835) und in Toasts nach dem Bestaetigen genutzt.
+    // In der Liste erschienen mehrere Gutschriften aus EINER PDF als
+    // zusammenhanglose Eintraege ohne erkennbare Reihenfolge.
+    // Zusaetzlich: fehlende Geschwister werden erkannt und markiert. Realer Fall
+    // VSI 2012 (Abrechnung_528_2.pdf): _splitTotal=5, vorhanden nur _splitIdx
+    // 1,2,3,4 — Index 0 (Beleg 528/20120301, Poupoupidou, 81,00 EUR) fehlte
+    // komplett. Ohne Nummerierung war das in der Liste nicht zu sehen.
+    var splitBadge = '';
+    try {
+      if(d._splitGroup && d._splitTotal > 1){
+        var _geschwister = (db.dokumente||[]).filter(function(x){
+          return x._splitGroup === d._splitGroup;
+        });
+        var _fehlt = _geschwister.length < d._splitTotal;
+        var _farbe  = _fehlt ? '#8a6a3f' : 'var(--ink3)';
+        var _bg     = _fehlt ? 'var(--orange2)' : 'transparent';
+        var _border = _fehlt ? '1px solid var(--orange)' : '1px solid transparent';
+        splitBadge = '<span style="font-size:10px;font-weight:700;color:'+_farbe
+          + ';background:'+_bg+';border:'+_border+';padding:2px 6px;border-radius:6px">'
+          + ((d._splitIdx||0)+1) + ' von ' + d._splitTotal
+          + (_fehlt ? ' ⚠ ' + (d._splitTotal - _geschwister.length) + ' fehlt' : '')
+          + '</span>';
+      }
+    } catch(e){ /* silent */ }
     html += '<div onclick="dokOpenDetail(\''+d.id+'\')" style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair);cursor:pointer;background:var(--card)'+(_isUeberholt ? ';opacity:.7' : '')+'">'
       // Thumbnail
       +(d.dataURL && d.mime!=='application/pdf'
@@ -13832,6 +13876,7 @@ function rDokumente(){
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap">'
       +'<span style="font-size:10px;font-weight:700;color:'+t.color+';background:'+t.bg+';border:1px solid '+t.border+';padding:2px 6px;border-radius:6px">'+t.label+'</span>'
+      +splitBadge
       +ueberholtBadge
       +(linked?'<span style="font-size:10px;font-weight:700;color:'+linkedColor+'">'+linked+'</span>':'<span style="font-size:10px;color:var(--ink3);font-weight:500">nicht zugeordnet</span>')
       +'</div>'
