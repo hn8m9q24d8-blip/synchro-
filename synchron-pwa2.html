@@ -4889,7 +4889,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1151';
+  if(elH) elH.textContent = '1152';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9106,7 +9106,22 @@ function exportData(){
   var blob=new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='synchron-backup-'+(new Date().toISOString().slice(0,10))+'.json';
+  // Build 1152: Uhrzeit im Dateinamen. Vorher hiessen ALLE Exporte eines Tages
+  // gleich ("synchron-backup-2026-08-05.json"). iOS legt gleichnamige Dateien
+  // nebeneinander ab (" 2.json", " (1).json") statt zu ueberschreiben — beim
+  // spaeteren Hochladen greift man dann leicht eine aeltere Fassung und merkt es
+  // nicht, weil der Name identisch aussieht. Real passiert am 05.08.2026: drei
+  // Anlaeufe, drei Mal ein Export von 14:56 / 14:59 / 15:03 statt des gemeinten.
+  // Format bewusst sortierfreundlich (JJJJ-MM-TT-HHMM) — alphabetische Sortierung
+  // entspricht damit der zeitlichen. Der Import prueft ausschliesslich den INHALT
+  // (_format-Feld in importData, Z. ~9115), nie den Dateinamen — die Aenderung
+  // kann also keinen bestehenden Backup-Import brechen, auch nicht bei alten
+  // Dateien mit dem kurzen Namen.
+  var _ts = new Date();
+  var _p2 = function(n){ return (n<10?'0':'')+n; };
+  a.download = 'synchron-backup-' + _ts.getFullYear() + '-' + _p2(_ts.getMonth()+1)
+             + '-' + _p2(_ts.getDate()) + '-' + _p2(_ts.getHours()) + _p2(_ts.getMinutes())
+             + '.json';
   a.click();
   try{localStorage.setItem('letztes_backup', new Date().toISOString());}catch(e){}
   var bb=document.getElementById('backup-banner'); if(bb) bb.remove();
