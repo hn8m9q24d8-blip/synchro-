@@ -2348,6 +2348,29 @@ function _klassifiziereAbrechnung(ab, dok){
   // Klasse 2: toneworx — Beleg-Nr TW-NNNN-YYYY
   if(/\btw[-_\s]?\d{3,4}[-_\s]?\d{4}\b/i.test(gnr) || studio.indexOf('toneworx') >= 0) return '2';
 
+  // ── Build 1150: SESAM-GNR ZUERST ────────────────────────────────
+  // Eine formal gueltige SESAM-Gutschriftsnummer (NNN/YYYYMMNN bzw. NNN/YYYYMM)
+  // ist ein HARTES Signal: solche Nummern vergibt das Studio, nicht der Sprecher.
+  // Sie muss deshalb Vorrang vor allen Klasse-3-Heuristiken haben.
+  //
+  // Realer Fehlerfall (TNT, 05.08.2026): Datei "Tim Knauer_Abrechnungen.pdf",
+  // GS-Nrn 134/20250701 · 134/20250801 · 134/20250901. Die Profilnamen-Heuristik
+  // weiter unten ("Namensteil im Dateinamen -> Eigenrechnung", gedacht fuer
+  // "rechnung_mustermann.pdf") griff, weil das Studio die Datei nach dem
+  // EMPFAENGER benennt. Folge: klasse '3' statt '1a' — und damit rechnete der
+  // Code die USt aus dem Brutto HERAUS statt sie obendrauf zu sehen.
+  // Auswirkung in der USt-VA Juli 2026: Bemessungsgrundlage 118,11 / 279,19 /
+  // 94,67 statt korrekt 127,00 / 300,20 / 101,80 — die Zeilen widersprachen sich
+  // selbst (118,11 x 7% = 8,27, ausgewiesen aber 8,89). Zahllast blieb richtig,
+  // die Bemessungsgrundlage fuer Kz 86 war um 37,03 EUR zu niedrig.
+  // Betrifft potenziell jede Nutzerin, deren Studios Dateien nach Empfaenger
+  // benennen — deshalb Root-Cause statt Einzelkorrektur.
+  var _digitsFrueh = gnr.replace(/\D/g, '');
+  if(_digitsFrueh.length >= 8 && /^20\d{6}$/.test(_digitsFrueh.slice(-8))
+     && /\//.test(gnr)) return '1a';
+  if(_digitsFrueh.length >= 6 && /^20\d{4}$/.test(_digitsFrueh.slice(-6))
+     && /\//.test(gnr) && _digitsFrueh.length < 8) return '1b';
+
   // Klasse 3: Eigenrechnung (User als Rechnungssteller)
   // Heuristik: Rechnungs-Nr NN/YYYY, "eigen" im Studio, oder Dateiname enthält
   // "rechnung"/"eigen" oder den User-Namen (aus Profil) als Bestandteil.
@@ -4848,7 +4871,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1149';
+  if(elH) elH.textContent = '1150';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
