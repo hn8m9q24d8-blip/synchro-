@@ -4831,7 +4831,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1147';
+  if(elH) elH.textContent = '1148';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -15746,6 +15746,24 @@ function dokAnalyseDoc(d, key, cb){
             s.terminId = null; // alten Stand zurücksetzen vor Neusuche
             if(s.datum && d.studio){
               var tm = dokFindTermin(s.datum, d.studio, s.titel, null, null, belegteIds2, true);
+              // Build 1148 (Fix H): Wenn nichts gefunden wurde ODER der Treffer ein
+              // fremdes Studio hat, nochmal OHNE die Ausschlussliste suchen — aber
+              // nur Kombi-Termine ("A + B") zulassen, deren Titel inhaltlich zur
+              // Session passt. Grund: dokFindTermin bekam bisher ALLE bereits
+              // belegten Termine als excludeIds. Bei zwei Produktionen im selben
+              // Aufnahmeblock nahm sich die erste Session den Kombi-Termin, und die
+              // zweite musste zwangslaeufig auf einen fremden Termin ausweichen
+              // (realer Fall 17.07.2025: "Super Cube" landete bei EVA Franklinstr.,
+              // weil "TNT / Super Cube + Witch Watch" schon von "Witch Watch"
+              // belegt war). Ohne diesen Zweig kann der Auto-Match den richtigen
+              // Termin gar nicht finden, egal wie gut das Titel-Scoring ist.
+              if(!tm || (tm.studio && d.studio && !_titelAehnlich(d.studio, tm.studio))){
+                var tmK = dokFindTermin(s.datum, d.studio, s.titel, null, null, null, true);
+                if(tmK && String(tmK.titel||'').indexOf(' + ') >= 0
+                       && _titelAehnlich(s.titel||'', tmK.titel||'')){
+                  tm = tmK; // Kombi-Termin gewinnt, Mehrfachbelegung ist hier korrekt
+                }
+              }
               if(tm){ s.terminId=tm.id; belegteIds2.push(tm.id); }
             }
           });
@@ -18412,9 +18430,27 @@ function dokSessionGotoKalender(dokId, si){
 
   // Kandidaten finden: alle Termine am selben Datum (ohne Score-Filter),
   // dann nach dokFindTermin-Score sortiert. So sieht der Nutzer auch knappe Treffer.
+  //
+  // Build 1148 (Fix G): belegteIds schloss bisher JEDEN Termin aus, der bereits
+  // von einer anderen Session desselben Belegs benutzt wird. Bei einem echten
+  // Kombi-Termin ist das genau falsch herum: Termin "TNT / Super Cube + Witch
+  // Watch" (17.07.2025, 12:20) war von der Witch-Watch-Session belegt — und damit
+  // fuer die Super-Cube-Session unerreichbar. Der einzige richtige Termin war der
+  // einzige, den die Liste verweigert hat; angeboten wurden nur EVA (09:30,
+  // fremdes Studio) und RC (13:45, fremdes Studio). Kein Nutzer kann das loesen.
+  // Jetzt: Ein belegter Termin bleibt in der Liste, wenn sein Titel BEIDE
+  // Produktionen nennt (Kombi-Format "A + B") und der Session-Titel zu einem der
+  // Teile passt. Sonst weiterhin ausgeschlossen — Fehlzuordnungen bei echten
+  // Einzelterminen bleiben also verhindert.
   var belegteIds = (d.sessions||[]).filter(function(x,xi){return xi!==si&&x.terminId;}).map(function(x){return x.terminId;});
+  var _kombiErlaubt = function(t){
+    if(belegteIds.indexOf(t.id) < 0) return true;          // nicht belegt -> immer erlaubt
+    var tt = String(t.titel||'');
+    if(tt.indexOf(' + ') < 0) return false;                // kein Kombi-Termin -> wie bisher raus
+    return _titelAehnlich(s.titel||'', tt);                // Session gehoert inhaltlich dazu?
+  };
   var sameDay = (db.termine||[]).filter(function(t){
-    if(belegteIds.indexOf(t.id)>=0) return false;
+    if(!_kombiErlaubt(t)) return false;
     return t.datum === s.datum;
   });
   // Falls am exakten Tag nichts: ±2 Tage als erweiterte Kandidaten
