@@ -4889,7 +4889,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1153';
+  if(elH) elH.textContent = '1154';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5370,12 +5370,26 @@ function openDetail(id){
   // Takes: Kalender-Termin hat Vorrang, Abrechnung als Fallback
   var _abForTakes = abFuerTermin_v2(t);
   var rawTakes=parseInt(t.takes)||parseInt(_abForTakes&&_abForTakes.takes)||0;
-  var billTakes=rawTakes>0&&rawTakes<10?10:rawTakes;
+  // Build 1154: 1-10-Pauschale nur anwenden, wenn sie fuer diese Gage auch gilt.
+  // Vorher wurde hart auf 10 hochgerundet — _paketRegelGilt() existiert seit
+  // Build 728 und wird anderswo genutzt, hier aber nie gefragt. Damit blieb der
+  // Schalter "1-10-Regel gilt" in Profil > Gagensaetze an dieser Stelle wirkungslos.
+  // Reale Folge: Termine mit Sondergagen ohne Pauschale zeigten in der GAGE-Sektion
+  // zu hohe Werte, waehrend die ABRECHNUNG-Sektion direkt darunter den korrekten
+  // Beleg-Wert nannte — und der Vergleich trotzdem "PASST" meldete. Betroffen u.a.
+  // Daredevil (300er-Gage, 26.02./12.03./26.03.2026, Abrechnung 260/230/260) und
+  // Jackass (200er, 27.05./03.06.2026, Abrechnung 155/160), dazu die VSI/TNT-
+  // Altbelege (Space Station 76: 90,00 angezeigt statt 66,00 laut Beleg).
+  // Steuerlich war nie etwas falsch — EUER/USt-VA lesen dbv2, nicht diese Anzeige.
+  // Bei allen fuenf Standardtarifen steht paketRegel:true, dort aendert sich nichts.
+  var _paketAn = true;
+  try { _paketAn = _paketRegelGilt(t.kommgage, t.rate); } catch(e){}
+  var billTakes=(_paketAn && rawTakes>0 && rawTakes<10) ? 10 : rawTakes;
   var net=(t.kommgage||0)+billTakes*(t.rate||0);
   var ust=net*ur;
   var brut=net+ust;
   var total=parseInt(t.takes)||parseInt(_abForTakes&&_abForTakes.takes)||0;
-  var totalLabel=total>0&&total<10?total+' (→10)':String(total);
+  var totalLabel=(_paketAn && total>0 && total<10) ? total+' (→10)' : String(total);
 
   // Verknüpfte Dokumente — vorwärts (d.terminId) UND rückwärts (t.dokIds)
   var allDoksIds = new Set();
