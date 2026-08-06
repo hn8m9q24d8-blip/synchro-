@@ -4889,7 +4889,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1152';
+  if(elH) elH.textContent = '1153';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5437,11 +5437,23 @@ function openDetail(id){
     });
     // Prio 2: Einträge für diesen Termin die KEIN abrechn-Typ haben
     // (UUID-Dateinamen aus iOS haben keinen 'dispo'-String, aber sind trotzdem Dispos)
+    // Build 1153: Alt-Eintraege mit typ:null bestanden diesen Test ebenfalls
+    // (null!=='abrechn' ist wahr) — dadurch landete der ABRECHNUNGS-Dateiname in
+    // dispoDateinamen, die Dispo-Ampel wurde rot und das Popup zeigte die
+    // Abrechnung als "Dispo" an. Real: VSI-2013-Termine, _archivLog-Eintrag
+    // {dateiname:'Abrechnung_528 8.pdf', typ:null} — geschrieben von dem einen
+    // Aufrufer in Z. ~19187, der den typ-Parameter nicht weitergab (jetzt gefixt).
+    // Zwei zusaetzliche Ausschluesse, die die iOS-UUID-Absicht unberuehrt lassen:
+    //   a) Dateiname ist als Abrechnung am Termin gestempelt
+    //   b) Dateiname beginnt erkennbar mit "Abrechnung"/"Gutschrift"/"Monats-"
     if(!dispArchEntry){
       dispArchEntry = db._archivLog.find(function(e){
-        return e.terminId===id
-          && e.typ!=='abrechn' && e.typ!=='monats_abrechn'
-          && e.dateiname && e.dateiname.length > 3;
+        if(e.terminId!==id) return false;
+        if(e.typ==='abrechn' || e.typ==='monats_abrechn') return false;
+        if(!e.dateiname || e.dateiname.length <= 3) return false;
+        if(t.abrechn_dateiname && e.dateiname === t.abrechn_dateiname) return false;
+        if(/^(abrechnung|gutschrift|monats)/i.test(e.dateiname)) return false;
+        return true;
       });
     }
     if(dispArchEntry && dispArchEntry.dateiname) dispoDateinamen=[dispArchEntry.dateiname];
@@ -5606,7 +5618,16 @@ function openDetail(id){
   var _hasDispoDoc = !!(t.dispoImg || dispoDoks.length || dispoDateinamen.length);
   var _hasDispoGVL = !!(t.gvl_takes_detail && t.gvl_takes_detail.length > 0);
   var _hasDispoArchiv = !!(t._dispoDateiname || (db._archivLog && db._archivLog.find(function(e){
-    return e.terminId===id && (e.typ==='dispo' || /dispo/i.test(e.dateiname||''));
+    if(e.terminId !== id) return false;
+    if(e.typ === 'dispo') return true;
+    // Build 1153: Alt-Eintraege ohne typ (vor dem Fix in Z. ~19187 geschrieben)
+    // duerfen NICHT allein wegen des Dateinamens als Dispo gelten, wenn derselbe
+    // Dateiname am Termin als Abrechnung gestempelt ist. Sonst faerbt die
+    // Dispo-Ampel bei reinen Abrechnungsbelegen ein — real aufgetreten bei den
+    // VSI-2013-Terminen, wo direkt darunter "Dispo fehlt" stand.
+    if(e.typ) return false;                       // typ gesetzt, aber nicht 'dispo'
+    if(t.abrechn_dateiname && e.dateiname === t.abrechn_dateiname) return false;
+    return /dispo/i.test(e.dateiname||'');
   })));
   var hasDispo = _hasDispoDoc || _hasDispoGVL || _hasDispoArchiv;
   // hasAbrechn: abId, abgerechnet-Flag, abrechn-Dok, _archivLog oder direkt gespeicherter Dateiname
@@ -19183,9 +19204,19 @@ function dokBestaetigenMonat(dokId){
     }
   }
   // _archivLog: Dateiname für JEDEN verknüpften Termin loggen → Dispoampel findet ihn wieder
+  // Build 1153: d.typ MUSS mitgegeben werden. Dies war der einzige der 15 Aufrufer
+  // von _archiveDateiname, der den dritten Parameter wegliess — Ergebnis: typ:null
+  // im _archivLog. Die Dispo-Ampel (Z. ~5608, _hasDispoArchiv) prueft dann nur noch
+  // per Dateinamen-Regex auf "dispo" und kann Abrechnungen nicht sauber ausschliessen.
+  // Realer Fall VSI 2013 (Abrechnung_528 8.pdf): Termine "The Reality Show" /
+  // "Parks & Recreation" 15.04.2013 zeigten die Dispo-Ampel eingefaerbt, obwohl nie
+  // eine Dispo existierte — direkt neben der eigenen Meldung "Dispo fehlt". Zugleich
+  // fuehrte der Ampel-Link auf die Abrechnung statt auf eine Dispo.
+  // Zusaetzlich setzt _archiveDateiname mit korrektem typ jetzt auch
+  // t.abrechn_dateiname statt faelschlich t._dispoDateiname (Z. ~19260).
   var _archTerminIds = (d.sessions||[]).filter(function(s){return s.terminId;}).map(function(s){return s.terminId;});
-  _archTerminIds.forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid); });
-  if(!_archTerminIds.length) _archiveDateiname(d.dateiname||d.beschr, null);
+  _archTerminIds.forEach(function(tid){ _archiveDateiname(d.dateiname||d.beschr, tid, d.typ||'abrechn'); });
+  if(!_archTerminIds.length) _archiveDateiname(d.dateiname||d.beschr, null, d.typ||'abrechn');
 
   // Log für Undo
   var linkedTerminIds = _archTerminIds;
