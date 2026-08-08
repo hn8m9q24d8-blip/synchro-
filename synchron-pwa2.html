@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1162';
+  if(elH) elH.textContent = '1163';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6304,13 +6304,37 @@ function openDetail(id){
   })();
 
   var diffWarnHtml = '';
-  var hasDiff = (t.takes_differenz && t.takes_differenz !== 0)
+  // ── Build 1163: behobene Differenzen verschwinden lassen ──────────────
+  // takes_differenz und kommgage_differenz sind gespeicherte Schnappschuesse
+  // (geschrieben in Z. ~19247 / ~19914 / ~20053), keine abgeleiteten Werte.
+  // Korrigiert man am Termin die Take-Zahl, bleibt der alte Stand stehen und
+  // der Banner meldet weiter eine Differenz, waehrend GAGE und ABRECHNUNG
+  // bereits "passt" zeigen. Real aufgetreten am 08.08.2026 bei Spy x Family
+  // (20.10.2025), nachdem eine zu hohe Dispo-Take-Zahl korrigiert wurde.
+  //
+  // Bewusst NUR entwarnend: eine Live-Neuberechnung takes - takes_abgerechnet
+  // wuerde bei der 1-10-Paketregel falsch liegen, weil dort absichtlich
+  // takes+10 gespeichert ist (Z. ~19914). Gegen Backup 2026-08-08-1744 haette
+  // sie 8 neue Fehlalarme erzeugt (Navy CIS, Jackass, Torment). Deshalb gilt:
+  // stimmen die aktuellen Zahlen ueberein, ist der Befund weg — weichen sie ab,
+  // bleibt der gespeicherte Stand unberuehrt.
+  var _tkNow1163 = (t.takes==null||t.takes==='') ? null : (parseFloat(t.takes)||0);
+  var _tkAbr1163 = (t.takes_abgerechnet==null) ? null : (parseFloat(t.takes_abgerechnet)||0);
+  var _takesBehoben1163 = (_tkNow1163!==null && _tkAbr1163!==null && _tkNow1163===_tkAbr1163);
+  var _kgNow1163 = (t.kommgage==null||t.kommgage==='') ? null : (parseFloat(t.kommgage)||0);
+  var _kgAbr1163 = (t.kommgage_abgerechnet==null) ? null : (parseFloat(t.kommgage_abgerechnet)||0);
+  var _kommBehoben1163 = (_kgNow1163!==null && _kgAbr1163!==null && _kgNow1163===_kgAbr1163);
+
+  var _takesDiff1163 = _takesBehoben1163 ? 0 : t.takes_differenz;
+  var _kommDiff1163  = _kommBehoben1163  ? 0 : t.kommgage_differenz;
+
+  var hasDiff = (_takesDiff1163 && _takesDiff1163 !== 0)
              || (t.rate_differenz && t.rate_differenz !== 0)
-             || (t.kommgage_differenz && t.kommgage_differenz !== 0);
+             || (_kommDiff1163 && _kommDiff1163 !== 0);
   if(hasDiff && !t.differenz_geklaert){
     var diffLines = '';
-    if(t.takes_differenz && t.takes_differenz !== 0){
-      var takeDiff = t.takes_differenz;
+    if(_takesDiff1163 && _takesDiff1163 !== 0){
+      var takeDiff = _takesDiff1163;   // Build 1163
       var rateVal  = parseFloat(t.rate)||parseFloat(t.rate_abgerechnet)||0;
       // takeDiff = Dispo - Abrechnung
       // positiv = Studio hat zu wenig gezahlt (ausstehend)
@@ -6328,7 +6352,7 @@ function openDetail(id){
       diffLines += '<div style="font-size:11px;color:#8a6a3f;margin-bottom:4px">'
         +'Take-Gage: <b>'+(t.rate_abgerechnet||'?')+'€ abgerechnet</b> statt '+(t.rate||'?')+'€</div>';
     }
-    if(t.kommgage_differenz && t.kommgage_differenz !== 0){
+    if(_kommDiff1163 && _kommDiff1163 !== 0){   // Build 1163
       diffLines += '<div style="font-size:11px;color:#8a6a3f;margin-bottom:4px">'
         +'Komm.-Gage: <b>'+(t.kommgage_abgerechnet||'?')+'€ abgerechnet</b> statt '+(t.kommgage||'?')+'€</div>';
     }
