@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1156';
+  if(elH) elH.textContent = '1157';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6026,9 +6026,24 @@ function openDetail(id){
       var cNet  = hasVergleich ? (netBruttoOk || diff1to10 ? 'var(--accent)' : 'var(--orange)') : 'inherit';
       var bgNet = hasVergleich ? (netBruttoOk || diff1to10 ? 'background:var(--green2);border-radius:8px;padding:4px 6px' : 'background:#fff5f5;border-radius:8px;padding:4px 6px') : '';
 
+      // ── Build 1157: zwei Faelle, in denen "⚠ Differenz" nicht gerechtfertigt ist ──
+      // 1) Kein Vergleichswert: ohne Take-Zahl, ohne Dispofoto und ohne GVL-Detail
+      //    steht links in der Rechnung nur die Kommgage aus einer Voreinstellung.
+      //    Gegen einen nicht vorhandenen Plan zu vergleichen ergibt keine Aussage —
+      //    dann "nicht pruefbar" statt eines Fehlerbefunds. 33 von 211 Terminen.
+      // 2) Vom Nutzer geprueft: differenz_geklaert wurde bisher nur beim Mahn-
+      //    Hinweis (Z. 5346) gelesen. Der Klick raeumte also fast nichts weg und
+      //    sperrte zugleich die Reparatur in der Konsolidierung. 23 Termine.
+      // Beide Variablen sind rein lokal und wirken nur auf die Einfaerbung.
+      var _keinPlan1157 = !(parseFloat(t.takes)||0) && !t.dispoImg
+                          && !((t.gvl_takes_detail||[]).length);
+      var _geprueft1157 = !!t.differenz_geklaert;
+
       var headerStatus = '';
       if(hasVergleich){
         if(netBruttoOk || diff1to10) headerStatus = '<span style="font-size:11px;font-weight:700;color:var(--accent)">✓ passt</span>';
+        else if(_geprueft1157)       headerStatus = '<span onclick="terminDifferenzKlaeren(\''+id+'\')" style="font-size:11px;font-weight:700;color:var(--ink3);cursor:pointer;text-decoration:underline dotted" title="Antippen: wieder als offen markieren">✓ geprüft</span>';
+        else if(_keinPlan1157)       headerStatus = '<span style="font-size:11px;font-weight:700;color:var(--ink3)">nicht prüfbar</span>';
         else headerStatus = '<span style="font-size:11px;font-weight:700;color:var(--orange)">⚠ Differenz</span>';
       } else {
         headerStatus = '<span class="ic-edit" onclick="openUstSheet()">USt '+Math.round(ur*100)+'%</span>';
@@ -6115,6 +6130,8 @@ function openDetail(id){
     var _erw = _erwartetKomm>0&&(_abRate||_tRate)>0 ? Math.round((_erwartetKomm+_billT*(_abRate||_tRate))*100)/100 : 0;
     var _kommOk = _gg1to10 || (_erw>0 && Math.abs(_abGG-_erw)<1.5);
     // hasDispo2: gleiche Logik wie hasDispo-Ampel — nicht nur dokIds prüfen
+    var _keinPlanAb1157 = !(parseFloat(t.takes)||0) && !t.dispoImg
+                          && !((t.gvl_takes_detail||[]).length);   // Build 1157
     var hasDispo2 = !!(t.dispoImg || dispoDoks.length ||
       (t.gvl_takes_detail && t.gvl_takes_detail.length > 0) ||
       (db._archivLog && db._archivLog.find(function(e){
@@ -6126,13 +6143,20 @@ function openDetail(id){
       })));
     // Differenz nur anzeigen wenn Dispo vorhanden — sonst kein Vergleichswert
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
-    var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk;
+    var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk
+                   && !t.differenz_geklaert;   // Build 1157
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'var(--accent)':'var(--orange)')+'">'
       +'<div class="info-card-header"><span>Abrechnung'
       +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#FDFCFA;color:#4A5A4E;padding:2px 6px;border-radius:6px;font-weight:700">'+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
       +(ab._isMultiMaster&&ab._multiAnzahl>1&&!ab._v2Source?' <span style="font-size:10px;background:#FDFCFA;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700">Master · '+ab._multiAnzahl+' Termine</span>':'')
       +((ab&&!ab._v2Source&&(ab._editierbar||(function(){var _lnk=(db.dokumente||[]).find(function(d){return d.sessions&&d.sessions.some(function(s){return s.terminId===ctid&&s._manuallyAssigned;});});return !!_lnk;})()))?' <span style="font-size:10px;background:#FDFCFA;color:var(--purple);padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" onclick="abrechnungEditOpen(\''+ab.id+'\')">✎ bearbeiten</span>':'')+'</span>'
-      +'<span style="font-size:11px;color:'+matchCol+';font-weight:700">'+(bruttoAnteilFehlt?'· Anteil nicht im PDF ausgewiesen':(netBruttoOk?'✓ Stimmt':'⚠ Differenz'))+'</span></div>'
+      +'<span style="font-size:11px;color:'+(netBruttoOk?matchCol:((t.differenz_geklaert||_keinPlanAb1157)?'var(--ink3)':matchCol))+';font-weight:700">'
+      /* Build 1157: gleiche Regel wie im GAGE-Kopf — geprueft bzw. ohne Plan
+         kein Fehlerbefund. Neu berechnet, da _keinPlan1157 im GAGE-Block liegt. */
+      +(bruttoAnteilFehlt?'· Anteil nicht im PDF ausgewiesen'
+        :(netBruttoOk?'✓ Stimmt'
+          :(t.differenz_geklaert?'✓ geprüft'
+            :(_keinPlanAb1157?'nicht prüfbar':'⚠ Differenz'))))+'</span></div>'
       +'<div style="padding:0 16px 14px">'
       +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4A5A4E;margin-bottom:8px;padding:6px 8px;background:#FDFCFA;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
       +(!hasDispo2?'<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;padding:6px 8px;background:var(--card);border-radius:6px">Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
@@ -8426,6 +8450,21 @@ function _updateMerklisteStern(t){
 function terminDifferenzKlaeren(terminId){
   var t=(db.termine||[]).find(function(x){return x.id===terminId;});
   if(!t) return;
+  // Build 1157: schaltet jetzt um statt nur zu setzen. Vorher gab es KEINEN
+  // Codepfad, der differenz_geklaert zuruecksetzt — acht Stellen lasen es, eine
+  // setzte es, null hob es auf. Seit 1157 unterdrueckt das Flag auch die beiden
+  // Karten-Badges; ohne Rueckweg waere ein Fehlklick endgueltig, und drei echte
+  // offene Faelle (Spy x Family 13.11., Happy Valley 3, FFS 25.03.) blieben
+  // unsichtbar, weil sie am 04.05.2026 quittiert wurden, als die Anzeige noch
+  // irrefuehrend war.
+  if(t.differenz_geklaert){
+    t.differenz_geklaert = false;
+    delete t.differenz_geklaert_am;
+    save(db);
+    openDetail(terminId);
+    showToast('↩ Wieder als offen markiert');
+    return;
+  }
   t.differenz_geklaert = true;
   t.differenz_geklaert_am = new Date().toISOString();
   save(db);
