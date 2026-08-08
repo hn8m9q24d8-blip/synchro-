@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1160';
+  if(elH) elH.textContent = '1162';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -22482,6 +22482,12 @@ function runIntegrityCheck(silent){
       }
       var anteil = aktiv[0].brutto_anteil_display;
       if(anteil == null || anteil === '') return; // PDF weist keinen Anteil aus → kein Fehler
+      // Build 1161: vom Nutzer geprueft = kein Befund. differenz_geklaert wurde im
+      // gesamten Daten-Check nicht gelesen (0 Treffer vor diesem Build), obwohl es
+      // seit Build 1157 die beiden Karten im Termin-Detail steuert. Die Liste
+      // meldete deshalb weiter, was im Termin schon als "✓ geprüft" dasteht.
+      // Rueckweg vorhanden: der graue Haken im Termin schaltet das Flag wieder ab.
+      if(t.differenz_geklaert) return;
       if(Math.abs((parseFloat(t.brutto_termin)||0) - parseFloat(anteil)) > 1.5){
         warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Anteil aus Abrechnung '+fmtEur(anteil)+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
       }
@@ -22495,6 +22501,7 @@ function runIntegrityCheck(silent){
     if(!ab) return;
     if(ab._nurMarker) return; // Marker-Einträge haben kein eigenes Brutto
     if(ab._isMultiMaster) return; // Master-Total ist Sammel-Summe, nicht Termin-Wert
+    if(t.differenz_geklaert) return;   // Build 1161: siehe oben
     var diff = Math.abs((parseFloat(t.brutto_termin)||0) - (parseFloat(ab.brutto)||0));
     if(diff > 1.5){
       warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Abrechnung '+fmtEur(ab.brutto)+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
@@ -22704,7 +22711,7 @@ function runIntegrityCheckAndShow(){
                           + (_m1160[3].length > _link1160.length ? 'Termin ' : '');
             _inhalt1157 = esc(_vor1160)
               + '<span onclick="event.stopPropagation();document.querySelectorAll(\'[data-dc-ov]\').forEach(function(e){e.remove()});switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid1157+'\')},150)"'
-              + ' style="font-weight:800;color:var(--orange);text-decoration:underline;cursor:pointer">'
+              + ' style="font-weight:800;color:var(--orange);cursor:pointer">'
               + esc(_link1160) + '</span>'
               + esc(_m1160[4]);
           }
