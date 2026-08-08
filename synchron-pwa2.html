@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1158';
+  if(elH) elH.textContent = '1160';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6133,9 +6133,18 @@ function openDetail(id){
     var _keinPlanAb1157 = !(parseFloat(t.takes)||0) && !t.dispoImg
                           && !((t.gvl_takes_detail||[]).length);   // Build 1157
     var hasDispo2 = !!(t.dispoImg || dispoDoks.length ||
+      // Build 1159: t.dispoDocId fehlte in der Bedingung, obwohl es die direkteste
+      // Verknuepfung zur Dispo ist — die Ampel liest es, diese Karte nicht.
+      t.dispoDocId ||
       (t.gvl_takes_detail && t.gvl_takes_detail.length > 0) ||
       (db._archivLog && db._archivLog.find(function(e){
-        return e.terminId===id && /dispo/i.test(e.dateiname||'');
+        // Build 1159: Der Test lief gegen den DATEINAMEN. Dispos aus der Foto-
+        // Mediathek heissen IMG_5294.HEIC — da steht "dispo" nirgends drin, also
+        // fiel jede Foto-Dispo durch und die Karte meldete "Dispo fehlt", waehrend
+        // die Ampel korrekt verlinkte. Das Feld typ tragen die Eintraege seit
+        // Build 1153; es ist die verlaessliche Quelle. Der Namenstest bleibt als
+        // Fallback fuer Altlasten ohne typ (typ:null).
+        return e.terminId===id && (e.typ==='dispo' || /dispo/i.test(e.dateiname||''));
       })) ||
       (t.dokIds && t.dokIds.some(function(did){
         var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
@@ -22673,22 +22682,34 @@ function runIntegrityCheckAndShow(){
       var r='<div style="background:var(--red2);border:1.5px solid #e3c4c0;border-radius:12px;padding:12px;margin-bottom:10px">'
         +'<div style="font-size:12px;font-weight:800;color:var(--orange);margin-bottom:8px">'+titel+' ('+liste.length+')</div>';
       liste.forEach(function(w){
-        // ── Build 1157: Sprung zum Kalendertermin ────────────────────────
+        // ── Build 1157/1160: Sprung zum Kalendertermin ───────────────────
         // Neun der 23 Push-Stellen haengen die Termin-ID mit \u0001T an. Der
         // Marker steht am Ende und beruehrt die Kategorie-Zuordnung nicht, die
         // per indexOf auf dem Text davor arbeitet. Hier wieder abtrennen, damit
         // esc() nur den Klartext sieht. Navigation wie in der Jahresuebersicht
         // (Z. ~12509): Ansicht wechseln, dann Detail oeffnen.
+        // Build 1160: verlinkt wird "Titel (TT.MM.JJJJ)" mitten im Satz statt
+        // eines angehaengten "→ Termin". Alle sieben real vorkommenden
+        // Meldungsformen gegen die Regex geprueft, inkl. "⚠ Termin X (Datum):".
         var _teil1157 = String(w).split('\u0001T');
         var _txt1157  = _teil1157[0];
         var _tid1157  = _teil1157[1] || '';
-        var _klick1157 = _tid1157
-          ? ' onclick="document.querySelectorAll(\'[data-dc-ov]\').forEach(function(e){e.remove()});switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid1157+'\')},150)"'
-            + ' style="font-size:12px;color:var(--red);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #ead4d1;line-height:1.4;cursor:pointer"'
-          : ' style="font-size:12px;color:var(--red);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #ead4d1;line-height:1.4"';
-        r+='<div'+_klick1157+'>'+esc(_txt1157)
-          +(_tid1157?' <span style="font-size:10px;font-weight:700;color:var(--orange);white-space:nowrap">→ Termin</span>':'')
-          +'</div>';
+        var _stil1157 = 'font-size:12px;color:var(--red);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #ead4d1;line-height:1.4';
+        var _inhalt1157 = esc(_txt1157);
+        if(_tid1157){
+          var _m1160 = _txt1157.match(/^(\u26a0\s*)?(.*?:\s)?((?:[^:]|:(?!\s))+\(\d{2}\.\d{2}\.\d{4}\))(.*)$/);
+          if(_m1160){
+            var _link1160 = _m1160[3].replace(/^Termin\s+/,'');
+            var _vor1160  = (_m1160[1]||'') + (_m1160[2]||'')
+                          + (_m1160[3].length > _link1160.length ? 'Termin ' : '');
+            _inhalt1157 = esc(_vor1160)
+              + '<span onclick="event.stopPropagation();document.querySelectorAll(\'[data-dc-ov]\').forEach(function(e){e.remove()});switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid1157+'\')},150)"'
+              + ' style="font-weight:800;color:var(--orange);text-decoration:underline;cursor:pointer">'
+              + esc(_link1160) + '</span>'
+              + esc(_m1160[4]);
+          }
+        }
+        r+='<div style="'+_stil1157+'">'+_inhalt1157+'</div>';
       });
       return r+'</div>';
     }
