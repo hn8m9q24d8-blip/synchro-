@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1157';
+  if(elH) elH.textContent = '1158';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -22303,15 +22303,27 @@ function runIntegrityCheck(silent){
     if(t.abId){
       var ab=(db.abrechnungen||[]).find(function(a){return a.id===t.abId;});
       if(!ab){
-        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) abId zeigt auf nicht-existente Abrechnung — bitte prüfen');
+        warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) abId zeigt auf nicht-existente Abrechnung — bitte prüfen'+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
       }
     }
   });
 
   // 5. Termin abgerechnet=true aber kein abId — Jahresabschluss und USt blind
+  // Build 1157: Gegenprobe gegen dbv2 ergaenzt. Die Regel prueft das Legacy-Feld
+  // t.abId gegen db.abrechnungen — die seit Build 898 eingefrorene Altkopie. Sie
+  // konnte deshalb gar nichts anderes melden als "fehlt", und der Meldungstext
+  // sagt selbst, dass es folgenlos ist ("Steuerzahlen kommen aus dbv2"). Ergebnis:
+  // 37 Meldungen im Backup 2026-08-08-1744, alle 37 mit sauberer dbv2-Junction,
+  // null echte Befunde — 85 % der gesamten Daten-Check-Liste. Ab jetzt wird nur
+  // gemeldet, wenn AUCH in dbv2 keine Verknuepfung existiert; dann ist der Termin
+  // tatsaechlich nirgends verbucht und die Meldung berechtigt.
+  var _v2TerminIds1157 = {};
+  ((dbv2 && dbv2.abrechnung_termin_links) || []).forEach(function(l){
+    if(l && l.termin_id) _v2TerminIds1157[l.termin_id] = true;
+  });
   (db.termine||[]).forEach(function(t){
-    if(t.abgerechnet && !t.abId){
-      warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) abgerechnet=true, alte Verknuepfung fehlt — Steuerzahlen kommen aus dbv2, dort oben gemeldet falls relevant');
+    if(t.abgerechnet && !t.abId && !_v2TerminIds1157[t.id]){
+      warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): abgerechnet=true, aber weder in dbv2 noch im Altbestand verknuepft — nicht verbucht'+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
     }
     // Abrechnung ohne MwSt → USt-Voranmeldung schweigt
     if(t.abId){
@@ -22319,7 +22331,7 @@ function runIntegrityCheck(silent){
       if(abMwst && parseFloat(abMwst.brutto)>0 && !parseFloat(abMwst.mwst)){
         // Nur warnen wenn keine gesamt_mwst als Fallback vorhanden
         if(!parseFloat(abMwst.gesamt_mwst)){
-          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) Abrechnung ohne MwSt-Feld — USt-VA liest dbv2, kein Steuerproblem');
+          warnings.push('⚠ Termin '+esc(t.titel||t.datum||'?')+' ('+fd(t.datum)+'): (Altbestand) Abrechnung ohne MwSt-Feld — USt-VA liest dbv2, kein Steuerproblem'+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
         }
       }
     }
@@ -22411,7 +22423,7 @@ function runIntegrityCheck(silent){
     // Grundgagenwert). Die Ausnahme verdeckte also genau den Fall, den sie erklaeren
     // sollte. Korrekt greift die Regel nur, wenn wenige Takes auf 10 aufgerundet wurden.
     if(gvlGesamt < 10 && abTakes === 10) return;
-    warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes);
+    warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
   });
 
   // Doppelte Dispos am selben Termin
@@ -22420,7 +22432,7 @@ function runIntegrityCheck(silent){
       return d.terminId===t.id && d.typ==='dispo' && d.bestaetigt;
     });
     if(dispos.length > 1){
-      warnings.push('⚠ Doppelte Dispo: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+dispos.length+' Dispos zugeordnet');
+      warnings.push('⚠ Doppelte Dispo: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+dispos.length+' Dispos zugeordnet'+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
     }
   });
 
@@ -22456,13 +22468,13 @@ function runIntegrityCheck(silent){
       if(aktiv.length > 1){
         // Kein stiller Vergleich gegen eine willkuerlich gewaehlte Abrechnung — das ist
         // ein eigener Befund und gehoert vom Menschen entschieden.
-        warnings.push('⚠ Mehrere Abrechnungen: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+aktiv.length+' Abrechnungen an einem Termin — bitte pruefen welche gilt');
+        warnings.push('⚠ Mehrere Abrechnungen: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '+aktiv.length+' Abrechnungen an einem Termin — bitte pruefen welche gilt'+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
         return;
       }
       var anteil = aktiv[0].brutto_anteil_display;
       if(anteil == null || anteil === '') return; // PDF weist keinen Anteil aus → kein Fehler
       if(Math.abs((parseFloat(t.brutto_termin)||0) - parseFloat(anteil)) > 1.5){
-        warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Anteil aus Abrechnung '+fmtEur(anteil));
+        warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Anteil aus Abrechnung '+fmtEur(anteil)+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
       }
       return;
     }
@@ -22476,7 +22488,7 @@ function runIntegrityCheck(silent){
     if(ab._isMultiMaster) return; // Master-Total ist Sammel-Summe, nicht Termin-Wert
     var diff = Math.abs((parseFloat(t.brutto_termin)||0) - (parseFloat(ab.brutto)||0));
     if(diff > 1.5){
-      warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Abrechnung '+fmtEur(ab.brutto));
+      warnings.push('⚠ Brutto-Differenz: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Termin '+fmtEur(t.brutto_termin)+' ≠ Abrechnung '+fmtEur(ab.brutto)+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
     }
   });
 
@@ -22561,7 +22573,7 @@ function runIntegrityCheck(silent){
     if(js.length !== 1) return; // 0 = nichts abgerechnet, >1 meldet Regel 1 schon
     var an = js[0].brutto_anteil_display;
     if(an == null || an === '' || !(parseFloat(an)>0)) return;
-    warnings.push('⚠ Fehlender Brutto-Anteil: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Abrechnung weist '+fmtEur(an)+' aus, am Termin fehlt der Wert');
+    warnings.push('⚠ Fehlender Brutto-Anteil: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): Abrechnung weist '+fmtEur(an)+' aus, am Termin fehlt der Wert'+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
   });
 
   // 5. Jahresabschluss-Tabelle Quer-Summen-Check
@@ -22629,6 +22641,7 @@ function runIntegrityCheckAndShow(){
   if(badge){ badge.textContent=warnings.length||''; badge.style.display=warnings.length?'inline':'none'; }
 
   var ov=document.createElement('div');
+  ov.setAttribute('data-dc-ov','1');   // Build 1157: gezielt schliessbar beim Sprung zum Termin
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
   var box=document.createElement('div');
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
@@ -22660,7 +22673,22 @@ function runIntegrityCheckAndShow(){
       var r='<div style="background:var(--red2);border:1.5px solid #e3c4c0;border-radius:12px;padding:12px;margin-bottom:10px">'
         +'<div style="font-size:12px;font-weight:800;color:var(--orange);margin-bottom:8px">'+titel+' ('+liste.length+')</div>';
       liste.forEach(function(w){
-        r+='<div style="font-size:12px;color:var(--red);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #ead4d1;line-height:1.4">'+esc(w)+'</div>';
+        // ── Build 1157: Sprung zum Kalendertermin ────────────────────────
+        // Neun der 23 Push-Stellen haengen die Termin-ID mit \u0001T an. Der
+        // Marker steht am Ende und beruehrt die Kategorie-Zuordnung nicht, die
+        // per indexOf auf dem Text davor arbeitet. Hier wieder abtrennen, damit
+        // esc() nur den Klartext sieht. Navigation wie in der Jahresuebersicht
+        // (Z. ~12509): Ansicht wechseln, dann Detail oeffnen.
+        var _teil1157 = String(w).split('\u0001T');
+        var _txt1157  = _teil1157[0];
+        var _tid1157  = _teil1157[1] || '';
+        var _klick1157 = _tid1157
+          ? ' onclick="document.querySelectorAll(\'[data-dc-ov]\').forEach(function(e){e.remove()});switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid1157+'\')},150)"'
+            + ' style="font-size:12px;color:var(--red);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #ead4d1;line-height:1.4;cursor:pointer"'
+          : ' style="font-size:12px;color:var(--red);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #ead4d1;line-height:1.4"';
+        r+='<div'+_klick1157+'>'+esc(_txt1157)
+          +(_tid1157?' <span style="font-size:10px;font-weight:700;color:var(--orange);white-space:nowrap">→ Termin</span>':'')
+          +'</div>';
       });
       return r+'</div>';
     }
