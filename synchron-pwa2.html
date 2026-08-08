@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1155';
+  if(elH) elH.textContent = '1156';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7996,6 +7996,21 @@ function dokReklassifizieren(dokId){
 }
 
 function dokSetTyp(dokId, newTyp){
+  var _dPre=(db.dokumente||[]).find(function(x){return x.id===dokId;});
+  // ── Build 1156: Nullauswahl abfangen ─────────────────────────────────
+  // Das Sheet (dokReklassifizieren) zeigt drei Knöpfe, ohne den aktuellen
+  // Typ zu markieren. Wählt man den Typ, der ohnehin schon gesetzt ist,
+  // lief die Funktion bisher stur durch: Log-Eintrag, Zuweisung ohne
+  // Wirkung — und bei 'abrechn' die Auto-Bestätigung aus Build 834.
+  // Ergebnis: ein Tipp, der nichts ändern sollte, bestätigt den Beleg.
+  // Real aufgetreten am 08.08.2026, 17:16 (Monats-Abrechnung 4.pdf,
+  // zweimal "abrechn → abrechn", je gefolgt von "Dok bestätigt").
+  // Betroffen wären 162 der 182 Dokumente im Bestand (typ==='abrechn').
+  if(_dPre && _dPre.typ === newTyp){
+    document.querySelectorAll('[style*="z-index:3000"]').forEach(function(el){el.remove();});
+    showToast('Typ ist bereits gesetzt — nichts geändert');
+    return;
+  }
   pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
@@ -12944,6 +12959,25 @@ function undoAction(actionId){
   var idx = (db.actionLog||[]).findIndex(function(a){return a.id===actionId;});
   if(idx < 0) return;
   var action = db.actionLog[idx];
+
+  // ── Build 1156: Rückfrage, wo "Rückgängig" in Wahrheit löscht ────────
+  // Der Undo-Fall 'dok_bestaetigt' (Z. ~12913, Build 765) behandelt das
+  // Dokument "wie nie hochgeladen": Beleg, dbv2-Eintrag, Junctions und
+  // Termin-Zuordnung verschwinden. Die Beschriftung "Rückgängig" legt
+  // nahe, dass nur die Bestätigung zurückgenommen wird. Ohne Rückfrage
+  // ist das für eine Beta-Nutzerin ein Datenverlust mit einem Tipp —
+  // und das PDF liegt danach nur noch im Mail-Anhang, nicht in der App.
+  if(action.typ === 'dok_bestaetigt' && !action._undoBestaetigt){
+    var _nm = (action.undoData && action.undoData.dateiname) || '';
+    if(!confirm('Achtung: Damit wird der Beleg vollständig gelöscht'
+        + (_nm ? ' (' + _nm + ')' : '')
+        + ' — nicht nur die Bestätigung zurückgenommen.\n\n'
+        + 'Der Eintrag verschwindet aus Jahresabschluss und USt-VA. '
+        + 'Zum erneuten Erfassen musst du die Datei neu hochladen.\n\n'
+        + 'Wirklich löschen?')){
+      return;
+    }
+  }
 
   // ─── Build 778: Snapshot-Restore zuerst versuchen ───
   // Wenn ein RAM-Snapshot zu dieser Aktion existiert, stellen wir den exakten
