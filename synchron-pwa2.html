@@ -3020,6 +3020,13 @@ function _konsolidiereDokumentNachV2(dokId){
 
       // Felder aus den Sessions zusammenführen — alles nur, was aus dem PDF kommt
       var anyBrutto = 0, hatBrutto = false;       // Summe explizit gelesener Brutto-Werte
+      // Build 1155: Prüfsumme getrennt vom Anzeigewert. anyBrutto wird durch
+      // differenz_geklaert:true genullt (Schutz manueller Entscheidungen, Build 1146).
+      // anyBruttoPruef ignoriert diese Sperre — sonst schaltet ein Klick auf
+      // "Differenz geklärt" den Rechenprüfer mit ab. Regression 08.08. gegen
+      // Backup 2026-08-08-0818: 0 Wertänderungen, 2 Statusänderungen (Happy
+      // Valley 3 / FFS 3298-20260403) — beide echte, bisher stumme Funde.
+      var anyBruttoPruef = 0, hatBruttoPruef = false;
       var summeGG = 0, hatGG = false;             // Summe Grundgage-Anteile
       var summeTakegage = 0, hatTakegage = false; // Summe Takegage-Posten (z.B. 32 × 4,20 = 134,40)
       var anyTakes = 0;                            // Takes wenn vorhanden (für Anzeige)
@@ -3065,7 +3072,9 @@ function _konsolidiereDokumentNachV2(dokId){
           var t = (db.termine||[]).find(function(x){ return x.id === s.terminId; });
           return t && t.differenz_geklaert === true;
         })();
-        var sB  = _termGeklaert ? 0 : (parseFloat(s.brutto_termin) || parseFloat(s.brutto) || 0);
+        var sBroh = (parseFloat(s.brutto_termin) || parseFloat(s.brutto) || 0);
+        if(sBroh > 0){ anyBruttoPruef += sBroh; hatBruttoPruef = true; }   // Build 1155
+        var sB  = _termGeklaert ? 0 : sBroh;
         var sGG = parseFloat(s.grundgage) || 0;
         var sR  = parseFloat(s.take_gage) || 0;
         var sT  = parseInt(s.takes)       || 0;
@@ -3099,9 +3108,48 @@ function _konsolidiereDokumentNachV2(dokId){
 
       // berechnung_check: stimmt explizit gelesener Brutto mit summe der Posten überein?
       var bruttoCheck = 'ok';
-      if(hatBrutto && (hatGG || hatTakegage)){
-        if(Math.abs(anyBrutto - (summeGG + summeTakegage)) > 1.5){
+      var checkGrund  = null;   // Build 1155: Begründung, wenn strukturell erklärbar
+      if(hatBruttoPruef && (hatGG || hatTakegage)){
+        var _postenSumme = summeGG + summeTakegage;
+        if(Math.abs(anyBruttoPruef - _postenSumme) > 1.5){
           bruttoCheck = 'abweichung';
+
+          // ── Build 1155: strukturelle Muster sind KEIN Lesefehler ───────
+          // Regression 08.08. gegen Backup 2026-08-08-0818: ohne diesen Block
+          // stehen 16 Warnungen auf 211 Junctions, davon 13 strukturell
+          // erklärbar (81 % Fehlalarm). Eine Warnung, die man ignorieren
+          // lernt, ist schlechter als keine.
+
+          // 1) Paketregel 1-10: das PDF schreibt "Takegage 1-10 · 1 x 42,00",
+          //    die KI liest takes:0. Beleg-Brutto = Grundgage + 10 x Rate.
+          //    11 Fälle im Bestand (Diff exakt 42,00 bzw. 40,00).
+          var _tf = _tarife() || [];
+          for(var _i1155=0; _i1155<_tf.length; _i1155++){
+            var _t1155 = _tf[_i1155];
+            if(!_t1155.paketRegel || !(_t1155.kommgage>0) || !(_t1155.rate>0)) continue;
+            if(Math.abs(summeGG - _t1155.kommgage) > 1) continue;
+            if(Math.abs(anyBruttoPruef - (_t1155.kommgage + 10*_t1155.rate)) > 1.5) continue;
+            bruttoCheck = 'ok'; checkGrund = 'paket_1_10'; break;
+          }
+
+          // 2) Klasse 3 (Eigenrechnung): brutto_termin ist INKL. USt, die
+          //    Posten sind netto. Beispiel Barsoi: 12.309 x 1,19 = 14.647,71.
+          if(bruttoCheck === 'abweichung' && v2Ab && v2Ab.klasse === '3'){
+            var _bas = parseFloat(v2Ab.ust_basis) || 0;
+            var _ustB = parseFloat(v2Ab.ust_betrag) || 0;
+            if(_bas > 0){
+              var _satz = _ustB / _bas;
+              if(Math.abs((anyBruttoPruef/(1+_satz)) - _postenSumme) <= 1.5){
+                bruttoCheck = 'ok'; checkGrund = 'klasse3_ust';
+              }
+            }
+          }
+
+          // 3) Klasse 2 (toneworx): Honorar + Nutzungsrechte nach § 73 UrhG.
+          //    Die Posten decken nur das Honorar — die Differenz ist gewollt.
+          if(bruttoCheck === 'abweichung' && v2Ab && v2Ab.klasse === '2'){
+            bruttoCheck = 'ok'; checkGrund = 'klasse2_nutzungsrechte';
+          }
         }
       }
 
@@ -3117,6 +3165,7 @@ function _konsolidiereDokumentNachV2(dokId){
         existingLink.takes_anteil          = anyTakes || null;
         existingLink.tarif_erkannt         = sTarif;
         existingLink.berechnung_check      = bruttoCheck;
+        existingLink.check_grund           = checkGrund;   // Build 1155
         existingLink.aktualisiert_am       = new Date().toISOString();
         linksGeupdated++;
       } else {
@@ -3130,6 +3179,7 @@ function _konsolidiereDokumentNachV2(dokId){
           takes_anteil:          anyTakes || null,
           tarif_erkannt:         sTarif,
           berechnung_check:      bruttoCheck,
+          check_grund:           checkGrund,   // Build 1155
           datum_ambiguitaet:     false,
           buchungskonto:         null,
           notiz:                 null,
@@ -3740,6 +3790,11 @@ function v2TerminView(terminId){
     takes:                parseInt(junction.takes_anteil) || null,
     tarif_erkannt:        junction.tarif_erkannt || null,
     berechnung_check:     junction.berechnung_check || null,
+    // Build 1155: Marker, ob die Junction schon mit der neuen Prueflogik
+    // geschrieben wurde. Alt-Junctions (vor 1155) haben den Key nicht und
+    // tragen noch die ungefilterten Werte — deren Warnung wird nicht gezeigt,
+    // bis der Beleg einmal neu konsolidiert ist.
+    _checkNeu:            Object.prototype.hasOwnProperty.call(junction, 'check_grund'),
     ab:                   ab,
     junction:             junction,
     quelle:               'v2'
@@ -4889,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1154';
+  if(elH) elH.textContent = '1155';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5613,6 +5668,7 @@ function openDetail(id){
           _v2AnzahlTermineInSammel: v2viewD.anzahlTermineInSammel,
           _v2TarifErkannt:          v2viewD.tarif_erkannt,
           _v2BerechnungCheck:       v2viewD.berechnung_check,
+          _v2CheckNeu:              v2viewD._checkNeu,   // Build 1155
           _v2GesamtBrutto:          v2viewD.ab.brutto,
           _v2Source:                true,
           _nurMarker:               false,
@@ -6099,6 +6155,19 @@ function openDetail(id){
                 : 'Brutto = App-Netto'))
         + '</div>'+
         '<div class="ir-val" style="color:'+matchCol+';font-weight:900">'+(ab.brutto==null?'<span style="font-style:italic">—</span>':fmtEur(ab.brutto))+'</div></div>'
+      /* ── Build 1155: Rechenprüfung sichtbar machen ──────────────────────
+         berechnung_check wird seit Build 737 bei jeder Konsolidierung
+         berechnet (Beleg-Brutto gegen Summe der Einzelposten) und war bis
+         hier nirgends gelesen — ein Treffer im ganzen File, die Zuweisung
+         selbst bei Z. 5615. Strukturell erklärbare Fälle (Paketregel 1-10,
+         Klasse 3 inkl. USt, Klasse 2 Nutzungsrechte) werden in der
+         Konsolidierung auf 'ok' gesetzt und erscheinen hier nicht. */
+      +(ab._v2BerechnungCheck === 'abweichung' && ab._v2CheckNeu
+        ? '<div class="info-row" style="background:#fff5f5;border-radius:6px;margin-top:4px">'+
+          '<div class="ir-key" style="color:var(--orange);font-weight:700">⚠ Rechenprüfung</div>'+
+          '<div class="ir-val" style="color:var(--orange);font-weight:700;font-size:11px">'+
+          'Posten ergeben nicht das Beleg-Brutto</div></div>'
+        : '')
       +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
         (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
