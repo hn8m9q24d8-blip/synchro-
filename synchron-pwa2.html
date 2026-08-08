@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1163';
+  if(elH) elH.textContent = '1165';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -8224,6 +8224,17 @@ function terminBackBtn(){
     ctid = null;
     switchView('dokumente');
     setTimeout(function(){ dokOpenDetail(returnId); }, 200);
+  } else if(window._returnToDatencheck){
+    // ── Build 1164: Rueckweg zum Daten-Check ───────────────────────────
+    // Wer aus der Pruefliste auf einen Termin springt, will danach wieder in
+    // die Liste — nicht in den Kalender. Gleiches Muster wie _returnToDokId
+    // (Z. 8200), nur mit der Pruefliste als Ziel. Der Check laeuft dabei neu,
+    // damit eine gerade vorgenommene Korrektur sofort aus der Liste faellt.
+    window._returnToDatencheck = false;
+    closeDetail();   // enthaelt den Merge-Revert (Z. ~6534)
+    setTimeout(function(){
+      try { runIntegrityCheckAndShow(); } catch(e){ }
+    }, 220);
   } else {
     // Normaler Zurück — mit Merge-Revert wenn nötig
     closeDetail();
@@ -22456,6 +22467,12 @@ function runIntegrityCheck(silent){
     // Grundgagenwert). Die Ausnahme verdeckte also genau den Fall, den sie erklaeren
     // sollte. Korrekt greift die Regel nur, wenn wenige Takes auf 10 aufgerundet wurden.
     if(gvlGesamt < 10 && abTakes === 10) return;
+    // Build 1165: vom Nutzer geprueft = kein Befund. Gleiche Semantik wie in den
+    // beiden Brutto-Differenz-Regeln (Build 1162) und in den Termin-Karten
+    // (Build 1157) — der Haken "✓ geprüft" soll ueberall gelten, nicht nur an
+    // zwei von drei Stellen. Betrifft 5 der 13 Meldungen im Backup
+    // 2026-08-08-1744. Rueckweg: grauer Haken im Termin schaltet das Flag ab.
+    if(t.differenz_geklaert) return;
     warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
   });
 
@@ -22734,7 +22751,7 @@ function runIntegrityCheckAndShow(){
             var _vor1160  = (_m1160[1]||'') + (_m1160[2]||'')
                           + (_m1160[3].length > _link1160.length ? 'Termin ' : '');
             _inhalt1157 = esc(_vor1160)
-              + '<span onclick="event.stopPropagation();document.querySelectorAll(\'[data-dc-ov]\').forEach(function(e){e.remove()});switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid1157+'\')},150)"'
+              + '<span onclick="event.stopPropagation();window._returnToDatencheck=true;document.querySelectorAll(\'[data-dc-ov]\').forEach(function(e){e.remove()});switchView(\'termine\');setTimeout(function(){openDetail(\''+_tid1157+'\')},150)"'
               + ' style="font-weight:800;color:var(--orange);cursor:pointer">'
               + esc(_link1160) + '</span>'
               + esc(_m1160[4]);
