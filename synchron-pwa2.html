@@ -4944,7 +4944,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1165';
+  if(elH) elH.textContent = '1167';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -19273,8 +19273,33 @@ function dokBestaetigenMonat(dokId){
       var tKomm = parseFloat(t.kommgage)||0;
       // 1-10-Regel erkennen: grundgage = kommgage + 10×rate
       var s1to10 = sGG > 0 && sRate > 0 && Math.abs(sGG - (tKomm + 10*sRate)) < 1.5;
-      // Wenn 1-10-Regel: echte Takes = sTakes + 10
-      var sTakesEffektiv = s1to10 ? sTakes + 10 : sTakes;
+      // ── Build 1167: Takes bei Paket-Abrechnung aus dem Brutto ableiten ──
+      // Bisher: takes_abgerechnet = takes + 10, sobald die Paket-Signatur
+      // (grundgage = kommgage + 10 x rate) erkannt wurde. Das unterstellt, die
+      // gelesenen Takes seien ZUSAETZLICH zum Paket — was in 7 von 12 Faellen
+      // stimmt, in 5 aber nicht:
+      //   The Artful Dodger 21.11.25 : Brutto = Grundgage, also nur das Paket,
+      //                                gespeichert 13 statt 10
+      //   Navy CIS 23.06.26, Torment 03.07./06.07., Dreaming Whilst Black:
+      //                                +10 wurde gar nicht angewandt, 96/137/
+      //                                77/105 statt 106/147/87/115
+      // Der Beleg selbst entscheidet es eindeutig: die Zusatz-Takes ergeben sich
+      // aus (Brutto - Grundgage) / Rate. Bei nur einem Paket ist das 0 -> 10.
+      // Gegen Backup 2026-08-08-1744 an allen 12 Paket-Terminen geprueft: das
+      // Beleg-Brutto wird jedes Mal exakt rekonstruiert, 7 Werte unveraendert,
+      // 5 korrigiert. Ausserhalb der Paket-Signatur aendert sich nichts.
+      var sTakesEffektiv;
+      if(s1to10){
+        var _sBr1167 = parseFloat(s.brutto_termin)||0;
+        if(_sBr1167 > 0){
+          var _sZus1167 = Math.round((_sBr1167 - sGG) / sRate);
+          sTakesEffektiv = _sZus1167 > 0 ? _sZus1167 + 10 : 10;
+        } else {
+          sTakesEffektiv = sTakes + 10;   // ohne Brutto: bisheriges Verhalten
+        }
+      } else {
+        sTakesEffektiv = sTakes;
+      }
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
       if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
       if(s.grundgage) t.kommgage_abgerechnet = parseFloat(s.grundgage)||0;
@@ -19965,7 +19990,31 @@ function dokMergeIntoTermin(d, termin){
       var _t10Komm = parseFloat(termin.kommgage)||0;
       var _t10Rate = parseFloat(takeGage||termin.rate)||0;
       var _t10Is1to10 = grundgage > 0 && _t10Rate > 0 && Math.abs(grundgage - (_t10Komm + 10*_t10Rate)) < 1.5;
-      if(takes) termin.takes_abgerechnet = _t10Is1to10 ? takes + 10 : takes;
+      // ── Build 1167: Takes bei Paket-Abrechnung aus dem Brutto ableiten ──
+      // Bisher: takes_abgerechnet = takes + 10, sobald die Paket-Signatur
+      // (grundgage = kommgage + 10 x rate) erkannt wurde. Das unterstellt, die
+      // gelesenen Takes seien ZUSAETZLICH zum Paket — was in 7 von 12 Faellen
+      // stimmt, in 5 aber nicht:
+      //   The Artful Dodger 21.11.25 : Brutto = Grundgage, also nur das Paket,
+      //                                gespeichert 13 statt 10
+      //   Navy CIS 23.06.26, Torment 03.07./06.07., Dreaming Whilst Black:
+      //                                +10 wurde gar nicht angewandt, 96/137/
+      //                                77/105 statt 106/147/87/115
+      // Der Beleg selbst entscheidet es eindeutig: die Zusatz-Takes ergeben sich
+      // aus (Brutto - Grundgage) / Rate. Bei nur einem Paket ist das 0 -> 10.
+      // Gegen Backup 2026-08-08-1744 an allen 12 Paket-Terminen geprueft: das
+      // Beleg-Brutto wird jedes Mal exakt rekonstruiert, 7 Werte unveraendert,
+      // 5 korrigiert. Ausserhalb der Paket-Signatur aendert sich nichts.
+      var _t10Eff1167;
+      if(_t10Is1to10 && brutto > 0){
+        var _zus1167 = Math.round((brutto - grundgage) / _t10Rate);
+        _t10Eff1167 = _zus1167 > 0 ? _zus1167 + 10 : 10;
+      } else if(_t10Is1to10){
+        _t10Eff1167 = takes + 10;   // ohne Brutto: bisheriges Verhalten
+      } else {
+        _t10Eff1167 = takes;
+      }
+      if(takes || _t10Is1to10) termin.takes_abgerechnet = _t10Eff1167;
       if(takeGage) termin.rate_abgerechnet = takeGage;
       if(grundgage) termin.kommgage_abgerechnet = grundgage;
       if(d.kuerzel && !termin.sender){
@@ -20066,7 +20115,31 @@ function dokMergeIntoTermin(d, termin){
       var _t10Komm = parseFloat(termin.kommgage)||0;
       var _t10Rate = parseFloat(takeGage||termin.rate)||0;
       var _t10Is1to10 = grundgage > 0 && _t10Rate > 0 && Math.abs(grundgage - (_t10Komm + 10*_t10Rate)) < 1.5;
-      if(takes) termin.takes_abgerechnet = _t10Is1to10 ? takes + 10 : takes;
+      // ── Build 1167: Takes bei Paket-Abrechnung aus dem Brutto ableiten ──
+      // Bisher: takes_abgerechnet = takes + 10, sobald die Paket-Signatur
+      // (grundgage = kommgage + 10 x rate) erkannt wurde. Das unterstellt, die
+      // gelesenen Takes seien ZUSAETZLICH zum Paket — was in 7 von 12 Faellen
+      // stimmt, in 5 aber nicht:
+      //   The Artful Dodger 21.11.25 : Brutto = Grundgage, also nur das Paket,
+      //                                gespeichert 13 statt 10
+      //   Navy CIS 23.06.26, Torment 03.07./06.07., Dreaming Whilst Black:
+      //                                +10 wurde gar nicht angewandt, 96/137/
+      //                                77/105 statt 106/147/87/115
+      // Der Beleg selbst entscheidet es eindeutig: die Zusatz-Takes ergeben sich
+      // aus (Brutto - Grundgage) / Rate. Bei nur einem Paket ist das 0 -> 10.
+      // Gegen Backup 2026-08-08-1744 an allen 12 Paket-Terminen geprueft: das
+      // Beleg-Brutto wird jedes Mal exakt rekonstruiert, 7 Werte unveraendert,
+      // 5 korrigiert. Ausserhalb der Paket-Signatur aendert sich nichts.
+      var _t10Eff1167;
+      if(_t10Is1to10 && brutto > 0){
+        var _zus1167 = Math.round((brutto - grundgage) / _t10Rate);
+        _t10Eff1167 = _zus1167 > 0 ? _zus1167 + 10 : 10;
+      } else if(_t10Is1to10){
+        _t10Eff1167 = takes + 10;   // ohne Brutto: bisheriges Verhalten
+      } else {
+        _t10Eff1167 = takes;
+      }
+      if(takes || _t10Is1to10) termin.takes_abgerechnet = _t10Eff1167;
       if(takeGage) termin.rate_abgerechnet = takeGage;
       if(grundgage) termin.kommgage_abgerechnet = grundgage;
 
@@ -22467,6 +22540,20 @@ function runIntegrityCheck(silent){
     // Grundgagenwert). Die Ausnahme verdeckte also genau den Fall, den sie erklaeren
     // sollte. Korrekt greift die Regel nur, wenn wenige Takes auf 10 aufgerundet wurden.
     if(gvlGesamt < 10 && abTakes === 10) return;
+    // ── Build 1166: Paket ohne Zusatz-Takes ist keine Abweichung ────────
+    // Z. 19968 / 20069 schreiben bei erkannter 1-10-Konstellation bewusst
+    // takes_abgerechnet = takes + 10, weil die gelesenen Takes dort ZUSAETZLICH
+    // zum Paket anfallen (Navy CIS: 120 Takes + Paket = 130, Brutto 600 gegen
+    // Grundgage 120 — passt). Deckt der Beleg aber nur das Paket ab, sind die
+    // Takes keine Zusatzleistung, sondern dieselben: The Artful Dodger hat
+    // Brutto 127 = Grundgage 127, also 3 disponierte Takes im Paket, nicht 13.
+    // Erkennbar daran, dass Beleg-Brutto und Grundgage uebereinstimmen.
+    // Gegen Backup 2026-08-08-1744: 8 Termine mit takes+10, davon 2 nur Paket
+    // (The Artful Dodger 21.11.2025, Relationship Goals 16.12.2025).
+    var _btP1166 = parseFloat(t.brutto_termin)||0;
+    var _ggP1166 = parseFloat(t.kommgage_abgerechnet)||0;
+    if(_btP1166 > 0 && _ggP1166 > 0 && Math.abs(_btP1166 - _ggP1166) < 1.5
+       && abTakes === gvlGesamt + 10) return;
     // Build 1165: vom Nutzer geprueft = kein Befund. Gleiche Semantik wie in den
     // beiden Brutto-Differenz-Regeln (Build 1162) und in den Termin-Karten
     // (Build 1157) — der Haken "✓ geprüft" soll ueberall gelten, nicht nur an
