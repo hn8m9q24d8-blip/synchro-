@@ -4998,7 +4998,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1169';
+  if(elH) elH.textContent = '1171';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -22604,6 +22604,48 @@ function runIntegrityCheck(silent){
     // dort steht zudem kommgage_abgerechnet 127, das ist der Brutto- und nicht der
     // Grundgagenwert). Die Ausnahme verdeckte also genau den Fall, den sie erklaeren
     // sollte. Korrekt greift die Regel nur, wenn wenige Takes auf 10 aufgerundet wurden.
+
+  // ── Build 1171: Tarif-Abweichung Dispo gegen Abrechnung ──────────────
+  // Bisher tauchte diese Klasse NUR im Termin selbst auf, nirgends in der
+  // Uebersicht — ausgerechnet die einzige, die Geld kostet. Alle anderen
+  // Regeln pruefen die App gegen sich selbst; diese prueft den Studio-Satz
+  // gegen den disponierten.
+  //
+  // Gemeldet wird der reine Tarifeffekt: (Kommgage_geplant - Kommgage_abgerechnet)
+  // + abgerechnete Takes x (Rate_geplant - Rate_abgerechnet). Bewusst OHNE die
+  // Take-Anzahl-Differenz — sonst mischt sich eine fehlende Dispo-Take-Zahl in
+  // den Betrag und macht ihn unbrauchbar (Ghosts 4 haette sonst -183 statt
+  // +14,40 gemeldet).
+  //
+  // Ausgeschlossen:
+  //   - unvollstaendiger Tarif auf einer der beiden Seiten (47 Faelle im
+  //     Backup 2026-08-08-1744: Sammelbelege, Pauschalen, Eigenrechnungen)
+  //   - Paketformat, wo kommgage_abgerechnet = kommgage + 10 x rate (12 Faelle)
+  //   - vom Nutzer geprueft (differenz_geklaert)
+  // Ergebnis auf dem Backup: 17 Meldungen, 567,70 EUR offen, 20,00 EUR zuviel.
+  (function(){
+    var v2ok = (typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links);
+    if(!v2ok) return;
+    var mitBeleg = {};
+    dbv2.abrechnung_termin_links.forEach(function(l){ mitBeleg[l.termin_id] = true; });
+    (db.termine||[]).forEach(function(t){
+      if(!t || !mitBeleg[t.id]) return;
+      if(t.differenz_geklaert) return;
+      var kg = parseFloat(t.kommgage)||0,            ka = parseFloat(t.kommgage_abgerechnet)||0;
+      var rt = parseFloat(t.rate)||0,                ra = parseFloat(t.rate_abgerechnet)||0;
+      var ta = parseInt(t.takes_abgerechnet)||0;
+      if(!(kg > 0 && ka > 0 && rt > 0 && ra > 0)) return;
+      if(Math.abs(ka - (kg + 10*rt)) < 1.5) return;        // Paketformat
+      if(Math.abs(kg - ka) < 1 && Math.abs(rt - ra) < 0.01) return;
+      var delta = Math.round(((kg - ka) + ta*(rt - ra))*100)/100;
+      if(Math.abs(delta) < 0.01) return;
+      warnings.push('⚠ Tarif-Abweichung: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '
+        + 'disponiert '+fmtEur(kg)+'/'+fmtEur(rt)+' \u2014 abgerechnet '+fmtEur(ka)+'/'+fmtEur(ra)
+        + ' \u2014 '+(delta>0?'offen ':'zuviel gezahlt ')+fmtEur(Math.abs(delta))
+        +'\u0001T'+t.id);
+    });
+  })();
+
     if(gvlGesamt < 10 && abTakes === 10) return;
     // ── Build 1166: Paket ohne Zusatz-Takes ist keine Abweichung ────────
     // Z. 19968 / 20069 schreiben bei erkannter 1-10-Konstellation bewusst
@@ -22664,7 +22706,14 @@ function runIntegrityCheck(silent){
       // Neuberechnungs-Anteil massgeblich, der Storno hebt nur das Alte auf.
       var aktiv = alleJ.filter(function(l){
         var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; });
-        return a && !a.ist_storno;
+        // Build 1170: ueberholte Belege zaehlen ebenfalls nicht. _ueberholt_durch
+        // markiert eine aeltere Fassung, die durch eine neuere ersetzt wurde
+        // (Build 756/757). Jahresabschluss und USt-VA filtern sie bereits heraus
+        // (vgl. Z. ~2965 und Z. ~3777) — dieser Check tat es als einziger nicht
+        // und meldete deshalb "2 Abrechnungen an einem Termin", wo in Wahrheit
+        // eine gilt und eine ersetzt wurde. Realfall: Memory of a Killer
+        // 17.02.2026, Studio Hamburg — 484 EUR ueberholt durch 856 EUR.
+        return a && !a.ist_storno && !a._ueberholt_durch;
       });
       if(!aktiv.length) return;
       if(aktiv.length > 1){
