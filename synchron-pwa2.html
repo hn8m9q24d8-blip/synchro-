@@ -2245,6 +2245,60 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
   }
 })();
 // ═══════════════════════════════════════════════════════════════
+// ─── Build 1169: takes_abgerechnet bei Paket-Abrechnungen heilen ───
+// Einmalig, idempotent. Repariert Werte, die vor Build 1167 geschrieben
+// wurden. Damals galt pauschal takes_abgerechnet = takes + 10, sobald die
+// Paket-Signatur (grundgage = kommgage + 10 x rate) erkannt wurde — ohne zu
+// pruefen, ob die gelesenen Takes ueberhaupt ZUSAETZLICH zum Paket anfallen.
+//
+// Der Beleg entscheidet es eindeutig:
+//   Zusatz-Takes = (brutto_termin - grundgage) / rate
+//   takes_abgerechnet = Zusatz > 0 ? Zusatz + 10 : 10
+//
+// Sicherungen:
+//   - laeuft nur bei erkannter Paket-Signatur
+//   - nur wenn brutto_termin, grundgage, rate und kommgage alle gesetzt sind
+//   - nur wenn die Formel das Beleg-Brutto exakt rekonstruiert (< 0,02 EUR)
+//   - aendert AUSSCHLIESSLICH takes_abgerechnet und das daraus abgeleitete
+//     takes_differenz. Keine Geldwerte: brutto, mwst, ust, auszahlung, SV
+//     werden nicht angefasst. Die Steuerauswertung liest ohnehin dbv2.
+//   - protokolliert jede Aenderung in db._mig1169 (Datum, Titel, alt, neu)
+//
+// Simulation gegen Backup 2026-08-08-1744: 159 Termine mit takes_abgerechnet,
+// davon 12 mit Paket-Signatur, davon 5 korrigiert, 7 unveraendert, 147 ausser-
+// halb der Signatur unberuehrt. Brutto in allen 12 Faellen rekonstruiert.
+(function(){
+  if(!db || !db.termine || db._mig1169Done) return;
+  var protokoll = [];
+  var num = function(v){ var n = parseFloat(String(v).replace(',','.')); return isFinite(n) ? n : 0; };
+  db.termine.forEach(function(t){
+    if(!t || t.takes_abgerechnet == null) return;
+    var gg   = num(t.kommgage_abgerechnet);
+    var rate = num(t.rate_abgerechnet) || num(t.rate);
+    var komm = num(t.kommgage);
+    var br   = num(t.brutto_termin);
+    if(!(gg > 0 && rate > 0 && komm > 0 && br > 0)) return;
+    if(Math.abs(gg - (komm + 10*rate)) >= 1.5) return;      // keine Paket-Signatur
+    var zusatz = Math.round((br - gg) / rate);
+    if(zusatz < 0) return;                                   // unplausibel: nichts tun
+    if(Math.abs(br - (gg + zusatz*rate)) >= 0.02) return;    // Brutto nicht rekonstruierbar
+    var neu = zusatz > 0 ? zusatz + 10 : 10;
+    var alt = parseInt(t.takes_abgerechnet) || 0;
+    if(neu === alt) return;
+    t.takes_abgerechnet = neu;
+    // takes_differenz folgt derselben Regel wie in der Konsolidierung (Z. ~19281)
+    var disp = parseInt(t.takes) || 0;
+    t.takes_differenz = (disp && neu !== disp) ? (disp - neu) : 0;
+    protokoll.push({ datum: t.datum, titel: t.titel, alt: alt, neu: neu });
+  });
+  db._mig1169Done = true;
+  if(protokoll.length){
+    db._mig1169 = { am: new Date().toISOString(), geaendert: protokoll };
+    console.log('[Build 1169] ' + protokoll.length + ' Paket-Takes korrigiert', protokoll);
+  }
+  save(db);
+})();
+// ═══════════════════════════════════════════════════════════════
 // ─── Build 772: Verwaiste Legacy-Geister einmalig bereinigen ───
 // db.abrechnungen-Einträge die auf ein Dokument zeigen das es nicht mehr
 // gibt (z.B. nach altem Rückgängig vor Build 772) sind Müll und tauchen als
@@ -4944,7 +4998,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1167';
+  if(elH) elH.textContent = '1169';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5890,8 +5944,18 @@ function openDetail(id){
           var s = _stile[Math.min(i, _stile.length-1)];
           var aktiv = (_tKg === tf.kommgage && _tR === tf.rate);
           if(aktiv) _istStandard = true;
+          // ── Build 1168: Fuellfarbe folgt der Auswahl, nicht der Position ──
+          // _stile ist nach Platz in der Liste indiziert. Die zweite Kachel trug
+          // dadurch IMMER den gruenen Hintergrund, auch wenn ein anderer Tarif
+          // gewaehlt war — nur der Rahmen wanderte mit. Wer TV antippte, sah
+          // weiterhin Streaming gefuellt und damit zwei scheinbar aktive Kacheln.
+          // Jetzt: gefuellt = ausgewaehlt, ungefuellt = nicht ausgewaehlt.
+          // Die Eigenfarbe jeder Kachel bleibt erhalten, sie erscheint nur im
+          // aktiven Zustand. Reine Darstellung, kein Datenpfad beruehrt.
+          var _bg1168  = aktiv ? s.bg : 'transparent';
+          var _bw1168  = aktiv ? '2px' : '1.5px';
           _html += '<div onclick="setGagePreset(\''+id+'\','+tf.kommgage+','+tf.rate+')"'
-                +  ' style="flex:1;background:'+s.bg+';border:'+s.bw+' solid '+(aktiv?s.an:s.aus)+';'
+                +  ' style="flex:1;background:'+_bg1168+';border:'+_bw1168+' solid '+(aktiv?s.an:'var(--hair)')+';'
                 +  'border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
                 +  '<div style="font-size:11px;font-weight:600;color:'+s.tf+'">'+esc(tf.name)+'</div>'
                 +  '<div style="font-size:11px;color:var(--ink2);margin-top:1px">'
@@ -5900,7 +5964,8 @@ function openDetail(id){
         /* Sonder ist aktiv, sobald eine Gage gesetzt ist, die zu keinem Tarif passt. */
         var _sonderAktiv = !!t.kommgage && !_istStandard;
         _html += '<div onclick="openSonderGageSheet(\''+id+'\')"'
-              +  ' style="flex:1;background:var(--yellow2);border:1.5px solid '+(_sonderAktiv?'#8a6a3f':'var(--warm)')+';'
+              +  ' style="flex:1;background:'+(_sonderAktiv?'var(--yellow2)':'transparent')+';'   /* Build 1168 */
+              +  'border:'+(_sonderAktiv?'2px':'1.5px')+' solid '+(_sonderAktiv?'#8a6a3f':'var(--hair)')+';'
               +  'border-radius:10px;padding:8px;text-align:center;cursor:pointer">'
               +  '<div style="font-size:11px;font-weight:700;color:#8a6a3f">Sonder</div>'
               +  '<div style="font-size:11px;color:#555;margin-top:1px">'
