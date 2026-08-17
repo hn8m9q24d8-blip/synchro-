@@ -4998,7 +4998,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1171';
+  if(elH) elH.textContent = '1173';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5915,6 +5915,27 @@ function openDetail(id){
       // Button entfernt (Build 931): ganze Karte ist klickbar -> gvlTerminBearbeiten
     }
     gvlHtml+='</div></div>';
+  } else if(t.abgerechnet || (typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links
+            && dbv2.abrechnung_termin_links.some(function(l){ return l.termin_id===id; }))){
+    // ── Build 1172: Einstieg, wenn noch keine GVL-Daten da sind ──────────
+    // Die Karte oben wird nur gerendert, wenn bereits GVL-Angaben existieren
+    // (Z. 5865) — und sie ist zugleich der einzige Weg zum Editor
+    // (gvlTerminBearbeiten, Z. 5866). Ohne Daten keine Karte, ohne Karte kein
+    // Editor: die Angaben liessen sich nie nachtragen. Betrifft im Backup
+    // 2026-08-13-1137 39 abgerechnete Termine aus 2026, darunter durchgehende
+    // Serienrollen (The Dink 7 Drehtage / 793 Takes, Navy CIS, Woman's Hell).
+    // Fehlt die Dispo, traegt die KI nichts ein und der Termin faellt fuer die
+    // GVL still durch.
+    // Nur bei abgerechneten/verknuepften Terminen, damit die Ansicht bei
+    // frisch importierten Kalendereintraegen ruhig bleibt.
+    gvlHtml='<div class="info-card" style="border-left:3px solid var(--warm)" onclick="gvlTerminBearbeiten(\''+id+'\')">'
+      +'<div class="info-card-header"><span>GVL-Übersicht</span>'
+      +'<span style="font-size:10px;color:var(--ink3);font-weight:500">›</span></div>'
+      +'<div style="padding:0 16px 14px">'
+      +'<div style="font-size:12px;color:var(--ink3);line-height:1.4">Keine GVL-Angaben \u2014 '
+      +'antippen, um Staffel und Folge nachzutragen'
+      +(t.takes?(' ('+esc(String(t.takes))+' Takes)'):'')+'</div>'
+      +'</div></div>';
   }
 
   // ── TAKES + GAGE ───────────────────────────────────────────
@@ -15259,6 +15280,20 @@ function dokAnalyseDoc(d, key, cb){
     +'    ⚠ Bindestrich zwischen Folgennummern = BEREICH → ALLE Folgen einzeln aufführen!\n'
     +'    ⚠ "Ep. 403-404" = ZWEI Folgen — NICHT eine Folge "403404"!\n'
     +'    ⚠ Wenn nur eine Folge: "Ep. 403" → [{"folge":403,"takes":81}]\n'
+    +'\n'
+    +'FILM-FALLBACK (Build 1173) — wenn WEDER Staffel NOCH Folge auffindbar:\n'
+    +'  Wenn nach Pruefung ALLER Layouts oben keine Staffel- und keine Folgenangabe\n'
+    +'  im Dokument steht (kein EPS, keine Ep., kein S..E.., kein Staffelkopf),\n'
+    +'  dann handelt es sich um eine Produktion OHNE Episodenstruktur — Kinofilm,\n'
+    +'  TV-Film, Trailer, Dokumentation oder Werbung.\n'
+    +'  → gvl_takes_detail=[{"folge":0,"takes":<Takes des Users>}]\n'
+    +'  → gvl_staffel_header=null, gvl_episode_header=null\n'
+    +'  folge=0 ist die Film-Kennung. Sie wird NUR gesetzt, wenn wirklich nichts\n'
+    +'  gefunden wurde — niemals, wenn irgendwo eine Folgennummer steht.\n'
+    +'  Erhaerten koennen das (aber NICHT erforderlich): "(Kino)" oder "Kinofilm"\n'
+    +'  im Titel, ein leeres Episoden-Feld im Kopf, oder "Trailer" im Titel.\n'
+    +'  Beispiel: Kopf "Onslaught (Kino)", Episoden-Feld leer, User-Zeile 43 Takes\n'
+    +'    → gvl_takes_detail=[{"folge":0,"takes":43}]\n'
     +'\n'
     +'TITEL BEREINIGEN — Staffel/Episoden-Angaben aus Titel entfernen:\n'
     +'  "ROOKIE BLUE S5" → titel="ROOKIE BLUE", gvl_staffel_header="5"\n'
