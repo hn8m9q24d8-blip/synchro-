@@ -4998,7 +4998,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1173';
+  if(elH) elH.textContent = '1174';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -16577,6 +16577,32 @@ function terminGageRecherche(terminId){
       var platt=j.plattform||'';
       var wahrsch=j.wahrsch||0;
       var notiz=j.notiz||'';
+      // ── Build 1174: Sender bei hoher Sicherheit direkt eintragen ────────
+      // Der Knopf zeigte das Ergebnis bisher nur an. Die Hintergrund-Recherche
+      // (_terminSenderRecherche, Z. ~7149) schreibt den Sender dagegen seit
+      // jeher ins Feld, ab 85 % Sicherheit. Hier dieselbe Mechanik, aber mit
+      // der von Tim gesetzten Schwelle von 90 %: wer den Knopf bewusst
+      // druckt, will das Ergebnis auch uebernommen haben.
+      // Uebertragen wird auf alle Termine derselben Produktion (_senderProdKey),
+      // aber nur auf solche OHNE Sender: ein manuell gesetzter Wert bleibt.
+      var _sndNeu1174 = false;
+      if(platt && wahrsch >= 90){
+        var _pk1174 = _senderProdKey(t);
+        if(!db._senderProProduktion) db._senderProProduktion = {};
+        db._senderProProduktion[_pk1174] = { sender: platt, kuerzel: null };
+        (db.termine||[]).forEach(function(o){
+          if(o.sender) return;
+          if(_senderProdKey(o) !== _pk1174) return;
+          o.sender = platt;
+          o.sender_quelle = 'KI ' + wahrsch + '%';
+          _sndNeu1174 = true;
+        });
+        if(_sndNeu1174){
+          save(db);
+          showToast('Sender eingetragen: ' + platt);
+          try { openDetail(terminId); } catch(e){}
+        }
+      }
       var empfKG=typ==='streaming'?85:typ==='freetv'?80:typ==='kino'?100:null;
       var empfRate=typ==='streaming'?4.20:typ==='freetv'?4.00:typ==='kino'?5.00:null;
       var farbe=typ==='streaming'?'var(--ai)':typ==='freetv'?'var(--accent)':typ==='kino'?'var(--purple)':'#666';
