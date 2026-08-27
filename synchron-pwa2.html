@@ -3163,6 +3163,25 @@ function _konsolidiereDokumentNachV2(dokId){
       // berechnung_check: stimmt explizit gelesener Brutto mit summe der Posten überein?
       var bruttoCheck = 'ok';
       var checkGrund  = null;   // Build 1155: Begründung, wenn strukturell erklärbar
+
+      // ── Build 1177: zusaetzlich gegen das BELEG-Brutto pruefen ───────────
+      // Die Pruefung unten vergleicht die Session-Bruttos gegen die Session-
+      // Posten. Sind beide aus derselben falschen Annahme abgeleitet, ist der
+      // Vergleich in sich stimmig und faellt nicht auf. Realfall Iyuno
+      // 677/20260802 vom 27.08.2026: die BLEACH-Session bekam take_gage 4,20,
+      // obwohl das PDF "8 x 0,00" ausweist (Takes im 127-EUR-Paket enthalten).
+      // Session-Brutto 160,60 und Posten 160,60 stimmten ueberein, die Summe
+      // beider Sessions ergab aber 518,60 statt der 485,00 des Belegs.
+      // Diese Pruefung greift nur bei MEHREREN Sessions: bei einer einzigen
+      // ist Session-Brutto per Definition gleich Beleg-Brutto, und Teilbelege
+      // aus Monatssammlern wuerden sonst dauerhaft falsch melden.
+      var _belegBr1177 = parseFloat(d.brutto) || 0;
+      if(bruttoCheck === 'ok' && _belegBr1177 > 0 && gruppenSessionsEff.length > 1
+         && hatBruttoPruef && Math.abs(anyBruttoPruef - _belegBr1177) > 1.5){
+        bruttoCheck = 'abweichung';
+        checkGrund  = 'summe_vs_beleg';
+      }
+
       if(hatBruttoPruef && (hatGG || hatTakegage)){
         var _postenSumme = summeGG + summeTakegage;
         if(Math.abs(anyBruttoPruef - _postenSumme) > 1.5){
@@ -4998,7 +5017,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1174';
+  if(elH) elH.textContent = '1178';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5072,7 +5091,7 @@ function termineSuche(q){
         || (t.memo||'').toLowerCase().indexOf(q)>=0;
   });
 
-  results.sort(function(a,b){ return (a.datum||'') > (b.datum||'') ? -1 : 1; }); // neu nach alt
+  results.sort(function(a,b){ return -_tagSort1176(a,b); }); // neu nach alt, Build 1176
 
   if(header) header.textContent = results.length + ' Ergebnis' + (results.length!==1?'se':'');
 
@@ -5153,6 +5172,15 @@ function _backupBanner(){
     +'<button onclick="exportData()" style="flex:none;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">Jetzt sichern</button>'
     +'</div>';
 }
+  // Build 1176: innerhalb eines Tages nach Uhrzeit sortieren. Bisher wurde nur
+  // nach Datum verglichen, die Reihenfolge gleicher Tage war damit zufaellig
+  // (Reihenfolge im Array). Termine ohne Uhrzeit kommen ans Ende des Tages.
+  function _tagSort1176(a, b){
+    var da = a.datum || '', dbb = b.datum || '';
+    if(da !== dbb) return da > dbb ? 1 : -1;
+    var ua = (a.uhrzeit || '99:99'), ub = (b.uhrzeit || '99:99');
+    return ua > ub ? 1 : (ua < ub ? -1 : 0);
+  }
 function rTermine(){
   rWeekStrip();
   _backupBanner();
@@ -5163,7 +5191,7 @@ function rTermine(){
   var header=document.getElementById('termine-header-sub');
   var monthNames=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
-  var all=db.termine.slice().sort(function(a,b){return(a.datum||'')>(b.datum||'')?1:-1;});
+  var all=db.termine.slice().sort(_tagSort1176);   // Build 1176
 
   // Merkliste-Filter: alle gemerkten Termine anzeigen
   if(_merklisteFilter){
@@ -5193,7 +5221,7 @@ function rTermine(){
         var searchRes=(db.termine||[]).filter(function(t){
           var q=_lastSucheQuery;
           return (t.titel||'').toLowerCase().indexOf(q)>=0||(t.studio||'').toLowerCase().indexOf(q)>=0||(t.rolle||'').toLowerCase().indexOf(q)>=0;
-        }).sort(function(a,b){return(a.datum||'')>(b.datum||'')?-1:1;});
+        }).sort(function(a,b){ return -_tagSort1176(a,b); });   // Build 1176
         searchRes.forEach(function(t){t._showMonth=true;});
         restHtml=searchRes.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
         searchRes.forEach(function(t){delete t._showMonth;});
@@ -15289,7 +15317,17 @@ function dokAnalyseDoc(d, key, cb){
     +'  → gvl_takes_detail=[{"folge":0,"takes":<Takes des Users>}]\n'
     +'  → gvl_staffel_header=null, gvl_episode_header=null\n'
     +'  folge=0 ist die Film-Kennung. Sie wird NUR gesetzt, wenn wirklich nichts\n'
-    +'  gefunden wurde — niemals, wenn irgendwo eine Folgennummer steht.\n'
+    +'  gefunden wurde. NIEMALS, wenn irgendwo eine Folgennummer steht.\n'
+    +'  ⚠ HARTE SPERRE (Build 1175): Wenn im Kopf eine Staffel steht (z.B.\n'
+    +'    "Staffel 1", "S3", "Season 2"), ist es KEIN Film. Dann gilt Layout F:\n'
+    +'    Staffel aus dem Kopf, Folge aus der EPS-Spalte der User-Zeile.\n'
+    +'    Setze in diesem Fall NIEMALS folge=0, auch wenn die EPS-Spalte\n'
+    +'    schwer lesbar ist. Lieber gvl_takes_detail=null zurueckgeben.\n'
+    +'  ⚠ SPALTENFALLE: EPS und Takes stehen oft direkt nebeneinander. Die\n'
+    +'    EPS-Zahl ist klein (1 bis 2 Stellen), die Takes-Zahl meist groesser.\n'
+    +'    Pruefe: addieren sich die Takes aller Zeilen zur Gesamtzahl im Kopf\n'
+    +'    ("Takes: 91")? Wenn ja, hast du die richtige Spalte. Bei gedrehten\n'
+    +'    oder schraegen Fotos diese Gegenprobe IMMER machen.\n'
     +'  Erhaerten koennen das (aber NICHT erforderlich): "(Kino)" oder "Kinofilm"\n'
     +'  im Titel, ein leeres Episoden-Feld im Kopf, oder "Trailer" im Titel.\n'
     +'  Beispiel: Kopf "Onslaught (Kino)", Episoden-Feld leer, User-Zeile 43 Takes\n'
@@ -15385,6 +15423,12 @@ function dokAnalyseDoc(d, key, cb){
     +'    Bei Einzelabrechnung (abrechn): grundgage = dieser Pauschalbetrag, takes=0, take_gage=0\n'
     +'    ⚠⚠⚠ WENN grundgage gesetzt aber take_gage=0 und takes=0: IMMER prüfen ob 1-10-Regel!\n'
     +'    Bekannte Sätze: TV=80€+10×4€=120€, Streaming=85€+10×4,20€=127€, Kino=100€+10×5€=150€\n'
+    +'    ⚠⚠⚠ VORRANG (Build 1178): Diese Aufteilung NUR anwenden, wenn es KEINE\n'
+    +'      separate Takegage-Zeile mit Betrag 0,00 gibt. Steht im Beleg eine Zeile\n'
+    +'      wie "Takegage Streaming (1-10)  8 x 0,00 = 0,00", dann gilt das\n'
+    +'      VSI-FORMAT weiter unten und NICHT diese Aufteilung. Der Betrag 0,00\n'
+    +'      ist die Angabe des Studios, dass die Takes in der Pauschale stecken.\n'
+    +'      Eine im Beleg stehende Zahl wird niemals durch eine Rechenregel ersetzt.\n'
     +'    Wenn grundgage einem dieser Werte entspricht: take_gage und grundgage AUFTEILEN!\n'
     +'    Beispiel: grundgage=127 → grundgage=85, take_gage=4.20, takes=0 (App addiert 10 automatisch)\n'
     +'    Beispiel: grundgage=120 → grundgage=80, take_gage=4.0, takes=0\n'
@@ -15395,6 +15439,19 @@ function dokAnalyseDoc(d, key, cb){
     +'    Der 0,00€-Betrag bei Takegage bedeutet: er ist bereits in Grundgage enthalten!\n'
     +'    → take_gage=0, takes = Anzahl aus Takegage-Zeile (hier 4)\n'
     +'    → grundgage = Pauschale (127€) — KEINE 1-10-Regel hier, einfach Pauschalgage für ≤10 Takes\n'
+    +'    ⚠ Diese Regel hat VORRANG vor der 1-10-Aufteilung oben. Erkennungsmerkmal\n'
+    +'      ist allein der Betrag 0,00 in der Takegage-Zeile, unabhaengig vom Studio.\n'
+    +'      Realfall Iyuno 677/20260802: "Grundgage Streaming (1-10) 1 x 127,00" und\n'
+    +'      "Takegage Streaming (1-10) 8 x 0,00" → takes=8, take_gage=0, grundgage=127,\n'
+    +'      brutto_termin=127. NICHT 85 + 8x4,20 = 118,60 und NICHT 127 + 8x4,20 = 160,60.\n'
+    +'  ⚠⚠⚠ SCHLUSSPROBE bei mehreren Sessions (Build 1178):\n'
+    +'    Bevor du antwortest: addiere die brutto_termin aller sessions dieses Belegs.\n'
+    +'    Die Summe MUSS der BRUTTO GAGE des Belegs entsprechen.\n'
+    +'    Stimmt sie nicht, hast du eine Position falsch gelesen — meist eine\n'
+    +'    Takegage-Zeile mit Betrag 0,00, die faelschlich mit einem Satz gerechnet wurde.\n'
+    +'    Korrigiere in dem Fall die Session, nicht das Beleg-Brutto.\n'
+    +'    Beispiel: Sessions 358,00 + 160,60 = 518,60, Beleg sagt 485,00 → falsch.\n'
+    +'    Mit take_gage=0 in der zweiten Session: 358,00 + 127,00 = 485,00 → richtig.\n'
     +'  ⚠ TV vs STREAMING erkennen aus Zeilenbeschriftung:\n'
     +'    "Streaming" oder "AMAZ", "NFLX", "DISN", "APPLE" in Zeile → produktionstyp=streaming\n'
     +'    "TV", "WARN", "PRO7", "ARD", "ZDF" oder kein Typ → produktionstyp=tv\n'
@@ -17883,6 +17940,16 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         if(s.grundgage) body+=' · GG: '+s.grundgage+'€';
         if(s.brutto_termin) body+=' · <b>'+s.brutto_termin+'€</b>';
         body+='</div>';
+        // ── Build 1177: Session-Werte korrigierbar machen ─────────────────
+        // Session-Felder waren bisher in KEINER Ansicht editierbar. Liest die
+        // KI eine Position falsch, blieb nur Loeschen und neu hochladen mit
+        // dem bekannten Varianz-Risiko. Realfall Iyuno 677/20260802: die
+        // BLEACH-Session bekam take_gage 4,20 statt 0,00 (Takes im Paket
+        // enthalten), Beleg-Anteil 160,60 statt 127,00.
+        // Der Kopf-Wert des Belegs half nicht: Sessions tragen eigene Werte.
+        body+='<div onclick="event.stopPropagation();dokSessionEdit(\''+d.id+'\','+si+')"'
+            + ' style="font-size:10px;color:var(--ink3);margin-top:4px;cursor:pointer">'
+            + '✎ Werte korrigieren</div>';
         body+='</div>';
       });
       if(allDone){
@@ -18858,6 +18925,69 @@ function dokLinkCancel(){
 //  - Liste der besten Termin-Kandidaten am selben Datum (auch knappe Scores)
 //  - Button "Neuen Termin aus dieser Session anlegen"
 //  - Schließen → zurück zur KI-Übersicht (kein Verlust des Kontexts)
+
+// ── Build 1177: Editor fuer Session-Werte ───────────────────────────────
+// Aendert takes, take_gage und grundgage einer einzelnen Session und rechnet
+// brutto_termin daraus neu. Kein Zugriff auf Beleg-Brutto, MwSt, SV oder
+// Auszahlung: die bleiben, wie sie im PDF stehen. Nach dem Speichern laeuft
+// die Konsolidierung erneut, damit Junction und Pruefung den neuen Stand sehen.
+function dokSessionEdit(dokId, si){
+  var d = (db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  if(!d || !d.sessions || !d.sessions[si]) return;
+  var s = d.sessions[si];
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3200;display:flex;align-items:flex-end;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px';
+  function fld(id, label, val){
+    return '<div style="flex:1"><div style="font-size:10px;color:var(--ink3);font-weight:700;letter-spacing:.5px;margin-bottom:4px">'
+      + label + '</div><input id="'+id+'" type="text" inputmode="decimal" value="'+(val==null?'':String(val))
+      + '" style="width:100%;padding:10px;border:1.5px solid var(--hair);border-radius:10px;font-size:15px;box-sizing:border-box"></div>';
+  }
+  box.innerHTML = '<div style="font-size:17px;font-weight:800;margin-bottom:4px">Session korrigieren</div>'
+    + '<div style="font-size:12px;color:var(--ink3);margin-bottom:14px">'
+    + esc(s.titel||'') + (s.datum ? ' · ' + esc(s.datum.split('-').reverse().join('.')) : '') + '</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + fld('se-takes','TAKES', s.takes)
+    + fld('se-rate','TAKE-GAGE €', s.take_gage)
+    + fld('se-gg','GRUNDGAGE €', s.grundgage)
+    + '</div>'
+    + '<div id="se-vorschau" style="font-size:12px;color:var(--ink3);margin-bottom:14px"></div>'
+    + '<button type="button" id="se-save" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer">Speichern</button>'
+    + '<button type="button" id="se-cancel" style="width:100%;background:none;border:none;color:var(--ink3);padding:12px;font-size:14px;cursor:pointer">Abbrechen</button>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  function lies(id){ var e=document.getElementById(id); return e ? (parseFloat(String(e.value).replace(',','.'))||0) : 0; }
+  function vorschau(){
+    var br = Math.round((lies('se-gg') + lies('se-takes')*lies('se-rate'))*100)/100;
+    var el = document.getElementById('se-vorschau');
+    if(el) el.innerHTML = 'Brutto-Anteil neu: <b>' + fmtEur(br) + '</b>'
+      + (s.brutto_termin!=null ? ' <span style="color:var(--ink3)">(bisher '+fmtEur(s.brutto_termin)+')</span>' : '');
+  }
+  ['se-takes','se-rate','se-gg'].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.addEventListener('input', vorschau);
+  });
+  vorschau();
+  document.getElementById('se-cancel').onclick = function(){ ov.remove(); };
+  document.getElementById('se-save').onclick = function(){
+    pushSnapshotVorAktion();
+    var alt = { takes:s.takes, take_gage:s.take_gage, grundgage:s.grundgage, brutto_termin:s.brutto_termin };
+    s.takes      = lies('se-takes');
+    s.take_gage  = lies('se-rate');
+    s.grundgage  = lies('se-gg');
+    s.brutto_termin = Math.round((s.grundgage + s.takes*s.take_gage)*100)/100;
+    logAction('ab_edit','Session korrigiert · '+(d.beschr||d.dateiname||'')+' · '+(s.titel||'')
+      + ' · ' + alt.takes + 'x' + alt.take_gage + '+' + alt.grundgage + ' → '
+      + s.takes + 'x' + s.take_gage + '+' + s.grundgage,
+      { dokId:d.id, si:si, vorher:alt });
+    save(db);
+    try { _konsolidiereDokumentNachV2(d); } catch(e){ console.warn('[1177] Konsolidierung:', e); }
+    ov.remove();
+    showToast('✓ Session gespeichert');
+    try { dokOpenDetail(d.id); } catch(e){}
+  };
+}
+
 function dokSessionGotoKalender(dokId, si){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d||!d.sessions||!d.sessions[si]) return;
