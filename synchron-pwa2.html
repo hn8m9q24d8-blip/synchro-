@@ -5017,7 +5017,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1178';
+  if(elH) elH.textContent = '1179';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -11221,10 +11221,40 @@ function icsParse(text){
     var summary=get('SUMMARY');
     var location=get('LOCATION');
     var uid=get('UID');
-    // Studio aus Summary/Location extrahieren
+    // ── Build 1179: Studio aus der bekannten Studioliste statt per Regex ──
+    // Das alte Muster nahm die erste Grossbuchstabenfolge aus Titel+Ort. Bei
+    // "Arena / Torment (Retakes)" mit Ort "HZD Atelier Y" traf es zuerst HZD,
+    // also den Atelier-Code statt der Firma. "Arena" fiel durch, weil nur ein
+    // Grossbuchstabe am Anfang steht und das Muster zwei verlangt.
+    // Die App kennt die Studios laengst (STUDIO_KEYWORDS oben), nutzte die
+    // Liste aber nur fuer die Ja/Nein-Frage "ist das ein Arbeitstermin".
+    // Jetzt: Treffer aus der Liste schlaegt Regex, bei mehreren gewinnt der
+    // frueheste im Text. Findet die Liste nichts, greift das alte Muster.
+    // Gegen Backup 2026-08-27-1240 an 394 iCal-Terminen geprueft: 124 besser
+    // (Arena statt HZD, Interopa statt leer, Oxygen statt "Studio 1", Omni
+    // statt VSI), 48 unveraendert, 222 ohne Listentreffer -> Regex wie bisher.
+    var STUDIO_NAMEN_1179 = [
+      'arena','ffs','tnt','vsi','sdi','iyuno','interopa','omni','dmt','oxygen',
+      'oddone','g&g','livelive','audioberlin','transperfect','taunusfilm',
+      'neue tonfilm','blg','cls','konterfei','hermes','scalamedia','cinephon',
+      'mixwerk','rotor','riverside','rekorder','jammin','audiocue','studiofunk',
+      'antares','think global','akibadreams','fridge','mobydok','as hörspiel',
+      'studio hamburg','toneworx'
+    ];
     var studio='';
-    var studioMatch=(summary+' '+location).match(/\b(FFS|Studio\s*\w+|[A-Z]{2,}(?:\s+[A-Z][a-z]+)*)\b/);
-    if(studioMatch) studio=studioMatch[1];
+    var _such1179 = (summary+' '+location).toLowerCase();
+    var _pos1179 = -1;
+    STUDIO_NAMEN_1179.forEach(function(kw){
+      var i = _such1179.indexOf(kw);
+      if(i >= 0 && (_pos1179 < 0 || i < _pos1179)){
+        _pos1179 = i;
+        studio = (summary+' '+location).substr(i, kw.length);
+      }
+    });
+    if(!studio){
+      var studioMatch=(summary+' '+location).match(/\b(FFS|Studio\s*\w+|[A-Z]{2,}(?:\s+[A-Z][a-z]+)*)\b/);
+      if(studioMatch) studio=studioMatch[1];
+    }
     var calEventId=uid||('ical-'+datum+'-'+summary.slice(0,20));
     events.push({
       datum:datum,
