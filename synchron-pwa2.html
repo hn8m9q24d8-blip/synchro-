@@ -5017,7 +5017,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1180';
+  if(elH) elH.textContent = '1181';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -16956,6 +16956,7 @@ function _uhrzeitTrifft(terminUhr, dokVon, dokBis){
 function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, strictDate){
   if(!datum) return null;
   excludeIds = excludeIds || [];
+  var _sig1181 = {};   // Build 1181: Studio-/Titel-Signal je Kandidat, siehe Regel 2 unten
   // strictDate=true: nur exaktes Datum (für Abrechnungen — nie ±1 Tag!)
   // Alle Termin-Felder als Suchraum
   function terminSearchText(t){
@@ -17023,14 +17024,52 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
     }
     // Uhrzeit im Von-Bis-Fenster
     if(uhrzeit && _uhrzeitTrifft(t.uhrzeit,uhrzeit,bis_uhrzeit)) sc+=6;
+    _sig1181[t.id] = {ss:ss, ov:(typeof ov==='number'?ov:null)};  // Build 1181
     return sc;
   }
   var best=(db.termine||[])
     .filter(function(t){ return excludeIds.indexOf(t.id)<0; }) // bereits belegte ausschließen
-    .map(function(t){return {t:t,sc:score(t)};})
+    .map(function(t){
+      return {
+        t: t,
+        sc: score(t),
+        // Build 1181: Tagesabstand mitfuehren, wird unten zum harten Filter
+        diff: t.datum ? Math.abs(new Date(t.datum)-new Date(datum))/(1000*60*60*24) : 99
+      };
+    })
     .filter(function(x){return x.sc>=8;})
     .sort(function(a,b){return b.sc-a.sc;});
-  return best.length?best[0].t:null;
+
+  // ── Build 1181, Regel 1: exaktes Datum schlaegt Nachbartag ──────────────
+  // Bisher entschied allein die Punktzahl. Ein praktisch exakter Titeltreffer
+  // bringt +22 (Z. ~17019), der Datumsvorsprung nur 30 gegen 8, also 22. Traegt
+  // ein Nachbartermin bereits den Produktionstitel — was nach dem ersten Beleg
+  // derselben Produktion immer der Fall ist — gewinnt er gegen den richtigen Tag.
+  // Realer Fall 07.09.2026: Iyuno-Dispo vom 02.09. landete auf dem 01.09.-Termin
+  // und ueberschrieb dort gvl_takes_detail 36 mit 19 sowie die Zeiten.
+  // Gegen Backup 2026-09-07-1535 nachgestellt (Belegtitel gegen Termine, die noch
+  // den Kalendertitel tragen): vorher 222 richtig / 12 falsch, alle zwoelf nach dem
+  // Muster "gleiche Produktion, Nachbartag". Nachher 234 richtig / 0 falsch.
+  // Ohne exakten Treffer bleibt die ±1-Tag-Toleranz unveraendert bestehen.
+  if(best.some(function(x){ return x.diff===0; })){
+    best = best.filter(function(x){ return x.diff===0; });
+  }
+  if(!best.length) return null;
+
+  // ── Build 1181, Regel 2: keine Zuordnung ohne ein einziges positives Merkmal ──
+  // Sind Studio UND Titel beide im Abzugsbereich (ss<0.15 und ov<0.2), traegt den
+  // Treffer nur noch der Datumsbonus. Das ist ein Muenzwurf zwischen allen Terminen
+  // des Tages. Realer Fall 07.09.2026: ELGA-Beleg "Unaccustomed Earth" — ELGA ist
+  // das Buchungstool von EVA Studios und steht in keinem Termin, der Titel passte
+  // zu keinem — Punktgleichstand 12:12, es gewann die Reihenfolge im Array, also
+  // der falsche Termin. Ab jetzt: kein Auto-Match, der Beleg zeigt "Termin suchen".
+  // Gegen dasselbe Backup: 379 von 379 Selbsttreffern unveraendert, 0 zusaetzliche
+  // Unsicherheiten. Fehlt Studio oder Titel im Beleg, greift die Regel nicht.
+  var _bs1181 = _sig1181[best[0].t.id] || {};
+  if(studio && _bs1181.ss < 0.15 && _bs1181.ov !== null && _bs1181.ov !== undefined && _bs1181.ov < 0.2){
+    return null;
+  }
+  return best[0].t;
 }
 
 // ── DETAIL VIEW ──────────────────────────────────────────────
