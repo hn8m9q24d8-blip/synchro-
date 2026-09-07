@@ -5017,7 +5017,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1179';
+  if(elH) elH.textContent = '1180';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5935,7 +5935,20 @@ function openDetail(id){
         gvlHtml+='<div style="background:var(--card);border:1px solid var(--accent2);border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:600;color:var(--accent)">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:700;color:var(--accent)">'+td.takes+'</div>'+'</div>';
       });
       gvlHtml+='</div>';
-      gvlHtml+='<div style="font-size:10px;color:#888">Gesamt: <b>'+(t.gvl_takes||'')+'</b> Takes</div>';
+      // ── Build 1180: Gesamt aus dem Detail-Array rechnen, nicht aus t.gvl_takes ──
+      // Der Dokument-Zweig oben (Z. ~5920) summiert die Kacheln live in _gdSum, dieser
+      // Zweig druckte dagegen das gespeicherte Feld t.gvl_takes. Das Feld wird beim
+      // Merge nie gefuellt: dokMergeIntoTermin uebernimmt zwar gvl_takes_detail, aber
+      // overwrite('gvl_takes', d.gvl_takes) laeuft ins Leere, weil Dispo-Dokumente
+      // kein gvl_takes tragen. Ergebnis: "Gesamt:  Takes" ohne Zahl, sobald das
+      // Dispo-Dokument geloescht ist und der Termin-Zweig greift.
+      // Gegen Backup 2026-09-07-1535 gezaehlt: 161 Termine mit Detail-Array,
+      // 84 davon ohne gvl_takes. Bewusst KEIN neues gespeichertes Summenfeld — das
+      // Detail-Array ist die Quelle, die Summe wird abgeleitet (vgl. Build 1163,
+      // gespeicherte Schnappschuesse laufen aus dem Ruder). t.gvl_takes bleibt als
+      // Rueckfall fuer Altdaten ohne Detail-Eintraege stehen.
+      var _gtSum1180 = t.gvl_takes_detail.reduce(function(s,e){ return s+(parseInt(e.takes)||0); }, 0);
+      gvlHtml+='<div style="font-size:10px;color:#888">Gesamt: <b>'+(_gtSum1180||t.gvl_takes||'')+'</b> Takes</div>';
     } else {
       if(t.gvl_staffel) gvlHtml+='<div class="info-row"><div class="ir-key">Staffel</div><div class="ir-val">'+esc(t.gvl_staffel)+'</div></div>';
       if(t.gvl_folge)   gvlHtml+='<div class="info-row"><div class="ir-key">Folge</div><div class="ir-val">'+esc(t.gvl_folge)+'</div></div>';
@@ -20206,8 +20219,23 @@ function dokMergeIntoTermin(d, termin){
   mergeField('titel',       d.titel,       'Titel');
   mergeField('regie',       d.regie,       'Regie');
   mergeField('rolle',       d.rolle,       'Rolle');
-  suggestField('uhrzeit',   d.uhrzeit,     'Beginn');
-  suggestField('uhrzeit_bis', d.bis_uhrzeit, 'Ende');
+  // ── Build 1180: Dispo-Zeiten still uebernehmen ────────────────────────
+  // Der Disponent traegt im iCal regelmaessig einen weiteren Rahmen ein als auf dem
+  // Dispozettel steht (RC Furia 31.08.2026: iCal 14:20-15:00, Dispo 14:25-14:55).
+  // Bisher wurden beide Zeiten nur vorgeschlagen, also zwei Tipps pro Beleg.
+  // Ab jetzt bei typ==='dispo' direkt uebernehmen. mergeField respektiert dabei
+  // _manualFields: selbst getippte Zeiten bleiben stehen und werden nur vorgeschlagen.
+  // Auf Dispos begrenzt, weil dieselbe Funktion auch fuer Abrechnungen (Z. ~8485)
+  // und Session-Vorschauen (Z. ~8528) laeuft. Im Backup 2026-09-07-1535 tragen
+  // 0 von 178 Abrechnungsbelegen eine Uhrzeit, dort aendert sich also nichts.
+  // Auswirkung nur auf die Statistik Gage/Stunde (Z. ~24340), keine Steuerzahl.
+  if(d.typ==='dispo'){
+    mergeField('uhrzeit',     d.uhrzeit,     'Beginn');
+    mergeField('uhrzeit_bis', d.bis_uhrzeit, 'Ende');
+  } else {
+    suggestField('uhrzeit',     d.uhrzeit,     'Beginn');
+    suggestField('uhrzeit_bis', d.bis_uhrzeit, 'Ende');
+  }
   // Studio: nur überschreiben wenn Dispo-Studio spezifischer ist
   // (Dispo kennt oft "RC Production" wo iCal nur "RC" hat)
   if(d.studio){
