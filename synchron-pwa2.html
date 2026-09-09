@@ -5017,7 +5017,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1181';
+  if(elH) elH.textContent = '1183';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6804,6 +6804,7 @@ function saveMergeChanges(){
   // Ging er mit "zurueck" raus, rollte closeDetail() den Termin zurueck, die Sperre blieb
   // stehen und die Datei tauchte im Ordner-Scan nie wieder auf (3 Dispos + 1 Abrechnung
   // am 14.-16.07.2026 so verloren). Regel ab hier: kein Speichern, keine Sperre.
+  var _archivDatei1182 = null, _archivDokId1182 = null;   // Build 1182
   if(t && _mergeSnapshot && _mergeSnapshot._fromDokId){
     var _sDok = (db.dokumente||[]).find(function(x){ return x.id===_mergeSnapshot._fromDokId; });
     // Schutz gegen Kreuzkontamination: _mergeSnapshot kann veraltet sein (Zeile 6099/7613
@@ -6819,6 +6820,10 @@ function saveMergeChanges(){
         t.abrechn_dateiname = _sDok.dateiname;
       }
       _archiveDateiname(_sDok.dateiname||_sDok.beschr, t.id, _sDok.typ||'dispo');
+      // Build 1182: genau diesen Dateinamen fuer das Rueckgaengig merken. Ohne ihn
+      // konnte das Undo die Sperre nicht aufheben, siehe Kommentar im Undo-Zweig.
+      _archivDatei1182 = _sDok.dateiname||_sDok.beschr||null;
+      _archivDokId1182 = _sDok.id||null;
     }
   }
 
@@ -6846,7 +6851,9 @@ function saveMergeChanges(){
       terminSnap: _mergeSnapshot,
       deletedDoks: _eigeneDeletes,
       fromDokId: fromDokId,
-      fromSessionIdx: fromSi
+      fromSessionIdx: fromSi,
+      archiviertDatei: _archivDatei1182,   // Build 1182
+      archiviertDokId: _archivDokId1182    // Build 1182
     });
   }
 
@@ -13405,7 +13412,10 @@ function undoAction(actionId){
           var tIdx=(db.termine||[]).findIndex(function(x){return x.id===action.undoData.terminId;});
           if(tIdx>=0){
             // _fromDokId und _fromSessionIdx nicht wiederherstellen
-            delete snap._fromDokId; delete snap._fromSessionIdx;
+            // Build 1182: _dokTerminIdVorher gehoert ebenfalls zum Snapshot-Kopf, nicht
+            // zum Termin. dokPeekTermin (Z. ~8530) haengt es an das Snapshot-Objekt, das
+            // hier 1:1 zurueckgeschrieben wird — der Termin trug es danach dauerhaft.
+            delete snap._fromDokId; delete snap._fromSessionIdx; delete snap._dokTerminIdVorher;
             db.termine[tIdx]=snap;
           }
         }
@@ -13426,7 +13436,52 @@ function undoAction(actionId){
             }
           }
         });
-        showToast('↩ Rückgängig'+(action.undoData.deletedDoks&&action.undoData.deletedDoks.length?' (Fotos unwiederbringlich gelöscht)':''));
+        // ── Build 1182: Dateisperre und Archivspur zuruecknehmen ──────────────
+        // Bisher stellte dieses Undo nur den Termin wieder her. Der Dateiname blieb
+        // in db.importedFiles und im db._archivLog stehen, weil saveMergeChanges ihn
+        // ueber _archiveDateiname (Z. ~6821) sperrt und nur die deletedDoks-Schleife
+        // oben ihn wieder freigab — die ist im Vorschau-Pfad (dokPeekTermin) aber
+        // immer leer, weil dort kein _pendingDelete gesetzt wird. Folge am 07.09.2026:
+        // nach dem Rueckgaengig stimmten die Zahlen, die Fotos tauchten beim naechsten
+        // Ordner-Scan trotzdem nicht mehr auf, und der _archivLog-Eintrag liess den
+        // Termin weiter "Dispo vorhanden" melden (Z. ~5310) und die Startmigration
+        // (Z. ~3927) den falschen Dateinamen erneut stempeln.
+        // Der Undo-Zweig 'dok_bestaetigt' macht genau das schon richtig, siehe dort.
+        var _uDat1182 = action.undoData.archiviertDatei || null;
+        if(!_uDat1182 && db._archivLog && action.id){
+          // Altbestand ohne gemerkten Dateinamen: Eintrag ueber Termin + Zeitpunkt
+          // finden. Die Log-ID ist 'act'+Date.now(), _archivLog.ts stammt aus
+          // derselben Speicheraktion, Abstand daher unter einer Sekunde.
+          var _actMs1182 = parseInt(String(action.id).replace('act',''),10);
+          if(_actMs1182){
+            var _tr1182 = db._archivLog.filter(function(e){
+              return e.terminId===action.undoData.terminId && e.ts
+                && Math.abs(new Date(e.ts).getTime() - _actMs1182) < 5000;
+            });
+            if(_tr1182.length===1) _uDat1182 = _tr1182[0].dateiname;
+          }
+        }
+        if(_uDat1182){
+          // Dokument, falls noch in der Pipeline, zurueck auf unbestaetigt und ohne
+          // Terminbindung — sonst blockiert die Pruefung in _dateinameFreigeben.
+          var _uDok1182 = action.undoData.archiviertDokId
+            ? (db.dokumente||[]).find(function(x){return x.id===action.undoData.archiviertDokId;})
+            : (db.dokumente||[]).find(function(x){return x.dateiname===_uDat1182;});
+          if(_uDok1182){
+            _uDok1182.terminId = null;
+            _uDok1182.bestaetigt = false;
+            _uDok1182.awaitConfirm = true;
+          }
+          if(db._archivLog){
+            db._archivLog = db._archivLog.filter(function(e){
+              return !(e.terminId===action.undoData.terminId && e.dateiname===_uDat1182);
+            });
+          }
+          _dateinameFreigeben(_uDat1182);
+        }
+        showToast('↩ Rückgängig'
+          + (action.undoData.deletedDoks&&action.undoData.deletedDoks.length?' (Fotos unwiederbringlich gelöscht)':'')
+          + (_uDat1182 && (!db.importedFiles || db.importedFiles.indexOf(_uDat1182)<0) ? ' · Datei wieder freigegeben' : ''));
         break;
 
       case 'dok_typ':
