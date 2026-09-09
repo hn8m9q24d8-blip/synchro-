@@ -2245,6 +2245,64 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
   }
 })();
 // ═══════════════════════════════════════════════════════════════
+// ─── Build 1186: Vorzeichen bei bereits verbuchten Stornos heilen ───
+// Die Konsolidierung hat Stornos bis 1185 halb negativ geschrieben: brutto,
+// ust_betrag und auszahlung mit Minus, die SV-Abzuege und der Junction-Anteil
+// dagegen positiv. Ursache: Math.abs bei kv/rv/pv und "> 0"-Existenzpruefungen
+// beim Sammeln der Session-Betraege, durch die ein negativer Session-Brutto
+// durchfaellt und der Anteil aus den positiv gelesenen Posten rekonstruiert wird.
+// Beides ist ab 1186 im Schreibpfad korrigiert; diese Migration zieht den
+// Bestand nach, damit Tim die vier vorhandenen Stornos nicht neu einpflegen muss.
+// Backup 2026-09-09-1029: 4 Stornos, alle betroffen (839/20260302, 2144/20251201,
+// 528/20120801, 134/20260801), davon 2 mit Junction.
+// Bewusst NUR das Vorzeichen: der Betrag bleibt, wie er gelesen wurde. Bei
+// 839/20260302 steht in der Junction 316 gegen ein Beleg-Brutto von -396 — das
+// ist eine eigene Abweichung, die hier nicht geraten wird. Idempotent, weil
+// bereits negative Werte unveraendert bleiben.
+(function(){
+  if(!dbv2 || !dbv2.abrechnungen || dbv2._mig1187Done) return;
+  var protokoll = [];
+  dbv2.abrechnungen.forEach(function(a){
+    var istStorno = a.ist_storno === true || (parseFloat(a.brutto)||0) < 0;
+    if(!istStorno) return;
+    var aend = [];
+    ['sv_kv_an','sv_rv_an','sv_pv_an'].forEach(function(f){
+      var v = parseFloat(a[f]);
+      if(!isNaN(v) && v > 0){ a[f] = -v; aend.push(f); }
+    });
+    (function(){
+      var eigene = (dbv2.abrechnung_termin_links||[]).filter(function(l){
+        return l.abrechnung_id === a.id;
+      });
+      // Build 1187: haengt der Storno an GENAU EINER Junction, ist der Anteil
+      // zwingend das Beleg-Brutto — ein Beleg mit einer einzigen Terminbindung
+      // verteilt seinen ganzen Betrag auf diesen Termin. Das ist Arithmetik,
+      // keine Schaetzung. Noetig, weil der alte Schreibpfad bei RC 839/20260302
+      // die negativ gelesene Grundgage verworfen hat und 316 statt 396 stehen
+      // liess: reines Vorzeichendrehen ergaebe −316 und damit weiter 80 zu wenig.
+      // Bei mehreren Junctions wird NICHT verteilt, dort nur das Vorzeichen.
+      var brt = parseFloat(a.brutto);
+      eigene.forEach(function(l){
+        var v = parseFloat(l.brutto_anteil_display);
+        if(isNaN(v)) return;
+        var neu = (eigene.length === 1 && !isNaN(brt)) ? -Math.abs(brt) : -Math.abs(v);
+        if(neu !== v){
+          l.brutto_anteil_display = neu;
+          l.aktualisiert_am = new Date().toISOString();
+          aend.push('anteil ' + v + '→' + neu);
+        }
+      });
+    })();
+    if(aend.length) protokoll.push({ beleg: a.beleg_nr||a.id, felder: aend });
+  });
+  dbv2._mig1187Done = true;
+  if(protokoll.length){
+    dbv2._mig1187 = { am: new Date().toISOString(), geheilt: protokoll };
+    console.log('[Build 1187] Storno-Vorzeichen geheilt', protokoll);
+  }
+  saveV2(dbv2);
+})();
+// ═══════════════════════════════════════════════════════════════
 // ─── Build 1169: takes_abgerechnet bei Paket-Abrechnungen heilen ───
 // Einmalig, idempotent. Repariert Werte, die vor Build 1167 geschrieben
 // wurden. Damals galt pauschal takes_abgerechnet = takes + 10, sobald die
@@ -2794,9 +2852,24 @@ function _konsolidiereDokumentNachV2(dokId){
     var brutto     = parseFloat(d.brutto)     || 0;
     var auszahlung = parseFloat(d.auszahlung) || null;
     var mwst       = parseFloat(d.mwst)       || null;
+    // ── Build 1186: Belegvorzeichen ──────────────────────────────────────
+    // brutto, auszahlung und mwst behalten ihr Vorzeichen, kv/rv/pv verloren es
+    // durch Math.abs. Das Math.abs ist fuer normale Belege richtig: SESAM druckt
+    // die Abzugszeilen mit Minus, die KI liest sie mal mit, mal ohne, und im
+    // Schema sind SV-Abzuege positive Betraege. Bei einem Storno ist der ganze
+    // Beleg negativ, dann muessen es auch die Abzuege sein — sonst addiert das
+    // Storno die Sozialabgaben, statt sie zurueckzunehmen. Realfall 09.09.2026,
+    // TNT 134/20260801: KV stand ueber die drei Belege bei 27,21 statt 10,45.
+    // Nicht die Existenzpruefungen unten anfassen, nur das Vorzeichen anlegen.
+    var _vzBeleg1186 = ((parseFloat(d.brutto)||0) < 0 || d.storno === true) ? -1 : 1;
     var kv         = Math.abs(parseFloat(d.kv_abzug)||0) || null;
     var rv         = Math.abs(parseFloat(d.rv_abzug)||0) || null;
     var pv         = Math.abs(parseFloat(d.pv_abzug)||0) || null;
+    if(_vzBeleg1186 < 0){
+      if(kv != null) kv = -kv;
+      if(rv != null) rv = -rv;
+      if(pv != null) pv = -pv;
+    }
 
     // Bei Einzel-Klasse-1a mit mehreren GNRs im PDF: Summe stimmt nicht mit d.brutto überein.
     // Dann: aus gruppen_sessions summieren.
@@ -3127,11 +3200,26 @@ function _konsolidiereDokumentNachV2(dokId){
           return t && t.differenz_geklaert === true;
         })();
         var sBroh = (parseFloat(s.brutto_termin) || parseFloat(s.brutto) || 0);
-        if(sBroh > 0){ anyBruttoPruef += sBroh; hatBruttoPruef = true; }   // Build 1155
-        var sB  = _termGeklaert ? 0 : sBroh;
         var sGG = parseFloat(s.grundgage) || 0;
         var sR  = parseFloat(s.take_gage) || 0;
         var sT  = parseInt(s.takes)       || 0;
+        // ── Build 1187: bei Stornos die Betraege absolut sammeln ─────────────
+        // Alle Aufnahmepruefungen unten sind "> 0"-Existenztests. Bei einem Storno
+        // liest die KI die Vorzeichen uneinheitlich: RC 839/20260302 vom 28.03.2025
+        // hat grundgage −80, aber take_gage +4. Die Grundgage fiel durch das Gate,
+        // die Takegage nicht — Ergebnis 79 × 4 = 316 statt 396, also exakt die
+        // Grundgage zu wenig. Bei TNT 134/20260801 traf dasselbe den Session-Brutto.
+        // Deshalb hier den Betrag normalisieren und das Vorzeichen erst unten an
+        // bruttoAnteilFinal anlegen (Build 1186). Greift ausschliesslich bei
+        // negativem Beleg-Brutto, normale Belege laufen unveraendert durch.
+        if(_vzBeleg1186 < 0){
+          sBroh = Math.abs(sBroh);
+          sGG   = Math.abs(sGG);
+          sR    = Math.abs(sR);
+          sT    = Math.abs(sT);
+        }
+        if(sBroh > 0){ anyBruttoPruef += sBroh; hatBruttoPruef = true; }   // Build 1155
+        var sB  = _termGeklaert ? 0 : sBroh;
         if(sB > 0){ anyBrutto += sB; hatBrutto = true; }
         if(sGG > 0){
           summeGG += sGG; hatGG = true;
@@ -3156,6 +3244,14 @@ function _konsolidiereDokumentNachV2(dokId){
       var bruttoAnteilFinal = null;
       if(hatBrutto)                 bruttoAnteilFinal = anyBrutto;
       else if(hatGG || hatTakegage) bruttoAnteilFinal = summeGG + summeTakegage;
+      // Build 1186: bei einem Storno das Vorzeichen anlegen. Die Sammelstellen
+      // oben pruefen durchgaengig auf "> 0" — ein negativer Session-Brutto faellt
+      // dort durch, hatBrutto bleibt false, und der Anteil wird aus den positiv
+      // gelesenen Posten rekonstruiert. Ergebnis am 09.09.2026: Storno 134/20260801
+      // hatte brutto −101,80, die Junction aber +101,80, Summe am Termin 330,60
+      // statt 127,00. Die Gates bleiben unangetastet, sie schuetzen an vielen
+      // Stellen vor Nullwerten. Korrigiert wird nur das Vorzeichen des Ergebnisses.
+      if(_vzBeleg1186 < 0 && bruttoAnteilFinal) bruttoAnteilFinal = -Math.abs(bruttoAnteilFinal);
 
       // Tarif-Klassifikation aus den höchsten Einzel-Werten (für _erkenneTarif/_rekonstruiereTarif)
       var sTarif = _erkenneTarif(maxGG_einzel || null, maxRate || null);
@@ -5017,7 +5113,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1184';
+  if(elH) elH.textContent = '1187';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -16784,9 +16880,20 @@ function terminGageRecherche(terminId){
       var empfRate=typ==='streaming'?4.20:typ==='freetv'?4.00:typ==='kino'?5.00:null;
       var farbe=typ==='streaming'?'var(--ai)':typ==='freetv'?'var(--accent)':typ==='kino'?'var(--purple)':'#666';
       var bg=typ==='streaming'?'var(--blue2)':typ==='freetv'?'var(--green2)':typ==='kino'?'#FDFCFA':'var(--card)';
-      if(res){
-        res.style.display='block';
-        res.innerHTML='<div style="background:'+bg+';border:1.5px solid '+farbe+'44;border-radius:10px;padding:10px 12px">'
+      // ── Build 1185: Panel nach dem Sender-Eintrag frisch adressieren ──────
+      // Build 1174 traegt den Sender ein und ruft danach openDetail() (Z. ~16783).
+      // Das baut die Detailansicht komplett neu auf. Die oben geholte Referenz
+      // `res` zeigte danach auf ein Element, das nicht mehr im Dokument haengt —
+      // das Ergebnis landete im Nichts. Sichtbar wurde nur der Sender-Toast, das
+      // Panel mit dem Uebernehmen-Knopf erschien erst beim zweiten Klick, wenn
+      // der Sender schon stand und openDetail nicht mehr lief.
+      // Beide Ergebnisstufen kommen aus derselben einen API-Antwort, es gab nie
+      // einen Grund fuer zwei Klicks. Deshalb hier das Element neu holen statt
+      // die alte Referenz zu benutzen.
+      var _res1185 = document.getElementById('gage-recherche-result') || res;
+      if(_res1185){
+        _res1185.style.display='block';
+        _res1185.innerHTML='<div style="background:'+bg+';border:1.5px solid '+farbe+'44;border-radius:10px;padding:10px 12px">'
           +'<div style="font-size:11px;font-weight:800;color:'+farbe+';margin-bottom:3px">'
           +(typ==='streaming'?'Streaming':typ==='freetv'?'Free TV':typ==='kino'?'Kino':'Unbekannt')
           +(platt?' · '+platt:'')
