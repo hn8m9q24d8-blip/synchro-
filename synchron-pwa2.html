@@ -5113,7 +5113,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1187';
+  if(elH) elH.textContent = '1190';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -13682,6 +13682,19 @@ function undoAction(actionId){
         saveV2(dbv2);
         showToast('↩ mev6-Anker rückgängig');
         break;
+
+      // ── Build 1188: kein Zweig vorhanden → ehrlich abbrechen ─────────────
+      // Bis 1187 hatte der Switch keinen default. Ein Typ ohne case fiel durch,
+      // danach lief unten trotzdem splice + save: der Eintrag verschwand aus der
+      // Liste, geaendert wurde nichts, und es gab keine Rueckmeldung. Der Knopf
+      // sah aus, als haette er gewirkt. Betrifft ab_edit, dok_storno_verbucht,
+      // mitgruen_add und mitgruen_remove — alle vier werden geloggt, aber nie
+      // zurueckgenommen. Innerhalb einer Sitzung faellt es nicht auf, weil dann
+      // der RAM-Snapshot (Build 778) oben greift; erst nach einem Reload ist der
+      // feldweise Weg der einzige. Ab jetzt: Eintrag bleibt stehen, Meldung raus.
+      default:
+        showToast('Diese Aktion lässt sich nicht rückgängig machen');
+        return;
     }
 
     // Aktion aus Log entfernen
@@ -13706,6 +13719,15 @@ function rUndoLog(){
     return;
   }
   var icons = {};
+  // ── Build 1188: welche Typen wirklich zurueckgenommen werden koennen ──────
+  // Liste gespiegelt aus dem switch in undoAction. Typen ohne Zweig bekommen
+  // keinen Knopf mehr, sondern einen Vermerk. Vorher trug jeder Eintrag einen
+  // Knopf, auch die vier ohne Zweig (ab_edit, dok_storno_verbucht, mitgruen_add,
+  // mitgruen_remove) — der loeschte den Eintrag und aenderte nichts.
+  // Beim Ergaenzen eines case in undoAction diesen Eintrag mitpflegen.
+  var UNDO_MOEGLICH_1188 = ['holvi_import','dok_bestaetigt','termin_bezahlt','merge_saved',
+    'dok_typ','multi_link','termin_erstellt','termin_bearbeitet','termin_geloescht',
+    'session_link','mev6_anker'];
   el.innerHTML = log.map(function(a){
     // Detail-Info aus undoData ermitteln
     var detail='';
@@ -13731,7 +13753,9 @@ function rUndoLog(){
       +(detail?'<div style="font-size:11px;color:var(--ink2);margin-top:3px">'+esc(detail)+'</div>':'')
       +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">'+a.datum.split('-').reverse().join('.')+' · '+a.zeit+'</div>'
       +'</div></div>'
-      +'<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:var(--red2);color:var(--orange);border:1.5px solid #e3c4c0;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb1)"><path d="M9 7c-4 0-6 3-6 5"/><path d="M6 4 3 7l3 3"/><path d="M8 12c4 0 6-3 6-5"/></g></svg>Rückgängig</button>'
+      +(UNDO_MOEGLICH_1188.indexOf(a.typ)<0
+        ? '<div style="margin-top:10px;background:var(--cream2);border:1px solid var(--hair);border-radius:10px;padding:9px;font-size:11px;color:var(--ink3);text-align:center">Nicht rückgängig machbar &middot; nur Protokoll</div>'
+        : '<button type="button" onclick="undoAction(\''+a.id+'\')" style="display:block;width:100%;margin-top:10px;background:var(--red2);color:var(--orange);border:1.5px solid #e3c4c0;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb1)"><path d="M9 7c-4 0-6 3-6 5"/><path d="M6 4 3 7l3 3"/><path d="M8 12c4 0 6-3 6-5"/></g></svg>Rückgängig</button>')
       +'</div>';
   }).join('');
 }
@@ -15316,6 +15340,17 @@ function dokDeleteAll(){
   // damit ein Re-Upload ohne Umbenennen möglich ist. Multi-Doc-PDFs bleiben gesperrt,
   // solange noch ein bestätigtes Teil-Dokument denselben Dateinamen trägt.
   rest.forEach(function(d){ _dateinameFreigeben(d.dateiname); });
+  // Build 1188: Chronik-Eintrag. Bewusst OHNE Undo-Zweig — die Aktion ist nicht
+  // umkehrbar, die Bilddaten sind weg. Rueckholbar ist trotzdem das meiste:
+  // unbestaetigte Belege kommen ueber den freigegebenen Dateinamen beim naechsten
+  // Ordner-Scan zurueck, bestaetigte Abrechnungen bleiben als Stub mit allen Daten.
+  // Verloren geht nur das Foto einer bestaetigten Dispo, deren Zahlen zu dem
+  // Zeitpunkt am Termin stehen. Der Eintrag erscheint im Rueckgaengig-Menue ohne
+  // Knopf mit dem Vermerk "nur Protokoll" (Whitelist in rUndoLog, Build 1188).
+  logAction('dok_geloescht',
+    'Pipeline geleert · '+nDel+' gelöscht'+(nStub?' · '+nStub+' Abr. als Verweis':''),
+    { anzahlGeloescht: nDel, anzahlStubs: nStub,
+      dateinamen: rest.map(function(d){ return d.dateiname||d.beschr||''; }).slice(0,50) });
   save(db);
   rDokumente();
   if(nStub && nDel) showToast('✕ '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
@@ -18296,56 +18331,40 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       // Button ist im fixen Footer (dok-footer-confirm)
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
       // Passende Termine suchen
+      // ── Build 1190: eine Quelle fuer die Terminsuche ─────────────────────
+      // Hier stand bis 1189 eine zweite, eigenstaendige Punktvergabe (termScore)
+      // mit eigenen Gewichten. Sie kannte die Absicherungen aus Build 1181 nicht,
+      // weshalb der GVL-Beleg 202594118 am 09.09.2026 einen Iyuno-Termin
+      // vorgeschlagen bekam, den dokFindTermin abgelehnt haette. In 1189 habe ich
+      // die beiden Regeln dorthin kopiert — das hat den Fall geheilt, aber die
+      // Doppelung zementiert: zwei Matcher, die getrennt gepflegt werden muessen.
+      // Ab 1190 ruft dieser Zweig dokFindTermin auf. Eine Quelle, alle Ansichten.
+      //
+      // Der Zweig behaelt seinen Sinn, obwohl dokFindTermin bei der Analyse schon
+      // einmal erfolglos lief: inzwischen kann der Titel oder das Studio im Beleg
+      // korrigiert oder ein Termin nachtraeglich importiert worden sein.
+      //
+      // Gegen Backup 2026-09-09-2108 gemessen, 446 Termine als Pseudobelege:
+      //   termScore (1189)   379 Selbsttreffer, 2 Fremdtreffer
+      //   dokFindTermin      379 Selbsttreffer, 0 Fremdtreffer
+      // Entfallen ist der Regie-Bonus (+8), den nur termScore kannte. In der
+      // Messung aendert er kein Ergebnis, dokFindTermin gewichtet stattdessen
+      // Studio und Titel schaerfer.
       var vorschlaege=[];
       if(d.datum){
-        var dokDat=new Date(d.datum);
-        var dokStudio=d.studio?(d.studio.toLowerCase().replace(/[^a-z0-9]/g,'')):'';
-        var dokTitel=d.titel?(d.titel.toLowerCase().replace(/[^a-z0-9]/g,'')):'';
-        function termScore(tv){
-          // ── 1. DATUM ──
-          var diff2=Math.abs(new Date(tv.datum)-dokDat)/(1000*60*60*24);
-          var score=0;
-          if(diff2===0) score+=20;
-          else if(diff2<=1) score+=8;
-          else return 0;
-
-          // ── 2. STUDIO/FIRMA (benutzt denselben studioScore wie dokFindTermin) ──
-          if(dokStudio){
-            var ss=Math.max(
-              _studioScore(dokStudio, tv.studio||''),
-              _studioScore(dokStudio, tv.titel||'')
-            );
-            if(ss<0.15) score-=8;
-            else score+=Math.round(ss*15);
-          }
-
-          // ── 3. TITEL/PRODUKTION ──
-          if(dokTitel){
-            var ts=_studioScore(dokTitel, tv.titel||'');
-            score+=Math.round(ts*10);
-          }
-
-          // ── 4. REGIE ──
-          if(d.regie && tv.regie){
-            if(_studioScore(d.regie, tv.regie)>0.3) score+=8;
-          }
-
-          // ── 5. UHRZEIT (mit ±15min Toleranz) ──
-          if(d.uhrzeit && _uhrzeitTrifft(tv.uhrzeit, d.uhrzeit, d.bis_uhrzeit)) score+=6;
-
-          return score;
-        }
-        vorschlaege=(db.termine||[])
-          .filter(function(tv){ return tv.datum; })
-          .map(function(tv){ return {tv:tv, score:termScore(tv)}; })
-          .filter(function(x){ return x.score>=8; }) // mind. Datum-Match
-          .sort(function(a,b){ return b.score-a.score; })
-          .map(function(x){ return x.tv; })
-          .slice(0,1); // immer nur 1 Vorschlag
+        var _vt1190 = dokFindTermin(d.datum, d.studio, d.titel, d.uhrzeit, d.bis_uhrzeit, [], false);
+        if(_vt1190) vorschlaege=[_vt1190];
       }
 
       if(vorschlaege.length){
         // Besten Vorschlag direkt zuordnen (wie dokFindTermin-Fallback)
+        // Build 1189: bleibt bewusst stehen. Der Fussleisten-Knopf routet ueber
+        // d.terminId (dokFooterBestaetigen, Z. ~14967) — ohne die Zuweisung wuerde
+        // "Bestaetigen" den Beleg ohne Termin verbuchen, obwohl die Karte einen
+        // anzeigt. Neu ist, dass hier nur noch ankommt, was die beiden Regeln oben
+        // ueberstanden hat; vorher schrieb schon das blosse Oeffnen der Ansicht
+        // jede Datumsuebereinstimmung fest. Wird der Vorschlag verworfen, raeumt
+        // dokKeinTerminZuordnen bzw. dokGotoKalender die terminId wieder ab.
         if(!d.terminId && !d._keinTermin){ d.terminId=vorschlaege[0].id; save(db); }
         body+='<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">PASSENDER TERMIN GEFUNDEN</div>';
         vorschlaege.forEach(function(tv){
