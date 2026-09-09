@@ -5017,7 +5017,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1183';
+  if(elH) elH.textContent = '1184';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5864,7 +5864,15 @@ function openDetail(id){
     +_inlineField(id,'regie','Regie',t.regie||'','text',true)
     +_inlineField(id,'sender','Sender',t.sender||'','text',true)
     +_inlineField(id,'atelier','Atelier',t.atelier||t.notizen||'','text',true)
-    +(istFilm?'':_inlineField(id,'episode','Episode',t.episode||'','text',true))
+    // Build 1184: Episode-Feld nur noch anzeigen, wenn es bereits Inhalt hat.
+    // Es fliesst nicht in die GVL: gelesen wird t.episode einzig in
+    // _staffelVonTermin Stufe 3 (Z. ~7146), und nur wenn der Text auf
+    // /(?:s|staffel)\s*(\d+)/ passt. Im Bestand vom 07.09.2026 sind acht Termine
+    // gefuellt ("2", "5", "101-104", "4 und 5"), keiner davon passt auf das Muster.
+    // Das Feld war also eine Notiz, die aussah wie eine GVL-Angabe. Staffel und
+    // Folge gehoeren in die GVL-Karte darunter. Alte Werte bleiben sichtbar und
+    // editierbar, neu angeboten wird das Feld nicht mehr.
+    +(istFilm||!t.episode?'':_inlineField(id,'episode','Episode',t.episode,'text',true))
     +'<div class="info-row"><div class="ir-key">Status</div><div class="ir-val">'+tlabel(t.status)+'</div></div>'
     +'</div>';
 
@@ -5956,7 +5964,7 @@ function openDetail(id){
       // Button entfernt (Build 931): ganze Karte ist klickbar -> gvlTerminBearbeiten
     }
     gvlHtml+='</div></div>';
-  } else if(t.abgerechnet || (typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links
+  } else if(t.abgerechnet || t.takes || (typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links
             && dbv2.abrechnung_termin_links.some(function(l){ return l.termin_id===id; }))){
     // ── Build 1172: Einstieg, wenn noch keine GVL-Daten da sind ──────────
     // Die Karte oben wird nur gerendert, wenn bereits GVL-Angaben existieren
@@ -5969,6 +5977,11 @@ function openDetail(id){
     // GVL still durch.
     // Nur bei abgerechneten/verknuepften Terminen, damit die Ansicht bei
     // frisch importierten Kalendereintraegen ruhig bleibt.
+    // Build 1184: zusaetzlich bei jedem Termin mit Takes. Ein Dispo-Termin ist oft
+    // noch lange nicht abgerechnet, die GVL-Angabe faellt aber jetzt an. Konkret
+    // 02.09.2026 Unaccustomed Earth: 132 Takes, Status ausstehend, dadurch keine
+    // Karte und kein Weg, die Staffel nachzutragen. Reine Kalendereintraege haben
+    // keine Takes, fuer die bleibt die Ansicht wie bisher ruhig.
     gvlHtml='<div class="info-card" style="border-left:3px solid var(--warm)" onclick="gvlTerminBearbeiten(\''+id+'\')">'
       +'<div class="info-card-header"><span>GVL-Übersicht</span>'
       +'<span style="font-size:10px;color:var(--ink3);font-weight:500">›</span></div>'
@@ -7242,9 +7255,14 @@ function gvlTerminBearbeiten(terminId){
     return parseInt(folgeStr)||0;
   }
 
+  // Build 1184: Startwert der Folge ist 0, nicht 1. 0 heisst "Staffel bekannt,
+  // Folge offen" — die Takes gehoeren dann der ganzen Staffel. Build 1048 hat genau
+  // das im Dokument-Editor (gvlDokBearbeiten/gvlDokSave) schon umgesetzt, der
+  // Termin-Editor hier wurde damals vergessen. Folge: ueber den Beleg entstand 100,
+  // ueber den Termin 101, also eine erfundene Folge 1.
   var detail = t.gvl_takes_detail && t.gvl_takes_detail.length
     ? t.gvl_takes_detail.map(function(e){ return {staffel:staffelAusFolge(e.folge), folge:folgeAusFolge(e.folge), takes:e.takes}; })
-    : [{staffel:parseInt(t.gvl_staffel)||1, folge:parseInt(t.gvl_folge)||1, takes:parseInt(t.takes)||0}];
+    : [{staffel:parseInt(t.gvl_staffel)||1, folge:parseInt(t.gvl_folge)||0, takes:parseInt(t.takes)||0}];
 
   // Film-Modus: folge=0 bedeutet kein Episodenbezug
   var isFilm = t.gvl_takes_detail && t.gvl_takes_detail.length===1 && t.gvl_takes_detail[0].folge===0;
@@ -7268,7 +7286,7 @@ function gvlTerminBearbeiten(terminId){
         +'</div>'
         +'<div style="flex:1">'
         +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">FOLGE</div>'
-        +'<input type="number" id="gvlt-f-'+i+'" value="'+row.folge+'" min="1" style="width:100%;border:1px solid var(--hair);border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box">'
+        +'<input type="number" id="gvlt-f-'+i+'" value="'+(row.folge?row.folge:'')+'" placeholder="ganze Staffel" min="0" style="width:100%;border:1px solid var(--hair);border-radius:6px;padding:5px 7px;font-size:14px;font-weight:700;box-sizing:border-box">'
         +'</div>'
         +'<div style="flex:1.5">'
         +'<div style="font-size:10px;color:#888;font-weight:700;margin-bottom:3px">TAKES</div>'
@@ -7360,7 +7378,11 @@ function gvlTerminSave(btn){
       var fEl=document.getElementById('gvlt-f-'+i);
       var tEl=document.getElementById('gvlt-t-'+i);
       var staffel=sEl?parseInt(sEl.value)||1:row.staffel;
-      var folge=fEl?parseInt(fEl.value)||1:row.folge;
+      // Build 1184: leere Folge = 0 = ganze Staffel. Vorher machte ||1 daraus eine
+      // Folge 1 und buchte alle Takes auf eine Folge, die es so nie gab.
+      // staffel*100+0 ergibt 100/200/..., was die GVL-Auswertung (Z. ~10929) bereits
+      // korrekt als Staffel mit offener Folge liest und in der Anzeige als "–" fuehrt.
+      var folge=fEl?parseInt(fEl.value)||0:row.folge;
       var takes=tEl?parseInt(tEl.value)||0:row.takes;
       detail.push({folge:staffel*100+folge, takes:takes});
     });
