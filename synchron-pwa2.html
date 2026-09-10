@@ -2303,6 +2303,104 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
   saveV2(dbv2);
 })();
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════
+// ─── Build 1196: Testdaten vor 2025 entfernen ───
+// Tim hatte zum Ausprobieren Termine und Gutschriften aus 2012 bis 2015 eingespielt.
+// Zwischen 2015 und 2025 liegen neun Jahre ohne einen einzigen Eintrag, die Grenze
+// 01.01.2025 ist also eindeutig und von ihm bestaetigt. Gestoert hat vor allem die
+// Mahn-Rubrik: alle 32 Altbelege stehen als unbezahlt in dbv2 und erschienen dort
+// als offene Forderungen.
+//
+// Einmalig, ueber _mig1196Done gesichert, laeuft also genau einmal.
+// LOESCHT unwiederbringlich — kein Undo-Zweig, der Eintrag im Rueckgaengig-Menue
+// erscheint bewusst als "nur Protokoll" (Whitelist aus Build 1188).
+//
+// Simulation gegen Backup 2026-09-09-2154, mit genau diesem Code:
+//   termine        448 -> 409   dokumente     202 -> 170
+//   importedFiles  328 -> 315   _archivLog    460 -> 421
+//   dbv2.abrechn.  192 -> 160   links         234 -> 195
+//   produktionen    94 ->  77   abrechner      38 ->  35
+//   zahlungsgruppen 71 ->  71   db.abrechnungen 155 -> 155
+// Rueckstandspruefung danach: 0 verwaiste Junctions, 0 Zahlungsgruppen mit totem
+// Beleg, 0 Dokumente und 0 Archiveintraege auf geloeschte Termine, zu jedem
+// verbliebenen Beleg existieren Produktion und Abrechner. Keine gemischten
+// Junctions und keine gemischte Zahlungsgruppe — Alt und Neu haengen nirgends
+// zusammen. Offene Forderungen 59 -> 27.
+//
+// NICHT angefasst: gageMappings, titelMappings, _senderProProduktion. Dort stammt
+// kein Eintrag ausschliesslich aus den Altdaten, ein Loeschen wuerde nur gelernte
+// Zuordnungen zerstoeren.
+(function(){
+  if(!db || !db.termine || db._mig1196Done) return;
+  var G = '2025-01-01';
+  var altT   = db.termine.filter(function(t){ return (t.datum||'9999') < G; });
+  var altTid = {}; altT.forEach(function(t){ altTid[t.id]=1; });
+  var altAb  = ((typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnungen)||[])
+                 .filter(function(a){ return (a.leistungs_datum_von||'9999') < G; });
+  var altAid = {}; altAb.forEach(function(a){ altAid[a.id]=1; });
+  var altDok = (db.dokumente||[]).filter(function(x){
+                 return (x.datum||'9999') < G || altTid[x.terminId]; });
+  db._mig1196Done = true;
+  if(!altT.length && !altAb.length && !altDok.length){ save(db); return; }
+
+  // Dateisperren loesen, damit alte PDFs nicht als "schon eingepflegt" gelten
+  var frei = 0;
+  altDok.forEach(function(x){
+    if(!x.dateiname || !db.importedFiles) return;
+    var vor = db.importedFiles.length;
+    db.importedFiles = db.importedFiles.filter(function(y){ return y !== x.dateiname; });
+    frei += (vor - db.importedFiles.length);
+  });
+  if(db._archivLog) db._archivLog = db._archivLog.filter(function(e){ return !altTid[e.terminId]; });
+
+  db.termine   = db.termine.filter(function(t){ return !altTid[t.id]; });
+  db.dokumente = (db.dokumente||[]).filter(function(x){
+                   return !((x.datum||'9999') < G || altTid[x.terminId]); });
+  if(db.holviAbgleich) db.holviAbgleich = db.holviAbgleich.filter(function(h){ return (h.datum||'9999') >= G; });
+  if(db.rechnungen)    db.rechnungen    = db.rechnungen.filter(function(r){ return (r.datum||'9999') >= G; });
+  if(db.abrechnungen)  db.abrechnungen  = db.abrechnungen.filter(function(a){ return (a.datum||'9999') >= G; });
+
+  var vProd=0, vAbr=0, nLinks=0, nZg=0;
+  if(typeof dbv2!=='undefined' && dbv2){
+    var vorL = (dbv2.abrechnung_termin_links||[]).length;
+    dbv2.abrechnung_termin_links = (dbv2.abrechnung_termin_links||[])
+      .filter(function(l){ return !altAid[l.abrechnung_id] && !altTid[l.termin_id]; });
+    nLinks = vorL - dbv2.abrechnung_termin_links.length;
+    var vorZ = (dbv2.zahlungsgruppen||[]).length;
+    dbv2.zahlungsgruppen = (dbv2.zahlungsgruppen||[]).filter(function(g){
+      var ids = g.beleg_ids || [];
+      return !(ids.length && ids.every(function(b){ return altAid[b]; }));
+    });
+    nZg = vorZ - dbv2.zahlungsgruppen.length;
+    dbv2.abrechnungen = (dbv2.abrechnungen||[]).filter(function(a){ return !altAid[a.id]; });
+    // verwaiste Stammdaten mitnehmen — sie haengen an keinem Beleg mehr
+    var pGen={}, aGen={};
+    dbv2.abrechnungen.forEach(function(a){
+      if(a.produktion_id) pGen[a.produktion_id]=1;
+      if(a.abrechner_id)  aGen[a.abrechner_id]=1;
+    });
+    var vorP=(dbv2.produktionen||[]).length;
+    dbv2.produktionen = (dbv2.produktionen||[]).filter(function(p){ return pGen[p.id]; });
+    vProd = vorP - dbv2.produktionen.length;
+    var vorA=(dbv2.abrechner||[]).length;
+    dbv2.abrechner = (dbv2.abrechner||[]).filter(function(x){ return aGen[x.id]; });
+    vAbr = vorA - dbv2.abrechner.length;
+    dbv2._mig1196 = { am:new Date().toISOString(), grenze:G,
+      termine:altT.length, dokumente:altDok.length, abrechnungen:altAb.length,
+      links:nLinks, zahlungsgruppen:nZg, produktionen:vProd, abrechner:vAbr,
+      dateisperren:frei };
+    saveV2(dbv2);
+  }
+  save(db);
+  try{
+    logAction('daten_bereinigt', 'Testdaten vor ' + G + ' entfernt · '
+      + altT.length + ' Termine · ' + altDok.length + ' Belege · '
+      + altAb.length + ' Abrechnungen', { grenze:G });
+  }catch(e){}
+  console.log('[Build 1196] Altdaten entfernt', dbv2 && dbv2._mig1196);
+})();
+
+// ═══════════════════════════════════════
 // ─── Build 1169: takes_abgerechnet bei Paket-Abrechnungen heilen ───
 // Einmalig, idempotent. Repariert Werte, die vor Build 1167 geschrieben
 // wurden. Damals galt pauschal takes_abgerechnet = takes + 10, sobald die
@@ -5126,7 +5224,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1195';
+  if(elH) elH.textContent = '1196';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
