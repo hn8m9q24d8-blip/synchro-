@@ -3544,9 +3544,22 @@ function _konsolidiereDokumentNachV2(dokId){
       if(v2Ab.steuerfrei && d && (d.gvl_vwk_netto || d.gvl_vwk_ust)){
         gvlEinbehalt = (parseFloat(d.gvl_vwk_netto)||0) + (parseFloat(d.gvl_vwk_ust)||0);
       }
-      var auszErw = istStorno
-        ? bruttoBetrag + svSumme + ustImCheck
-        : bruttoBetrag - svSumme + ustImCheck - gvlEinbehalt;
+      // ── Build 1193: eine Formel fuer beide Vorzeichen ────────────────────
+      // Hier stand ein Sonderzweig fuer Stornos: bruttoBetrag + svSumme, weil die
+      // SV-Werte damals auch bei negativen Belegen positiv gespeichert waren und
+      // das Plus den Abzug wieder aufheben musste. Seit Build 1187 tragen sie das
+      // Vorzeichen des Belegs — der Sonderzweig zog seitdem doppelt ab und meldete
+      // Fehlalarme. Beispiel 134/20260803: erwartet wurden −469,11 statt der
+      // richtigen −321,83, das Warndreieck im Jahresabschluss war Unsinn.
+      // Diese Warnung habe ich mit 1187 selbst erzeugt.
+      // Gegen den Bestand geprueft, alle 5 Stornos:
+      //   839/20260302 −344,81 · 528/20120801 −80,25 · 134/20260801 −88,64 ·
+      //   134/20260803 −321,83  → alle vier cent-genau wie auf dem Beleg.
+      //   2144/20251201 bleibt bei 1,65 Differenz, das ist die seit Build 758
+      //   bekannte Rundungsabweichung dieses Belegs, kein Vorzeichenthema.
+      // Fuer die 187 positiven Belege aendert sich nichts, der Storno-Zweig hat
+      // sie nie betroffen.
+      var auszErw = bruttoBetrag - svSumme + ustImCheck - (istStorno ? 0 : gvlEinbehalt);
       var diff_a = (v2Ab.auszahlung || 0) - auszErw;
       checks.auszahlung = {
         status: Math.abs(diff_a) <= TOL ? 'ok' : 'abweichung',
@@ -5113,7 +5126,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1190';
+  if(elH) elH.textContent = '1195';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -7672,13 +7685,34 @@ function dokToggleUstFrei(dokId){
   var d = (db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
   try{ pushSnapshotVorAktion('USt-frei umschalten'); }catch(e){}
+  // ── Build 1191: MwSt merken und zurueckholen ───────────────────────────
+  // Bis 1190 war der Schalter eine Einbahnstrasse: Einschalten setzte d.mwst auf
+  // 0, Ausschalten liess die Null stehen. Im Beleg sah sie danach aus wie ein
+  // gelesener Wert. Realfall 09.09.2026, GVL-Auslandsverguetung 202594118: die KI
+  // hatte 134,32 korrekt erkannt, nach einmal an und aus stand dort 0,00, waehrend
+  // Brutto 1.918,83 und Auszahlung 2.053,15 unveraendert blieben — eine Luecke von
+  // exakt der Umsatzsteuer, die so in die Voranmeldung gelaufen waere.
+  // Bewusst wird nur zurueckgeholt, was vorher dastand. Gibt es keinen gemerkten
+  // Wert, bleibt das Feld leer und der Toast fordert weiterhin zum Eintragen auf —
+  // eine MwSt aus Auszahlung minus Brutto zu rechnen waere geraten, nicht gelesen.
   d.ust_frei = !d.ust_frei;
-  if(d.ust_frei) d.mwst = 0;
+  if(d.ust_frei){
+    var _mAlt1191 = parseFloat(d.mwst);
+    if(!isNaN(_mAlt1191) && _mAlt1191 !== 0) d._mwstVorUstFrei = _mAlt1191;
+    d.mwst = 0;
+  } else if(d._mwstVorUstFrei != null){
+    d.mwst = d._mwstVorUstFrei;
+    delete d._mwstVorUstFrei;
+  }
   save(db);
   if(d.bestaetigt){
     try{ _autoKonsolidiereNachBestaetigen(dokId); }catch(e){ console.warn('[844] Re-Konsolidierung', e); }
   }
-  showToast(d.ust_frei ? '✓ steuerfrei (0%) — keine Ausgangssteuer' : 'USt-frei aus — MwSt ggf. manuell setzen');
+  // Build 1191: Rueckmeldung sagt jetzt, ob ein Wert zurueckkam oder fehlt.
+  showToast(d.ust_frei
+    ? '✓ steuerfrei (0%) — keine Ausgangssteuer'
+    : (parseFloat(d.mwst) ? '✓ USt-frei aus — MwSt ' + fmtEur(parseFloat(d.mwst)) + ' zurückgeholt'
+                          : 'USt-frei aus — MwSt bitte manuell setzen'));
   dokOpenDetail(dokId);
 }
 
@@ -11538,7 +11572,29 @@ function autoSyncBootFetch(){
           _entfernt++; return false;                   // zukuenftig + leer + weg -> raus
         });
         // --- ADD: neue Termine ---
-        if(neu.length){ if(!db.termine) db.termine=[]; neu.forEach(function(e){ if(!e.id) e.id=uid(); db.termine.push(e); }); }
+        // Build 1195: Sender aus dem Produktions-Gedaechtnis ergaenzen. Alle anderen
+        // fuenf Anlagepfade tun das laengst (Z. ~10736 Dispo-Termin, ~15253 und ~15264
+        // Dokument-Merge, ~19477 Termin aus Session, ~7294 Recherche) — nur der
+        // iCal-Import nicht. Fuer Kalendertermine blieb damit einzig der Hintergrund-
+        // lauf _senderBatchRun, und der steigt ohne API-Schluessel sofort aus und
+        // arbeitet ohnehin nur zehn Termine je Lauf ab. Bei 360 Terminen ohne Sender
+        // kommt er nie durch.
+        // _senderAusGedaechtnis schreibt ausschliesslich in leere Felder und nur bei
+        // exaktem Schluessel aus Titel UND Staffel — die Regel aus Build 766/767, dass
+        // ein Sender pro Staffel gilt und bei neuer Staffel erst wieder eine manuelle
+        // Eintragung abgewartet wird, bleibt unberuehrt.
+        // Gegen Backup 2026-09-09-2154 gerechnet: genau zwei Termine wuerden bedient,
+        // FFS / La Familia am 08.09. und am 10.09., beide mit Netflix aus dem
+        // vorhandenen Eintrag 'ffs / la familia##s1'. Kein anderer der 360 senderlosen
+        // Termine ist betroffen, es wird also nichts flaechig ueberschrieben.
+        if(neu.length){
+          if(!db.termine) db.termine=[];
+          neu.forEach(function(e){
+            if(!e.id) e.id=uid();
+            try{ if(typeof _senderAusGedaechtnis==='function') _senderAusGedaechtnis(e); }catch(err){}
+            db.termine.push(e);
+          });
+        }
         // --- UPDATE (Build 1006): Disponenten-Aenderungen an ZUKUENFTIGEN, UNVERKNUEPFTEN
         // Terminen uebernehmen (Datum/Zeit/Titel/Studio/Regie/Notizen). Verknuepfte und
         // vergangene bleiben unberuehrt; App-Daten (Gage/Takes) werden nie angefasst. ---
@@ -15622,6 +15678,17 @@ function dokAnalyseDoc(d, key, cb){
     +'    - studio = der EMPFAENGER der Rechnung (die Firma, an die der User schreibt), NICHT der User selbst.\n'
     +'      Der Empfaenger steht als Anschrift-Block oben links unter dem Absender (z.B. "mobyDOK GmbH" → studio="mobyDOK").\n'
     +'    - rolle = leer lassen, wenn keine explizite Rolle genannt ist.\n'
+    // Build 1192: Betragsfelder waren in diesem Block nie geregelt, deshalb fiel die
+    // KI auf die Studio-Gutschrift-Regeln zurueck, wo brutto das Honorar VOR USt ist.
+    // Bei einer Eigenrechnung heisst genau dieser Wert aber "Nettobetrag" — daher las
+    // sie mal 400,00 (FRIDGE 10/2026) und mal 374,50 (mobyDok 09/2026) als brutto.
+    // Konvention laut Build 835: bei Klasse 3 ist brutto der Endbetrag INKL. USt.
+    +'    - brutto = der RECHNUNGSENDBETRAG inklusive Umsatzsteuer, also die Zeile \"zus.:\" —\n'
+    +'      NICHT der \"Nettobetrag\"! Bei einer Eigenrechnung ist das anders als bei einer Studio-Gutschrift.\n'
+    +'    - netto = der Wert hinter \"Nettobetrag\"\n'
+    +'    - mwst = der Wert hinter \"zzgl. X % MWSt.\"\n'
+    +'    - auszahlung = derselbe Endbetrag wie brutto\n'
+    +'      Rechenprobe, muss aufgehen: netto + mwst = brutto = auszahlung.\n'
     +'\n'
     +'  ── Ab hier: NORMALE Studio-Gutschrift/Abrechnung (der Regelfall, KEINE Eigenrechnung) ──\n'
     +'  studio = der KURZNAME des Synchronstudios/der Produktionsfirma — z.B. "FFS", "VSI", "Arena", "TNT", "Interopa", "RC", "Taunus"\n'
@@ -18489,6 +18556,27 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     if(d.gutschrift_nr) body += _row('Beleg-Nr.', d.gutschrift_nr, null);
     if(d.brutto != null)     body += _row('Brutto', fmtEur(d.brutto), 'brutto');
     if(d.mwst != null)       body += _row('MwSt',   fmtEur(d.mwst), 'mwst');
+    // ── Build 1194: Bemessungsgrundlage sichtbar machen ────────────────────
+    // Bei Eigenrechnungen (Klasse 3) ist "Brutto" der Rechnungsendbetrag INKLUSIVE
+    // USt, laut Konvention aus Build 835 (Z. ~2942). Dadurch stehen Brutto und
+    // Auszahlung zwangslaeufig auf demselben Wert — bei 10/2026 zweimal 476,00 —
+    // und der Beleg sieht falsch aus, obwohl er stimmt. Der Nettobetrag, um den es
+    // steuerlich geht, war nirgends zu sehen.
+    // Die Zeile wird ABGELEITET, nicht gespeichert: _ustNettoBasis ist dieselbe
+    // Funktion, ueber die auch _v2Basis (Z. ~5049) und damit die USt-VA rechnen.
+    // Kein zweiter Wert neben dem ersten, nichts zu pflegen, nichts, das veralten
+    // kann. Sie erscheint nur, wenn die Steuer rechnerisch im Brutto steckt — bei
+    // Studio-Gutschriften, wo die USt obendrauf kommt, bleibt die Ansicht wie bisher.
+    if(d.brutto != null && d.mwst != null && !d.ust_frei && typeof _ustIstEnthalten === 'function'){
+      var _br1194 = parseFloat(d.brutto)||0, _mw1194 = parseFloat(d.mwst)||0;
+      var _satz1194 = (_br1194 && _mw1194) ? (_mw1194/(_br1194-_mw1194)) : 0;
+      if(_ustIstEnthalten(_br1194, _mw1194, _satz1194 >= 0.13 ? 0.19 : 0.07)){
+        body += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream2);font-size:12px">'
+          + '<span style="color:#999">davon Netto</span>'
+          + '<span style="color:#999;font-weight:600">'+fmtEur(_ustNettoBasis(_br1194, _mw1194, _satz1194 >= 0.13 ? 0.19 : 0.07))+'</span>'
+          + '</div>';
+      }
+    }
     if(d.auszahlung != null) body += _row('Auszahlung', fmtEur(d.auszahlung), 'auszahlung');
     // Build 844: USt-frei-Schalter (z.B. GVL Privatkopie — EuGH/§§54 UrhG):
     // keine Ausgangssteuer, Brutto = Bemessungsgrundlage → USt-VA-Zeile "steuerfreie Umsätze".
@@ -23366,7 +23454,39 @@ function runIntegrityCheck(silent){
     }
   });
 
-  // Ergebnis speichern
+  // ── Build 1192: USt-Probe ───────────────────────────────────────────────
+  // Bemessungsgrundlage mal Steuersatz muss den ausgewiesenen USt-Betrag ergeben.
+  // Anlass am 09.09.2026: Eigenrechnung 10/2026 (FRIDGE) trug im Feld brutto den
+  // NETTObetrag 400,00 statt des Endbetrags 476,00. Die Konsolidierung rechnet bei
+  // Klasse 3 laut Konvention (Build 835, Z. ~2942) Basis = brutto minus USt und kam
+  // damit auf 324,00. In der Voranmeldung waere die Bemessungsgrundlage um 76 Euro
+  // zu niedrig gewesen, die Steuer selbst mit 76,00 richtig — genau die Art Fehler,
+  // die keine Summe auffaellig macht.
+  // Bewusst ueber ALLE Klassen, nicht nur Eigenrechnungen: die Probe ist eine
+  // Definition, kein Sonderfall. Und bewusst ueber _v2Basis (Z. ~5049), damit hier
+  // dieselbe Zahl geprueft wird, die auch die USt-VA verwendet (Z. ~12309) — keine
+  // zweite Rechnung neben der ersten.
+  // Toleranz gegen den Bestand gemessen, 190 Belege mit Satz und USt-Betrag:
+  //   189 liegen unter 0,02 (groesste legitime Abweichung 0,01 durch Satzrundung),
+  //   einer bei 14,44 — die FRIDGE-Rechnung. 0,05 trennt beides sicher.
+  (function(){
+    if(typeof dbv2==='undefined' || !dbv2 || !dbv2.abrechnungen) return;
+    if(typeof _v2Basis !== 'function') return;
+    dbv2.abrechnungen.forEach(function(a){
+      if(a.steuerfrei) return;                       // 0 % ist kein Rechenfehler
+      var s = parseFloat(a.ust_satz)  || 0;
+      var u = parseFloat(a.ust_betrag) || 0;
+      if(!s || !u) return;                           // ohne Satz oder Steuer nichts zu pruefen
+      var basis = _v2Basis(a);
+      if(!(basis > 0)) return;
+      var soll = Math.round(basis * s * 100) / 100;
+      if(Math.abs(soll - u) < 0.05) return;
+      warnings.push('⚠ USt-Probe: '+esc(a.beleg_nr||a.id)+': Bemessungsgrundlage '
+        +fmtEur(basis)+' × '+Math.round(s*100)+' % = '+fmtEur(soll)
+        +' ≠ ausgewiesene USt '+fmtEur(u));
+    });
+  })();
+
   db._lastIntegrityCheck = {
     datum: today(),
     warnings: warnings,
