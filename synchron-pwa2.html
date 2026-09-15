@@ -5224,7 +5224,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1196';
+  if(elH) elH.textContent = '1197';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -18062,7 +18062,30 @@ function dokOpenDetail(id, _keepEdit){
 
 body+='<div style="background:var(--green2);border:2px solid var(--accent2);border-radius:12px;padding:12px 14px;margin-bottom:12px'+(_schonAnalysiert?'':';display:none')+'">';  // Build 1046: erst nach Analyse
     var _eo=!!window._dokEditOpen;
-    body+='<div onclick="window._dokEditOpen=!window._dokEditOpen;(window._rerenderDetail||function(){})();" style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.5px;margin-bottom:8px;cursor:pointer;touch-action:manipulation">ERKANNTE DATEN</div>';
+    // ── Build 1197: erkannten Dokumenttyp neben die Ueberschrift ──────────
+    // Bisher stand der Typ nirgends in der Belegansicht. Er entscheidet aber
+    // alles: eine Dispo liefert nur Takes und Zeiten, eine Gagenabrechnung wird
+    // konsolidiert und landet als Einnahme in dbv2. Ein Fehlgriff faellt erst
+    // auf, wenn Zahlen an falscher Stelle auftauchen. Realfall 15.09.2026: der
+    // ELGA-Gagenschein "In a Holidaze" wurde als Abrechnung gelesen, dazu als
+    // Klasse 3 (Eigenrechnung), und stand nach dem Bestaetigen mit 547 Euro in
+    // den Einnahmen. Zurueckzunehmen war das nur noch ueber den Typwechsel.
+    // Die Farben sind dieselben wie im "Typ aendern"-Blatt (Z. ~8430), damit
+    // Kennzeichen und Auswahl zusammenpassen. Antippen oeffnet direkt das Blatt.
+    var _tn1197 = { dispo:'DISPO', abrechn:'GAGENABRECHNUNG',
+                    monats_abrechn:'MONATS-ABRECHNUNG', ausgabe:'BETRIEBSAUSGABE' }[d.typ] || (d.typ||'').toUpperCase();
+    // Build 1197b: exakt die Farben der Ampel-Dots aus der Terminliste (Z. ~5590):
+    // Dispo = var(--red), Abrechnung = var(--orange), Zahlung = var(--accent).
+    // Eine Betriebsausgabe hat in der Ampel keine Entsprechung, sie ist keine Phase
+    // eines Aufnahmetags — sie bekommt var(--accent) wie die gruene Stufe.
+    // Die Plakette selbst bleibt neutral, die Farbe steckt nur im Punkt davor.
+    // Damit wirkt Rot als Phasenkennzeichen und nicht als Fehlermeldung.
+    var _tf1197 = { dispo:'var(--red)', abrechn:'var(--orange)',
+                    monats_abrechn:'var(--orange)', ausgabe:'var(--accent)' }[d.typ] || 'var(--ink3)';
+    body+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<span onclick="window._dokEditOpen=!window._dokEditOpen;(window._rerenderDetail||function(){})();" style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.5px;cursor:pointer;touch-action:manipulation">ERKANNTE DATEN</span>'
+      +(_tn1197 ? '<span onclick="dokReklassifizieren(\''+d.id+'\')" style="display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800;letter-spacing:.4px;padding:3px 9px;border-radius:999px;background:var(--cream2);color:var(--ink2);border:1px solid var(--hair);cursor:pointer;touch-action:manipulation;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;opacity:.75;background:'+_tf1197+'"></span>'+_tn1197+'</span>' : '')
+      +'</div>';
     if(!_eo){ body+=_dokDispBlock(d); }
     if(_eo){
     body+=_editRow('beschr','Beschreibung',d.beschr||'');
