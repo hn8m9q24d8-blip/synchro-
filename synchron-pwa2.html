@@ -5224,7 +5224,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1197';
+  if(elH) elH.textContent = '1199';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6104,7 +6104,23 @@ function openDetail(id){
 
   // ── GVL ÜBERSICHT ──────────────────────────────────────────
   var gvlHtml='';
-  var gvlDispo=dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
+  // ── Build 1198: der Termin ist die Quelle, das Dokument nur der Rueckfall ──
+  // Bisher gewann das verknuepfte Dispo-Dokument immer. Folge: was du im
+  // GVL-Editor am Termin aenderst, war gespeichert, aber unsichtbar — die
+  // Kacheln zeigten weiter die Werte aus dem Beleg. Aufgefallen am 24.09.2026
+  // bei Blue Lights, als die korrigierte Staffel nicht ankam.
+  // Zweiter, groesserer Effekt: der Zweig greift schon, wenn ein Dokument nur
+  // gvl_staffel_header traegt, ohne Detail. Dann rendert er eine Staffelzeile
+  // und KEINE Kacheln, obwohl der Termin welche haette.
+  // Gegen Backup 2026-09-24-1457 gezaehlt: 15 Termine haben ein verknuepftes
+  // Dokument mit GVL-Daten. Bei 11 davon traegt das Dokument nur den Header und
+  // der Termin das echte Detail — Monarch, Daredevil, Rookie Blue, Fire Force,
+  // Dr. Stone, Artful Dodger. Die zeigen ab jetzt ihre Kacheln.
+  // 1 Termin ist deckungsgleich, 2 haben kein eigenes Detail und lesen weiter
+  // das Dokument, 1 ist Blue Lights mit der korrigierten Staffel.
+  var gvlDispo=(t.gvl_takes_detail&&t.gvl_takes_detail.length)
+    ? null
+    : dispoDoks.find(function(d){return d.gvl_staffel_header||d.gvl_takes_detail;});
   if(gvlDispo||t.gvl_staffel||t.gvl_folge||t.gvl_takes||t.gvl_takes_detail){
     gvlHtml='<div class="info-card" style="border-left:3px solid var(--accent)" onclick="gvlTerminBearbeiten(\''+id+'\')">'
       +'<div class="info-card-header"><span>GVL-Übersicht</span>'
@@ -16425,8 +16441,31 @@ function dokAnalyseDoc(d, key, cb){
       // GVL-Takes-Detail
       if(j.gvl_takes_detail && Array.isArray(j.gvl_takes_detail) && j.gvl_takes_detail.length){
         d.gvl_takes_detail = j.gvl_takes_detail;
+        // ── Build 1199: blanke Folgennummer mit der Kopf-Staffel koppeln ──────
+        // Die Episodes-Spalte nennt oft nur die Folge, die Staffel steht allein in
+        // der Kopfzeile. Der Prompt laesst genau das zu ("05:32" → folge 5), also
+        // kommt aus der Analyse eine 5 statt einer 505. Im Detail-Array ist die
+        // Folge aber als staffel*100+folge kodiert, deshalb landen solche Eintraege
+        // spaeter unter Staffel 0 (gvlBuildData, Z. ~10929 rechnet die Staffel aus
+        // den fuehrenden Ziffern).
+        // Realfall 24.09.2026, Bleach S4: Kopf "THOUSAND YEAR BLOOD WAR S4",
+        // Episodes-Spalte "48:2" → folge 48 statt 448, Kachel zeigte "F48" ohne S4.
+        // Im Bestand vom 24.09.2026 betrifft das neun Eintraege, sechsmal Artful
+        // Dodger, dazu Bleach, Parks & Recreation und Mongoose.
+        // Gekoppelt wird nur, wenn eine Kopf-Staffel vorliegt UND die Folge ein-
+        // oder zweistellig ist. Die 0 bleibt unberuehrt, sie heisst Film.
+        // Kopf-Staffel nur zwischen 1 und 99 gelten lassen. Steht dort Unsinn wie
+        // eine Jahreszahl, wird nichts gekoppelt statt eine Folge 202605 zu bauen.
+        var _sh1199 = parseInt(j.gvl_staffel_header);
+        if(_sh1199 > 0 && _sh1199 < 100){
+          d.gvl_takes_detail = d.gvl_takes_detail.map(function(e){
+            var f = parseInt(e.folge);
+            if(f > 0 && f < 100) return { folge: _sh1199*100 + f, takes: e.takes };
+            return e;
+          });
+        }
         // Staffel aus erstem Eintrag ableiten
-        var firstFolge = String(j.gvl_takes_detail[0].folge||'');
+        var firstFolge = String(d.gvl_takes_detail[0].folge||'');
         if(firstFolge.length>2) d.gvl_staffel = String(parseInt(firstFolge.slice(0,-2)));
       } else {
         d.gvl_takes_detail = null;
@@ -21076,15 +21115,36 @@ function dokLinkMultiConfirm(){
   // Dispo: alle Termine verknüpfen
   if(d.typ==='dispo'){
     d.terminId=terminIds[0];
-    termine.forEach(function(t){
-      if(d.rolle&&!t.rolle) t.rolle=d.rolle;
-      if(d.regie&&!t.regie) t.regie=d.regie;
-      if(d.titel&&!t.titel) t.titel=d.titel;
-      if((d.atelier||d.notizen)&&!t.atelier) t.atelier=d.atelier||d.notizen;
-      // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
-      if(d.dateiname) t._dispoDateiname = d.dateiname;
-      _archiveDateiname(d.dateiname||d.beschr, t.id, 'dispo');
-    });
+    // ── Build 1198: bei genau EINEM Termin den echten Merge benutzen ──────
+    // Dieser Zweig kopierte bisher fuenf Felder von Hand: rolle, regie, titel,
+    // atelier und _dispoDateiname. Nicht dabei waren takes, gvl_takes_detail,
+    // gvl_staffel und dispoDocId. Wer einen Beleg ueber "Termin auswaehlen"
+    // manuell zuordnete, bekam also eine halbe Uebernahme — und weil
+    // dispoDocId leer blieb, sah man dem Termin hinterher nicht einmal an,
+    // dass eine Dispo daran haengt.
+    // Realfall 24.09.2026, Blue Lights bei Studio Hamburg: Rolle und Regie kamen
+    // an, die 18 Takes und die Aufteilung 203/11 und 204/7 nicht. Der Titel
+    // ebenfalls nicht, weil `!t.titel` gegen den Kalendertitel "Studio Hamburg"
+    // lief. Tim musste alles von Hand nachtragen und hat dabei die Staffel
+    // verwechselt, weil der GVL-Editor sie mit 1 vorbelegt.
+    // Bei MEHREREN Terminen bleibt das Kopieren: dokMergeIntoTermin wuerde die
+    // Takes und das GVL-Detail dann an jeden Termin schreiben, also vervielfachen.
+    // Dort ist die Handarbeit richtig, nur bei einem Termin war sie es nie.
+    if(termine.length===1){
+      dokMergeIntoTermin(d, termine[0]);
+      if(d.dateiname) termine[0]._dispoDateiname = d.dateiname;
+      _archiveDateiname(d.dateiname||d.beschr, termine[0].id, 'dispo');
+    } else {
+      termine.forEach(function(t){
+        if(d.rolle&&!t.rolle) t.rolle=d.rolle;
+        if(d.regie&&!t.regie) t.regie=d.regie;
+        if(d.titel&&!t.titel) t.titel=d.titel;
+        if((d.atelier||d.notizen)&&!t.atelier) t.atelier=d.atelier||d.notizen;
+        // Dateiname direkt am Termin speichern — überlebt dokDeleteAll()
+        if(d.dateiname) t._dispoDateiname = d.dateiname;
+        _archiveDateiname(d.dateiname||d.beschr, t.id, 'dispo');
+      });
+    }
   }
 
   // Abrechnung: Betrag aufteilen
