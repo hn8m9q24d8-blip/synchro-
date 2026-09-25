@@ -5224,7 +5224,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1199';
+  if(elH) elH.textContent = '1201';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -15469,7 +15469,24 @@ function dokDeleteAllMenu(){
 }
 
 function importedFilesReset(){
-  if(!confirm('Importierte Dateien-Liste zurücksetzen?\n\nDanach werden alle Dateien beim nächsten Ordner-Scan als "neu" erkannt.\nDaten im Kalender bleiben erhalten.')) return;
+  // ── Build 1200: zweite Bestaetigung ──────────────────────────────────────
+  // Der Eintrag liegt im Drei-Punkte-Menue der Belege direkt neben "Alle
+  // loeschen" und dem Ordner-Scan. Am 24.09.2026 wurde er versehentlich
+  // getroffen: die Sperrliste fiel von 324 Eintraegen auf null, und beim
+  // naechsten Scan meldete die App laengst eingepflegte Dispofotos als neu.
+  // Schaden entsteht dabei nicht sofort — Termine, Abrechnungen, dbv2 und GVL
+  // bleiben unberuehrt —, aber wer die Altbelege dann bestaetigt, legt ein
+  // zweites Dokument zu einem Aufnahmetag an, der seine Daten schon hat.
+  // Die erste Frage nennt jetzt die Anzahl, die zweite verlangt eine bewusste
+  // Zustimmung. Zwei Tipps aus Versehen sind deutlich unwahrscheinlicher als einer.
+  var _n1200 = (db.importedFiles||[]).length;
+  if(!_n1200){ showToast('Liste ist bereits leer'); return; }
+  if(!confirm('Importierte Dateien-Liste zurücksetzen?\n\n'+_n1200+' gemerkte Dateien werden vergessen. '
+    + 'Beim nächsten Ordner-Scan gelten alle Dateien wieder als neu, auch die längst eingepflegten.\n\n'
+    + 'Daten im Kalender bleiben erhalten.')) return;
+  if(!confirm('Sicher? '+_n1200+' Einträge werden gelöscht.\n\n'
+    + 'Das brauchst du nur, wenn der Ordner-Scan eine Datei übersieht, die er finden soll. '
+    + 'Zum normalen Einlesen neuer Belege ist es NICHT nötig.')) return;
   db.importedFiles = [];
   db._importedFilesResetDone = true;
   window._skipImportedFilesCheck = true; // In-Memory Flag — gilt für nächsten Scan
@@ -21111,6 +21128,19 @@ function dokLinkMultiConfirm(){
 
   var termine=terminIds.map(function(id){return (db.termine||[]).find(function(x){return x.id===id;});}).filter(Boolean);
   var n=termine.length;
+
+  // ── Build 1201: Inline-Korrekturen zuerst anwenden ───────────────────────
+  // Was du im Auslesefeld aenderst, liegt bis zur Anwendung in _edited-Feldern
+  // und wird erst von _applyEditedFields in die echten Felder uebertragen.
+  // Fuenf Wege tun das laengst: dokBestaetigen (Z. ~15368), dokBestaetigenMitTermin
+  // (Z. ~20618), dokBestaetigenMonat (Z. ~19874), dokPeekTermin (Z. ~8797) und
+  // dokSessionPeek (Z. ~8656). Nur die manuelle Terminauswahl nicht — sie uebertrug
+  // die ungeaenderten Werte aus der Analyse, die Korrektur blieb im Beleg stehen.
+  // Realfall 24.09.2026, Blue Lights: der von Hand gesetzte Titel kam nie am Termin
+  // an. Ich hatte das zuerst der Bedingung `!t.titel` zugeschrieben; die war ein
+  // Teil davon, der eigentliche Grund lag hier eine Ebene hoeher.
+  // Reihenfolge ist damit ueberall gleich: erst Korrekturen anwenden, dann merken.
+  _applyEditedFields(d);
 
   // Dispo: alle Termine verknüpfen
   if(d.typ==='dispo'){
