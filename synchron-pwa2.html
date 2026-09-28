@@ -2401,6 +2401,61 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
 })();
 
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+// ─── Build 1203: Happy Valley 3 (03.03.2026) — Lohnart als Take-Zahl gelesen ───
+// Die Monats-Gutschrift 2229/202603 von TaunusFilm fuehrt zwei Zeilen:
+//   Di 03.03.26 | LA  4 | 117 Takegage  | Happy Valley 3 | 468,00
+//   Di 03.03.26 | LA 13 |     Grundgage | Happy Valley 3 |  80,00
+// Die Spalte LA ist die Lohnart, nicht die Menge. Die Analyse hat die 4 als
+// Take-Zahl uebernommen und nur die Grundgage-Zeile als Termin-Anteil verbucht.
+// Am Termin standen dadurch 4 abgerechnete Takes gegen 117 disponierte, die
+// Junction trug 80 statt 548 und keine Takegage.
+// Probe am Beleg: 80 + 117 x 4,00 = 548,00 — exakt das Brutto der Gutschrift.
+// Es fehlt also nichts, Taunus hat alle 117 Takes bezahlt.
+//
+// GELD BLEIBT UNBERUEHRT: brutto 548,00, USt 38,36, SV 105,18 und Auszahlung
+// 481,18 stehen unveraendert in dbv2 und sind am 29.04.2026 bezahlt. Korrigiert
+// werden nur die Vergleichswerte, die den Soll-Ist-Abgleich falsch anzeigen.
+// Die Korrektur stellt den Belegwert her, sie entfernt sich nicht von ihm.
+//
+// Einzelfall, kein Muster: die Januar-Gutschrift 2229/20260201 desselben Studios
+// wurde im gleichen Format korrekt gelesen (118 disponiert, 118 abgerechnet).
+// Deshalb kein Prompt-Umbau und keine allgemeine Regel, sondern ein gezielter,
+// an den Werten festgemachter Eingriff, der nur genau diesen Fall trifft.
+(function(){
+  if(!db || !db.termine || db._mig1203Done) return;
+  db._mig1203Done = true;
+  if(typeof dbv2==='undefined' || !dbv2 || !dbv2.abrechnungen){ save(db); return; }
+  var ab = dbv2.abrechnungen.find(function(a){ return a.beleg_nr === '2229/202603'; });
+  if(!ab){ save(db); return; }
+  var lnk = (dbv2.abrechnung_termin_links||[]).filter(function(l){ return l.abrechnung_id === ab.id; });
+  if(lnk.length !== 1){ save(db); return; }
+  var l = lnk[0];
+  var t = db.termine.find(function(x){ return x.id === l.termin_id; });
+  if(!t) { save(db); return; }
+  // Nur heilen, wenn der Bestand noch der falsche ist — sonst nichts tun.
+  if(Number(l.takes_anteil) !== 4 || Number(t.takes_abgerechnet) !== 4){ save(db); return; }
+  if(Number(t.takes) !== 117 || Number(ab.brutto) !== 548){ save(db); return; }
+
+  l.takes_anteil          = 117;
+  l.takegage_anteil       = 4;
+  l.grundgage_anteil      = 80;
+  l.brutto_anteil_display = 548;
+  t.takes_abgerechnet     = 117;
+  t.rate_abgerechnet      = 4;
+  t.takes_differenz       = 0;
+  t._mig1203 = 'Lohnart 4 als Take-Zahl gelesen — auf Belegwert 117 korrigiert (Probe: 80 + 117 x 4,00 = 548,00)';
+  saveV2(dbv2);
+  save(db);
+  try{
+    logAction('daten_korrigiert',
+      'Happy Valley 3 (03.03.2026) · abgerechnete Takes 4 → 117 · Lohnart-Spalte war als Menge gelesen',
+      { beleg: '2229/202603', alt: 4, neu: 117, brutto: 548 });
+  }catch(e){}
+  console.log('[Build 1203] Happy Valley 3 korrigiert');
+})();
+
+// ═══════════════════════════════════════
 // ─── Build 1169: takes_abgerechnet bei Paket-Abrechnungen heilen ───
 // Einmalig, idempotent. Repariert Werte, die vor Build 1167 geschrieben
 // wurden. Damals galt pauschal takes_abgerechnet = takes + 10, sobald die
@@ -5224,7 +5279,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1201';
+  if(elH) elH.textContent = '1209';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -6691,9 +6746,41 @@ function openDetail(id){
   var _takesDiff1163 = _takesBehoben1163 ? 0 : t.takes_differenz;
   var _kommDiff1163  = _kommBehoben1163  ? 0 : t.kommgage_differenz;
 
+  // ── Build 1208: Klasse-4-Salden nicht als Gagen-Differenz melden ────────
+  // Studio Hamburg rechnet ueber Monatssalden ab. In kommgage_abgerechnet steht
+  // dann NICHT die Tagesgage, sondern der Saldo des Monats — bei Máxima II vom
+  // 23.01.2026 also 184,00 gegen deine 85,00, bei Memory of a Killer sogar 856,00.
+  // Der Banner meldete daraufhin eine Abrechnungs-Differenz und nannte sie
+  // "Grundlage fuer Mahnung", obwohl alles korrekt bezahlt war: 161,57 am
+  // 06.02.2026, 751,61 am 18.03., 316,10 am 10.04., 115,89 am 04.05.
+  // Der Vergleich Tagesgage gegen Monatssaldo ist bei dieser Abrechnungsform
+  // strukturell unmoeglich, nicht bloss im Einzelfall falsch. Deshalb faellt die
+  // Gagenzeile hier weg und es steht ein Hinweis auf die Abrechnungsform.
+  // Takes und Take-Gage bleiben unberuehrt: die fehlen bei Klasse 4 ohnehin, und
+  // wenn sie einmal da sind, sollen sie auch geprueft werden.
+  // Im Daten-Check taucht der Fall nicht auf, die Tarif-Regel (Build 1171)
+  // verlangt rate_abgerechnet > 0 und steigt vorher aus.
+  var _k4_1208 = false;
+  try{
+    if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
+      var _l1208 = dbv2.abrechnung_termin_links.filter(function(l){ return l.termin_id === t.id; });
+      _k4_1208 = _l1208.some(function(l){
+        var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id === l.abrechnung_id; });
+        return a && (String(a.klasse) === '4' || (a.leistungs_monat && !a.beleg_nr));
+      });
+    }
+  }catch(e){ _k4_1208 = false; }
+  var _kommDiffEff1208 = _k4_1208 ? 0 : _kommDiff1163;
+
   var hasDiff = (_takesDiff1163 && _takesDiff1163 !== 0)
              || (t.rate_differenz && t.rate_differenz !== 0)
-             || (_kommDiff1163 && _kommDiff1163 !== 0);
+             || (_kommDiffEff1208 && _kommDiffEff1208 !== 0);
+  if(_k4_1208 && !hasDiff && _kommDiff1163 && _kommDiff1163 !== 0){
+    diffWarnHtml = '<div style="background:var(--cream2);border:1px solid var(--hair);border-radius:12px;padding:10px 14px;margin-bottom:12px">'
+      +'<div style="font-size:11px;color:var(--ink3)">Monatssaldo-Abrechnung (Klasse 4) — Grundgage '
+      + (t.kommgage_abgerechnet||'?') + '€ ist der Monatssaldo, nicht die Tagesgage. Kein Tagesvergleich möglich.</div>'
+      +'</div>';
+  }
   if(hasDiff && !t.differenz_geklaert){
     var diffLines = '';
     if(_takesDiff1163 && _takesDiff1163 !== 0){
@@ -6715,7 +6802,7 @@ function openDetail(id){
       diffLines += '<div style="font-size:11px;color:#8a6a3f;margin-bottom:4px">'
         +'Take-Gage: <b>'+(t.rate_abgerechnet||'?')+'€ abgerechnet</b> statt '+(t.rate||'?')+'€</div>';
     }
-    if(_kommDiff1163 && _kommDiff1163 !== 0){   // Build 1163
+    if(_kommDiffEff1208 && _kommDiffEff1208 !== 0){   // Build 1163, Klasse-4-Filter aus 1208
       diffLines += '<div style="font-size:11px;color:#8a6a3f;margin-bottom:4px">'
         +'Komm.-Gage: <b>'+(t.kommgage_abgerechnet||'?')+'€ abgerechnet</b> statt '+(t.kommgage||'?')+'€</div>';
     }
@@ -12367,21 +12454,39 @@ function rUstStat(){
   var y=new Date().getFullYear();
   var ur=db.profil.ust!=null?db.profil.ust:0.07;
   
+  // ── Build 1209: Umsatzsteuer aus dem Geldfluss, nicht aus den Dispo-Werten ──
+  // Die Ansicht summierte je Quartal kommgage + takes x rate ueber die TERMIN-
+  // daten. Zwei Fehler in einem: sie rechnete nach Aufnahmetag statt nach
+  // Zahlungseingang, und sie nahm die disponierten Werte statt der tatsaechlich
+  // abgerechneten. Fuer 2026 stand dort Netto 85.335,40 und daraus 5.973,48 USt
+  // — eine Zahl, die mit keiner Voranmeldung etwas zu tun hat. Die reale Zahllast
+  // im August waren 515,47.
+  // Bei Ist-Versteuerung nach §20 UStG entsteht die Steuer mit dem Zufluss.
+  // Deshalb jetzt dieselbe Quelle wie die Voranmeldung selbst: _mev7Buckets()
+  // summiert ust_betrag der dbv2-Belege mit gesetztem zahlungs_datum, gruppiert
+  // nach Valuta-Monat, laesst ueberholte K4-Korrekturen aussen vor und trennt
+  // 7%, 19%, Klasse 4 und steuerfrei. Eine Quelle fuer beide Ansichten.
   var quarters=['Q1 (Jan-Mär)','Q2 (Apr-Jun)','Q3 (Jul-Sep)','Q4 (Okt-Dez)'];
+  var _by1209 = {};
+  try{ _by1209 = _mev7Buckets() || {}; }catch(e){ _by1209 = {}; }
   var qData=quarters.map(function(q,qi){
-    var ms=[qi*3,qi*3+1,qi*3+2];
-    var termine=db.termine.filter(function(t){
-      if(!t.datum||!t.datum.startsWith(String(y)))return false;
-      var pm=parseInt(t.datum.split('-')[1])-1;
-      return ms.includes(pm);
-    });
-    var net=termine.reduce(function(a,t){return a+(t.kommgage||0)+(t.takes||0)*(t.rate||0);},0);
-    return{label:q,net:net,ust:net*ur};
+    var ust=0, basis=0;
+    for(var mi=qi*3; mi<qi*3+3; mi++){
+      var key = String(y)+'-'+('0'+(mi+1)).slice(-2);
+      var b = _by1209[key]; if(!b) continue;
+      var u = (b.u7||0)+(b.u19||0)+(b.k4||0);
+      ust += u;
+      // Bemessungsgrundlage aus der Steuer zurueckrechnen; steuerfreie Umsaetze
+      // haben keine Steuer und werden mit ihrer eigenen Basis addiert.
+      basis += (b.u7||0)/0.07 + (b.u19||0)/0.19 + (b.k4||0)/0.07 + (b.frei||0);
+    }
+    return{label:q, net:Math.round(basis*100)/100, ust:Math.round(ust*100)/100};
   });
   var totalNet=qData.reduce(function(a,d){return a+d.net;},0);
   var totalUst=qData.reduce(function(a,d){return a+d.ust;},0);
   el.innerHTML='<div class="info-card" style="margin-bottom:16px">'
     +'<div class="info-card-header"><span>Umsatzsteuer '+y+'</span></div>'
+    +'<div style="font-size:10px;color:var(--ink3);padding:0 16px 6px">Nach Zahlungseingang (Ist-Versteuerung §20 UStG) — gleiche Quelle wie die Voranmeldung</div>'
     +'<div class="gage-row gage-total"><span>Netto gesamt</span><span>'+fmtEur(totalNet)+'</span></div>'
     +'<div class="gage-row gage-total"><span>USt. gesamt</span><span>'+fmtEur(totalUst)+'</span></div>'
     +'</div>'
@@ -14069,7 +14174,16 @@ function rZahlungsStatistik(jahr){
   var studioMap = {};
   belege.forEach(function(ab){
     var studio = _mahnBelegStudio(ab) || 'Unbekannt';
-    var start = ab.ausstellungs_datum || ab._print_datum || ab.leistungs_datum_von;
+    // ── Build 1206: ab dem Aufnahmetag messen, nicht ab der Gutschrift ──────
+    // Bisher zaehlte die Statistik ab ausstellungs_datum. FFS stellt eine
+    // Gutschrift regelmaessig einen Tag vor der Ueberweisung aus, also stand dort
+    // "Ø 1 Tag · Schnellzahler" — waehrend real 22 Tage im Median zwischen
+    // Aufnahme und Geld liegen. Gemessen wurde die Ueberweisungsgeschwindigkeit
+    // der Buchhaltung, nicht die Wartezeit des Sprechers.
+    // Gewartet wird ab dem Tag, an dem gesprochen wurde. Also ist
+    // leistungs_datum_von der Anker; die Ausstellung nur als Rueckfall, wenn das
+    // Leistungsdatum fehlt.
+    var start = ab.leistungs_datum_von || ab.ausstellungs_datum || ab._print_datum;
     if(!start) return;
     var tage = Math.round((new Date(ab.zahlungs_datum)-new Date(start))/(1000*60*60*24));
     if(tage < 0 || tage > 365) return; // Ausreißer ignorieren
@@ -14077,10 +14191,71 @@ function rZahlungsStatistik(jahr){
     studioMap[studio].push(tage);
   });
 
+  // ── Build 1206: was noch gar nicht abgerechnet ist ──────────────────────
+  // Die Statistik rechnet nur mit BEZAHLTEN Belegen. Aufnahmetage ohne Gutschrift
+  // kommen darin nicht vor — je laenger ein Studio schweigt, desto besser sieht
+  // es hier aus. Genau der Fall FFS: seit dem 19.05.2026 18 Aufnahmetage, keine
+  // einzige Gutschrift, und in der Liste stand weiterhin "Schnellzahler".
+  // Deshalb je Studio zusaetzlich: wie viele Aufnahmetage tragen keine
+  // Gutschrift, und wie lange liegt der aelteste davon zurueck.
+  var _heute1206 = new Date();
+  // Build 1206c: "abgerechnet" heisst verknuepft, nicht "hat eine Gutschrift-Nr".
+  // Der erste Wurf prueft nur t.gutschrift_nr. Studio Hamburg rechnet aber ueber
+  // Klasse-4-Salden ab, und die tragen keine Gutschrift-Nummer (beleg_nr ist dort
+  // leer). Folge: alle sieben Studio-Hamburg-Tage galten als unabgerechnet,
+  // obwohl fuenf davon laengst bezahlt sind — Máxima II vom 23.01. etwa am
+  // 06.02.2026 mit 161,57. Massgeblich ist deshalb die Junction nach dbv2.
+  var _verknuepft1206 = {};
+  ((typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links)||[]).forEach(function(l){
+    _verknuepft1206[l.termin_id] = 1;
+  });
+  var _offen1206 = {};
+  (db.termine||[]).forEach(function(t){
+    if(!t.datum || t.gutschrift_nr || _verknuepft1206[t.id]) return;
+    if(jahr && String(t.datum).slice(0,4) !== String(jahr)) return;
+    var _tg = Math.round((_heute1206 - new Date(t.datum))/(1000*60*60*24));
+    if(_tg < 0) return;                       // kuenftige Termine zaehlen nicht
+    var _st = (t.studio||'').trim(); if(!_st) return;
+    if(!_offen1206[_st]) _offen1206[_st] = { n:0, aeltester:0 };
+    _offen1206[_st].n++;
+    if(_tg > _offen1206[_st].aeltester) _offen1206[_st].aeltester = _tg;
+  });
+  // Build 1206b: Namensabgleich an der Wortgrenze, nicht per blossem Praefix.
+  // Der erste Wurf verglich mit indexOf(...)===0 und liess damit kurze Namen
+  // laengere schlucken: "MO" traf "mobyDok", und die Statistik meldete fuer
+  // MO Synchron einen offenen Aufnahmetag vor 242 Tagen, den es nicht gibt —
+  // der Termin gehoerte mobyDok. Deshalb muss nach dem kuerzeren Namen ein
+  // Leerzeichen folgen; "mo " passt dann nicht mehr auf "mobydok".
+  // Die Schreibweisen an den Terminen sind uneinheitlich (VSI / VSI Studio,
+  // RC / RC Hermes Bberg Atl, mobyDok / mobydok GmbH), darum vorher
+  // normalisieren: Kleinschreibung, Umlaute aufloesen, Rechtsform abschneiden.
+  // Und alle passenden Schreibweisen aufaddieren statt nur die erste zu nehmen.
+  function _norm1206(x){
+    return String(x||'').toLowerCase()
+      .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+      .replace(/\b(gmbh|mbh|kg|ag|co|film|synchron)\b/g,' ')
+      .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function _offenFuer1206(name){
+    var n = _norm1206(name); if(!n) return null;
+    var res = null;
+    Object.keys(_offen1206).forEach(function(x){
+      var k = _norm1206(x); if(!k) return;
+      var passt = (k === n)
+        || (k.length > n.length && k.indexOf(n + ' ') === 0)
+        || (n.length > k.length && n.indexOf(k + ' ') === 0);
+      if(!passt) return;
+      if(!res) res = { n:0, aeltester:0 };
+      res.n += _offen1206[x].n;
+      if(_offen1206[x].aeltester > res.aeltester) res.aeltester = _offen1206[x].aeltester;
+    });
+    return res;
+  }
+
   var studios = Object.keys(studioMap).map(function(s){
     var werte = studioMap[s];
     var avg = Math.round(werte.reduce(function(a,b){return a+b;},0)/werte.length);
-    return {studio:s, avg:avg, count:werte.length};
+    return {studio:s, avg:avg, count:werte.length, offen:_offenFuer1206(s)};
   }).sort(function(a,b){return a.avg-b.avg;});
 
   if(!studios.length) return '';
@@ -14106,11 +14281,21 @@ function rZahlungsStatistik(jahr){
       +'<div style="background:var(--hair);border-radius:4px;height:6px">'
       +'<div style="background:'+(s.avg<=14?'var(--accent)':s.avg<=30?'var(--orange)':s.avg<=60?'var(--orange)':'var(--red)')+';border-radius:4px;height:6px;width:'+balkenBreite+'%"></div>'
       +'</div>'
-      +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">'+b.label+'</div>'
+      +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">'+b.label
+      // Build 1206: offene Aufnahmetage direkt neben die Bewertung. Ohne diese
+      // Zeile behauptet die Liste "Schnellzahler" fuer ein Studio, das seit
+      // Monaten nichts abrechnet.
+      +(s.offen && s.offen.n
+         ? '<span style="color:'+(s.offen.aeltester>60?'var(--red)':'var(--orange)')+';font-weight:700"> · '
+           + s.offen.n + ' Aufnahmetag' + (s.offen.n>1?'e':'') + ' ohne Gutschrift'
+           + (s.offen.aeltester>0 ? ', ältester vor ' + s.offen.aeltester + ' Tagen' : '')
+           + '</span>'
+         : '')
+      +'</div>'
       +'</div>';
   });
 
-  html += '<div style="font-size:10px;color:var(--ink3);margin-top:4px;padding-bottom:8px">Berechnet aus Rechnungsdatum bis Zahlungseingang</div>'
+  html += '<div style="font-size:10px;color:var(--ink3);margin-top:4px;padding-bottom:8px">Berechnet vom Aufnahmetag bis zum Zahlungseingang</div>'
     +'</div>';
 
   return html;
@@ -15508,12 +15693,48 @@ function dokDeleteAll(){
   var rest = docs.filter(function(d){
     return !(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn'));
   });
+
+  // ── Build 1202: angebrochene Split-Gruppen nicht loeschen ────────────────
+  // Ein Sammel-PDF wird beim Import in mehrere Dokumente zerlegt, die alle
+  // DENSELBEN Dateinamen tragen. Bestaetigst du 3 von 6 und leerst danach die
+  // Pipeline, passiert Folgendes: die drei bestaetigten bleiben als Stub, die
+  // drei offenen werden geloescht — und _dateinameFreigeben (Z. ~15318) gibt den
+  // Namen NICHT frei, weil noch ein bestaetigtes Dokument darauf sitzt. Damit
+  // gilt die Datei als eingepflegt, der Ordner-Scan ueberspringt sie, und die
+  // fehlenden Gutschriften sind nicht mehr zurueckzuholen.
+  // Deshalb bleiben unbestaetigte Geschwister einer angebrochenen Gruppe stehen.
+  // Ist eine Gruppe komplett unbestaetigt, wird sie wie bisher geloescht, denn
+  // dann wird auch der Dateiname frei und der Scan bringt alles zurueck.
+  // Ein Absturz mitten in der Reihe ist davon unabhaengig ungefaehrlich: jeder
+  // Bestaetigungspfad ruft save(db), die offenen Dokumente liegen persistent.
+  var _gruppen1202 = {};
+  docs.forEach(function(d){
+    if(d._splitGroup && (d._splitTotal||0) > 1){
+      if(!_gruppen1202[d._splitGroup]) _gruppen1202[d._splitGroup] = { best:0, offen:0 };
+      if(d.bestaetigt) _gruppen1202[d._splitGroup].best++;
+      else _gruppen1202[d._splitGroup].offen++;
+    }
+  });
+  var _geschont1202 = rest.filter(function(d){
+    var g = d._splitGroup && _gruppen1202[d._splitGroup];
+    return g && g.best > 0 && g.offen > 0;
+  });
+  if(_geschont1202.length){
+    var _ids1202 = {};
+    _geschont1202.forEach(function(d){ _ids1202[d.id] = 1; });
+    rest = rest.filter(function(d){ return !_ids1202[d.id]; });
+  }
+
   var nStub = bestaetigtAbrechn.length;
   var nDel  = rest.length;
+  var nSchon = _geschont1202.length;
   var msg = '';
   if(nStub && nDel) msg = nDel+' Dokumente löschen?\n\n'+nStub+' bestätigte Abrechnungen bleiben erhalten (PDFs werden zu Datei-Verweisen ohne Vorschau).';
   else if(nStub)    msg = nStub+' bestätigte Abrechnung'+(nStub>1?'en':'')+' aufräumen?\n\nDaten bleiben vollständig erhalten — nur die PDF-Vorschau wird entfernt (spart Speicher).';
   else              msg = nDel+' Dokumente löschen? Termine bleiben erhalten.';
+  if(nSchon) msg += '\n\n'+nSchon+' Gutschrift'+(nSchon>1?'en':'')+' aus angefangenen Sammel-PDFs '
+    + (nSchon>1?'bleiben':'bleibt')+' stehen — sonst ' + (nSchon>1?'waeren sie':'waere sie')
+    + ' nicht mehr einlesbar.';
   if(!confirm(msg)) return;
   // Stub-Modus für bestätigte Abrechnungen
   bestaetigtAbrechn.forEach(function(d){
@@ -15522,7 +15743,7 @@ function dokDeleteAll(){
     d._stubAfterDeleteAll = true; // Marker für UI ("PDF entfernt")
   });
   // Alle anderen raus
-  db.dokumente = bestaetigtAbrechn;
+  db.dokumente = bestaetigtAbrechn.concat(_geschont1202);
   // Build 849 (Issue #21): Dateinamen der gelöschten (unbestätigten) Docs freigeben,
   // damit ein Re-Upload ohne Umbenennen möglich ist. Multi-Doc-PDFs bleiben gesperrt,
   // solange noch ein bestätigtes Teil-Dokument denselben Dateinamen trägt.
@@ -15540,7 +15761,8 @@ function dokDeleteAll(){
       dateinamen: rest.map(function(d){ return d.dateiname||d.beschr||''; }).slice(0,50) });
   save(db);
   rDokumente();
-  if(nStub && nDel) showToast('✕ '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
+  if(nSchon)        showToast('✕ '+nDel+' gelöscht · '+nSchon+' offene Gutschrift'+(nSchon>1?'en':'')+' behalten');
+  else if(nStub && nDel) showToast('✕ '+nDel+' gelöscht · '+nStub+' Abr. erhalten');
   else if(nStub)    showToast('✓ '+nStub+' Abr.-PDFs aufgeräumt');
   else              showToast('✕ '+nDel+' Dokumente gelöscht');
 }
@@ -23460,6 +23682,62 @@ function runIntegrityCheck(silent){
     warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
   });
 
+  // ── Build 1205: Dispo-Takes gegen abgerechnete Takes ────────────────────
+  // Bisher verglich der Daten-Check nur GVL gegen Abrechnung (Regel oben) und
+  // die Tarife. Die Menge selbst — was disponiert war und was bezahlt wurde —
+  // tauchte nirgends in einer Liste auf. Sie lebte nur als takes_differenz am
+  // einzelnen Termin und war als Banner erst sichtbar, wenn man den Termin
+  // oeffnete. Bei The Dink fehlten dadurch monatelang unbemerkt 70 Takes, an
+  // zwei Tagen je exakt 35, zusammen 490,00 Euro brutto.
+  //
+  // Gemeldet wird nur, was Geld bedeutet: die Differenz wird mit der Take-Gage
+  // multipliziert und der Betrag steht daneben. Richtung wird benannt, damit
+  // klar ist, ob es eine Forderung oder eine Ueberzahlung ist.
+  //
+  // Vier Ausnahmen, damit die Liste nicht mit Scheinbefunden volllaeuft:
+  //  1. Die 1-10-Paketregel speichert absichtlich takes+10 (Z. ~19914). Dieselbe
+  //     Pruefung wie in der GVL-Regel oben: Brutto gleich Grundgage und genau
+  //     10 Takes Unterschied heisst Paket, nicht Fehler.
+  //  2. "✓ geprueft" am Termin (differenz_geklaert) gilt hier wie ueberall sonst.
+  //  3. Fehlt eine der beiden Zahlen, gibt es nichts zu vergleichen.
+  //  4. Ohne Take-Gage laesst sich kein Betrag nennen — dann kein Befund, weil
+  //     eine Meldung ohne Euro-Angabe nicht handhabbar waere.
+  //
+  // Gegen Backup 2026-09-25-1128 gerechnet: 9 Befunde aus 421 Terminen.
+  // Groesste: The Dink 23.03. und 30.03. mit je 35 Takes / 245,00 Euro,
+  // Dreaming Whilst Black 13.07. mit 89 Takes zu viel abgerechnet.
+  (db.termine||[]).forEach(function(t){
+    var _dp1205 = (t.takes==null||t.takes==='') ? null : (parseFloat(t.takes)||0);
+    var _ab1205 = (t.takes_abgerechnet==null||t.takes_abgerechnet==='') ? null : (parseFloat(t.takes_abgerechnet)||0);
+    if(_dp1205===null || _ab1205===null) return;
+    var _df1205 = _dp1205 - _ab1205;
+    if(!_df1205) return;
+    if(t.differenz_geklaert) return;
+    // Paketsignaturen. Erster Durchlauf gegen Backup 2026-09-25-1128 brachte 14
+    // Befunde, davon 12 Scheinbefunde aus der 1-10-Pauschale — die Bedingung war
+    // zu eng. Beide Schreibweisen werden jetzt erkannt:
+    //  (a) abgerechnet genau 10 bei hoechstens 10 disponierten: die Gutschrift
+    //      sagt "Grundgage (1-10)", die App legt 10 ab (Artful Dodger 3→10,
+    //      Torment 2→10, Habeas Corpus 9→10, BLEACH 8→10, Cien anos 3→10).
+    //  (b) abgerechnet = disponiert + 10: die Pauschale deckt die ersten zehn ab,
+    //      der Rest wird einzeln gezaehlt (Navy CIS 120→130, Jackass 94→104).
+    // Die frueher zusaetzlich verlangte Bedingung Brutto = Grundgage traf nur den
+    // reinen Pauschalfall und liess (b) durchrutschen.
+    if(_ab1205 === 10 && _dp1205 <= 10) return;
+    if(_ab1205 === _dp1205 + 10) return;
+    // Steht am Termin keine Dispo-Zahl, gibt es nichts zu vergleichen. Eine 0
+    // heisst hier "nicht erfasst", nicht "null Takes gesprochen".
+    if(_dp1205 === 0) return;
+    var _rt1205 = parseFloat(t.rate_abgerechnet)||parseFloat(t.rate)||0;
+    if(!_rt1205) return;
+    var _eu1205 = Math.abs(Math.round(_df1205 * _rt1205 * 100) / 100);
+    warnings.push('⚠ Takes Dispo/Abrechnung: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '
+      + 'disponiert '+_dp1205+' — abgerechnet '+_ab1205+' — '
+      + (_df1205 > 0 ? ('offen € '+fmtEur(_eu1205).replace('€','').trim())
+                     : ('zuviel gezahlt € '+fmtEur(_eu1205).replace('€','').trim()))
+      + '\u0001T'+t.id);
+  });
+
   // Doppelte Dispos am selben Termin
   (db.termine||[]).forEach(function(t){
     var dispos = (db.dokumente||[]).filter(function(d){
@@ -23727,7 +24005,30 @@ function runIntegrityCheckAndShow(){
   box.style.cssText='background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
 
   var last=db._lastIntegrityCheck||{};
-  var html='<div style="font-size:17px;font-weight:900;margin-bottom:4px">Daten-Check</div>'
+  // ── Build 1204: Befunde als Text herausgeben ─────────────────────────────
+  // Die Liste war nur lesbar, nicht kopierbar. Wer einen Befund woanders
+  // nachrechnen lassen will, musste ihn abtippen oder Screenshots schicken —
+  // bei 198 Zeilen unmoeglich.
+  // Der Knopf legt alle Warnungen als reinen Text in die Zwischenablage, eine
+  // Zeile je Befund, mit Kategorie davor und ohne den \u0001T-Sprungmarker.
+  // Kein Fallback-Prompt: schlaegt das Kopieren fehl (aelteres iOS, kein
+  // sicherer Kontext), sagt der Toast das, statt ein Fenster mit 198 Zeilen
+  // aufzumachen, aus dem sich erst recht nichts markieren laesst.
+  window._dcTextKopieren1204 = function(){
+    try{
+      var w = runIntegrityCheck(false) || [];
+      var zeilen = w.map(function(x){ return String(x).split('\u0001T')[0].trim(); });
+      var txt = 'Daten-Check · ' + (last.datum||'jetzt') + ' · ' + zeilen.length + ' Befunde\n\n'
+              + zeilen.join('\n');
+      navigator.clipboard.writeText(txt).then(function(){
+        showToast('✓ ' + zeilen.length + ' Befunde kopiert');
+      }).catch(function(){ showToast('Kopieren nicht möglich'); });
+    }catch(e){ showToast('Kopieren nicht möglich'); }
+  };
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+    +'<span style="font-size:17px;font-weight:900">Daten-Check</span>'
+    +(warnings.length?'<button type="button" onclick="_dcTextKopieren1204()" style="background:var(--cream2);color:var(--ink2);border:1px solid var(--hair);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Als Text kopieren</button>':'')
+    +'</div>'
     +'<div style="font-size:11px;color:#888;margin-bottom:14px">Geprüft: '+( last.datum||'jetzt')+(last.fixes?' · '+last.fixes+' Auto-Fix'+(last.fixes>1?'es':''):'')+'</div>';
 
   if(!warnings.length){
@@ -24677,7 +24978,34 @@ function rZahlungen(){
     }).join('');
   }
 
-  function calcNet(t){ return (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0); }
+  // ── Build 1209: echte Abrechnung schlaegt Kalkulation ───────────────────
+  // calcNet rechnete immer kommgage + takes x rate aus den DISPO-Werten und wird
+  // in dieser Ansicht 15-mal benutzt: Hero, Monatsbalken, Studio- und
+  // Produktionsverteilung, KW-Trend, Senderauswertung. Was ein Studio wirklich
+  // abgerechnet hat, blieb aussen vor.
+  // Am Bestand vom 25.09.2026 wichen 64 von 200 Terminen ab, in beide Richtungen:
+  // Memory of a Killer 17.02. um 830,80 nach oben, The Dink 23.03. und 30.03. um
+  // je 245,00 nach unten. Elf Termine hatten gar keinen Gagenwert und zaehlten 0.
+  // Liegt eine Abrechnung vor, ist deren Termin-Anteil die Wahrheit — das ist die
+  // Zahl, die das Studio bezahlt. Nur solange nichts abgerechnet ist, bleibt die
+  // Kalkulation aus der Dispo die beste verfuegbare Schaetzung.
+  var _anteil1209 = {};
+  try{
+    if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
+      dbv2.abrechnung_termin_links.forEach(function(l){
+        var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id === l.abrechnung_id; });
+        if(a && a._ueberholt_durch) return;              // ueberholte K4-Korrektur nie zaehlen
+        var v = parseFloat(l.brutto_anteil_display);
+        if(!(v > 0)) return;
+        _anteil1209[l.termin_id] = (_anteil1209[l.termin_id] || 0) + v;
+      });
+    }
+  }catch(e){ _anteil1209 = {}; }
+  function calcNet(t){
+    var ist = _anteil1209[t.id];
+    if(ist > 0) return ist;
+    return (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+  }
 
   // Totals for hero — Build 865: bezahlt/abgerechnet aus dbv2-Ankern statt t.status
   var totalAll=0,offenAll=0,bezahltAll=0,abgAll=0;
