@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  Synchronik
+  © 2026 Tim Knauer. Alle Rechte vorbehalten.
+  Nutzung nur mit Erlaubnis, keine Weitergabe, keine Veränderung.
+-->
 <html lang="de">
 <head>
 <meta charset="UTF-8">
@@ -661,6 +666,9 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 
     <div class="group-lbl" style="margin:18px 0 6px">Kontakt</div>
     <p>tknauer.synchro@gmail.com</p>
+
+    <div class="group-lbl" style="margin:18px 0 6px">Urheberrecht</div>
+    <p>© 2026 Tim Knauer. Alle Rechte vorbehalten. Nutzung nur mit Erlaubnis, keine Weitergabe, keine Veränderung.</p>
   </div>
 </div>
 
@@ -1457,10 +1465,10 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div class="bs-title">Anthropic API-Key</div>
   <div class="bs-scroll">
     <div style="background:var(--amber2);border:1px solid rgba(217,119,6,.25);border-radius:12px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--ink2);line-height:1.6">
-      <strong style="color:var(--amber);display:block;margin-bottom:4px">Key kostenlos anlegen:</strong>
-      1. console.anthropic.com aufrufen<br>
-      2. Kostenlosen Account erstellen<br>
-      3. „API Keys" → „Create Key"<br>
+      <strong style="color:var(--amber);display:block;margin-bottom:4px">Key anlegen:</strong>
+      1. platform.claude.com aufrufen und Konto anlegen<br>
+      2. Billing → „Buy credits“: mindestens 5 $ aufladen<br>
+      3. „API keys“ → „Create key“, Key kopieren<br>
       4. Key hier einfügen<br><br>
       <strong>Kosten:</strong> ~1 Cent pro Dokument. Kein Monatsabo.
     </div>
@@ -1689,10 +1697,10 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div class="bs-title">Anthropic API-Key</div>
   <div class="bs-scroll">
     <div style="background:var(--amber2);border:1px solid rgba(217,119,6,.25);border-radius:12px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--ink2);line-height:1.6">
-      <strong style="color:var(--amber);display:block;margin-bottom:4px">Key kostenlos anlegen:</strong>
-      1. console.anthropic.com aufrufen<br>
-      2. Kostenlosen Account erstellen<br>
-      3. „API Keys" → „Create Key"<br>
+      <strong style="color:var(--amber);display:block;margin-bottom:4px">Key anlegen:</strong>
+      1. platform.claude.com aufrufen und Konto anlegen<br>
+      2. Billing → „Buy credits“: mindestens 5 $ aufladen<br>
+      3. „API keys“ → „Create key“, Key kopieren<br>
       4. Key hier einfügen<br><br>
       <strong>Kosten:</strong> ~1 Cent pro Dokument. Kein Monatsabo.
     </div>
@@ -2259,6 +2267,17 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
 // 839/20260302 steht in der Junction 316 gegen ein Beleg-Brutto von -396 — das
 // ist eine eigene Abweichung, die hier nicht geraten wird. Idempotent, weil
 // bereits negative Werte unveraendert bleiben.
+// ── Build 1215: Tims Datenkorrekturen nur auf Tims Bestand ─────────────
+// Seit Build 1215 bekommen Beta-Tester dieselbe Datei. Migrationen, die gezielt
+// Tims Datensaetze reparieren oder loeschen, duerfen bei ihnen nie laufen.
+// Erkennungsmerkmal ist der Name im Profil (Build 1216; vorher die Steuernummer, die
+// nicht in ein oeffentliches Repository gehoert). Allgemeine Logik-Korrekturen
+// (1187 Storno-Vorzeichen, 1169 Paket-Takes) bleiben bewusst fuer alle aktiv.
+// REGEL fuer jede kuenftige Migration auf Tims Daten: mit _istTimsBestand() sperren.
+function _istTimsBestand(){
+  try{ return String((db && db.profil && db.profil.name) || '').replace(/\s+/g,' ').trim().toLowerCase() === 'tim knauer'; }
+  catch(e){ return false; }
+}
 (function(){
   if(!dbv2 || !dbv2.abrechnungen || dbv2._mig1187Done) return;
   var protokoll = [];
@@ -2332,6 +2351,7 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
 // Zuordnungen zerstoeren.
 (function(){
   if(!db || !db.termine || db._mig1196Done) return;
+  if(!_istTimsBestand()){ db._mig1196Done = true; return; }   // Build 1215
   var G = '2025-01-01';
   var altT   = db.termine.filter(function(t){ return (t.datum||'9999') < G; });
   var altTid = {}; altT.forEach(function(t){ altTid[t.id]=1; });
@@ -2425,6 +2445,7 @@ if(!localStorage.getItem(DBK_V2)) saveV2(dbv2);
 (function(){
   if(!db || !db.termine || db._mig1203Done) return;
   db._mig1203Done = true;
+  if(!_istTimsBestand()) return;   // Build 1215
   if(typeof dbv2==='undefined' || !dbv2 || !dbv2.abrechnungen){ save(db); return; }
   var ab = dbv2.abrechnungen.find(function(a){ return a.beleg_nr === '2229/202603'; });
   if(!ab){ save(db); return; }
@@ -4340,6 +4361,19 @@ function v2ZaehleAbgerechneteTermine(jahr){
 })();
 
 // ── BUILD-NUMMER (fest, wird von Claude erhöht beim Speichern) ─
+// Build 1215/1217: Beta-Kennung. Die Einstiegsseite (tobi-….html) leitet auf
+// synchronik.html?beta=Tobi weiter. Build 1217: Die Kennung kommt aus dem URL-
+// Parameter, weil iOS Home-Bildschirm-Apps einen eigenen Speicher haben und das,
+// was Safari vorher abgelegt hat, dort nicht sehen. Ohne Web-App-Manifest nimmt
+// iOS die aktuelle Adresse samt ?beta=… als Start-Adresse des Icons, der Parameter
+// kommt also bei jedem Start mit. Nur Buchstaben, max. 20 Zeichen.
+window._BETA_TESTER = (function(){
+  try{
+    var p = new URLSearchParams(location.search).get('beta');
+    if(p && /^[A-Za-zÄÖÜäöüß]{1,20}$/.test(p)){ try{ localStorage.setItem('synchron_beta_tester', p); }catch(e){} return p; }
+    return localStorage.getItem('synchron_beta_tester') || null;
+  }catch(e){ return null; }
+})(); // BETA-KENNUNG
 (function(){
   var elH = document.getElementById('heute-build-nr');
   // Build 842: Analyse-Prompt kennt jetzt GVL — GVL-Auszahlungsmitteilungen werden als
@@ -5279,7 +5313,11 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1213';
+  if(elH) elH.textContent = '1217';
+  // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
+  // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
+  if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
+  if(elH && /synchron-dev\.html$/i.test(location.pathname)) elH.textContent += ' · DEV';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -9829,6 +9867,11 @@ function exportData(){
   // API-Key aus Export entfernen — Sicherheitsregel
   var exportDb = JSON.parse(JSON.stringify(db));
   if(exportDb.profil) { exportDb.profil.apiKey = ''; }
+  // Build 1215: Studio-Passwoerter (PDF-Kennwoerter) nicht im Klartext ins Backup.
+  // Backups werden geteilt (Analyse, kuenftig auch von Testern). delete statt {},
+  // damit der Import (Build 759) auf demselben Geraet die vorhandenen Kennwoerter
+  // behaelt. Auf einem neuen Geraet muessen sie einmal neu eingegeben werden.
+  if(exportDb.profil) { delete exportDb.profil.studioPasswords; }
   // Build 747: dbv2 mit exportieren — sonst gehen alle Abrechnungen-v2 beim Restore verloren.
   // Das v2-Schema ist seit dem Umbau die Hauptquelle für Jahresabschluss/USt-VA.
   var exportDbv2 = (typeof dbv2 !== 'undefined') ? JSON.parse(JSON.stringify(dbv2)) : null;
@@ -15046,7 +15089,11 @@ function dokGotFilesFolder(inp){
   if(!files.length) return;
 
   // NUR Unterordner "Dispofotos" und "Gagenabrechnungen" — alle anderen ignorieren
-  var ALLOWED_FOLDERS = ['dispofotos', 'gagenabrechnungen', 'ausgaben'];
+  // Build 1214: 'dispo' statt 'dispofotos'. Die Fehlermeldung unten versprach seit
+  // jeher auch "Dispo", der Filter liess aber nur "dispofotos" durch. Teilwort-Abgleich:
+  // Dispo, Dispos, Dispofotos, Dispos 2026 werden alle erkannt. Fuer den bestehenden
+  // Ordner "Dispofotos" aendert sich nichts.
+  var ALLOWED_FOLDERS = ['dispo', 'gagenabrechnungen', 'ausgaben'];
   var allInFolder = files.filter(function(f){
     var path = (f.webkitRelativePath || f.name).toLowerCase();
     var parts = path.split('/');
@@ -15071,7 +15118,7 @@ function dokGotFilesFolder(inp){
     showToast('⚠ '+skippedFormat.length+' Datei'+(skippedFormat.length>1?'en':'')+' übersprungen — Format nicht unterstützt: '+extList);
   }
   if(!files.length){
-    showToast('Keine Dateien gefunden. Ordner muss "Dispofotos", "Dispo", "Gagenabrechnungen" oder "Ausgaben" heissen.');
+    showToast('Keine Dateien gefunden. Unterordner müssen "Dispo", "Dispos", "Dispofotos", "Gagenabrechnungen" oder "Ausgaben" heißen.');
     inp.value=''; return;
   }
 
@@ -15081,7 +15128,7 @@ function dokGotFilesFolder(inp){
     var parts=path.split('/');
     var subfolder=parts.length>=3?parts[1]:(parts.length===2?parts[0]:'');
     // Ordner-basierte Klassifizierung — eindeutig und einfach
-    if(subfolder.indexOf('dispofotos')>=0)       return 'dispo';
+    if(subfolder.indexOf('dispo')>=0)             return 'dispo';   // Build 1214
     if(subfolder.indexOf('gagenabrechnungen')>=0) return 'abrechn';
     if(subfolder.indexOf('ausgaben')>=0)          return 'ausgabe';
     return null;
