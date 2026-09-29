@@ -5279,7 +5279,7 @@ function v2ZaehleAbgerechneteTermine(jahr){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1209';
+  if(elH) elH.textContent = '1213';
 })();
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -5443,6 +5443,42 @@ function _backupBanner(){
     var ua = (a.uhrzeit || '99:99'), ub = (b.uhrzeit || '99:99');
     return ua > ub ? 1 : (ua < ub ? -1 : 0);
   }
+// ── Build 1213: Tagessumme leise unter der letzten Karte ────────────────
+// Wunsch vom 29.09.2026: unauffaellig, grau, erst beim Runterscrollen sichtbar.
+// Betrag wie calcNet in der Analyse (Build 1209): liegt ein Beleg vor, zaehlt
+// dessen Termin-Anteil (brutto_anteil_display, ohne USt, vor SV); sonst die
+// Schaetzung aus der Dispo (Komm.-Gage + Takes x Rate). Ist mindestens ein
+// Termin des Tages noch geschaetzt, steht "ca." davor und die Summe ist auf
+// ganze Euro gerundet. Bei nur einem Termin erscheint nichts, die Summe
+// wuerde die Karte darueber nur wiederholen.
+function _tagesSumme1213(items){
+  try{
+    if(!items || items.length < 2) return '';
+    var ids = {}; items.forEach(function(t){ ids[t.id] = 0; });
+    if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
+      dbv2.abrechnung_termin_links.forEach(function(l){
+        if(!(l.termin_id in ids)) return;
+        var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id === l.abrechnung_id; });
+        if(a && a._ueberholt_durch) return;
+        var v = parseFloat(l.brutto_anteil_display);
+        if(v > 0) ids[l.termin_id] += v;
+      });
+    }
+    var sum = 0, geschaetzt = false;
+    items.forEach(function(t){
+      if(ids[t.id] > 0){ sum += ids[t.id]; return; }
+      geschaetzt = true;
+      sum += (parseFloat(t.kommgage)||0) + (parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+    });
+    if(!(sum > 0)) return '';
+    var betrag = geschaetzt
+      ? 'ca. ' + Math.round(sum).toLocaleString('de-DE') + ' €'
+      : (Math.round(sum*100)/100).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
+    return '<div style="text-align:right;font-size:12px;color:var(--ink3);padding:6px 6px 18px;letter-spacing:.01em">'
+      + items.length + ' Termine · ' + betrag + '</div>';
+  }catch(e){ return ''; }
+}
+
 function rTermine(){
   rWeekStrip();
   _backupBanner();
@@ -5513,7 +5549,8 @@ function rTermine(){
       list.innerHTML='<div class="empty-state">'+_sumiMikro()+'<div class="empty-title" style="font-family:var(--serif);font-weight:500">Ein freier Tag.</div></div>';
       return;
     }
-    list.innerHTML=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('');
+    list.innerHTML=dayItems.map(function(t){t._hideGVL=true;var h=tCard(t);delete t._hideGVL;return h;}).join('')
+      + _tagesSumme1213(dayItems);
     return;
   }
 
@@ -6712,7 +6749,21 @@ function openDetail(id){
       }
     }
     if(t.takes_differenz && t.takes_differenz!==0){
-      if(ggHat1to10 && Math.abs(t.takes_differenz)<=10){ t.takes_differenz=0; changed2=true; }
+      // Build 1212: Liegt takes_abgerechnet vor (seit Build 1167 die effektiven
+      // Takes), wird nicht mehr pauschal jede Differenz bis 10 geloescht. Das
+      // haette die echte Differenz von 8 Takes bei Nobody Wants This (26.08.2026)
+      // stillschweigend entfernt. Stattdessen: eine zu hoch gespeicherte positive
+      // Differenz (alte Rechnung mit roher Beleg-Take-Zahl) wird auf
+      // max(Dispo, 10) - takes_abgerechnet zurueckgesetzt, nie erhoeht, nie
+      // negativ. Negative Werte und Faelle ohne takes_abgerechnet behalten die
+      // bisherige Regel. Gegen Backup 2026-09-28-0949 geprueft: unter den 24
+      // Paket-Terminen hat keiner eine positive gespeicherte Differenz, es
+      // aendert sich am Bestand nichts ausser dem neuen Fall.
+      var _ta1212 = (t.takes_abgerechnet==null || t.takes_abgerechnet==='') ? null : (parseFloat(t.takes_abgerechnet)||0);
+      if(ggHat1to10 && _ta1212!==null && t.takes_differenz > 0){
+        var _korr1212 = Math.max(tTakes, 10) - _ta1212;
+        if(_korr1212 < t.takes_differenz){ t.takes_differenz = _korr1212 > 0 ? _korr1212 : 0; changed2=true; }
+      } else if(ggHat1to10 && Math.abs(t.takes_differenz)<=10){ t.takes_differenz=0; changed2=true; }
     }
     // rate_differenz: wenn Take-Rate von Dispo abweicht aber Tarif-konform
     if(t.rate_differenz && t.rate_differenz!==0 && abgeleitetesProfile){
@@ -14157,6 +14208,12 @@ function rZahlungsStatistik(jahr){
     if(ab._ueberholt_durch) return false;
     if(!ab.zahlungs_datum) return false;             // nur bezahlte
     if((parseFloat(ab.brutto)||0) <= 0) return false;// Storno/Null verzerrt nicht
+    // Build 1211: GVL gehoert nicht in die Zahlungsdauer. Die GVL zahlt fuer
+    // Verteilungsjahre, nicht fuer Aufnahmetage; leistungs_datum_von ist dort das
+    // Belegdatum. Die Liste zeigte deshalb "GVL · Ø 2 Tage · Schnellzahler" ganz oben.
+    // Am Bestand vom 28.09.2026: 202527500/501 je 2 Tage, 202594118 3 Tage.
+    // Abgleich am Abrechner (dbv2), nicht am Freitext; einzige Schreibweise im Bestand: "GVL".
+    if(/^gvl\b/i.test(String(_mahnBelegStudio(ab)||'').trim())) return false;
     return true;
   });
 
@@ -18937,10 +18994,15 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     body += '<div style="background:var(--card);border:1.5px solid var(--hair);border-radius:10px;padding:12px;margin-bottom:12px">'
       + '<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Erkannte Daten</div>';
 
+    // Build 1210: editAttr trug ein eigenes style="cursor:pointer", das <div> danach ein
+    // zweites style mit display:flex. Der Browser nimmt nur das erste Attribut, das
+    // zweite fiel weg. Deshalb klebten bei den editierbaren Zeilen (Studio, Titel, Brutto,
+    // MwSt, Auszahlung) Label und Wert zusammen ("StudioGVL"), Datum und Beleg-Nr. waren
+    // korrekt. cursor:pointer steht ohnehin im zweiten style, das erste ist gestrichen.
     function _row(label, val, editable){
       var v = val != null && String(val).trim() ? esc(String(val)) : '<span style="color:#ccc">—</span>';
       var editAttr = editable
-        ? ' onclick="dokEditFieldInline(this,\''+d.id+'\',\''+editable+'\')" style="cursor:pointer" title="Antippen zum Bearbeiten"'
+        ? ' onclick="dokEditFieldInline(this,\''+d.id+'\',\''+editable+'\')" title="Antippen zum Bearbeiten"'
         : '';
       var pencil = editable ? ' <span style="color:#ccc;font-size:10px">✎</span>' : '';
       return '<div'+editAttr+' style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream2);font-size:13px;'+(editable?'cursor:pointer':'')+'">'
@@ -21194,6 +21256,22 @@ function dokMergeIntoTermin(d, termin){
       // Effektive Takes: wenn Grundgage 1-10 enthält, sind echte Takes = takes_abgerechnet + 10
       var effektiveTakes = grundgageEnthält1to10 ? takes + 10 : takes;
 
+      // ── Build 1212: Differenz beim Paket gegen die EFFEKTIVEN Takes ──────
+      // Build 1167 schreibt oben die richtigen Takes in takes_abgerechnet, die
+      // Differenz darunter rechnete aber weiter mit der rohen Zahl vom Beleg.
+      // Real am 28.09.2026: Nobody Wants This S3 (Interopa, 26.08.2026), Dispo 23,
+      // Beleg 127,00 Grundgage (= 85 + 10 x 4,20) plus 5 Takegage, Brutto 148,00.
+      // takes_abgerechnet wurde korrekt 15, die Differenz aber 23 - 5 = 18
+      // (75,60 EUR) statt 23 - 15 = 8 (33,60 EUR). Unter 10 Dispo-Takes gilt die
+      // Mindestabrechnung von 10, das ist keine Ueberzahlung: Soll = max(Dispo, 10).
+      if(_t10Is1to10 && dispTakes > 0){
+        var _soll1212 = Math.max(dispTakes, 10);
+        termin.takes_differenz = _soll1212 - _t10Eff1167;
+        if(termin.takes_differenz !== 0)
+          changed.push('Differenz Takes: '+dispTakes+' Dispo vs '+_t10Eff1167+' abgerechnet (Paket)');
+        else
+          changed.push('Takes: Paket erkannt ('+_t10Eff1167+' abgerechnet = Dispo)');
+      } else
       // Takes-Differenz: nur wenn nicht durch 1-10-Grundgage erklärbar
       if(dispTakes > 0 && takes > 0 && dispTakes !== takes){
         if(grundgageEnthält1to10 && Math.abs(effektiveTakes - dispTakes) < 2){
