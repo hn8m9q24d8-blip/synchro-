@@ -1320,7 +1320,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="info-card-header"><span>Steuerdaten</span></div>
       <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
         <div><div style="font-size:11px;color:var(--ink4);margin-bottom:4px">Steuernummer</div><input class="sheet-input" id="pf-steuernr" placeholder="12/345/67890"></div>
-        <div><div style="font-size:11px;color:var(--ink4);margin-bottom:4px">USt-IdNr.</div><input class="sheet-input" id="pf-ustid" placeholder="DE123456789"></div>
+        <div><div style="font-size:11px;color:var(--ink4);margin-bottom:4px">USt-IdNr. <span style="color:var(--ink4);font-weight:400">(nur bei Kunden im EU-Ausland, sonst leer lassen)</span></div><input class="sheet-input" id="pf-ustid" placeholder="leer lassen · sonst DE123456789"><div style="font-size:10px;color:var(--ink4);margin-top:4px;line-height:1.4">Nicht die persönliche Steuer-ID. Die gehört nicht auf Rechnungen.</div></div>
         <div><div style="font-size:11px;color:var(--ink4);margin-bottom:4px">Zuständiges Finanzamt</div><input class="sheet-input" id="pf-famt" placeholder="Finanzamt Berlin-Mitte"></div>
         <div><div style="font-size:11px;color:var(--ink4);margin-bottom:4px">Voranmeldung</div>
           <select class="sheet-input" id="pf-voranm" style="appearance:auto">
@@ -5313,7 +5313,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1219';
+  if(elH) elH.textContent = '1222';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -24820,7 +24820,11 @@ function _erzeugeUndTeileRechnungPDF(r){
   doc.setTextColor(110,110,110);
   if(p.steuernr){ doc.text('Steuer-Nr.: '+p.steuernr, L, y); y += 4; }
   if(p.famt){ doc.text('Finanzamt: '+p.famt, L, y); y += 4; }
-  if(p.ustid){ doc.text('Steuer-ID: '+p.ustid, L, y); y += 4; }
+  // Build 1220: Das Profilfeld heisst "USt-IdNr." (DE123456789). Im Bestand stand dort
+  // die persoenliche Steuer-Identifikationsnummer, die das PDF als "Steuer-ID" auf jede
+  // Rechnung druckte. Die gehoert nicht auf Rechnungen. Gedruckt wird nur noch eine
+  // echte USt-IdNr. (beginnt mit Laenderkuerzel), korrekt beschriftet.
+  if(p.ustid && /^[A-Z]{2}\s*\d/i.test(String(p.ustid).trim())){ doc.text('USt-IdNr.: '+String(p.ustid).trim(), L, y); y += 4; }
   doc.setTextColor(0,0,0);
   y += 6;
 
@@ -24838,6 +24842,10 @@ function _erzeugeUndTeileRechnungPDF(r){
   // ─── Rechnungsnummer + Projekt + Leistungsdatum (linksbündig, kompakt) ───
   doc.setFontSize(10);
   if(r.nr){ doc.text('Rechnungsnummer: '+r.nr, L, y); y += 5; }
+  // Build 1220: Leistungsdatum direkt unter die Rechnungsnummer (Formalien beisammen),
+  // danach eine Leerzeile, dann Titel mit Folgen als eigener Block.
+  if(r.leistdatum){ doc.text('Leistungsdatum: '+_fmtDatumDE(r.leistdatum), L, y); y += 5; }
+  if(r.leistung && (r.nr || r.leistdatum)) y += 3;
   // Build 1218: Die Leistungsbeschreibung kam nur mit der ersten Zeile ins PDF
   // (split('\n')[0]). Real am 30.09.2026: Rechnung 12/2026 an mobyDok, "Arte 42"
   // mit den Folgen "Dunkle Energie" und "Supervulkane" darunter; im PDF stand nur
@@ -24855,12 +24863,8 @@ function _erzeugeUndTeileRechnungPDF(r){
         var _txt = (_t !== z ? '- ' : '') + _t;
         doc.splitTextToSize(_txt, R-_ein1218).forEach(function(w){ doc.text(w, _ein1218, y); y += 5; });
       });
-      // Build 1219: etwas Luft nach der Folgenliste, damit "Leistungsdatum" nicht
-      // wie eine weitere Folge wirkt. Nur wenn es Folgezeilen gibt.
-      if(_lz1218.length > 1) y += 3;
     }
   }
-  if(r.leistdatum){ doc.text('Leistungsdatum: '+_fmtDatumDE(r.leistdatum), L, y); y += 5; }
   y += 6;
 
   // ─── Anrede + Einleitung ───
@@ -24895,13 +24899,13 @@ function _erzeugeUndTeileRechnungPDF(r){
   doc.text('zzgl. '+Math.round(ur*100)+' % MWSt.', L+90, y);
   doc.text(_fmtEur(ustBetrag), R, y, {align:'right'}); y += 5;
   doc.setFont('helvetica','bold');
-  doc.text('zus.:', L+90, y); doc.text(_fmtEur(brutto), R, y, {align:'right'});
+  doc.text('Gesamtbetrag', L+90, y); doc.text(_fmtEur(brutto), R, y, {align:'right'});   // Build 1221: statt 'zus.:'
   doc.setFont('helvetica','normal');
   y += 12;
 
   // ─── Zahlungsaufforderung ───
   var bankBlock=[];
-  if(p.bank) bankBlock.push(p.bank);
+  if(p.bank) bankBlock.push(String(p.bank).trim());   // Build 1220: kein Leerzeichen vor dem Komma
   if(p.iban) bankBlock.push('IBAN '+p.iban);
   if(p.bic) bankBlock.push('BIC '+p.bic);
   var zahlText = 'Bitte überweisen Sie o.g. Betrag binnen 4 Wochen auf mein Konto'
@@ -24912,7 +24916,7 @@ function _erzeugeUndTeileRechnungPDF(r){
   y += zahlWrap.length * 5 + 10;
 
   // ─── Grußformel ───
-  doc.text('Mit freundlichen Grüßen,', L, y); y += 8;
+  doc.text('Mit freundlichen Grüßen', L, y); y += 8;   // Build 1220: nach der Grußformel kein Komma
   if(p.name){ doc.text(p.name, L, y); }
 
   // ─── Seitenzahl unten ───
@@ -25005,7 +25009,7 @@ function generateRechnungPDFHTMLPreview(){
     +'<div style="font-size:13px;color:#555">'+esc(p.beruf||'Synchronsprecher·in')+'</div>'
     +(p.strasse?'<div style="font-size:13px;color:#555">'+esc(p.strasse)+'</div>':'')
     +((p.plz||p.ort)?'<div style="font-size:13px;color:#555">'+esc((p.plz||'')+' '+(p.ort||''))+'</div>':'')
-    +(p.ustid?'<div style="font-size:11px;color:#888;margin-top:8px">USt-IdNr: '+esc(p.ustid)+'</div>':'')
+    +((p.ustid && /^[A-Z]{2}\s*\d/i.test(String(p.ustid).trim()))?'<div style="font-size:11px;color:#888;margin-top:8px">USt-IdNr: '+esc(p.ustid)+'</div>':'')   /* Build 1220 */
     +(p.steuernr?'<div style="font-size:11px;color:#888">Steuernr: '+esc(p.steuernr)+'</div>':'');
 
   var bankBlock='';
