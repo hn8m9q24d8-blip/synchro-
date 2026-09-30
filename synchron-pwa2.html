@@ -5313,7 +5313,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1217';
+  if(elH) elH.textContent = '1218';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -24838,8 +24838,25 @@ function _erzeugeUndTeileRechnungPDF(r){
   // ─── Rechnungsnummer + Projekt + Leistungsdatum (linksbündig, kompakt) ───
   doc.setFontSize(10);
   if(r.nr){ doc.text('Rechnungsnummer: '+r.nr, L, y); y += 5; }
-  // Wir nehmen das erste Wort der Leistung als "Titel"-Indikator
-  if(r.leistung){ doc.text('Titel: '+String(r.leistung).split('\n')[0], L, y); y += 5; }
+  // Build 1218: Die Leistungsbeschreibung kam nur mit der ersten Zeile ins PDF
+  // (split('\n')[0]). Real am 30.09.2026: Rechnung 12/2026 an mobyDok, "Arte 42"
+  // mit den Folgen "Dunkle Energie" und "Supervulkane" darunter; im PDF stand nur
+  // "Titel: Arte 42". Jetzt: erste Zeile als Titel, jede weitere nicht leere Zeile
+  // darunter, eingerueckt auf Hoehe des Titels. Fuehrende Striche/Punkte werden zu
+  // einem einheitlichen "- " vereinheitlicht, lange Zeilen umbrochen.
+  if(r.leistung){
+    var _lz1218 = String(r.leistung).split('\n').map(function(z){ return z.trim(); }).filter(function(z){ return z; });
+    if(_lz1218.length){
+      doc.text('Titel: '+_lz1218[0], L, y);
+      var _ein1218 = L + doc.getTextWidth('Titel: ');
+      y += 5;
+      _lz1218.slice(1).forEach(function(z){
+        var _t = z.replace(/^[-–—•·*]+\s*/, '');
+        var _txt = (_t !== z ? '- ' : '') + _t;
+        doc.splitTextToSize(_txt, R-_ein1218).forEach(function(w){ doc.text(w, _ein1218, y); y += 5; });
+      });
+    }
+  }
   if(r.leistdatum){ doc.text('Leistungsdatum: '+_fmtDatumDE(r.leistdatum), L, y); y += 5; }
   y += 6;
 
