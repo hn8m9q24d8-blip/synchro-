@@ -5346,7 +5346,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1226';
+  if(elH) elH.textContent = '1227';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -18002,7 +18002,23 @@ function _dokDispBlock(d){
     var _satzD   = d.ustSatz!=null ? d.ustSatz : null;
     var _vstD    = (d.mwst!=null && d.mwst!=='') ? parseFloat(d.mwst)
                  : (_satzD!=null && _bruttoD>0 ? Math.round((_bruttoD-_bruttoD/(1+_satzD))*100)/100 : null);
-    if(_vstD!=null && !isNaN(_vstD)){
+    // Build 1227: Gemischte Saetze (Bewirtung seit 2026: Speisen 7 %, Getraenke 19 %)
+    // je Satz zeigen, damit der Wert direkt gegen die Steuertabelle auf dem Bon
+    // pruefbar ist. Vorher stand nur die Summe ohne Satz (ustSatz ist bei gemischt
+    // null, Z. ~16755). Der Editor (Z. ~18578) schluesselte schon auf, die Leseansicht
+    // nicht. Passt die Aufteilung nicht zur Summe (z. B. Summe von Hand korrigiert),
+    // wird sie nicht als gueltig gezeigt, sondern als Abweichung markiert.
+    var _udD = (Array.isArray(d.ust_details) ? d.ust_details : []).filter(function(u){ return u && u.satz!=null; });
+    if(_udD.length > 1 && _vstD!=null && !isNaN(_vstD)){
+      var _udSum = _udD.reduce(function(a,u){ return a+(parseFloat(u.ust)||0); },0);
+      var _udOk  = Math.abs(_udSum - _vstD) <= 0.02;
+      _udD.forEach(function(u){
+        var _n = parseFloat(u.netto);
+        o+=_dispRow('Vorsteuer '+Math.round((parseFloat(u.satz)||0)*100)+'%'+(isNaN(_n)?'':' · netto '+fmtEur(_n)),
+                    fmtEur(parseFloat(u.ust)||0), _udOk?'var(--accent)':'var(--orange)');
+      });
+      o+=_dispRow('Vorsteuer gesamt'+(_udOk?'':' ≠ Aufteilung '+fmtEur(_udSum)), fmtEur(_vstD), _udOk?'var(--accent)':'var(--orange)');
+    } else if(_vstD!=null && !isNaN(_vstD)){
       o+=_dispRow('Vorsteuer'+(_satzD!=null?' '+Math.round(_satzD*100)+'%':''), fmtEur(_vstD), 'var(--accent)');
     }
   }
