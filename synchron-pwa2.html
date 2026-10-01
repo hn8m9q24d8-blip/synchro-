@@ -2321,6 +2321,31 @@ function _istTimsBestand(){
   }
   saveV2(dbv2);
 })();
+// ─── Build 1229: Ausgaben mit ihrem Beleg verknuepfen ───
+// Alte Ausgaben haben keinen Dateinamen (Anlage vor Build 1130) oder nur einen
+// Verweis aufs GVL-Dokument (_gvlBelegDok). Nur eindeutige Verweise werden
+// uebernommen, nichts wird geraten. Allgemein, fuer alle. Einmalig.
+(function(){
+  if(!db || !db.ausgaben || db._mig1229Done) return;
+  var dok = {}; (db.dokumente||[]).forEach(function(d){ dok[d.id] = d; });
+  var proAg = {}; (db.dokumente||[]).forEach(function(d){ if(d.ausgabeId) (proAg[d.ausgabeId] = proAg[d.ausgabeId]||[]).push(d); });
+  var log = [];
+  db.ausgaben.forEach(function(a){
+    var q = null, ordner = null;
+    if(a._gvlBelegDok && dok[a._gvlBelegDok]){ q = dok[a._gvlBelegDok]; ordner = 'Gagenabrechnungen'; }
+    else if(proAg[a.id] && proAg[a.id].length === 1){ q = proAg[a.id][0]; ordner = 'Ausgaben'; }
+    if(!q) return;
+    var ch = false;
+    if(!a.dateiname && q.dateiname){ a.dateiname = q.dateiname; ch = true; }
+    if(!a.dokId){ a.dokId = q.id; ch = true; }
+    if(!a.belegOrdner){ a.belegOrdner = ordner; ch = true; }
+    if(ordner === 'Ausgaben' && Array.isArray(q.ust_details) && q.ust_details.length > 1 && a.ustSatz != null){ a.ustSatz = null; ch = true; }
+    if(ch) log.push(a.beschr || a.id);
+  });
+  db._mig1229Done = true;
+  if(log.length){ db._mig1229 = { am:new Date().toISOString(), verknuepft:log }; console.log('[Build 1229] verknuepft', log); }
+  save(db);
+})();
 // ─── Build 1226: K3-Eigenrechnungen ohne Auszahlung heilen ───
 // Gleiche Regel wie im Schreibpfad (Konsolidierung, Build 1226): Eigenrechnung ohne
 // SV-Abzuege, Auszahlung leer → Auszahlung = Rechnungsbrutto. Allgemeine
@@ -5346,7 +5371,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1227';
+  if(elH) elH.textContent = '1229';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -8745,7 +8770,7 @@ function showDateinamen(el){
 
   // Ordner aus Label erkennen (zuverlässiger als Dateiname)
   var firstName = namen[0];
-  var ordner = /abrechn|abrechnung/i.test(label) ? 'Gagenabrechnungen' : 'Dispofotos';
+  var ordner = /ausgabe/i.test(label) ? 'Ausgaben' : (/abrechn|abrechnung/i.test(label) ? 'Gagenabrechnungen' : 'Dispofotos');   // Build 1229: Ausgaben
 
   // Generische Fallback-Texte erkennen — kein echter Dateiname
   // Echter Dateiname = hat Extension ODER UUID-Muster (Bindestriche/Unterstriche)
@@ -14747,12 +14772,12 @@ function showSyncReview(ids){
     } else if(d.typ==='ausgabe'){
       color='#FDFCFA';icon='&#x1F9FE;';
       var ag=d.ausgabeId?(db.ausgaben||[]).find(function(a){return a.id===d.ausgabeId;}):null;
-      var brutto=ag?ag.brutto:(d.brutto||0);var vst=ag?ag.vorsteuer:0;var kat=ag?ag.kat:'Sonstiges';var ustPct=ag?Math.round((ag.ustSatz||0.19)*100):19;
+      var brutto=ag?ag.brutto:(d.brutto||0);var vst=ag?ag.vorsteuer:0;var kat=ag?ag.kat:'Sonstiges';var ustPct=ag?((ag.ustSatz==null&&parseFloat(ag.vorsteuer)>0)?'gemischt':Math.round((ag.ustSatz||0.19)*100)):19;
       var kats=['Equipment/Technik','Software/Abo','Fahrtkosten','Büro/Arbeitsmittel','Bewirtung','Fortbildung','Sonstiges'];
       var katOpts=kats.map(function(k){return '<option value="'+k+'"'+(k===kat?' selected':'')+'>'+k+'</option>';}).join('');
       statusText='<div style="margin-top:6px;font-size:12px">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">Brutto</span><b>'+parseFloat(brutto||0).toFixed(2)+' \u20ac</b></div>'
-        +'<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#666">Vorsteuer ('+ustPct+'%)</span><b style="color:var(--purple)">'+parseFloat(vst||0).toFixed(2)+' \u20ac</b></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#666">Vorsteuer ('+ustPct+(ustPct==='gemischt'?'':'%')+')</span><b style="color:var(--purple)">'+parseFloat(vst||0).toFixed(2)+' \u20ac</b></div>'
         +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#666">Kategorie</span>'
         +'<select id="katsel-'+d.id+'" style="border:1px solid #ddd;border-radius:6px;padding:3px 6px;font-size:11px">'+katOpts+'</select></div></div>';
       actionHtml='<div onclick="syncReviewAusgabeOk(\''+d.id+'\')" style="background:var(--purple);color:#fff;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Freigeben &#x2713;</div>';
@@ -15651,13 +15676,19 @@ function _ausgabeAusDokAnlegen(d){
     return;
   }
   var agId = 'ag'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  // Build 1229: Gemischter Beleg (7 % + 19 %, z. B. Bewirtung) hat keinen Einzelsatz.
+  // Vorher wurde 19 % gespeichert und in der Liste als "VSt 19%" gezeigt. Die
+  // Aufteilung selbst bleibt im Dokument (ust_details), nicht als Kopie hier.
+  var _gemischt = Array.isArray(d.ust_details) && d.ust_details.length > 1;
   db.ausgaben.push({
     id:agId, beschr:d.beschr, datum:d.datum,
     brutto:brutto, netto:netto,
-    ustSatz:satz, vorsteuer:vst,
+    ustSatz:(_gemischt ? null : satz), vorsteuer:vst,
     kat:kat, ausgabe_kat_raw:d.ausgabe_kat||'sonstiges',
     belegImg:(d.mime!=='application/pdf'?(d.thumb||null):null),
     dateiname:d.dateiname||null,
+    dokId:d.id,                                // Build 1229: Rueckweg zum Dokument (ust_details)
+    belegOrdner:'Ausgaben',                    // Build 1229: fuer das Beleg-Sheet
     notiz:(d.notiz||''),                       // Build 1133: wandert in den CSV-Export
     erstelltAm:new Date().toISOString()
   });
@@ -17872,8 +17903,29 @@ function dokFindTermin(datum, studio, titel, uhrzeit, bis_uhrzeit, excludeIds, s
 }
 
 // ── DETAIL VIEW ──────────────────────────────────────────────
+// Build 1228: Geldfelder deutsch anzeigen ("40,60" statt "40.6") und beim Speichern
+// beide Schreibweisen verstehen. Vorher las der Speicherpfad mit parseFloat, das bei
+// "40,60" nur 40 liefert. Darum gibt es hier EINEN Parser, den alle Speicherpfade
+// fuer Geldfelder nutzen (dokBestaetigenMonat, _applyEditedFields). Bewusst ohne
+// Tausenderpunkt in der Anzeige: "4687,60", nie "4.687,60" (parseFloat-Falle).
+var _GELD_FELDER_1228 = ['take_gage','grundgage','brutto','kv_abzug','rv_abzug','pv_abzug','netto','mwst','auszahlung'];
+function _geldParse1228(v){
+  if(typeof v === 'number') return v;
+  var t = String(v==null?'':v).replace(/\u20ac|EUR/gi,'').replace(/\s+/g,'');
+  if(t === '') return v;
+  if(t.indexOf(',') >= 0) t = t.replace(/\./g,'').replace(',', '.');   // deutsch: Punkt = Tausender
+  if(!/^-?\d+(\.\d+)?$/.test(t)) return v;                              // kein Geldwert → unveraendert
+  return parseFloat(t);
+}
+function _geldAnzeige1228(v){
+  var n = _geldParse1228(v);
+  if(typeof n !== 'number' || isNaN(n)) return v;
+  return n.toFixed(2).replace('.', ',');
+}
 function _editRow(field, label, val, altWert){
   var inputType = (field==='datum')?'date':(field==='uhrzeit'||field==='bis_uhrzeit')?'time':'text';  // Build 1043: Ende auch Zeitfeld
+  var _istGeld = _GELD_FELDER_1228.indexOf(field) >= 0;
+  if(_istGeld && (val||val===0) && val!=='') val = _geldAnzeige1228(val);
   // Build 1066: altWert = abweichender Kalender-Wert (durchgestrichen, antippbar zum Zurueckholen)
   var altHtml='';
   if(altWert && String(altWert).trim() && String(altWert).trim().toLowerCase()!==String(val||'').trim().toLowerCase()){
@@ -17885,7 +17937,7 @@ function _editRow(field, label, val, altWert){
   return '<div style="padding:7px 0;border-bottom:1px solid var(--cream2)">'
     +'<div style="display:flex;align-items:center">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
-    +'<input id="dedit-'+field+'" type="'+inputType+'" value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
+    +'<input id="dedit-'+field+'" type="'+inputType+'"'+(_istGeld?' inputmode="decimal"':'')+' value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
     +'</div>'
     +altHtml
     +'</div>';
@@ -20257,7 +20309,7 @@ function dokBestaetigenMonat(dokId){
   var mFields=['kv_abzug','rv_abzug','pv_abzug','mwst','brutto','auszahlung'];
   mFields.forEach(function(f){
     var el=document.getElementById('dedit-'+f);
-    if(el && el.value) d[f]=parseFloat(el.value)||el.value;
+    if(el && el.value) d[f]=_geldParse1228(el.value);   // Build 1228
   });
 
   // MwSt proportional auf Einzeltermine verteilen
@@ -20841,7 +20893,7 @@ function _applyEditedFields(d){
   var oldTakes = parseInt(d.takes)||0;
   fields.forEach(function(f){
     var el=document.getElementById('dedit-'+f);
-    if(el && el.value!=='') d[f]=el.value;
+    if(el && el.value!=='') d[f] = (_GELD_FELDER_1228.indexOf(f)>=0) ? _geldParse1228(el.value) : el.value;   // Build 1228
   });
   // Build 1133: Notiz uebernehmen — auch wenn geleert (anders als die Felder oben,
   // die bei leerem Wert den Bestand behalten).
@@ -22214,7 +22266,7 @@ function rUstVoranmeldung(){
         +(a.belegImg?'<div style="width:36px;height:36px;border-radius:6px;background:var(--cream2);margin-right:8px;flex-shrink:0;overflow:hidden"><img src="'+a.belegImg+'" style="width:100%;height:100%;object-fit:cover"></div>':'<div style="width:36px;height:36px;border-radius:6px;background:var(--cream2);margin-right:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/></svg></div>')
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:12px;font-weight:700">'+esc(a.beschr||'')+'</div>'
-        +'<div style="font-size:10px;color:#999">'+fd(a.datum)+'  ·  <span style="background:var(--cream2);padding:1px 5px;border-radius:4px;font-weight:600">'+esc(a.kat||'Sonstiges')+'</span>  ·  Brutto '+fmtEur(a.brutto)+'  ·  VSt '+Math.round((a.ustSatz||0)*100)+'%</div>'
+        +'<div style="font-size:10px;color:#999">'+fd(a.datum)+'  ·  <span style="background:var(--cream2);padding:1px 5px;border-radius:4px;font-weight:600">'+esc(a.kat||'Sonstiges')+'</span>  ·  Brutto '+fmtEur(a.brutto)+'  ·  VSt '+((a.ustSatz==null && parseFloat(a.vorsteuer)>0)?'gemischt':Math.round((a.ustSatz||0)*100)+'%')+(a.dateiname?'  ·  <span style="color:var(--accent);font-weight:700">Beleg ›</span>':'')+'</div>'
         +'</div>'
         +'<div style="font-size:13px;font-weight:800;color:var(--accent);flex-shrink:0;margin-left:8px">−'+fmtEur(a.vorsteuer)+'</div>'
         +'<div onclick="ustAusgabeDelete(\''+a.id+'\',event)" style="margin-left:8px;font-size:16px;color:#ccc;cursor:pointer">✕</div>'
@@ -22240,6 +22292,20 @@ function rUstVoranmeldung(){
 function ustAusgabeDetail(id, e){
   var a = (db.ausgaben||[]).find(function(x){return x.id===id;});
   if(!a) return;
+  // Build 1229: Original ueber den Dateinamen finden, wie bei der Termin-Ampel
+  // (showDateinamen: Name kopieren + Dateien-App). Die App bewahrt keine Bilder auf
+  // (_releaseDokDataURL), der Ordner ist das Archiv. Vorschaubild nur als Rueckfall.
+  if(a.dateiname){
+    var _el = document.createElement('div');
+    _el.setAttribute('data-namen', a.dateiname);
+    _el.setAttribute('data-label', (a.belegOrdner==='Gagenabrechnungen') ? 'Abrechnung' : 'Ausgabe');
+    showDateinamen(_el);
+    return;
+  }
+  if(!a.belegImg){
+    showToast('Kein Dateiname gespeichert · im Ordner Ausgaben nach '+fd(a.datum)+' suchen');
+    return;
+  }
   if(a.belegImg){
     // Sicheres Vollbild-Overlay statt window.open
     _lockPageZoom();
