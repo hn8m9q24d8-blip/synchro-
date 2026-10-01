@@ -40,6 +40,14 @@
   --accent2:#98A896;      /* soft sage */
   --warm:#C9A386;         /* clay */
   --ai:#6B7A9E;           /* Indigo — KI-Momente */
+  /* Build 1233: vier Variablen wurden benutzt, aber nie definiert. Der Browser
+     verwirft dann die ganze Angabe still: Die Balken "Verlauf ueber das Jahr" hatten
+     keinen Hintergrund (linear-gradient mit var(--sage) ungueltig) und waren
+     unsichtbar, Ueberschriften in --clay fielen auf die Grundfarbe zurueck. */
+  --sage:var(--accent2);  /* 5 Stellen: Verlauf, Oe-Kacheln, Diagrammfarben */
+  --clay:var(--warm);     /* 10 Stellen: laut Kommentar oben ist --warm "clay" */
+  --washi2:var(--paper2); /* 1 Stelle: Kartenhintergrund */
+  --ocker:#B39255;        /* 1 Stelle: Diagrammpalette, eigener Ton neben --warm */
 
   --cream:var(--paper);
   --cream2:#EFECE5;
@@ -5371,7 +5379,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1231';
+  if(elH) elH.textContent = '1233';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -25459,8 +25467,8 @@ function rZahlungen(){
         +(g.bezahlt>0?' · <span style="color:var(--accent)">'+fmtEur(g.bezahlt)+' bezahlt</span>':'')
         +'</div></div>'
         +'<div style="text-align:right;flex-shrink:0"><div style="font-size:16px;font-weight:900">'+fmtEur(g.net)+'</div>'
-        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">&#9662;</div></div></div>'
-        +'<div id="'+gid+'">'
+        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">'+((_zgOffen1232||{})[gid]?'&#9662;':'&#9656;')+'</div></div></div>'
+        +'<div id="'+gid+'"'+((_zgOffen1232||{})[gid]?'':' style="display:none"')+'>'   // Build 1232: zugeklappt starten
         +g.termine.map(function(t){
           var tnet=calcNet(t);
           var stT=_terminZahlStatus(t.id);
@@ -25708,6 +25716,7 @@ function rZahlungen(){
 }
 
 var _zpOffen1223 = {};   // Build 1223: aufgeklappte Produktionen im Tab "Produktion"
+var _zgOffen1232 = {};   // Build 1232: aufgeklappte Studios im Tab "Studio" (gleiches Muster)
 function zgToggle(gid){
   var el=document.getElementById(gid);
   var arr=document.getElementById(gid+'-arr');
@@ -25715,6 +25724,7 @@ function zgToggle(gid){
   var hidden=el.style.display==='none';
   el.style.display=hidden?'':'none';
   if(String(gid).indexOf('zp-')===0){ if(hidden) _zpOffen1223[gid]=true; else delete _zpOffen1223[gid]; }
+  if(String(gid).indexOf('zg-')===0){ if(hidden) _zgOffen1232[gid]=true; else delete _zgOffen1232[gid]; }
   if(arr) arr.textContent=hidden?'\u25be':'\u25b8';
 }
 
