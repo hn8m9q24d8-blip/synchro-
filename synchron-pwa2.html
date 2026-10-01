@@ -2321,6 +2321,30 @@ function _istTimsBestand(){
   }
   saveV2(dbv2);
 })();
+// ─── Build 1226: K3-Eigenrechnungen ohne Auszahlung heilen ───
+// Gleiche Regel wie im Schreibpfad (Konsolidierung, Build 1226): Eigenrechnung ohne
+// SV-Abzuege, Auszahlung leer → Auszahlung = Rechnungsbrutto. Allgemeine
+// Logik-Korrektur, laeuft daher fuer alle (nicht nur Tims Bestand). Einmalig.
+(function(){
+  if(!dbv2 || !dbv2.abrechnungen || dbv2._mig1226Done) return;
+  var geheilt = [];
+  dbv2.abrechnungen.forEach(function(a){
+    if(String(a.klasse) !== '3' || a.steuerfrei) return;
+    if(a.auszahlung != null && a.auszahlung !== '') return;
+    if(a.sv_kv_an || a.sv_rv_an || a.sv_pv_an) return;
+    var b = parseFloat(a.brutto);
+    if(!(b > 0)) return;
+    a.auszahlung = b;
+    a.aktualisiert_am = new Date().toISOString();
+    geheilt.push(a.beleg_nr || a.id);
+  });
+  dbv2._mig1226Done = true;
+  if(geheilt.length){
+    dbv2._mig1226 = { am: new Date().toISOString(), geheilt: geheilt };
+    console.log('[Build 1226] K3-Auszahlung gesetzt', geheilt);
+  }
+  saveV2(dbv2);
+})();
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════
 // ─── Build 1196: Testdaten vor 2025 entfernen ───
@@ -3054,6 +3078,15 @@ function _konsolidiereDokumentNachV2(dokId){
       }, 0);
       // MwSt/SV pro Untergruppe nicht ermittelbar ohne zusätzliche Daten — null lassen
       mwst = null; kv = null; rv = null; pv = null; auszahlung = null;
+    }
+    // Build 1226: Eigenrechnung (K3) ohne gelesene Auszahlung. Eine eigene Rechnung
+    // hat keine Abzuege, der Zahlbetrag ist der Rechnungsbetrag inkl. USt (das Feld
+    // brutto ist bei K3 das echte Brutto, siehe Build 835). Die KI liest bei
+    // gescannten Rechnungen oft keine "Auszahlung", weil keine auf dem Papier steht.
+    // Realfall Fridge 11/2025: auszahlung null, USt-VA-PDF zeigte 0,00 EUR.
+    // Nur ohne SV-Abzuege, sonst waere brutto nicht der Zahlbetrag.
+    if(klasse === '3' && auszahlung == null && !kv && !rv && !pv && brutto){
+      auszahlung = brutto;
     }
 
     // Upsert der v2-Abrechnung
@@ -5313,7 +5346,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1225';
+  if(elH) elH.textContent = '1226';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -22367,6 +22400,35 @@ function ustExport(){
   catch(e){ console.error('VA-PDF-Fehler:', e); showToast('PDF-Fehler: '+e.message); }
 }
 
+// Build 1226: Anteil eines Belegs an EINER Zahlung. Ein Beleg kann in mehreren
+// Zahlungsgruppen stehen (Teilzahlungen, Realfall Studio Hamburg 02/2026: 751,61 in
+// 424,98 am 12.03. + 326,63 am 18.03.). Vorher zeigte das USt-VA-PDF in jedem Block
+// den ganzen Beleg. Der Anteil richtet sich nach der Zahlung: Auszahlung = Zahlbetrag,
+// Basis und USt im gleichen Verhaeltnis. Die letzte Teilzahlung bekommt den Rest,
+// damit die Teile centgenau den Beleg ergeben. Liefert null, wenn kein Teilzahlungsfall
+// vorliegt oder er nicht eindeutig aufteilbar ist (mehrere Belege in der Gruppe).
+function _teilzahlAnteil1226(a, g, gruppen, basis, ust, ausz){
+  var gs = (gruppen||[]).filter(function(x){ return (x.beleg_ids||[]).indexOf(a.id) >= 0; });
+  if(gs.length < 2) return null;
+  if(gs.some(function(x){ return (x.beleg_ids||[]).length !== 1; })) return null;
+  if(!(ausz > 0)) return null;
+  gs.sort(function(x,y){ return (x.valuta||'') < (y.valuta||'') ? -1 : ((x.valuta||'') > (y.valuta||'') ? 1 : 0); });
+  var r2 = function(v){ return Math.round(v*100)/100; };
+  var sb=0, su=0, sa=0, res=null;
+  gs.forEach(function(x, i){
+    var o;
+    if(i < gs.length-1){
+      var f = (parseFloat(x.betrag)||0) / ausz;
+      o = { basis:r2(basis*f), ust:r2(ust*f), ausz:r2(parseFloat(x.betrag)||0) };
+      sb+=o.basis; su+=o.ust; sa+=o.ausz;
+    } else {
+      o = { basis:r2(basis-sb), ust:r2(ust-su), ausz:r2(ausz-sa) };
+    }
+    o.nr = i+1; o.von = gs.length;
+    if(x === g) res = o;
+  });
+  return res;
+}
 function _ustExportPDF(){
   var ym = _ustYear+'-'+String(_ustMonth+1).padStart(2,'0');
   var monName = MONTH_NAMES[_ustMonth]+' '+_ustYear;
@@ -22397,7 +22459,7 @@ function _ustExportPDF(){
       .filter(function(a){return a && !a._ueberholt_durch && a.zahlungs_datum && a.zahlungs_datum.slice(0,7)===ym;});
     if(!bs.length) return;
     bs.forEach(function(a){ benutzt[a.id]=true; });
-    bloecke.push({ valuta:g.valuta, betrag:g.betrag, gegen:g.gegenpartei||'', belege:bs });
+    bloecke.push({ valuta:g.valuta, betrag:g.betrag, gegen:g.gegenpartei||'', belege:bs, _grp:g });
   });
   // Belege ohne Gruppe → Einzelblock (z.B. GVL vor Bank-Match)
   monBelege.forEach(function(a){
@@ -22467,6 +22529,9 @@ function _ustExportPDF(){
       var br=_v2Basis(a), u=belegUst(a), aus=parseFloat(a.auszahlung)||0; // Build 1089
       var satz = a.steuerfrei?'steuerfrei':(String(a.klasse)==='4'?'7% K4':(_snap(a.ust_satz||0)===0.19?'19%':'7%'));
       var bn = a.beleg_nr || '—';
+      // Build 1226: Teilzahlung → nur der Anteil dieser Zahlung
+      var _tz = b._grp ? _teilzahlAnteil1226(a, b._grp, grpById, br, u, aus) : null;
+      if(_tz){ br=_tz.basis; u=_tz.ust; aus=_tz.ausz; bn += '  (Teilzahlung '+_tz.nr+'/'+_tz.von+')'; }
       var _pr = prodIdx[a.produktion_id];
       var prod = _pr ? (_pr.name||_pr.titel||'') : '';
       doc.text(bn + (prod?'  ·  '+prod:''), L, y, {maxWidth:88});
