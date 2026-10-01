@@ -5371,7 +5371,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1229';
+  if(elH) elH.textContent = '1231';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5549,7 +5549,11 @@ function _backupBanner(){
 // wuerde die Karte darueber nur wiederholen.
 function _tagesSumme1213(items){
   try{
-    if(!items || items.length < 2) return '';
+    // Build 1231: schon ab EINEM Termin. Vorher erst ab zwei, mit der Annahme, die Karte
+    // zeige den Betrag ohnehin. Das stimmt nur nach der Gutschrift (tCard zeigt Geld erst
+    // bei ab.brutto). Vor der Gutschrift stand im Tag nirgends ein Betrag (Realfall
+    // 01.10.2026, Troppo Invidiosa: 500,80 nur im Termin-Detail sichtbar).
+    if(!items || items.length < 1) return '';
     var ids = {}; items.forEach(function(t){ ids[t.id] = 0; });
     if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
       dbv2.abrechnung_termin_links.forEach(function(l){
@@ -5571,7 +5575,7 @@ function _tagesSumme1213(items){
       ? 'ca. ' + Math.round(sum).toLocaleString('de-DE') + ' €'
       : (Math.round(sum*100)/100).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
     return '<div style="text-align:right;font-size:12px;color:var(--ink3);padding:6px 6px 18px;letter-spacing:.01em">'
-      + items.length + ' Termine · ' + betrag + '</div>';
+      + items.length + (items.length === 1 ? ' Termin · ' : ' Termine · ') + betrag + '</div>';
   }catch(e){ return ''; }
 }
 
@@ -25303,6 +25307,36 @@ function rZahlungen(){
     return (parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
   }
 
+  // Build 1230: Ø/Monat aus Tagen statt aus "Monaten mit Terminen". Vorher sprang der
+  // Wert am Monatsersten: ein neuer Termin ohne Gage machte den Monat zaehlbar, der
+  // Teiler wuchs (9 → 10), die Summe nicht (Realfall 01.10.2026: 9.925,41 → 8.932,87).
+  // Jetzt: Gage aller Termine bis heute ÷ vergangene Tage × 30,4375 (= 365,25/12).
+  // Termine nach heute zaehlen nicht mit (sonst blaeht ein Novembertermin den Schnitt).
+  // Start 01.01., bei Neueinsteigern ab ihrem ersten Termin ueberhaupt (sonst zu
+  // niedrig). Vergangene Jahre: bis 31.12. EINE Rechnung fuer Studio- und Analyse-Tab.
+  function _avgMonat1230(){
+    var j = String(_zahlYear), now = new Date();
+    var heute = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    if(j > heute.slice(0,4)) return { avg:0, tage:0 };
+    var ende = (j < heute.slice(0,4)) ? j+'-12-31' : heute;
+    var erster = null;
+    (db.termine||[]).forEach(function(t){ if(t.datum && (!erster || t.datum < erster)) erster = t.datum; });
+    var start = j+'-01-01';
+    // Nur echter spaeter Einstieg (mehr als ein Monat nach Jahresbeginn) verschiebt den
+    // Start. Ein erster Termin am 06.01. nach den Feiertagen (Tims 2025) zaehlt ab 01.01.
+    if(erster && erster.slice(0,10) > start){
+      var _gap = (new Date(erster.slice(0,10)+'T12:00:00') - new Date(start+'T12:00:00'))/86400000;
+      if(_gap > 31) start = erster.slice(0,10);
+    }
+    var sum = 0;
+    (db.termine||[]).forEach(function(t){
+      if(t.datum && t.datum.slice(0,4)===j && t.datum.slice(0,10) <= ende) sum += calcNet(t);
+    });
+    var tage = Math.round((new Date(ende+'T12:00:00') - new Date(start+'T12:00:00'))/86400000) + 1;
+    if(!(tage > 0)) return { avg:0, tage:0 };
+    return { avg: sum / tage * 30.4375, tage: tage };
+  }
+
   // Totals for hero — Build 865: bezahlt/abgerechnet aus dbv2-Ankern statt t.status
   var totalAll=0,offenAll=0,bezahltAll=0,abgAll=0;
   (db.termine||[]).filter(function(t){return t.datum&&t.datum.startsWith(String(_zahlYear));}).forEach(function(t){
@@ -25372,10 +25406,8 @@ function rZahlungen(){
     });
     html+='</div>';
     // Mini-Stat-Karten: Ø/Monat + Ø Zahlungsdauer (echt)
-    var monthsWithData={};
-    all.forEach(function(t){ if(t.datum) monthsWithData[t.datum.slice(0,7)]=1; });
-    var nMonths=Math.max(1,Object.keys(monthsWithData).length);
-    var avgMonat=totalAll/nMonths;
+    var _am1230 = _avgMonat1230();   // Build 1230
+    var avgMonat = _am1230.avg;
     // Ø Zahlungsdauer aus dbv2 (ausstellungs_datum -> zahlungs_datum), Jahr nach Zahlung
     var dTage=[], schnellstStudio='', schnellstAvg=1e9, stud2={};
     (dbv2.abrechnungen||[]).forEach(function(ab){
@@ -25394,7 +25426,7 @@ function rZahlungen(){
       +'<div style="flex:1;border:1px solid var(--hair);border-radius:12px;padding:11px 12px">'
       +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3)">Ø / Monat</div>'
       +'<div style="font-family:var(--serif);font-size:19px;margin-top:2px">'+fmtEur(avgMonat)+'</div>'
-      +'<div style="font-size:9.5px;color:var(--sage);margin-top:1px">'+nMonths+' Monate mit Terminen</div></div>'
+      +'<div style="font-size:9.5px;color:var(--sage);margin-top:1px">'+'hochgerechnet aus '+_am1230.tage+' Tagen</div></div>'
       +'<div style="flex:1;border:1px solid var(--hair);border-radius:12px;padding:11px 12px">'
       +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3)">Ø Zahlungsdauer</div>'
       +'<div style="font-family:var(--serif);font-size:19px;margin-top:2px">'+(avgDauer!=null?avgDauer+' Tage':'—')+'</div>'
@@ -25543,8 +25575,7 @@ function rZahlungen(){
   if(_zahlTab==='analyse'){
     // Build 1022: avgMonat hier lokal berechnen — im studio-Tab definiert, aber im
     // analyse-Tab sonst undefined (zeigte 0). Gleiche Formel wie Startseite.
-    var _mwdA={}; all.forEach(function(t){ if(t.datum) _mwdA[t.datum.slice(0,7)]=1; });
-    avgMonat=totalAll/Math.max(1,Object.keys(_mwdA).length);
+    avgMonat=_avgMonat1230().avg;   // Build 1230: gleiche Rechnung wie Studio-Tab
     var COLORS=['var(--accent)','var(--accent2)','var(--warm)','var(--orange)','var(--sage)','var(--red)','#8E9B77','var(--ocker)'];
     var studios={};
     all.forEach(function(t){var k=(t.studio||'Unbekannt').toLowerCase();if(!studios[k])studios[k]=0;studios[k]+=calcNet(t);});
