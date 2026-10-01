@@ -5313,7 +5313,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1222';
+  if(elH) elH.textContent = '1225';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -25373,8 +25373,10 @@ function rZahlungen(){
         +(g.offen>0?' · <span style="color:var(--red)">'+fmtEur(g.offen)+' offen</span>':'')
         +'</div></div>'
         +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:900">'+fmtEur(g.net)+'</div>'
-        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">&#9662;</div></div></div>'
-        +'<div id="'+gid+'">'
+        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">'+((_zpOffen1223||{})[gid]?'&#9662;':'&#9656;')+'</div></div></div>'
+        // Build 1223: Produktionen starten zugeklappt; aufgeklappte bleiben es beim
+        // Neuzeichnen (bis die App neu geladen wird).
+        +'<div id="'+gid+'"'+((_zpOffen1223||{})[gid]?'':' style="display:none"')+'>'
         +g.termine.map(function(t){
           var tnet=calcNet(t);
           var stP=_terminZahlStatus(t.id);
@@ -25527,12 +25529,14 @@ function rZahlungen(){
   }
 }
 
+var _zpOffen1223 = {};   // Build 1223: aufgeklappte Produktionen im Tab "Produktion"
 function zgToggle(gid){
   var el=document.getElementById(gid);
   var arr=document.getElementById(gid+'-arr');
   if(!el) return;
   var hidden=el.style.display==='none';
   el.style.display=hidden?'':'none';
+  if(String(gid).indexOf('zp-')===0){ if(hidden) _zpOffen1223[gid]=true; else delete _zpOffen1223[gid]; }
   if(arr) arr.textContent=hidden?'\u25be':'\u25b8';
 }
 
@@ -27082,10 +27086,22 @@ function _mev6Resolve(e){
            ustNote:_withVzWarn('VZ-Liste evtl. unvollständig — Summe weicht ab') };
 }
 function _mev6UstNote(belege){
-  var s7=0,s19=0;
-  belege.forEach(function(ab){ var r=parseFloat(ab.ust_satz)||0; if(r>=0.15) s19++; else s7++; });
-  if(s19&&s7) return '⚠ gemischt: '+s7+'×7% / '+s19+'×19%';
-  return s19? (s19+'× 19%') : (s7+'× 7%');
+  // Build 1224: steuerfreie Belege (GVL-Privatkopie) eigens zaehlen. Vorher landeten
+  // sie bei 7 %: GVL 202679856 + 202679857 (24.09.2026) zeigte "2× 7%" statt
+  // "1× 7% · 1× frei". Reine Anzeige, die Voranmeldung liest die Steuer aus dem Beleg.
+  var s7=0,s19=0,s0=0;
+  belege.forEach(function(ab){
+    var r=parseFloat(ab.ust_satz)||0;
+    if(ab.steuerfrei || r===0) s0++;
+    else if(r>=0.15) s19++;
+    else s7++;
+  });
+  if(s19&&s7) return '⚠ gemischt: '+s7+'×7% / '+s19+'×19%'+(s0?' · '+s0+'× frei':'');
+  var teile=[];
+  if(s7) teile.push(s7+'× 7%');
+  if(s19) teile.push(s19+'× 19%');
+  if(s0) teile.push(s0+'× frei');
+  return teile.join(' · ') || '0×';
 }
 
 /* READ-ONLY Diagnose-Overlay */
@@ -27809,19 +27825,43 @@ function _mev6VzweckHtml(e){
   return '<div style="font-size:10px;color:#888;margin-top:3px;font-family:monospace;word-break:break-word">VZ: '+kurz+'</div>';
 }
 function _mev6PeekHtml(r,idx){
-  var peek=_mev6TerminPeek(r);
-  var inner;
-  if(!peek.length){
-    inner='<span style="color:#999">kein Termin verknüpft</span>';
+  // Build 1225: aufgeklappt nach Beleg gruppiert, mit Betraegen. Pro Beleg die
+  // Auszahlung (das, was auf dem Konto ankommt), darunter seine Termine mit ihrem
+  // Gage-Anteil in Grau. Unten die Summe der Auszahlungen gegen die Zahlung, damit
+  // auf einen Blick sichtbar ist, ob es aufgeht.
+  var _belege=r.belege||[];
+  var inner='';
+  if(!_belege.length){
+    inner='<span style="color:#999">kein Beleg zugeordnet</span>';
   } else {
-    inner=peek.map(function(o){
-      return '<div style="padding:2px 0">'
-        +'<span style="color:#111;font-weight:600">'+(o.datum||'?')+'</span> · '
-        +(o.titel?('<span style="color:#333">'+esc(o.titel)+'</span>'):'<span style="color:#999">ohne Titel</span>')
-        +(o.rolle?(' · '+esc(o.rolle)):'')
-        +(o.studio?(' · <span style="color:#777">'+esc(o.studio)+'</span>'):'')
-        +'</div>';
-    }).join('');
+    _belege.forEach(function(ab){
+      inner+='<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0 1px;border-top:1px solid rgba(0,0,0,.06)">'
+        +'<span style="color:#111;font-weight:700;font-family:monospace">'+esc(ab.beleg_nr||'?')+'</span>'
+        +'<span style="color:#111;font-weight:700;white-space:nowrap">'+fmtEur(_mev6Ausz(ab))+'</span></div>';
+      var lnks=(dbv2.abrechnung_termin_links||[]).filter(function(l){ return l.abrechnung_id===ab.id; });
+      var zeilen=[];
+      lnks.forEach(function(l){
+        var t=(db.termine||[]).find(function(x){ return x.id===l.termin_id; });
+        if(t) zeilen.push({ t:t, anteil:parseFloat(l.brutto_anteil_display) });
+      });
+      zeilen.sort(function(x,y){ return (x.t.datum||'')<(y.t.datum||'')?-1:1; });
+      if(!zeilen.length) inner+='<div style="padding:1px 0 2px 10px;color:#999">kein Termin verknüpft</div>';
+      zeilen.forEach(function(z){
+        var t=z.t;
+        inner+='<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0 1px 10px">'
+          +'<span style="min-width:0"><span style="color:#111;font-weight:600">'+(t.datum||'?')+'</span> · '
+          +((t.titel||t.produktion)?('<span style="color:#333">'+esc(t.titel||t.produktion)+'</span>'):'<span style="color:#999">ohne Titel</span>')
+          +(t.rolle?(' · '+esc(t.rolle)):'')+'</span>'
+          +(z.anteil>0?('<span style="color:#888;white-space:nowrap">Gage '+fmtEur(z.anteil)+'</span>'):'')
+          +'</div>';
+      });
+    });
+    var _zahl=r._e?(parseFloat(r._e.betrag)||0):null;
+    var _sum=_mev6Round(_belege.reduce(function(s,ab){ return s+_mev6Ausz(ab); },0));
+    var _ok=(_zahl!==null && Math.abs(_sum-_zahl)<=0.01);
+    inner+='<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0 0;margin-top:2px;border-top:1.5px solid rgba(0,0,0,.15)">'
+      +'<span style="color:#555">Summe Auszahlungen'+(_zahl!==null?(_ok?' = Zahlung ✓':' ≠ Zahlung '+fmtEur(_zahl)):'')+'</span>'
+      +'<span style="font-weight:800;white-space:nowrap;color:'+(_ok?'var(--accent)':'var(--red)')+'">'+fmtEur(_sum)+'</span></div>';
   }
   return '<div id="mev6-peek-'+idx+'" style="display:none;font-size:11px;background:var(--cream2);border-radius:6px;padding:6px 8px;margin-top:4px;line-height:1.5">'+inner+'</div>';
 }
