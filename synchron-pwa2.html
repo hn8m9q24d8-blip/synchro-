@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1235';
+  if(elH) elH.textContent = '1237';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -13859,6 +13859,9 @@ function undoAction(actionId){
         // (Im Snapshot-Pfad oben ohnehin abgedeckt; dies ist der feldweise Fallback.)
         if(action.undoData.dokId && db.ausgaben){
           db.ausgaben = db.ausgaben.filter(function(x){
+            // Build 1236: auch die normale Ausgabe dieses Belegs (dokId seit 1229).
+            // Vorher blieb sie nach Rueckgaengig ohne Beleg in USt-VA und Liste stehen.
+            if(x.dokId===action.undoData.dokId) return false;
             return !(x.ausgabe_kat_raw==='gvl_verwaltung' && x._gvlBelegDok===action.undoData.dokId);
           });
         }
@@ -15709,9 +15712,306 @@ function _ausgabeAusDokAnlegen(d){
     notiz:(d.notiz||''),                       // Build 1133: wandert in den CSV-Export
     erstelltAm:new Date().toISOString()
   });
+  // Build 1236: nach "Buchung zuruecknehmen" geparkte Angaben wieder mitnehmen
+  var _agNeu = db.ausgaben[db.ausgaben.length-1];
+  if(d.bewAnlass){ _agNeu.bewAnlass=d.bewAnlass; delete d.bewAnlass; }
+  if(d.bewTeilnehmer){ _agNeu.bewTeilnehmer=d.bewTeilnehmer; delete d.bewTeilnehmer; }
+  if(d.zahlweg){ _agNeu.zahlweg=d.zahlweg; delete d.zahlweg; }
+  try{ _agBankAutoZuordnen([_agNeu]); }catch(eB){ console.error('[1236 bank]', eB); }
   d.ausgabeId = agId;
   delete d._agVorschau;
   showToast('✓ Ausgabe gebucht · '+fmtEur(brutto)+' · VSt '+fmtEur(vst));
+}
+
+// ═══ Build 1236: Gebuchte Ausgabe — eigene Ansicht, Bewirtung, Holvi-Abbuchung ═══
+// Bis 1235 lief eine bestaetigte Ausgabe durch dieselbe Uebersicht wie eine Gage
+// (Studio, Titel, Brutto, MwSt). Korrekturen dort landeten nur im Dokument, nicht in
+// db.ausgaben — die Buchung, aus der USt-VA und Ausgabenliste rechnen, blieb alt.
+// Ab hier ist der Ausgabe-Datensatz die Quelle; das Dokument wird nur gespiegelt,
+// damit beide Ansichten dasselbe zeigen. Die Satz-Aufteilung (ust_details) bleibt
+// wie seit 1229 im Dokument.
+var _AG_KAT_1236 = {equipment:'Technik/Equipment',software:'Software/Abos',fahrt:'Fahrtkosten',
+  bewirtung:'Bewirtung',buero:'Büro',weiterbildung:'Weiterbildung',marketing:'Marketing',
+  steuer_recht:'Steuer/Recht',versicherung:'Versicherung',kommunikation:'Kommunikation',sonstiges:'Sonstiges'};
+var _AG_ZAHLWEG_1236 = {holvi:'Holvi',haspa:'Haspa',dkb:'DKB-Karte',bar:'Bar',privat:'Privat bezahlt'};
+
+function _agZuDok(d){
+  if(!d || !d.ausgabeId) return null;
+  return (db.ausgaben||[]).find(function(x){ return x.id===d.ausgabeId; }) || null;
+}
+function _agIstBewirtung(ag){ return ag && (ag.ausgabe_kat_raw==='bewirtung' || ag.kat==='Bewirtung'); }
+
+// Holvi-Abbuchung zur Ausgabe. Trinkgeld wird nie gespeichert, sondern immer
+// abgeleitet: Abbuchung minus Bon. Aendert sich eins von beiden, stimmt es weiter.
+function _agBankEintrag(ag){
+  if(!ag || !ag.bankId) return null;
+  return (db.holviAbbuchungen||[]).find(function(b){ return b.id===ag.bankId; }) || null;
+}
+function _agTrinkgeld(ag){
+  var b = _agBankEintrag(ag); if(!b) return 0;
+  var t = Math.round(((parseFloat(b.betrag)||0) - (parseFloat(ag.brutto)||0))*100)/100;
+  return t > 0 ? t : 0;
+}
+
+function _agNameTokens(s){
+  return String(s||'').toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/['’`´]/g,'').replace(/[^a-z0-9]+/g,' ').trim().split(' ')
+    .filter(function(w){ return w.length>=4 && ['gmbh','restaurant','sumup','payment','sent','berlin','store'].indexOf(w)<0; });
+}
+function _agNamePasst(ag, b){
+  var g = _agNameTokens(b.gegenpartei).join(' ');
+  var gk = g.replace(/ /g,'');
+  return _agNameTokens(ag.beschr).some(function(w){ return g.indexOf(w)>=0 || gk.indexOf(w)>=0; });
+}
+function _agIsoPlus(iso, tage){
+  var p=String(iso||'').split('-'); if(p.length<3) return '';
+  var dt=new Date(Date.UTC(+p[0], +p[1]-1, +p[2]+tage));
+  return dt.toISOString().slice(0,10);
+}
+// Kandidaten: Abbuchung 1 Tag vor bis 5 Tage nach dem Bon (Kartenzahlungen werden
+// oft am Folgetag valutiert, Chen's 17.06. → Holvi 18.06.), Betrag zwischen Bon und
+// Bon + 25 % (Trinkgeld). Schon anderen Ausgaben zugeordnete Abbuchungen fallen raus.
+function _agBankKandidaten(ag){
+  var br = parseFloat(ag.brutto)||0; if(!br || !ag.datum) return [];
+  var von=_agIsoPlus(ag.datum,-1), bis=_agIsoPlus(ag.datum,5);
+  var belegt={};
+  (db.ausgaben||[]).forEach(function(x){ if(x.bankId && x.id!==ag.id) belegt[x.bankId]=true; });
+  return (db.holviAbbuchungen||[]).filter(function(b){
+    var bt=parseFloat(b.betrag)||0;
+    return !belegt[b.id] && b.datum>=von && b.datum<=bis
+      && bt >= br-0.005 && bt <= br*1.25+0.5;
+  }).map(function(b){ return {b:b, name:_agNamePasst(ag,b)}; })
+    .sort(function(x,y){ return (y.name-x.name) || (Math.abs(x.b.betrag-br)-Math.abs(y.b.betrag-br)); });
+}
+// Eindeutig = genau ein Kandidat mit passendem Namen, oder ohne Namenstreffer genau
+// ein Kandidat mit exakt dem Bon-Betrag. Alles andere bleibt zur Auswahl offen.
+function _agBankAutoZuordnen(liste){
+  var n=0;
+  (liste || db.ausgaben || []).forEach(function(ag){
+    if(!ag || ag.bankId || ag._bankManuellGeloest) return;
+    if(ag.ausgabe_kat_raw==='gvl_verwaltung') return;   // wird verrechnet, nie abgebucht
+    if(ag.zahlweg && ag.zahlweg!=='holvi') return;
+    var k=_agBankKandidaten(ag); if(!k.length) return;
+    var mitName=k.filter(function(x){ return x.name; });
+    var treffer=null;
+    if(mitName.length===1) treffer=mitName[0].b;
+    else if(!mitName.length){
+      var exakt=k.filter(function(x){ return Math.abs(x.b.betrag-(parseFloat(ag.brutto)||0))<0.005; });
+      if(exakt.length===1 && k.length===1) treffer=exakt[0].b;
+    }
+    if(treffer){ ag.bankId=treffer.id; ag.zahlweg='holvi'; n++; }
+  });
+  return n;
+}
+
+function _agNeuZeichnen(dokId){
+  save(db);
+  try{ if(typeof rUstVoranmeldung==='function') rUstVoranmeldung(); }catch(e){ console.error('[1236]', e); }
+  try{ if(typeof rJahresabschluss==='function') rJahresabschluss(); }catch(e){ console.error('[1236]', e); }
+  try{ rDokumente(); }catch(e){ console.error('[1236]', e); }
+  if(dokId) dokOpenDetail(dokId);
+}
+
+function agFeldBearbeiten(dokId, feld){
+  var d=(db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  var ag=_agZuDok(d); if(!ag) return;
+  var labels={beschr:'Händler',datum:'Datum (TT.MM.JJJJ)',brutto:'Brutto €',vorsteuer:'Vorsteuer €',
+    bewAnlass:'Anlass der Bewirtung',bewTeilnehmer:'Teilnehmer (Namen, auch du selbst)'};
+  var alt = feld==='datum' ? (ag.datum?fd(ag.datum):'')
+          : (feld==='brutto'||feld==='vorsteuer') ? (ag[feld]!=null?String(ag[feld]).replace('.',','):'')
+          : (ag[feld]||'');
+  var neu=prompt(labels[feld]+':', alt);
+  if(neu===null) return;
+  neu=neu.trim();
+  try{ pushSnapshotVorAktion(); }catch(e){ console.error('[1236]', e); }
+  if(feld==='brutto'||feld==='vorsteuer'){
+    var num=_geldParse1228(neu);
+    if(neu==='' || isNaN(num)){ showToast('⚠ Ungültige Zahl'); return; }
+    ag[feld]=Math.round(num*100)/100;
+    ag.netto=Math.round(((parseFloat(ag.brutto)||0)-(parseFloat(ag.vorsteuer)||0))*100)/100;
+    if(feld==='brutto') d.brutto=ag.brutto; else d.mwst=ag.vorsteuer;
+    d.netto=ag.netto;
+  } else if(feld==='datum'){
+    var m=neu.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if(!m){ showToast('⚠ Datum bitte als TT.MM.JJJJ'); return; }
+    ag.datum=m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); d.datum=ag.datum;
+  } else if(feld==='beschr'){
+    if(!neu) return; ag.beschr=neu; d.beschr=neu;
+  } else {
+    ag[feld]=neu;
+  }
+  if(feld==='brutto'||feld==='datum'||feld==='beschr'){
+    // Neue Eckdaten → alte Zuordnung pruefen lassen, nicht stillschweigend behalten
+    if(ag.bankId && feld!=='beschr'){ delete ag.bankId; }
+    _agBankAutoZuordnen([ag]);
+  }
+  _agNeuZeichnen(dokId);
+}
+
+function agAuswahlSetzen(dokId, feld, wert){
+  var d=(db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  var ag=_agZuDok(d); if(!ag) return;
+  try{ pushSnapshotVorAktion(); }catch(e){ console.error('[1236]', e); }
+  if(feld==='kat'){
+    ag.ausgabe_kat_raw=wert; ag.kat=_AG_KAT_1236[wert]||'Sonstiges'; d.ausgabe_kat=wert;
+  } else if(feld==='zahlweg'){
+    ag.zahlweg=wert||null;
+    if(wert && wert!=='holvi') delete ag.bankId;
+    if(wert==='holvi'){ delete ag._bankManuellGeloest; _agBankAutoZuordnen([ag]); }
+  }
+  _agNeuZeichnen(dokId);
+}
+
+function agBankWaehlen(dokId, bankId){
+  var d=(db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  var ag=_agZuDok(d); if(!ag) return;
+  try{ pushSnapshotVorAktion(); }catch(e){ console.error('[1236]', e); }
+  if(bankId){ ag.bankId=bankId; ag.zahlweg='holvi'; delete ag._bankManuellGeloest; }
+  else { delete ag.bankId; ag._bankManuellGeloest=true; }
+  _agNeuZeichnen(dokId);
+}
+
+// Bestaetigung aufheben: Buchung raus, Beleg zurueck in die Liste — mit allen
+// gelesenen Werten, damit er korrigiert und neu gebucht werden kann. Das ist
+// bewusst NICHT der Rueckgaengig-Weg (der loescht den Beleg komplett, Build 765).
+// Ausgaben ohne Termin hinterlassen weder importedFiles noch _archivLog
+// (_archiveDateiname greift nur mit terminId), es bleibt also nichts zurueck.
+// Der alte Log-Eintrag 'dok_bestaetigt' faellt weg, sonst wuerde ein spaeteres
+// Rueckgaengig die neue Buchung mitnehmen.
+function agBestaetigungAufheben(dokId){
+  var d=(db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  var ag=_agZuDok(d); if(!d || !ag) return;
+  if(!confirm('Buchung zurücknehmen?\n\nDie Ausgabe verschwindet aus USt-VA und Ausgabenliste. Der Beleg bleibt mit allen Werten in der Liste und kann neu gebucht werden.')) return;
+  pushSnapshotVorAktion();
+  db.ausgaben=(db.ausgaben||[]).filter(function(x){ return x.id!==ag.id; });
+  // Bewirtungsangaben und Zahlweg gehen sonst mit der Buchung verloren
+  if(ag.bewAnlass) d.bewAnlass=ag.bewAnlass;
+  if(ag.bewTeilnehmer) d.bewTeilnehmer=ag.bewTeilnehmer;
+  if(ag.zahlweg) d.zahlweg=ag.zahlweg;
+  d.ausgabeId=null; d.bestaetigt=false; d.awaitConfirm=false;
+  db.actionLog=(db.actionLog||[]).filter(function(a){
+    return !(a.typ==='dok_bestaetigt' && a.undoData && a.undoData.dokId===dokId);
+  });
+  _agNeuZeichnen(dokId);
+  showToast('↩ Buchung zurückgenommen · Beleg wieder offen');
+}
+
+function _agBestaetigtHtml(d){
+  var ag=_agZuDok(d);
+  // Beim Oeffnen eindeutige Abbuchung nachziehen (Holvi-Import kann spaeter kommen)
+  if(!ag.bankId && _agBankAutoZuordnen([ag])) save(db);
+  var h='', id=d.id;
+  var card='background:var(--card);border:1.5px solid var(--hair);border-radius:10px;padding:12px;margin-bottom:12px';
+  var kopf=function(t){ return '<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">'+t+'</div>'; };
+  var zeile=function(label, val, feld, farbe){
+    var v = (val!=null && String(val).trim()) ? esc(String(val)) : '<span style="color:#ccc">—</span>';
+    var klick = feld ? ' onclick="agFeldBearbeiten(\''+id+'\',\''+feld+'\')"' : '';
+    return '<div'+klick+' style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--cream2);font-size:13px;'+(feld?'cursor:pointer;touch-action:manipulation':'')+'">'
+      + '<span style="color:var(--ink2)">'+label+'</span>'
+      + '<span style="color:'+(farbe||'#111')+';font-weight:600;text-align:right;max-width:62%">'+v+(feld?' <span style="color:#ccc;font-size:10px">✎</span>':'')+'</span></div>';
+  };
+  var auswahl=function(label, feld, optionen, wert){
+    var o='<option value=""'+(wert?'':' selected')+'>—</option>';
+    Object.keys(optionen).forEach(function(k){ o+='<option value="'+k+'"'+(k===wert?' selected':'')+'>'+optionen[k]+'</option>'; });
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--cream2);font-size:13px">'
+      + '<span style="color:var(--ink2)">'+label+'</span>'
+      + '<select onchange="agAuswahlSetzen(\''+id+'\',\''+feld+'\',this.value)" style="font:inherit;font-size:13px;font-weight:600;color:#111;background:transparent;border:none;text-align:right;text-align-last:right;padding:4px 0;max-width:62%">'+o+'</select></div>';
+  };
+
+  // Banner
+  h+='<div style="background:var(--green2);border:1.5px solid var(--accent2);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+    +'<div style="font-size:18px">✓</div><div style="font-size:12px;color:var(--accent);font-weight:700">Gebucht'
+    +(d.bestaetigt_am?' am '+String(d.bestaetigt_am).slice(0,10).split('-').reverse().join('.'):'')+'</div></div>';
+
+  // ── Beleg ──
+  var bew=_agIstBewirtung(ag);
+  h+='<div style="'+card+'">'+kopf('Beleg');
+  h+=zeile('Händler', ag.beschr, 'beschr');
+  h+=zeile('Datum', ag.datum?fd(ag.datum):null, 'datum');
+  h+=auswahl('Kategorie','kat',_AG_KAT_1236, ag.ausgabe_kat_raw && _AG_KAT_1236[ag.ausgabe_kat_raw] ? ag.ausgabe_kat_raw : '');
+  var zw = ag.zahlweg || (ag.bankId?'holvi':'');
+  h+=auswahl('Bezahlt mit','zahlweg',_AG_ZAHLWEG_1236, zw);
+  h+='</div>';
+
+  // ── Steuer ── (Aufteilung wie Leseansicht 1227)
+  var br=parseFloat(ag.brutto)||0, vst=parseFloat(ag.vorsteuer)||0;
+  var netto=Math.round((br-vst)*100)/100;
+  h+='<div style="'+card+'">'+kopf('Betrag und Vorsteuer');
+  h+=zeile('Brutto laut Bon', fmtEur(br), 'brutto');
+  var ud=(Array.isArray(d.ust_details)?d.ust_details:[]).filter(function(u){ return u && u.satz!=null; });
+  if(ud.length>1){
+    var udSum=ud.reduce(function(a,u){ return a+(parseFloat(u.ust)||0); },0);
+    var ok=Math.abs(udSum-vst)<=0.02;
+    ud.forEach(function(u){
+      var n=parseFloat(u.netto);
+      h+=zeile('Vorsteuer '+Math.round((parseFloat(u.satz)||0)*100)+' %'+(isNaN(n)?'':' · netto '+fmtEur(n)), fmtEur(parseFloat(u.ust)||0), null, ok?'var(--accent)':'var(--orange)');
+    });
+    h+=zeile('Vorsteuer gesamt'+(ok?'':' ≠ Aufteilung '+fmtEur(udSum)), fmtEur(vst), 'vorsteuer', ok?'var(--accent)':'var(--orange)');
+  } else {
+    var satz = ag.ustSatz!=null ? ag.ustSatz : (netto ? vst/netto : null);
+    var satzTxt = satz!=null ? ' '+(Math.abs(satz-0.19)<0.02?'19':Math.abs(satz-0.07)<0.02?'7':Math.round(satz*1000)/10)+' %' : '';
+    h+=zeile('Vorsteuer'+satzTxt, fmtEur(vst), 'vorsteuer', 'var(--accent)');
+  }
+  h+=zeile('Netto', fmtEur(netto), null, 'var(--ink2)');
+  h+='</div>';
+
+  // ── Bank ──
+  var b=_agBankEintrag(ag);
+  if(zw==='holvi' || !zw){
+    h+='<div style="'+card+'">'+kopf('Abbuchung');
+    if(b){
+      var tg=_agTrinkgeld(ag);
+      h+='<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:4px 0">'
+        +'<span style="color:var(--ink2)">Holvi '+fd(b.datum)+'<br><span style="font-size:11px;color:#999">'+esc(b.gegenpartei)+'</span></span>'
+        +'<span style="font-weight:700;color:var(--accent);white-space:nowrap">−'+fmtEur(b.betrag)+' ✓</span></div>';
+      h+=zeile('Trinkgeld (Abbuchung − Bon)', fmtEur(tg), null, tg?'#111':'var(--ink2)');
+      h+='<div onclick="agBankWaehlen(\''+id+'\',null)" style="font-size:11px;color:#999;text-align:right;padding-top:6px;cursor:pointer">falsche Abbuchung? lösen</div>';
+    } else if(!(db.holviAbbuchungen||[]).length){
+      h+='<div style="font-size:12px;color:var(--ink2);line-height:1.5">Noch keine Holvi-Abbuchungen in der App. Lade den Holvi-Auszug im Kontoabgleich einmal neu, dann findet die App Abbuchung und Trinkgeld selbst.</div>';
+    } else {
+      var k=_agBankKandidaten(ag);
+      if(k.length){
+        h+='<div style="font-size:12px;color:var(--orange);margin-bottom:6px">Nicht eindeutig. Welche Abbuchung gehört zum Bon?</div>';
+        k.slice(0,4).forEach(function(x){
+          h+='<div onclick="agBankWaehlen(\''+id+'\',\''+esc(x.b.id)+'\')" style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:8px 10px;margin-bottom:6px;border:1.5px solid var(--hair);border-radius:8px;cursor:pointer;touch-action:manipulation">'
+            +'<span>'+fd(x.b.datum)+' · '+esc(x.b.gegenpartei)+'</span><span style="font-weight:700;white-space:nowrap">−'+fmtEur(x.b.betrag)+'</span></div>';
+        });
+      } else {
+        var letzte=(db.holviAbbuchungen||[]).reduce(function(m,x){ return x.datum>m?x.datum:m; },'');
+        h+='<div style="font-size:12px;color:var(--ink2);line-height:1.5">'
+          +(ag.datum>letzte ? 'Liegt nach dem letzten Holvi-Auszug ('+fd(letzte)+'). Neuen Auszug laden.'
+                            : 'Keine passende Holvi-Abbuchung gefunden. Bar oder mit anderer Karte bezahlt? Dann oben bei „Bezahlt mit“ wählen.')
+          +'</div>';
+      }
+    }
+    h+='</div>';
+  }
+
+  // ── Bewirtung ──
+  if(bew){
+    var tg2=_agTrinkgeld(ag);
+    var fehlt=!(ag.bewAnlass||'').trim() || !(ag.bewTeilnehmer||'').trim();
+    h+='<div style="'+card+(fehlt?';border-color:var(--orange)':'')+'">'+kopf('Bewirtung');
+    if(fehlt) h+='<div style="font-size:12px;color:var(--orange);line-height:1.5;margin-bottom:6px">Anlass und Teilnehmer fehlen. Ohne sie erkennt das Finanzamt die Bewirtung nicht an. Bitte auch auf den Papierbon schreiben und unterschreiben.</div>';
+    h+=zeile('Anlass', ag.bewAnlass, 'bewAnlass');
+    h+=zeile('Teilnehmer', ag.bewTeilnehmer, 'bewTeilnehmer');
+    var basis=Math.round((netto+tg2)*100)/100;
+    var ab=Math.round(basis*0.7*100)/100;
+    h+=zeile('Kosten netto'+(tg2?' inkl. Trinkgeld':''), fmtEur(basis), null, 'var(--ink2)');
+    h+=zeile('davon absetzbar (70 %)', fmtEur(ab), null, 'var(--accent)');
+    h+=zeile('nicht absetzbar (30 %)', fmtEur(Math.round((basis-ab)*100)/100), null, 'var(--ink2)');
+    h+='<div style="font-size:11px;color:#999;line-height:1.5;padding-top:6px">Vorsteuer ist voll abziehbar. Auf Trinkgeld gibt es keine Vorsteuer.</div>';
+    h+='</div>';
+  }
+
+  // ── Aktionen ──
+  var knopf='width:100%;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;display:block';
+  if(ag.dateiname || ag.belegImg){
+    h+='<button type="button" onclick="ustAusgabeDetail(\''+ag.id+'\')" style="'+knopf+';background:var(--hair);color:var(--ink);border:none">Beleg im Ordner finden</button>';
+  }
+  h+='<button type="button" onclick="agBestaetigungAufheben(\''+id+'\')" style="'+knopf+';background:transparent;color:var(--ink2);border:1.5px solid var(--hair)">Buchung zurücknehmen</button>';
+  return h;
 }
 
 function dokFooterBestaetigen(){
@@ -16770,6 +17070,7 @@ function dokAnalyseDoc(d, key, cb){
       }
       txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
+      d._kiAnalysiert = true; // Build 1236: Marker fuer "KI hat gelesen" (Ausgaben-Knopf)
       d.typ     = _dokTypAufloesen(d, j.typ, j.gutschrift_nr);
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
@@ -19025,6 +19326,15 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       // 17.06.2026, 02.10.2026). dokFooterBestaetigen → dokBestaetigen →
       // _ausgabeAusDokAnlegen ist der bestehende Buchungsweg, hier nur erreichbar gemacht.
       var _agBuchbar = (parseFloat(d.brutto)||0) && d.datum;
+      // Build 1236: Knopf und Fehlt-Hinweis erst nach der KI-Analyse. Vorher stand
+      // "Zum Buchen fehlen Brutto und Datum" unter dem Spinner, obwohl die KI noch
+      // gar nicht gelesen hatte (02.10.2026). Altbelege ohne Marker zaehlen als
+      // gelesen, sobald ein Analysefeld gefuellt ist; manuell eingetragene Werte
+      // (Brutto + Datum) machen den Beleg ebenfalls buchbar.
+      var _agGelesen = _agBuchbar || d._kiAnalysiert || d.ausgabe_kat || d.netto
+        || (d.mwst!=null && d.mwst!=='') || d.ust_details
+        || (d.beschr && d.beschr!==d.dateiname);
+      if(_agGelesen){
       body += '<div style="padding:8px 0 20px">';
       if(!_agBuchbar){
         body += '<div style="font-size:12px;color:var(--orange);text-align:center;margin-bottom:8px">'
@@ -19035,6 +19345,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
         + '-webkit-tap-highlight-color:transparent;display:block;opacity:'+(_agBuchbar?'1':'.4')+'">'
         + '✓ Ausgabe buchen &amp; bestätigen</button></div>';
+      }
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
       // Passende Termine suchen
       // ── Build 1190: eine Quelle fuer die Terminsuche ─────────────────────
@@ -19156,6 +19467,10 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
   // weder STATE 1 (typ='offen') noch STATE 2 (awaitConfirm||!bestaetigt) griff.
   // Klick auf Ampel führte daher zu blank page. Jetzt: kompakte Daten-Übersicht,
   // editierbares Studio-Feld (wichtig für Klasse-3-Nachbearbeitung), Termin-Link.
+  // Build 1236: gebuchte Ausgabe → eigene Ansicht (Quelle ist db.ausgaben)
+  else if(d.bestaetigt && d.typ==='ausgabe' && _agZuDok(d)){
+    body += _agBestaetigtHtml(d);
+  }
   else if(d.bestaetigt){
     // Bestätigt-Banner
     body += '<div style="background:var(--green2);border:1.5px solid var(--accent2);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
@@ -23031,7 +23346,26 @@ function holviAbgleichLoad(inp){
           quelle: 'holvi'
         };
       });
-      if(!eingaenge.length){ showToast('Keine Zahlungseingänge gefunden'); return; }
+      // Build 1236: Abbuchungen nicht mehr verwerfen. Gebraucht fuer Ausgaben
+      // (Abbuchung zum Bon, Trinkgeld = Abbuchung − Bon). Gemischt nach Zahlungs-ID,
+      // damit ein Teilauszug aeltere Abbuchungen nicht loescht; 2 Jahre Vorhalt.
+      var _abNeu = dataRows.filter(function(r){
+        return parseFloat(String(r[2]).replace(',','.')) < 0 && String(r[8]||'').trim();
+      }).map(function(r){
+        var mA = String(r[0]||'').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        return { id:String(r[8]).trim(), datum: mA ? mA[3]+'-'+mA[2]+'-'+mA[1] : '',
+                 betrag: Math.round(Math.abs(parseFloat(String(r[2]).replace(',','.')))*100)/100,
+                 gegenpartei: String(r[4]||'').trim() };
+      }).filter(function(x){ return x.datum; });
+      var _abMap = {};
+      (db.holviAbbuchungen||[]).concat(_abNeu).forEach(function(x){ _abMap[x.id]=x; });
+      var _abCut = new Date(); _abCut.setFullYear(_abCut.getFullYear()-2);
+      var _abCutISO = _abCut.toISOString().slice(0,10);
+      db.holviAbbuchungen = Object.keys(_abMap).map(function(k){ return _abMap[k]; })
+        .filter(function(x){ return x.datum >= _abCutISO; })
+        .sort(function(a,b){ return a.datum<b.datum?-1:a.datum>b.datum?1:0; });
+      var _agZu = 0; try{ _agZu = _agBankAutoZuordnen(); }catch(eZ){ console.error('[1236 bank]', eZ); }
+      if(!eingaenge.length){ save(db); showToast('Keine Zahlungseingänge · '+_abNeu.length+' Abbuchungen'+(_agZu?' · '+_agZu+' Ausgaben zugeordnet':'')); return; }
       // Nur Kontoabgleich-eigene Bestätigungen übernehmen
       // (holviImportIds = alter Flow, darf hier nicht auto-bestätigen)
       var vorher = (db.holviAbgleich||[]).reduce(function(m,e){
@@ -23051,7 +23385,7 @@ function holviAbgleichLoad(inp){
       save(db);
       _updateHolviAbgleichBadge();
       rHolviAbgleich();
-      showToast('✓ '+eingaenge.length+' Eingänge geladen');
+      showToast('✓ '+eingaenge.length+' Eingänge · '+_abNeu.length+' Abbuchungen'+(_agZu?' · '+_agZu+' Ausgaben zugeordnet':''));
     } catch(ex){ showToast('Fehler: '+ex.message); }
   };
   reader.readAsArrayBuffer(file);
