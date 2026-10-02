@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1239';
+  if(elH) elH.textContent = '1242';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5580,7 +5580,13 @@ function _tagesSumme1213(items){
     items.forEach(function(t){
       if(ids[t.id] > 0){ sum += ids[t.id]; return; }
       geschaetzt = true;
-      sum += (parseFloat(t.kommgage)||0) + (parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+      // Build 1242: 10er-Paket wie im Termin-Detail (billTakes, Z. ~5935). Vorher
+      // 2 Takes × 4,20 statt 10 × 4,20: Unaccustomed Earth 02.10.2026 zeigte
+      // "ca. 93 €" in der Liste, im Detail 127,00.
+      var _kg = parseFloat(t.kommgage)||0, _rt = parseFloat(t.rate)||0, _tk = parseInt(t.takes)||0;
+      var _pk = true; try { _pk = _paketRegelGilt(t.kommgage, t.rate); } catch(eP){ console.error('[1242 paket]', eP); }
+      if(_pk && _tk > 0 && _tk < 10) _tk = 10;
+      sum += _kg + _tk*_rt;
     });
     if(!(sum > 0)) return '';
     var betrag = geschaetzt
@@ -15692,6 +15698,14 @@ function _ausgabeAusDokAnlegen(d){
   });
   if(dup){
     d.ausgabeId = dup.id;
+    // Build 1240: Zeigt die Buchung auf ein Dokument, das es nicht mehr gibt
+    // (Pipeline geleert bis 1239), uebernimmt dieser Beleg die Rolle. Sonst bleibt
+    // die Buchung ohne Satzaufteilung und ohne Weg zur Ansicht.
+    if(!dup.dokId || !(db.dokumente||[]).some(function(x){ return x.id===dup.dokId; })){
+      dup.dokId = d.id;
+      if(!dup.dateiname && d.dateiname) dup.dateiname = d.dateiname;
+      if(Array.isArray(d.ust_details) && d.ust_details.length > 1) dup.ustSatz = null;
+    }
     showToast('Ausgabe war bereits erfasst — nicht doppelt gebucht');
     return;
   }
@@ -16235,12 +16249,18 @@ function dokDeleteAll(){
   // (a) Bestätigte Abrechn-Docs werden zu "Stubs": dataURL+thumb weg, Doc-Objekt + ID bleibt.
   //     Termin-Detail kann weiter darauf zeigen, nur das Vorschau-Bild ist weg.
   // (b) Alle anderen Docs (unbestätigt, dispo, sonstig, …) werden komplett gelöscht.
-  var bestaetigtAbrechn = docs.filter(function(d){
-    return d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn');
-  });
-  var rest = docs.filter(function(d){
-    return !(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn'));
-  });
+  // Build 1240: Gebuchte Ausgaben ebenso. Bis 1239 wurden sie komplett geloescht:
+  // Dateiname frei, naechster Ordner-Scan holte den Beleg als neu in die Pipeline
+  // (Chen's Noodle, 02.10.2026), und die 7/19-Aufteilung (ust_details, nur im
+  // Dokument) war weg. Die Buchung in db.ausgaben zeigte per dokId ins Leere.
+  var _agIds1240 = {}; (db.ausgaben||[]).forEach(function(a){ _agIds1240[a.id]=1; });
+  var _bleibt1240 = function(d){
+    if(!d.bestaetigt) return false;
+    if(d.typ==='abrechn'||d.typ==='monats_abrechn') return true;
+    return d.typ==='ausgabe' && !!d.ausgabeId && !!_agIds1240[d.ausgabeId];
+  };
+  var bestaetigtAbrechn = docs.filter(_bleibt1240);
+  var rest = docs.filter(function(d){ return !_bleibt1240(d); });
 
   // ── Build 1202: angebrochene Split-Gruppen nicht loeschen ────────────────
   // Ein Sammel-PDF wird beim Import in mehrere Dokumente zerlegt, die alle
@@ -16277,8 +16297,8 @@ function dokDeleteAll(){
   var nDel  = rest.length;
   var nSchon = _geschont1202.length;
   var msg = '';
-  if(nStub && nDel) msg = nDel+' Dokumente löschen?\n\n'+nStub+' bestätigte Abrechnungen bleiben erhalten (PDFs werden zu Datei-Verweisen ohne Vorschau).';
-  else if(nStub)    msg = nStub+' bestätigte Abrechnung'+(nStub>1?'en':'')+' aufräumen?\n\nDaten bleiben vollständig erhalten — nur die PDF-Vorschau wird entfernt (spart Speicher).';
+  if(nStub && nDel) msg = nDel+' Dokumente löschen?\n\n'+nStub+' gebuchte Abrechnungen und Ausgaben bleiben erhalten (Dateien werden zu Verweisen ohne Vorschau).';
+  else if(nStub)    msg = nStub+' gebuchte Belege aufräumen?\n\nDaten bleiben vollständig erhalten — nur die PDF-Vorschau wird entfernt (spart Speicher).';
   else              msg = nDel+' Dokumente löschen? Termine bleiben erhalten.';
   if(nSchon) msg += '\n\n'+nSchon+' Gutschrift'+(nSchon>1?'en':'')+' aus angefangenen Sammel-PDFs '
     + (nSchon>1?'bleiben':'bleibt')+' stehen — sonst ' + (nSchon>1?'waeren sie':'waere sie')
@@ -23461,6 +23481,11 @@ function holviAbgleichLoad(inp){
       eingaenge.forEach(function(e){
         if(vorher[e.zahlungsId||e.id]) e.bestaetigt=true;
       });
+      // Build 1241: "privat/ignoriert" ueberlebte den Neu-Import nicht — nur bestaetigt
+      // wurde uebernommen. Nach dem Holvi-Neuladen am 02.10.2026 standen zwei als privat
+      // markierte Eingaenge wieder als Problemfall da. Jetzt per Zahlungs-ID mit.
+      var _ign1241 = (db.holviAbgleich||[]).reduce(function(m,x){ if(x.ignoriert) m[x.zahlungsId||x.id]=true; return m; },{});
+      eingaenge.forEach(function(e){ if(_ign1241[e.zahlungsId||e.id]) e.ignoriert=true; });
       // Bestätigte Einträge älter als 2 Jahre entfernen (Speicher-Schutz)
       var _cutoff = new Date(); _cutoff.setFullYear(_cutoff.getFullYear()-2);
       var _cutoffISO = _cutoff.toISOString().slice(0,10);
@@ -23532,6 +23557,9 @@ function haspaAbgleichLoad(inp){
       if(!neu.length){ showToast('Keine Haspa-Eingänge gefunden'); return; }
       var vorher=(db.holviAbgleich||[]).reduce(function(m,x){ if(x.bestaetigt) m[x.zahlungsId||x.id]=true; return m; },{});
       neu.forEach(function(x){ if(vorher[x.zahlungsId||x.id]) x.bestaetigt=true; });
+      // Build 1241: privat/ignoriert auch bei Haspa mitnehmen (gleiche Luecke wie Holvi)
+      var _ignH1241=(db.holviAbgleich||[]).reduce(function(m,x){ if(x.ignoriert) m[x.zahlungsId||x.id]=true; return m; },{});
+      neu.forEach(function(x){ if(_ignH1241[x.zahlungsId||x.id]) x.ignoriert=true; });
       var rest=(db.holviAbgleich||[]).filter(function(x){ return x.quelle!=='haspa'; });  // Holvi behalten
       db.holviAbgleich = rest.concat(neu);
       save(db);
