@@ -29,6 +29,10 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=Shippori+Mincho:wght@500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/* Build 1234: Safari vergroessert im Querformat Text in breiten Bloecken eigenmaechtig
+   (Text-Autosizing). In der Jahresabschluss-Tabelle wurden so "Gesamt" und "2 Termine"
+   riesig, die Zahlen daneben nicht. Die App setzt ihre Schriftgroessen selbst. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 :root{
   /* Zen-Palette (Build 908): Washi-Töne, Hairlines, Kiefern-Grün.
      Alte Variablennamen bleiben als Aliase erhalten — alle bestehenden
@@ -5379,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1233';
+  if(elH) elH.textContent = '1235';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -12896,9 +12900,10 @@ function _rJahresabschlussV2(el, yr, termine, v2AbsImJahr){
           + '</tr>';
       });
       // Zusammenfassungs-Zeile für Sammel
-      table += '<tr style="border-top:1px solid var(--hair);background:var(--blue2)">'
-        + '<td style="padding:6px 4px;text-align:right;font-weight:700" colspan="3">Gesamt</td>'
-        + '<td style="padding:6px 4px;text-align:right;font-weight:800">'+fmtEur(_v2Basis(ab))+'</td>'
+      // Build 1234: dezenter. Keine Flaechenfarbe mehr, nur Haarlinie; "Gesamt" leise.
+      table += '<tr style="border-top:1px solid var(--hair)">'
+        + '<td style="padding:6px 4px;text-align:right;font-weight:600;color:var(--ink3);font-size:11px" colspan="3">Gesamt</td>'
+        + '<td style="padding:6px 4px;text-align:right;font-weight:700">'+fmtEur(_v2Basis(ab))+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:var(--ink2)">'+fmtEur(ab.sv_kv_an||0)+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:var(--ink2)">'+fmtEur(ab.sv_rv_an||0)+'</td>'
         + '<td style="padding:6px 4px;text-align:right;color:var(--ink2)">'+fmtEur(ab.sv_pv_an||0)+'</td>'
@@ -19012,6 +19017,24 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       }
       body += _buildMergePreview(d, termin);
       // Button ist im fixen Footer (dok-footer-confirm)
+    } else if(d.typ==='ausgabe'){
+      // Build 1235: Ausgaben brauchen keinen Termin, hatten ohne Termin aber keinen
+      // Bestaetigen-Knopf. Seit Build 1101 (alter Footer-Knopf entfernt) gab es fuer
+      // eine Ausgabe ohne Termin und ohne _keinTermin keinen Zweig in dieser Kette:
+      // Detail zeigte Daten, aber keinen Weg zum Buchen (Realfall Chen's Noodle
+      // 17.06.2026, 02.10.2026). dokFooterBestaetigen → dokBestaetigen →
+      // _ausgabeAusDokAnlegen ist der bestehende Buchungsweg, hier nur erreichbar gemacht.
+      var _agBuchbar = (parseFloat(d.brutto)||0) && d.datum;
+      body += '<div style="padding:8px 0 20px">';
+      if(!_agBuchbar){
+        body += '<div style="font-size:12px;color:var(--orange);text-align:center;margin-bottom:8px">'
+          + 'Zum Buchen fehlen ' + (!(parseFloat(d.brutto)||0) && !d.datum ? 'Brutto und Datum' : (!d.datum ? 'das Datum' : 'der Bruttobetrag')) + '</div>';
+      }
+      body += '<button type="button" onclick="dokFooterBestaetigen()"'+(_agBuchbar?'':' disabled')+' '
+        + 'style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:14px;'
+        + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
+        + '-webkit-tap-highlight-color:transparent;display:block;opacity:'+(_agBuchbar?'1':'.4')+'">'
+        + '✓ Ausgabe buchen &amp; bestätigen</button></div>';
     } else if(d.typ==='dispo'||d.typ==='abrechn'){
       // Passende Termine suchen
       // ── Build 1190: eine Quelle fuer die Terminsuche ─────────────────────
