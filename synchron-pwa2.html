@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1237';
+  if(elH) elH.textContent = '1239';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -15717,6 +15717,7 @@ function _ausgabeAusDokAnlegen(d){
   if(d.bewAnlass){ _agNeu.bewAnlass=d.bewAnlass; delete d.bewAnlass; }
   if(d.bewTeilnehmer){ _agNeu.bewTeilnehmer=d.bewTeilnehmer; delete d.bewTeilnehmer; }
   if(d.zahlweg){ _agNeu.zahlweg=d.zahlweg; delete d.zahlweg; }
+  if(d.aufschlagArt){ _agNeu.aufschlagArt=d.aufschlagArt; delete d.aufschlagArt; }   // Build 1238
   try{ _agBankAutoZuordnen([_agNeu]); }catch(eB){ console.error('[1236 bank]', eB); }
   d.ausgabeId = agId;
   delete d._agVorschau;
@@ -15762,7 +15763,60 @@ function _agNameTokens(s){
 function _agNamePasst(ag, b){
   var g = _agNameTokens(b.gegenpartei).join(' ');
   var gk = g.replace(/ /g,'');
-  return _agNameTokens(ag.beschr).some(function(w){ return g.indexOf(w)>=0 || gk.indexOf(w)>=0; });
+  var tok = _agNameTokens(ag.beschr);
+  if(tok.length) return tok.some(function(w){ return g.indexOf(w)>=0 || gk.indexOf(w)>=0; });
+  // Build 1238: "Restaurant Z" — nach dem Filter (restaurant raus, z zu kurz) bleibt
+  // nichts. Dann den ganzen Namen als Wortfolge suchen, nicht als Teilstring
+  // ("restaurant z" soll nicht in "restaurant zoe" treffen). Mindestens 5 Zeichen.
+  var voll = _agNameVoll(ag.beschr);
+  if(voll.replace(/ /g,'').length < 5) return false;
+  return (' '+_agNameVoll(b.gegenpartei)+' ').indexOf(' '+voll+' ') >= 0;
+}
+function _agNameVoll(s){
+  return String(s||'').toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/['’`´]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+
+// Build 1238: Differenz Abbuchung − Bon ist Trinkgeld ODER Kartengebuehr.
+// Steuerlich gleich (keine Vorsteuer ohne Beleg, beides in der 70/30-Kuerzung),
+// nur die Beschriftung unterscheidet sich. Reihenfolge:
+//  1. von Hand gesetzt (ag.aufschlagArt)
+//  2. derselbe Haendler hat schon eine Kartengebuehr (von Hand oder per Prozent)
+//  3. Differenz exakt Bon × 1 bis 3,5 % (halbe Prozentschritte) → Kartengebuehr.
+//     Terminal-Trinkgeld liegt bei 5 % und mehr, Aufschlaege darunter
+//     (Chen's 40,60 → 41,62 = 2,5 %).
+//  4. sonst Trinkgeld (runde Betraege, Terminal-Prozente, freie Betraege)
+var _AG_GEBUEHR_SAETZE_1238 = [0.01,0.015,0.02,0.025,0.03,0.035];
+function _agHaendlerKey(ag){
+  var t=_agNameTokens(ag && ag.beschr);
+  return t.length ? t.join(' ') : _agNameVoll(ag && ag.beschr);
+}
+function _agIstGebuehrProzent(ag){
+  var d=_agTrinkgeld(ag); if(!d) return false;
+  var br=parseFloat(ag.brutto)||0;
+  return _AG_GEBUEHR_SAETZE_1238.some(function(p){ return Math.abs(Math.round(br*p*100)/100 - d) < 0.005; });
+}
+function _agAufschlagArt(ag){
+  if(!_agTrinkgeld(ag)) return null;
+  if(ag.aufschlagArt==='trinkgeld' || ag.aufschlagArt==='kartengebuehr') return ag.aufschlagArt;
+  var key=_agHaendlerKey(ag);
+  if(key){
+    var andere=(db.ausgaben||[]).some(function(x){
+      if(x===ag || x.id===ag.id || x.aufschlagArt==='trinkgeld') return false;
+      if(_agHaendlerKey(x)!==key) return false;
+      return x.aufschlagArt==='kartengebuehr' || _agIstGebuehrProzent(x);
+    });
+    if(andere) return 'kartengebuehr';
+  }
+  return _agIstGebuehrProzent(ag) ? 'kartengebuehr' : 'trinkgeld';
+}
+function agAufschlagWechseln(dokId){
+  var d=(db.dokumente||[]).find(function(x){ return x.id===dokId; });
+  var ag=_agZuDok(d); if(!ag) return;
+  try{ pushSnapshotVorAktion(); }catch(e){ console.error('[1238]', e); }
+  ag.aufschlagArt = _agAufschlagArt(ag)==='kartengebuehr' ? 'trinkgeld' : 'kartengebuehr';
+  _agNeuZeichnen(dokId);
 }
 function _agIsoPlus(iso, tage){
   var p=String(iso||'').split('-'); if(p.length<3) return '';
@@ -15889,6 +15943,7 @@ function agBestaetigungAufheben(dokId){
   if(ag.bewAnlass) d.bewAnlass=ag.bewAnlass;
   if(ag.bewTeilnehmer) d.bewTeilnehmer=ag.bewTeilnehmer;
   if(ag.zahlweg) d.zahlweg=ag.zahlweg;
+  if(ag.aufschlagArt) d.aufschlagArt=ag.aufschlagArt;   // Build 1238
   d.ausgabeId=null; d.bestaetigt=false; d.awaitConfirm=false;
   db.actionLog=(db.actionLog||[]).filter(function(a){
     return !(a.typ==='dok_bestaetigt' && a.undoData && a.undoData.dokId===dokId);
@@ -15965,7 +16020,14 @@ function _agBestaetigtHtml(d){
       h+='<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:4px 0">'
         +'<span style="color:var(--ink2)">Holvi '+fd(b.datum)+'<br><span style="font-size:11px;color:#999">'+esc(b.gegenpartei)+'</span></span>'
         +'<span style="font-weight:700;color:var(--accent);white-space:nowrap">−'+fmtEur(b.betrag)+' ✓</span></div>';
-      h+=zeile('Trinkgeld (Abbuchung − Bon)', fmtEur(tg), null, tg?'#111':'var(--ink2)');
+      if(tg){
+        var art=_agAufschlagArt(ag);
+        h+='<div onclick="agAufschlagWechseln(\''+id+'\')" style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--cream2);font-size:13px;cursor:pointer;touch-action:manipulation">'
+          +'<span style="color:var(--ink2)">'+(art==='kartengebuehr'?'Kartengebühr':'Trinkgeld')+' (Abbuchung − Bon) <span style="color:#ccc;font-size:11px">⇅</span></span>'
+          +'<span style="color:#111;font-weight:600;white-space:nowrap">'+fmtEur(tg)+'</span></div>';
+      } else {
+        h+=zeile('Abbuchung = Bon', fmtEur(0), null, 'var(--ink2)');
+      }
       h+='<div onclick="agBankWaehlen(\''+id+'\',null)" style="font-size:11px;color:#999;text-align:right;padding-top:6px;cursor:pointer">falsche Abbuchung? lösen</div>';
     } else if(!(db.holviAbbuchungen||[]).length){
       h+='<div style="font-size:12px;color:var(--ink2);line-height:1.5">Noch keine Holvi-Abbuchungen in der App. Lade den Holvi-Auszug im Kontoabgleich einmal neu, dann findet die App Abbuchung und Trinkgeld selbst.</div>';
@@ -15998,10 +16060,11 @@ function _agBestaetigtHtml(d){
     h+=zeile('Teilnehmer', ag.bewTeilnehmer, 'bewTeilnehmer');
     var basis=Math.round((netto+tg2)*100)/100;
     var ab=Math.round(basis*0.7*100)/100;
-    h+=zeile('Kosten netto'+(tg2?' inkl. Trinkgeld':''), fmtEur(basis), null, 'var(--ink2)');
+    var art2=_agAufschlagArt(ag);
+    h+=zeile('Kosten netto'+(tg2?(art2==='kartengebuehr'?' inkl. Kartengebühr':' inkl. Trinkgeld'):''), fmtEur(basis), null, 'var(--ink2)');
     h+=zeile('davon absetzbar (70 %)', fmtEur(ab), null, 'var(--accent)');
     h+=zeile('nicht absetzbar (30 %)', fmtEur(Math.round((basis-ab)*100)/100), null, 'var(--ink2)');
-    h+='<div style="font-size:11px;color:#999;line-height:1.5;padding-top:6px">Vorsteuer ist voll abziehbar. Auf Trinkgeld gibt es keine Vorsteuer.</div>';
+    h+='<div style="font-size:11px;color:#999;line-height:1.5;padding-top:6px">Vorsteuer ist voll abziehbar. '+(art2==='kartengebuehr'?'Auf die Kartengebühr gibt es Vorsteuer nur, wenn sie auf einem Beleg ausgewiesen ist.':'Auf Trinkgeld gibt es keine Vorsteuer.')+'</div>';
     h+='</div>';
   }
 
@@ -22607,7 +22670,7 @@ function rUstVoranmeldung(){
   html += '<div style="padding:0 16px;margin-top:8px;margin-bottom:4px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
     +'<div style="font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">Ausgaben / Vorsteuer ('+ausgaben.length+')</div>'
-    +'<div onclick="ausgabeOpen()" style="background:var(--purple);color:#fff;font-size:11px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer">+ Beleg</div>'
+    +'<div onclick="ustBelegNeu()" style="background:var(--purple);color:#fff;font-size:11px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer">+ Beleg</div>'
     +'</div>';
   if(ausgaben.length){
     html += '<div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:10px;overflow:hidden">';
@@ -22631,7 +22694,7 @@ function rUstVoranmeldung(){
       +'<div style="margin-bottom:6px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/><path d="M9 8h6M9 12h6"/></svg></div>'
       +'<div style="font-size:13px;font-weight:600;margin-bottom:4px">Keine Ausgaben erfasst</div>'
       +'<div style="font-size:11px">Belege scannen → Vorsteuer wird automatisch verrechnet</div>'
-      +'<div onclick="ausgabeOpen()" style="margin-top:10px;background:var(--purple);color:#fff;padding:10px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">+ Beleg hinzufügen</div>'
+      +'<div onclick="ustBelegNeu()" style="margin-top:10px;background:var(--purple);color:#fff;padding:10px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">+ Beleg hinzufügen</div>'
       +'</div>';
   }
   html += '</div>';
@@ -22639,9 +22702,28 @@ function rUstVoranmeldung(){
   el.innerHTML = html;
 }
 
+// Build 1239: "+ Beleg" in der Voranmeldung lief noch ueber das alte Formular
+// (ausgabeOpen/ausgabeSave): kein Dokument, keine 7/19-Aufteilung, kein Dateiname,
+// keine Bewirtung, keine Holvi-Zuordnung. Jetzt dieselbe Strecke wie ueberall:
+// Belege, Reiter Ausgaben, Dateiauswahl. Das alte Formular bleibt im Code, ist aber
+// nicht mehr erreichbar. click() bleibt synchron im Tipp, sonst blockt iOS die Auswahl.
+function ustBelegNeu(){
+  try{ switchView('dokumente'); }catch(e){ console.error('[1239]', e); }
+  try{ dokSetTab('ausgabe'); }catch(e){ console.error('[1239]', e); }
+  var inp=document.getElementById('dok-upload-input');
+  if(inp) inp.click();
+}
+// Build 1239: Ausgabe mit Dokument → gebuchte Ansicht (1237), sonst wie bisher
+function _ustAgDok(a){
+  if(!a || !a.dokId) return null;
+  var d=(db.dokumente||[]).find(function(x){ return x.id===a.dokId; });
+  return (d && d.ausgabeId===a.id) ? d : null;
+}
 function ustAusgabeDetail(id, e){
   var a = (db.ausgaben||[]).find(function(x){return x.id===id;});
   if(!a) return;
+  var _d1239=_ustAgDok(a);
+  if(_d1239){ dokOpenDetail(_d1239.id); return; }
   // Build 1229: Original ueber den Dateinamen finden, wie bei der Termin-Ampel
   // (showDateinamen: Name kopieren + Dateien-App). Die App bewahrt keine Bilder auf
   // (_releaseDokDataURL), der Ordner ist das Archiv. Vorschaubild nur als Rueckfall.
@@ -22685,6 +22767,10 @@ function ustAusgabeDelete(id, e){
   e.stopPropagation();
   var a = (db.ausgaben||[]).find(function(x){return x.id===id;});
   if(!a) return;
+  // Build 1239: Mit Dokument nicht hart loeschen — sonst bleibt der Beleg als
+  // "gebucht" stehen und zeigt auf eine Ausgabe, die es nicht mehr gibt. Stattdessen
+  // wie "Buchung zuruecknehmen": Buchung raus, Beleg wieder offen, Angaben geparkt.
+  if(_ustAgDok(a)){ agBestaetigungAufheben(a.dokId); return; }
   if(!confirm((a.beschr||'Ausgabe')+' löschen?')) return;
   db.ausgaben = (db.ausgaben||[]).filter(function(x){return x.id!==id;});
   save(db);
