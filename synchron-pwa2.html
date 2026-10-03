@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1243';
+  if(elH) elH.textContent = '1244';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -10015,9 +10015,9 @@ function importData(inp){
       var infoMsg = 'Backup importieren? Aktuelle Daten werden überschrieben.';
       if(importDbv2){
         var n = (importDbv2.abrechnungen||[]).length;
-        infoMsg += '\\n\\nEnthält dbv2 mit '+n+' Abrechnung'+(n!==1?'en':'')+'.';
+        infoMsg += '\n\nEnthält dbv2 mit '+n+' Abrechnung'+(n!==1?'en':'')+'.';
       } else {
-        infoMsg += '\\n\\n⚠ Backup ohne dbv2 — neue Schema-Daten gehen verloren.';
+        infoMsg += '\n\n⚠ Backup ohne dbv2 — neue Schema-Daten gehen verloren.';
       }
       if(!confirm(infoMsg))return;
 
@@ -16108,7 +16108,7 @@ function _agBestaetigtHtml(d){
   // ── Aktionen ──
   var knopf='width:100%;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;margin-bottom:8px;display:block';
   if(ag.dateiname || ag.belegImg){
-    h+='<button type="button" onclick="ustAusgabeDetail(\''+ag.id+'\')" style="'+knopf+';background:var(--hair);color:var(--ink);border:none">Beleg im Ordner finden</button>';
+    h+='<button type="button" onclick="ustAusgabeDetail(\''+ag.id+'\',null,true)" style="'+knopf+';background:var(--hair);color:var(--ink);border:none">Beleg im Ordner finden</button>';
   }
   h+='<button type="button" onclick="agBestaetigungAufheben(\''+id+'\')" style="'+knopf+';background:transparent;color:var(--ink2);border:1.5px solid var(--hair)">Buchung zurücknehmen</button>';
   return h;
@@ -22763,11 +22763,14 @@ function _ustAgDok(a){
   var d=(db.dokumente||[]).find(function(x){ return x.id===a.dokId; });
   return (d && d.ausgabeId===a.id) ? d : null;
 }
-function ustAusgabeDetail(id, e){
+function ustAusgabeDetail(id, e, direkt){
   var a = (db.ausgaben||[]).find(function(x){return x.id===id;});
   if(!a) return;
   var _d1239=_ustAgDok(a);
-  if(_d1239){ dokOpenDetail(_d1239.id); return; }
+  // Build 1244: "Beleg im Ordner finden" in der gebuchten Ansicht rief diese Funktion,
+  // und 1239 leitete sie zurueck in genau diese Ansicht. Der Knopf tat scheinbar nichts
+  // (Ming Dynastie 10.09.2026, Meldung 03.10.). direkt=true ueberspringt die Umleitung.
+  if(_d1239 && !direkt){ dokOpenDetail(_d1239.id); return; }
   // Build 1229: Original ueber den Dateinamen finden, wie bei der Termin-Ampel
   // (showDateinamen: Name kopieren + Dateien-App). Die App bewahrt keine Bilder auf
   // (_releaseDokDataURL), der Ordner ist das Archiv. Vorschaubild nur als Rueckfall.
