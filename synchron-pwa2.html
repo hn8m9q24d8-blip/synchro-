@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1242';
+  if(elH) elH.textContent = '1243';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -15966,6 +15966,28 @@ function agBestaetigungAufheben(dokId){
   showToast('↩ Buchung zurückgenommen · Beleg wieder offen');
 }
 
+// Build 1243: Passt die Satzaufteilung (netto+USt je Satz) nicht zum Brutto?
+// Bisher wurde nur die Vorsteuer-Summe geprueft. Realfall my noodlehouse 31.05.2026:
+// Brutto 50,00 erkannt, Aufteilung ergibt 46,00 (vermutlich Kartenbetrag statt
+// Bonsumme gelesen). Vorsteuer stimmte, also keine Warnung, aber 4,00 Trinkgeld
+// fehlten in der Bewirtung. Toleranz 2 Cent (Rundung je Satz, Ming Dynastie 37,01).
+function _udBruttoSumme(ud){
+  if(!Array.isArray(ud) || ud.length < 2) return null;
+  var s=0;
+  for(var i=0;i<ud.length;i++){
+    var n=parseFloat(ud[i]&&ud[i].netto), u=parseFloat(ud[i]&&ud[i].ust);
+    if(isNaN(n) || isNaN(u)) return null;
+    s+=n+u;
+  }
+  return Math.round(s*100)/100;
+}
+function _udBruttoWarnHtml(ud, brutto){
+  var s=_udBruttoSumme(ud), b=parseFloat(brutto);
+  if(s==null || isNaN(b) || Math.abs(s-b) <= 0.02) return '';
+  return '<div style="margin:8px 0 2px;padding:8px 10px;border-radius:8px;background:#f6ece0;color:var(--orange);font-size:12px;line-height:1.4">'
+    +'Bonsumme laut Aufteilung '+fmtEur(s)+', erkannt wurde '+fmtEur(b)+'. Bitte auf dem Bon nachsehen und das Brutto korrigieren.</div>';
+}
+
 function _agBestaetigtHtml(d){
   var ag=_agZuDok(d);
   // Beim Oeffnen eindeutige Abbuchung nachziehen (Holvi-Import kann spaeter kommen)
@@ -16017,6 +16039,7 @@ function _agBestaetigtHtml(d){
       h+=zeile('Vorsteuer '+Math.round((parseFloat(u.satz)||0)*100)+' %'+(isNaN(n)?'':' · netto '+fmtEur(n)), fmtEur(parseFloat(u.ust)||0), null, ok?'var(--accent)':'var(--orange)');
     });
     h+=zeile('Vorsteuer gesamt'+(ok?'':' ≠ Aufteilung '+fmtEur(udSum)), fmtEur(vst), 'vorsteuer', ok?'var(--accent)':'var(--orange)');
+    h+=_udBruttoWarnHtml(ud, br);   // Build 1243
   } else {
     var satz = ag.ustSatz!=null ? ag.ustSatz : (netto ? vst/netto : null);
     var satzTxt = satz!=null ? ' '+(Math.abs(satz-0.19)<0.02?'19':Math.abs(satz-0.07)<0.02?'7':Math.round(satz*1000)/10)+' %' : '';
@@ -18471,6 +18494,7 @@ function _dokDispBlock(d){
                     fmtEur(parseFloat(u.ust)||0), _udOk?'var(--accent)':'var(--orange)');
       });
       o+=_dispRow('Vorsteuer gesamt'+(_udOk?'':' ≠ Aufteilung '+fmtEur(_udSum)), fmtEur(_vstD), _udOk?'var(--accent)':'var(--orange)');
+      o+=_udBruttoWarnHtml(_udD, _bruttoD);   // Build 1243
     } else if(_vstD!=null && !isNaN(_vstD)){
       o+=_dispRow('Vorsteuer'+(_satzD!=null?' '+Math.round(_satzD*100)+'%':''), fmtEur(_vstD), 'var(--accent)');
     }
