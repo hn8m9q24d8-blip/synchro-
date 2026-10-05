@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1244';
+  if(elH) elH.textContent = '1247';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -11698,8 +11698,26 @@ function autoMatchPay(){
 // ══════════════════════════════════════════════════
 // ICS IMPORT — liest .ics-Datei aus iPhone Kalender
 // ══════════════════════════════════════════════════
+// Build 1245: Regie aus der Kalender-Notiz (DESCRIPTION). Bisher las icsParse nur
+// SUMMARY/LOCATION/DTSTART/DTEND — die Notiz "Bernhard Völger" am Iyuno-Termin
+// 06.10.2026 kam nie an. Uebernommen wird nur, was nach Personenname aussieht
+// (2–4 Woerter, keine Ziffern/Links), optional mit "Regie:" davor. Alles andere
+// bleibt draussen, damit keine Wegbeschreibung o.ae. im Regie-Feld landet.
+function _icsRegieAusNotiz(block){
+  var b = String(block||'').replace(/BEGIN:VALARM[\s\S]*?END:VALARM/g,'');   // Erinnerungen tragen eigene DESCRIPTIONs
+  var m = b.match(/(?:^|\n)DESCRIPTION[^:\r\n]*:([^\r\n]*)/);
+  if(!m) return '';
+  var d = m[1].replace(/\\n/g,'\n').replace(/\\,/g,',').replace(/\\;/g,';').split('\n')[0].trim();
+  d = d.replace(/^regie\s*[:\-–]?\s*/i,'').trim();
+  if(!d || d.length>40 || /[0-9@\/]|http/i.test(d)) return '';
+  var w = d.split(/\s+/);
+  if(w.length<2 || w.length>4) return '';
+  if(!w.every(function(x){ return /^[A-Za-zÀ-ÖØ-öø-ÿ'’.\-]+$/.test(x); })) return '';
+  return d;
+}
 function icsParse(text){
   var events=[];
+  text = String(text||'').replace(/\r?\n[ \t]/g,'');   // Build 1245: gefaltete iCal-Zeilen zusammenfuehren (RFC 5545)
   var blocks=text.split('BEGIN:VEVENT');
   for(var i=1;i<blocks.length;i++){
     var block=blocks[i];
@@ -11810,6 +11828,7 @@ function icsParse(text){
       titel:summary,
       notizen:location,
       studio:studio,
+      regie:_icsRegieAusNotiz(block),   // Build 1245
       calEventId:calEventId,
       sourceTitle:summary
     });
@@ -11983,6 +12002,10 @@ function autoSyncBootFetch(){
           var _e=_feedById[t.calEventId]; if(!_e) return;
           var _ch=false;
           ['datum','uhrzeit','uhrzeit_bis','titel','studio','regie','notizen'].forEach(function(f){
+            // Build 1245: Regie nur uebernehmen, wenn der Kalender eine liefert. Vorher
+            // loeschte jeder Sync eine von Hand eingetragene Regie an zukuenftigen
+            // Terminen, weil icsParse das Feld nie befuellte ('' !== 'Name').
+            if(f==='regie') return;   // Build 1246: Regie laeuft nur noch additiv (unten), Dispo hat Vorrang
             if((_e[f]||'')!==(t[f]||'')){ t[f]=_e[f]||''; _ch=true; }
           });
           if(_ch) _geaendert++;
@@ -11995,6 +12018,14 @@ function autoSyncBootFetch(){
           if(!t.calEventId || t.uhrzeit_bis) return;
           var _e=_feedById[t.calEventId];
           if(_e && _e.uhrzeit_bis){ t.uhrzeit_bis=_e.uhrzeit_bis; _ergaenzt++; }
+        });
+        // --- Build 1246: Regie aus der Kalender-Notiz rueckwirkend nachtragen ---
+        // Rein additiv wie die Endzeit oben: nur leere Felder, auch vergangene und
+        // verknuepfte Termine. Vorhandene Regie (Dispo, Hand) wird nie angefasst.
+        (db.termine||[]).forEach(function(t){
+          if(!t.calEventId || (t.regie||'').trim()) return;
+          var _e=_feedById[t.calEventId];
+          if(_e && _e.regie){ t.regie=_e.regie; _ergaenzt++; }
         });
         if(neu.length||_entfernt||_geaendert||_ergaenzt){
           db.termine.sort(function(a,b){ return (a.datum||'').localeCompare(b.datum||''); });
@@ -21613,6 +21644,9 @@ function dokMergeIntoTermin(d, termin){
     }
   }
   mergeField('titel',       d.titel,       'Titel');
+  // Build 1247: Regie wieder wie Titel (Tims Wunsch): Dispo uebernimmt, der Termin
+  // zeigt "Dokument hat Felder eingetragen — bitte pruefen" mit Uebernehmen/Verwerfen.
+  // Von Hand gesetzte Regie bleibt und erscheint nur als Vorschlag (_manualFields).
   mergeField('regie',       d.regie,       'Regie');
   mergeField('rolle',       d.rolle,       'Rolle');
   // ── Build 1180: Dispo-Zeiten still uebernehmen ────────────────────────
@@ -26209,8 +26243,63 @@ function rZahlungen(){
       html+='</div>';
     }
 
+    html+=_regieStatHtml1246(all);   // Build 1246
     el.innerHTML=html; return;
   }
+}
+
+// ── Build 1246: NACH REGIE ────────────────────────────────────────────
+// Termine, Stunden, Projekte und Gage je Synchronregie, fuer das gewaehlte Jahr.
+// Stunden nur aus Terminen mit Beginn UND Ende. Projekte ueber den Titel: Studio-
+// Praefix "FFS / " und Klammerzusaetze "(Retakes)" fallen weg, damit
+// "La Familia" und "FFS / La Familia" ein Projekt sind.
+var _regieSort1246 = 'stunden', _regieAlle1246 = false;
+function regieSortSetzen(k){ _regieSort1246=k; rZahlungen(); }
+function regieAlleToggle(){ _regieAlle1246=!_regieAlle1246; rZahlungen(); }
+function _regieProjektKey(titel){
+  var x=String(titel||'').toLowerCase();
+  if(x.indexOf(' / ')>=0) x=x.split(' / ').pop();
+  return x.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
+}
+function _regieStatHtml1246(all){
+  var M={}, mitRegie=0;
+  (all||[]).forEach(function(t){
+    var r=String(t.regie||'').replace(/\s+/g,' ').trim(); if(!r) return;
+    mitRegie++;
+    var k=r.toLowerCase();
+    if(!M[k]) M[k]={name:r,termine:0,stunden:0,projekte:{},gage:0};
+    var e=M[k]; e.termine++;
+    if(/^[a-zà-ÿ]/.test(e.name) && /^[A-ZÀ-Þ]/.test(r)) e.name=r;   // gross geschriebene Variante anzeigen
+    if(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis)){
+      var mn=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5)));
+      if(mn>0) e.stunden+=mn/60;
+    }
+    var pk=_regieProjektKey(t.titel); if(pk) e.projekte[pk]=1;
+    try{ e.gage+=calcNet(t)||0; }catch(err){ console.error('[1246 regie]', err); }
+  });
+  var keys=Object.keys(M); if(!keys.length) return '';
+  var wert=function(e){ return _regieSort1246==='termine'?e.termine:_regieSort1246==='projekte'?Object.keys(e.projekte).length:_regieSort1246==='gage'?e.gage:e.stunden; };
+  keys.sort(function(a,b){ return wert(M[b])-wert(M[a]) || M[b].termine-M[a].termine; });
+  var max=wert(M[keys[0]])||1;
+  var zeig=_regieAlle1246?keys:keys.slice(0,10);
+  var tab=function(k,l){ var a=_regieSort1246===k; return '<span onclick="regieSortSetzen(\''+k+'\')" style="cursor:pointer;touch-action:manipulation;font-size:11px;padding:4px 9px;border-radius:12px;'+(a?'background:var(--accent);color:#fff;font-weight:700':'background:var(--cream2);color:var(--ink2)')+'">'+l+'</span>'; };
+  var h='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
+    +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:2px">NACH REGIE</div>'
+    +'<div style="font-size:10.5px;color:var(--ink3);margin-bottom:10px">'+mitRegie+' von '+(all||[]).length+' Terminen mit Regie</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+tab('stunden','Stunden')+tab('termine','Termine')+tab('projekte','Projekte')+tab('gage','Gage')+'</div>';
+  zeig.forEach(function(k,i){
+    var e=M[k], v=wert(e), w=Math.round((v/max)*100), np=Object.keys(e.projekte).length;
+    var haupt=_regieSort1246==='gage'?fmtEur(e.gage):_regieSort1246==='termine'?e.termine+' T.':_regieSort1246==='projekte'?np+' Proj.':(Math.round(e.stunden*10)/10).toString().replace('.',',')+' h';
+    h+='<div style="margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px">'
+      +'<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--warm);font-weight:600;white-space:nowrap">'+haupt
+      +' <span style="font-weight:400;color:var(--ink3)">· '+e.termine+' T. · '+(Math.round(e.stunden*10)/10).toString().replace('.',',')+' h · '+np+' P.</span></div></div>'
+      +'<div style="height:7px;background:var(--cream2);border-radius:4px;overflow:hidden">'
+      +'<div style="height:100%;width:'+w+'%;background:var(--accent2);border-radius:4px"></div></div></div>';
+  });
+  if(keys.length>10) h+='<div onclick="regieAlleToggle()" style="cursor:pointer;font-size:11px;color:var(--accent);font-weight:700;padding-top:4px">'+(_regieAlle1246?'weniger anzeigen':'alle '+keys.length+' anzeigen')+'</div>';
+  return h+'</div>';
 }
 
 var _zpOffen1223 = {};   // Build 1223: aufgeklappte Produktionen im Tab "Produktion"
