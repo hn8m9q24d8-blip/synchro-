@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1247';
+  if(elH) elH.textContent = '1249';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -11713,6 +11713,10 @@ function _icsRegieAusNotiz(block){
   var w = d.split(/\s+/);
   if(w.length<2 || w.length>4) return '';
   if(!w.every(function(x){ return /^[A-Za-zÀ-ÖØ-öø-ÿ'’.\-]+$/.test(x); })) return '';
+  // Build 1249: Jedes Wort gross, ausser Namenspartikeln. Sonst rutschte die Notiz
+  // "PL statt Sven Hasper" als Regie durch (Nachtragung 05.10.2026).
+  var _part = {von:1,van:1,der:1,den:1,de:1,du:1,zu:1,la:1,le:1,di:1,da:1,dos:1,del:1,ten:1,ter:1};
+  if(!w.every(function(x){ return /^[A-ZÀ-ÖØ-Þ]/.test(x) || _part[x.toLowerCase()]; })) return '';
   return d;
 }
 function icsParse(text){
@@ -26243,7 +26247,7 @@ function rZahlungen(){
       html+='</div>';
     }
 
-    html+=_regieStatHtml1246(all);   // Build 1246
+    html+=_regieStatHtml1246(all, calcNet);   // Build 1246; 1248: calcNet ist lokal in rZahlungen, daher uebergeben
     el.innerHTML=html; return;
   }
 }
@@ -26253,7 +26257,7 @@ function rZahlungen(){
 // Stunden nur aus Terminen mit Beginn UND Ende. Projekte ueber den Titel: Studio-
 // Praefix "FFS / " und Klammerzusaetze "(Retakes)" fallen weg, damit
 // "La Familia" und "FFS / La Familia" ein Projekt sind.
-var _regieSort1246 = 'stunden', _regieAlle1246 = false;
+var _regieSort1246 = 'projekte', _regieAlle1246 = false;   // Build 1248: Projekte zuerst
 function regieSortSetzen(k){ _regieSort1246=k; rZahlungen(); }
 function regieAlleToggle(){ _regieAlle1246=!_regieAlle1246; rZahlungen(); }
 function _regieProjektKey(titel){
@@ -26261,7 +26265,7 @@ function _regieProjektKey(titel){
   if(x.indexOf(' / ')>=0) x=x.split(' / ').pop();
   return x.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
 }
-function _regieStatHtml1246(all){
+function _regieStatHtml1246(all, netFn){
   var M={}, mitRegie=0;
   (all||[]).forEach(function(t){
     var r=String(t.regie||'').replace(/\s+/g,' ').trim(); if(!r) return;
@@ -26275,7 +26279,9 @@ function _regieStatHtml1246(all){
       if(mn>0) e.stunden+=mn/60;
     }
     var pk=_regieProjektKey(t.titel); if(pk) e.projekte[pk]=1;
-    try{ e.gage+=calcNet(t)||0; }catch(err){ console.error('[1246 regie]', err); }
+    // Build 1248: Gage war immer 0,00 — calcNet ist nur innerhalb von rZahlungen definiert,
+    // der Aufruf hier warf einen ReferenceError, den der catch still auf 0 setzte.
+    try{ e.gage+=(netFn?netFn(t):0)||0; }catch(err){ console.error('[1248 regie]', err); }
   });
   var keys=Object.keys(M); if(!keys.length) return '';
   var wert=function(e){ return _regieSort1246==='termine'?e.termine:_regieSort1246==='projekte'?Object.keys(e.projekte).length:_regieSort1246==='gage'?e.gage:e.stunden; };
@@ -26286,7 +26292,7 @@ function _regieStatHtml1246(all){
   var h='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
     +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:2px">NACH REGIE</div>'
     +'<div style="font-size:10.5px;color:var(--ink3);margin-bottom:10px">'+mitRegie+' von '+(all||[]).length+' Terminen mit Regie</div>'
-    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+tab('stunden','Stunden')+tab('termine','Termine')+tab('projekte','Projekte')+tab('gage','Gage')+'</div>';
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+tab('projekte','Projekte')+tab('stunden','Stunden')+tab('termine','Termine')+tab('gage','Gage')+'</div>';
   zeig.forEach(function(k,i){
     var e=M[k], v=wert(e), w=Math.round((v/max)*100), np=Object.keys(e.projekte).length;
     var haupt=_regieSort1246==='gage'?fmtEur(e.gage):_regieSort1246==='termine'?e.termine+' T.':_regieSort1246==='projekte'?np+' Proj.':(Math.round(e.stunden*10)/10).toString().replace('.',',')+' h';
