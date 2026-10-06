@@ -5383,7 +5383,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1249';
+  if(elH) elH.textContent = '1251';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -26147,13 +26147,33 @@ function rZahlungen(){
     });
     var _gageProStd=_gStd>0?_gGage/_gStd:0;
     var html='';
-    html+='<div style="background:var(--ink);padding:16px">'
-      +'<div style="color:var(--ink2);font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:8px">JAHRESANALYSE '+_zahlYear+'</div>'
-      +'<div style="display:flex;gap:14px;flex-wrap:wrap">'
-      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Termine</div><div style="font-size:20px;font-weight:900;color:#fff">'+all.length+'</div></div>'
-      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Monat</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(avgMonat)+'</div></div>'
-      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Termin</div><div style="font-size:20px;font-weight:900;color:#fff">'+fmtEur(all.length?totalAll/all.length:0)+'</div></div>'
-      +'<div><div style="font-size:10px;color:var(--ink2);margin-bottom:3px">Ø/Stunde</div><div style="font-size:20px;font-weight:900;color:#fff">'+(_gStd>0?fmtEur(_gageProStd):'&#8212;')+'</div></div>'
+    // Build 1250: Jahresanalyse heller (vorher schwarzer Kasten, Beschriftung kaum lesbar)
+    // und um Arbeitszeit ergaenzt: Stunden bisher und Arbeitstage bei 9 bis 18 Uhr (9 h).
+    // Stunden aus ALLEN Terminen des Jahres bis heute mit Beginn und Ende, auch ohne Gage,
+    // denn gearbeitet ist gearbeitet. Ø/Stunde bleibt wie in 1015 (nur Termine mit Gage).
+    var _heute1250=new Date().toISOString().slice(0,10), _arbStd=0;
+    (db.termine||[]).forEach(function(t){
+      if(!t.datum||!t.datum.startsWith(String(_zahlYear))||t.datum>_heute1250) return;
+      if(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis)){
+        var _m=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5)));
+        if(_m>0) _arbStd+=_m/60;
+      }
+    });
+    var _fz=function(x,d){ return (Math.round(x*Math.pow(10,d))/Math.pow(10,d)).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d}); };
+    var _kz=function(label,wert,sub){ return '<div><div style="font-size:10.5px;color:var(--ink2);margin-bottom:3px">'+label+'</div><div style="font-size:19px;font-weight:900;color:var(--ink)">'+wert+'</div>'+(sub?'<div style="font-size:10px;color:var(--ink3);margin-top:1px">'+sub+'</div>':'')+'</div>'; };
+    html+='<div style="background:var(--cream2);padding:16px;border-bottom:1px solid var(--hair)">'
+      +'<div style="color:var(--ink2);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:12px">JAHRESANALYSE '+_zahlYear+'</div>'
+      // Build 1251: Arbeitswochen dazu (5-Tage-Woche, Sa/So frei) = Arbeitstage / 5
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px 8px;margin-bottom:14px">'
+      +_kz('Termine', all.length)
+      +_kz('Stunden', _arbStd>0?_fz(_arbStd,1):'&#8212;', 'bis heute')
+      +_kz('Arbeitstage', _arbStd>0?_fz(_arbStd/9,1):'&#8212;', '9 bis 18 Uhr')
+      +_kz('Wochen', _arbStd>0?_fz(_arbStd/45,1):'&#8212;', '5-Tage-Woche')
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 10px">'
+      +_kz('Ø/Monat', fmtEur(avgMonat))
+      +_kz('Ø/Termin', fmtEur(all.length?totalAll/all.length:0))
+      +_kz('Ø/Stunde', _gStd>0?fmtEur(_gageProStd):'&#8212;')
       +'</div></div>';
     html+='<div style="padding:16px 16px 8px">'
       +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA2" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="8" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA2)"><path d="M3.2 17.8 9 8.1l3.4 5.3 2.6-3.2 5.8 7.7z"/><path d="M9 8.2l1.6 2.4 1.4-1.8" opacity=".55"/></g></svg>MONATSVERLAUF</div>'
