@@ -1092,10 +1092,10 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
     </div>
     <!-- Segment-Switcher -->
     <div style="display:flex;border:1px solid var(--hair);border-radius:11px;overflow:hidden;margin:8px 0 12px">
-      <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;text-align:center;font-size:11px;font-weight:600;padding:8px 2px;color:#fff;background:var(--accent);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Studio</div>
+      <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;text-align:center;font-size:11px;font-weight:600;padding:8px 2px;color:#fff;background:var(--accent);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Analyse</div>
+      <div id="zt-studio" onclick="zahlTab('studio')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Studio</div>
       <div id="zt-monat" onclick="zahlTab('monat')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Monat</div>
       <div id="zt-produktion" onclick="zahlTab('produktion')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Produktion</div>
-      <div id="zt-analyse" onclick="zahlTab('analyse')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation;border-right:1px solid var(--hair)">Analyse</div>
       <div id="zt-zahldauer" onclick="zahlTab('zahldauer')" style="flex:1;text-align:center;font-size:11px;font-weight:500;padding:8px 2px;color:var(--ink2);cursor:pointer;touch-action:manipulation">Dauer</div>
     </div>
   </div>
@@ -2357,6 +2357,15 @@ function _istTimsBestand(){
   db._mig1229Done = true;
   if(log.length){ db._mig1229 = { am:new Date().toISOString(), verknuepft:log }; console.log('[Build 1229] verknuepft', log); }
   save(db);
+})();
+// ─── Build 1255: Emoji vor der Rolle entfernen ("🎭 Cody") ───
+// Zwei Termine trugen ein Masken-Emoji vor dem Rollennamen (Herkunft: Import).
+// Allgemeine Bereinigung, laeuft fuer alle, einmalig. Nur fuehrende Emojis/Leerzeichen.
+function _ohneEmojiVorne1255(x){ return String(x||'').replace(/^(?:[\u2600-\u27BF\uFE0F\u200D]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]|\s)+/,''); }
+(function(){
+  if(!db || db._mig1255Done) return;
+  (db.termine||[]).forEach(function(t){ if(t.rolle){ var r=_ohneEmojiVorne1255(t.rolle); if(r!==t.rolle) t.rolle=r; } });
+  db._mig1255Done = true; save(db);
 })();
 // ─── Build 1226: K3-Eigenrechnungen ohne Auszahlung heilen ───
 // Gleiche Regel wie im Schreibpfad (Konsolidierung, Build 1226): Eigenrechnung ohne
@@ -5383,7 +5392,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1251';
+  if(elH) elH.textContent = '1256';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5864,7 +5873,7 @@ function tCard(t){
     +(t.studio?'<div class="t-studio">'+esc(t.studio)+'</div>':'')
     +'<div class="t-chips">'
     +(t.uhrzeit?'<span class="chip chip-time">'+esc(t.uhrzeit)+' Uhr</span>':'')
-    +(t.rolle?'<span style="background:var(--cream2);color:var(--ink2);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(t.rolle)+'</span>':'')
+    +(t.rolle?'<span style="background:var(--cream2);color:var(--ink2);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(_ohneEmojiVorne1255(t.rolle))+'</span>':'')
     +tlabel(ampelStatus)
     +'</div>'
     +extraLines
@@ -6259,7 +6268,7 @@ function openDetail(id){
   var header='<div class="big-date">'
     +'<div class="bd-studio" style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'studio\',\'text\')">'+(t.studio?esc(t.studio):'<span style="color:#ccc">Studio ✎</span>')+'</div>'
     +'<div class="bd-titel" style="cursor:pointer" onclick="inlineEditActivate(this,\''+id+'\',\'titel\',\'text\')">'+(t.titel?esc(t.titel):'<span style="color:#ccc">Produktionstitel ✎</span>')+'</div>'
-    +'<div class="bd-rolle" style="cursor:pointer;min-height:22px" onclick="inlineEditActivate(this,\''+id+'\',\'rolle\',\'text\')">'+(t.rolle?''+esc(t.rolle):'<span style="color:#ccc;font-size:12px">Rolle eingeben ✎</span>')+'</div>'
+    +'<div class="bd-rolle" style="cursor:pointer;min-height:22px" onclick="inlineEditActivate(this,\''+id+'\',\'rolle\',\'text\')">'+(t.rolle?''+esc(_ohneEmojiVorne1255(t.rolle)):'<span style="color:#ccc;font-size:12px">Rolle eingeben ✎</span>')+'</div>'
     +'<div class="bd-dateline">'
     +'<div class="bd-day">'+d.getDate()+'</div>'
     +'<div class="bd-month">'+dayNames[d.getDay()]+', '+monthNames[d.getMonth()]+' '+d.getFullYear()+'</div>'
@@ -13593,7 +13602,7 @@ function rProfil(){
 
 // ══ BUCHHALTUNG HELPERS ══════════════════════════════════════
 var _verdYear = new Date().getFullYear();
-var _zahlTab = 'studio';
+var _zahlTab = 'analyse';   // Build 1252: Analyse ist der erste Reiter
 var _reStatus = 'offen';
 var _rePositionen = [];
 
@@ -25769,7 +25778,7 @@ function printRechnung(){
 }
 
 // ── ZAHLUNGEN ────────────────────────────────────────────────
-var _zahlTab = 'studio';
+var _zahlTab = 'analyse';   // Build 1252: Analyse ist der erste Reiter
 var _zahlYear = new Date().getFullYear();
 
 function zahlTab(tab){
@@ -26137,13 +26146,25 @@ function rZahlungen(){
     }
     var monthMax=Math.max.apply(null,monthTrend)||1;
     // Ø Gage/Stunde: nur Termine mit Anfang UND Ende (Gage/Stunden aus gleicher Menge)
-    var _gStd=0,_gGage=0;
+    var _gStd=0,_gGage=0,_gProd1256={};
+    var _prodKey1256=function(t){ return String(t.studio||'').toLowerCase().trim()+'|'+_regieProjektKey(t.titel); };
     all.forEach(function(t){
       if(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis)){
         var _min=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5)));
         var _net=calcNet(t);
-        if(_min>0 && _net>0){ _gStd+=_min/60; _gGage+=_net; }
+        if(_min>0 && _net>0){ _gStd+=_min/60; _gGage+=_net; _gProd1256[_prodKey1256(t)]=1; }
       }
+    });
+    // Build 1256: Produktions-Zusammenfassung. Pauschalen ueber mehrere Tage stehen oft
+    // nur an einem Termin (Orbitals, Toneworx: 3.300 € am 26.02., Tage 18. und 24.02.
+    // ohne Gage). Die Stunden dieser Geschwister-Termine (gleiches Studio, gleiche
+    // Produktion, gueltige Zeit, selbes Jahr) zaehlen jetzt mit, sonst 825 €/h.
+    (db.termine||[]).forEach(function(t){
+      if(!t.datum||!t.datum.startsWith(String(_zahlYear))) return;
+      if(!(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis))) return;
+      if((calcNet(t)||0)>0 || !_gProd1256[_prodKey1256(t)]) return;
+      var _m2=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5)));
+      if(_m2>0) _gStd+=_m2/60;
     });
     var _gageProStd=_gStd>0?_gGage/_gStd:0;
     var html='';
@@ -26161,32 +26182,72 @@ function rZahlungen(){
     });
     var _fz=function(x,d){ return (Math.round(x*Math.pow(10,d))/Math.pow(10,d)).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d}); };
     var _kz=function(label,wert,sub){ return '<div><div style="font-size:10.5px;color:var(--ink2);margin-bottom:3px">'+label+'</div><div style="font-size:19px;font-weight:900;color:var(--ink)">'+wert+'</div>'+(sub?'<div style="font-size:10px;color:var(--ink3);margin-top:1px">'+sub+'</div>':'')+'</div>'; };
-    html+='<div style="background:var(--cream2);padding:16px;border-bottom:1px solid var(--hair)">'
-      +'<div style="color:var(--ink2);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:12px">JAHRESANALYSE '+_zahlYear+'</div>'
-      // Build 1251: Arbeitswochen dazu (5-Tage-Woche, Sa/So frei) = Arbeitstage / 5
-      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px 8px;margin-bottom:14px">'
-      +_kz('Termine', all.length)
-      +_kz('Stunden', _arbStd>0?_fz(_arbStd,1):'&#8212;', 'bis heute')
-      +_kz('Arbeitstage', _arbStd>0?_fz(_arbStd/9,1):'&#8212;', '9 bis 18 Uhr')
-      +_kz('Wochen', _arbStd>0?_fz(_arbStd/45,1):'&#8212;', '5-Tage-Woche')
-      +'</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 10px">'
-      +_kz('Ø/Monat', fmtEur(avgMonat))
-      +_kz('Ø/Termin', fmtEur(all.length?totalAll/all.length:0))
-      +_kz('Ø/Stunde', _gStd>0?fmtEur(_gageProStd):'&#8212;')
-      +'</div></div>';
-    html+='<div style="padding:16px 16px 8px">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA2" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="8" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA2)"><path d="M3.2 17.8 9 8.1l3.4 5.3 2.6-3.2 5.8 7.7z"/><path d="M9 8.2l1.6 2.4 1.4-1.8" opacity=".55"/></g></svg>MONATSVERLAUF</div>'
-      +'<div style="display:flex;align-items:flex-end;gap:3px;height:80px">';
+    // ── Build 1252: Jahresanalyse als eine Karte (Tims Vorschlag 3 vom 06.10.2026) ──
+    // Oben Kernzahl (Ø Monat) und Anteil an einer Vollzeitstelle, darunter der
+    // Monatsverlauf als Hauptelement. Monat antippen zeigt dessen Gage oben, erneut
+    // tippen fuehrt zurueck. Darunter die Kennzahlen als antippbare Liste. Der alte
+    // Block "Monatsverlauf" ist hier aufgegangen; Studios, Produktionen usw. folgen
+    // wie bisher darunter.
+    var _jaHeute=new Date(), _jaEnde=(_zahlYear<_jaHeute.getFullYear())?new Date(_zahlYear,11,31):_jaHeute;
+    // Build 1253: Vollzeit realistisch (Tim, 06.10.2026, recherchiert): 40-Stunden-Woche
+    // (Destatis: Vollzeit-Arbeitnehmer seit 1991 stabil ~40 h; faktische Normalarbeitszeit),
+    // 30 Urlaubstage (tariflicher Standard, anteilig bis heute), Berliner Feiertage an
+    // Werktagen abgezogen. Vorher: alle Werktage x 9 h, ohne Urlaub und Feiertage.
+    var _jaFt=_feiertageBerlin1253(_zahlYear), _jaWt=0, _jaFtWt=0;
+    for(var _d=new Date(_zahlYear,0,1); _d<=_jaEnde; _d.setDate(_d.getDate()+1)){
+      var _wd=_d.getDay(); if(_wd===0||_wd===6) continue;
+      _jaWt++; if(_jaFt[_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0')]) _jaFtWt++;
+    }
+    var _jaJt=((_zahlYear%4===0&&_zahlYear%100!==0)||_zahlYear%400===0)?366:365;
+    var _jaVerg=Math.min(_jaJt,Math.floor((_jaEnde-new Date(_zahlYear,0,1))/86400000)+1);
+    var _jaUrl=Math.round(30*_jaVerg/_jaJt);
+    var _jaArbT=Math.max(0,_jaWt-_jaFtWt-_jaUrl), _jaVoll=_jaArbT*8, _jaPct=_jaVoll>0?Math.round(_arbStd/_jaVoll*100):0;
+    var _jaCnt=[0,0,0,0,0,0,0,0,0,0,0,0], _jaMitZeit=0;
+    all.forEach(function(t){ var mi=parseInt((t.datum||'').slice(5,7))-1; if(mi>=0&&mi<12) _jaCnt[mi]++; });
+    var _jaBisHeute=0;   // Build 1254: Vollstaendigkeit der Zeitangaben sichtbar machen
+    (db.termine||[]).forEach(function(t){ if(!t.datum||!t.datum.startsWith(String(_zahlYear))||t.datum>_heute1250) return; _jaBisHeute++; if(t.uhrzeit&&t.uhrzeit_bis&&t.uhrzeit_bis>t.uhrzeit) _jaMitZeit++; });
+    // Build 1255: Termin- und Zeitkennzahlen nur aus Terminen mit gueltigem Beginn und
+    // Ende (Tim, 06.10.2026). Termine ohne Zeit (Pauschalen, Nachgagen, Tippfehler wie
+    // 13:35 bis 13:00) verfaelschten Ø Termin und die Regie-Statistik. Gesamtsumme,
+    // Ø Monat, Monatsverlauf und Studios bleiben vollstaendig: das ist Einkommen.
+    var _jaZeitOk=function(t){ return !!(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis)&&t.uhrzeit_bis>t.uhrzeit); };
+    var _allZ=all.filter(_jaZeitOk), _sumZ=0; _allZ.forEach(function(t){ _sumZ+=calcNet(t)||0; });
+    var _ohneZ=all.length-_allZ.length;
+    var _jaRows=[
+      ['Ø Monat', fmtEur(avgMonat), 'Durchschnitt pro Monat', (_zahlYear<_jaHeute.getFullYear()?'ganzes Jahr':'Januar bis heute')],
+      ['Ø Stunde', _gStd>0?fmtEur(_gageProStd):'&#8212;', 'Pro Stunde verdient', 'Gage geteilt durch Studiostunden'],
+      ['Ø Termin', fmtEur(_allZ.length?_sumZ/_allZ.length:0), 'Durchschnitt pro Termin', (_jaMitZeit?('bei Ø '+_fz(_arbStd/_jaMitZeit,1)+' Stunden'):'')+(_ohneZ?' · ohne '+_ohneZ+' Termine ohne Uhrzeit':'')],
+      ['Termine', String(_allZ.length), 'Termine mit Gage und Uhrzeit', _ohneZ?(_ohneZ+' weitere ohne gültige Uhrzeit, nicht gezählt'):String(_zahlYear)],
+      ['Stunden', _arbStd>0?_fz(_arbStd,1):'&#8212;', 'Gearbeitet', _jaMitZeit+' von '+_jaBisHeute+' Terminen mit Uhrzeit · gebuchte Studiozeit'],
+      ['Arbeitstage', _arbStd>0?_fz(_arbStd/8,1):'&#8212;', 'Arbeitstage', 'à 8 Stunden'],
+      ['Wochen', _arbStd>0?_fz(_arbStd/40,1):'&#8212;', 'Arbeitswochen', 'à 40 Stunden, 5-Tage-Woche'],
+      ['Vollzeit', _jaPct+' %', 'Anteil an einer Vollzeitstelle', _fz(_arbStd,1).replace(/,0$/,'')+' von '+_fz(_jaVoll,0)+' h · 40-h-Woche, 30 Tage Urlaub, Feiertage Berlin']
+    ];
+    window._ja1252={rows:_jaRows, m:monthTrend.slice(), c:_jaCnt, y:_zahlYear, mn:MONTHS_FULL, sel:-1};
+    html+='<div style="padding:12px 16px 4px">'
+      +'<div style="background:var(--paper2);border:1px solid var(--hair);border-radius:14px;padding:14px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:12px">'
+      +'<div style="min-width:0"><div id="ja-lab" style="font-size:11.5px;color:var(--ink3)">'+_jaRows[0][2]+'</div>'
+      +'<div id="ja-val" style="font-family:var(--serif);font-size:30px;line-height:1.15;color:var(--ink)">'+_jaRows[0][1]+'</div>'
+      +'<div id="ja-sub" style="font-size:11.5px;color:var(--ink3)">'+_jaRows[0][3]+'</div></div>'
+      +'<div onclick="ja1252Zeile(7)" style="text-align:right;flex-shrink:0;cursor:pointer;touch-action:manipulation"><div style="font-family:var(--serif);font-size:22px;color:var(--accent)">'+_jaPct+' %</div>'
+      +'<div style="font-size:11px;color:var(--ink3)">einer Vollzeitstelle</div></div></div>'
+      +'<div style="display:flex;align-items:flex-end;gap:4px;height:110px">';
     monthTrend.forEach(function(v,i){
-      var h2=Math.round((v/monthMax)*76);
+      var h2=Math.max(v>0?3:0,Math.round((v/monthMax)*92));
       var isNow=new Date().getFullYear()===_zahlYear&&new Date().getMonth()===i;
-      html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">'
-        +'<div style="width:100%;height:'+h2+'px;background:'+(isNow?'var(--accent)':'var(--hair)')+';border-radius:3px 3px 0 0;min-height:'+(v>0?3:0)+'px"></div>'
-        +'<div style="font-size:8px;color:var(--ink3);font-weight:600">'+MONTHS[i]+'</div>'
-        +'</div>';
+      html+='<div onclick="ja1252Monat('+i+')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;touch-action:manipulation">'
+        +'<div id="ja-b'+i+'" data-now="'+(isNow?1:0)+'" style="width:100%;height:'+h2+'px;background:'+(isNow?'var(--accent2)':'var(--hair)')+';border-radius:3px 3px 0 0"></div>'
+        +'<div style="font-size:9px;color:var(--ink3);margin-top:3px">'+MONTHS[i]+'</div></div>';
     });
-    html+='</div></div>';
+    html+='</div><div style="font-size:11px;color:var(--ink4);margin-top:8px">Monat antippen · nochmal tippen für den Jahresschnitt</div></div>'
+      +'<div style="background:var(--paper2);border:1px solid var(--hair);border-radius:14px;padding:4px 14px;margin-top:10px">'
+      +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px">';
+    _jaRows.forEach(function(r,i){
+      html+='<div id="ja-r'+i+'" onclick="ja1252Zeile('+i+')" style="display:flex;justify-content:space-between;gap:6px;padding:9px 0;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer;touch-action:manipulation">'
+        +'<span style="color:'+(i===0?'var(--accent)':'var(--ink3)')+'">'+r[0]+'</span><span style="white-space:nowrap;color:'+(i===0?'var(--accent)':'var(--ink)')+';font-weight:'+(i===0?'600':'400')+'">'+r[1]+'</span></div>';
+    });
+    html+='</div></div></div>';
     html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
       +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA1)"><path d="M5.1 19.9 5 9.2M12 20 11.9 4.3M18.9 19.8l.1-7.9"/><path d="M5.1 9.2c2-1.4 4.9-1.5 6.8-4.8" opacity=".4"/></g></svg>TOP STUDIOS</div>';
     studioKeys.forEach(function(k,i){
@@ -26267,7 +26328,7 @@ function rZahlungen(){
       html+='</div>';
     }
 
-    html+=_regieStatHtml1246(all, calcNet);   // Build 1246; 1248: calcNet ist lokal in rZahlungen, daher uebergeben
+    html+=_regieStatHtml1246(_allZ, calcNet);   // Build 1255: nur Termine mit gueltiger Zeit   // Build 1246; 1248: calcNet ist lokal in rZahlungen, daher uebergeben
     el.innerHTML=html; return;
   }
 }
@@ -26277,6 +26338,40 @@ function rZahlungen(){
 // Stunden nur aus Terminen mit Beginn UND Ende. Projekte ueber den Titel: Studio-
 // Praefix "FFS / " und Klammerzusaetze "(Retakes)" fallen weg, damit
 // "La Familia" und "FFS / La Familia" ein Projekt sind.
+// Build 1253: Gesetzliche Feiertage Berlin. Feste Tage plus Ostern-abhaengige
+// (Karfreitag, Ostermontag, Himmelfahrt, Pfingstmontag). Frauentag seit 2019.
+// 2020 und 2025 zusaetzlich 8. Mai (Tag der Befreiung, einmalig in Berlin).
+function _feiertageBerlin1253(y){
+  var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+      h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+      mo=Math.floor((h+l-7*m+114)/31), da=((h+l-7*m+114)%31)+1, os=new Date(y,mo-1,da);
+  var key=function(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); };
+  var plus=function(n){ var x=new Date(os); x.setDate(x.getDate()+n); return key(x); };
+  var F={}; [y+'-01-01',y+'-05-01',y+'-10-03',y+'-12-25',y+'-12-26',plus(-2),plus(1),plus(39),plus(50)].forEach(function(k2){F[k2]=1;});
+  if(y>=2019) F[y+'-03-08']=1;
+  if(y===2020||y===2025) F[y+'-05-08']=1;
+  return F;
+}
+// Build 1252: Jahresanalyse-Karte, Klicks ohne Neuaufbau der Liste
+function _ja1252Oben(lab,val,sub){
+  var a=document.getElementById('ja-lab'),b=document.getElementById('ja-val'),c=document.getElementById('ja-sub');
+  if(a) a.innerHTML=lab; if(b) b.innerHTML=val; if(c) c.innerHTML=sub;
+}
+function _ja1252Markiere(zeile,monat){
+  var J=window._ja1252; if(!J) return;
+  J.rows.forEach(function(r,i){ var el=document.getElementById('ja-r'+i); if(!el) return;
+    var on=i===zeile; el.children[0].style.color=on?'var(--accent)':'var(--ink3)'; el.children[1].style.color=on?'var(--accent)':'var(--ink)'; el.children[1].style.fontWeight=on?'600':'400'; });
+  for(var i=0;i<12;i++){ var b=document.getElementById('ja-b'+i); if(!b) continue;
+    b.style.background = i===monat ? 'var(--accent)' : (b.getAttribute('data-now')==='1'?'var(--accent2)':'var(--hair)'); }
+}
+function ja1252Zeile(i){ var J=window._ja1252; if(!J||!J.rows[i]) return; J.sel=-1; _ja1252Markiere(i,-1); _ja1252Oben(J.rows[i][2],J.rows[i][1],J.rows[i][3]); }
+function ja1252Monat(i){
+  var J=window._ja1252; if(!J) return;
+  if(J.sel===i || !(J.m[i]>0)){ ja1252Zeile(0); return; }
+  J.sel=i; _ja1252Markiere(-1,i);
+  _ja1252Oben(J.mn[i]+' '+J.y, fmtEur(J.m[i]), J.c[i]+' Termine'+((new Date().getFullYear()===J.y&&new Date().getMonth()===i)?' · laufender Monat':''));
+}
+
 var _regieSort1246 = 'projekte', _regieAlle1246 = false;   // Build 1248: Projekte zuerst
 function regieSortSetzen(k){ _regieSort1246=k; rZahlungen(); }
 function regieAlleToggle(){ _regieAlle1246=!_regieAlle1246; rZahlungen(); }
@@ -28652,7 +28747,7 @@ function _mev6PeekHtml(r,idx){
         inner+='<div style="display:flex;justify-content:space-between;gap:8px;padding:1px 0 1px 10px">'
           +'<span style="min-width:0"><span style="color:#111;font-weight:600">'+(t.datum||'?')+'</span> · '
           +((t.titel||t.produktion)?('<span style="color:#333">'+esc(t.titel||t.produktion)+'</span>'):'<span style="color:#999">ohne Titel</span>')
-          +(t.rolle?(' · '+esc(t.rolle)):'')+'</span>'
+          +(t.rolle?(' · '+esc(_ohneEmojiVorne1255(t.rolle))):'')+'</span>'
           +(z.anteil>0?('<span style="color:#888;white-space:nowrap">Gage '+fmtEur(z.anteil)+'</span>'):'')
           +'</div>';
       });
