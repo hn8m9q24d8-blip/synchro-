@@ -5392,7 +5392,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1256';
+  if(elH) elH.textContent = '1257';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -12401,10 +12401,24 @@ function rHeute(){
     if(_nEl){
       var _yr=String(new Date().getFullYear());
       var _disp=0,_bez=0,_off=0;
+      // Build 1257: Gleiche Rechnung wie Mein Jahr (calcNet, Build 1209). Liegt eine
+      // Abrechnung vor, zaehlt ihr Termin-Anteil, sonst die Kalkulation. Vorher rechnete
+      // die Startseite immer nur Kalkulation: 06.10.2026 Dispo 88.053,60 statt 89.721,30,
+      // Bezahlt 62.638,40 statt 64.380,20, obwohl der Kommentar "gleiche Quelle" sagte.
+      var _ist1257={};
+      try{
+        if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
+          dbv2.abrechnung_termin_links.forEach(function(l){
+            var a=(dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; });
+            if(a && a._ueberholt_durch) return;
+            var v=parseFloat(l.brutto_anteil_display); if(!(v>0)) return;
+            _ist1257[l.termin_id]=(_ist1257[l.termin_id]||0)+v;
+          });
+        }
+      }catch(e){ console.error('[1257 heute]', e); _ist1257={}; }
       (db.termine||[]).forEach(function(t){
         if(!t.datum || t.datum.slice(0,4)!==_yr) return;
-        // calcNet() lebt in rZahlungen und ist hier NICHT erreichbar -> selbst rechnen
-        var _net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
+        var _net=(_ist1257[t.id]>0)?_ist1257[t.id]:((parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0));
         if(!_net) return;
         _disp+=_net;
         var _st=(typeof _terminZahlStatus==='function')?_terminZahlStatus(t.id):'';
