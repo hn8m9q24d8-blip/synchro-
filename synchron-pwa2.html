@@ -5392,7 +5392,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1257';
+  if(elH) elH.textContent = '1259';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -26217,7 +26217,8 @@ function rZahlungen(){
     var _jaUrl=Math.round(30*_jaVerg/_jaJt);
     var _jaArbT=Math.max(0,_jaWt-_jaFtWt-_jaUrl), _jaVoll=_jaArbT*8, _jaPct=_jaVoll>0?Math.round(_arbStd/_jaVoll*100):0;
     var _jaCnt=[0,0,0,0,0,0,0,0,0,0,0,0], _jaMitZeit=0;
-    all.forEach(function(t){ var mi=parseInt((t.datum||'').slice(5,7))-1; if(mi>=0&&mi<12) _jaCnt[mi]++; });
+    var _jaFut=[0,0,0,0,0,0,0,0,0,0,0,0];   // Build 1258: schon kalkulierte Termine nach heute
+    all.forEach(function(t){ var mi=parseInt((t.datum||'').slice(5,7))-1; if(mi>=0&&mi<12){ _jaCnt[mi]++; if(t.datum>_heute1250) _jaFut[mi]+=(calcNet(t)||0); } });
     var _jaBisHeute=0;   // Build 1254: Vollstaendigkeit der Zeitangaben sichtbar machen
     (db.termine||[]).forEach(function(t){ if(!t.datum||!t.datum.startsWith(String(_zahlYear))||t.datum>_heute1250) return; _jaBisHeute++; if(t.uhrzeit&&t.uhrzeit_bis&&t.uhrzeit_bis>t.uhrzeit) _jaMitZeit++; });
     // Build 1255: Termin- und Zeitkennzahlen nur aus Terminen mit gueltigem Beginn und
@@ -26237,7 +26238,7 @@ function rZahlungen(){
       ['Wochen', _arbStd>0?_fz(_arbStd/40,1):'&#8212;', 'Arbeitswochen', 'à 40 Stunden, 5-Tage-Woche'],
       ['Vollzeit', _jaPct+' %', 'Anteil an einer Vollzeitstelle', _fz(_arbStd,1).replace(/,0$/,'')+' von '+_fz(_jaVoll,0)+' h · 40-h-Woche, 30 Tage Urlaub, Feiertage Berlin']
     ];
-    window._ja1252={rows:_jaRows, m:monthTrend.slice(), c:_jaCnt, y:_zahlYear, mn:MONTHS_FULL, sel:-1};
+    window._ja1252={rows:_jaRows, m:monthTrend.slice(), c:_jaCnt, f:_jaFut, y:_zahlYear, mn:MONTHS_FULL, sel:-1};
     html+='<div style="padding:12px 16px 4px">'
       +'<div style="background:var(--paper2);border:1px solid var(--hair);border-radius:14px;padding:14px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:12px">'
@@ -26262,32 +26263,35 @@ function rZahlungen(){
         +'<span style="color:'+(i===0?'var(--accent)':'var(--ink3)')+'">'+r[0]+'</span><span style="white-space:nowrap;color:'+(i===0?'var(--accent)':'var(--ink)')+';font-weight:'+(i===0?'600':'400')+'">'+r[1]+'</span></div>';
     });
     html+='</div></div></div>';
-    html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA1)"><path d="M5.1 19.9 5 9.2M12 20 11.9 4.3M18.9 19.8l.1-7.9"/><path d="M5.1 9.2c2-1.4 4.9-1.5 6.8-4.8" opacity=".4"/></g></svg>TOP STUDIOS</div>';
-    studioKeys.forEach(function(k,i){
-      var v=studios[k]; var w=Math.round((v/studioMax)*100);
-      html+='<div style="margin-bottom:10px">'
-        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
-        +'<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%">'+esc(k)+'</div>'
-        +'<div style="font-size:12px;font-weight:600;color:var(--accent)">'+fmtEur(v)+'</div></div>'
-        +'<div style="height:7px;background:var(--cream2);border-radius:4px;overflow:hidden">'
-        +'<div style="height:100%;width:'+w+'%;background:'+COLORS[i%COLORS.length]+';border-radius:4px"></div>'
-        +'</div></div>';
+    // ── Build 1259: Top Studios und Top Produktionen sortierbar ─────────────
+    // Reiter Gage / Stunden / Projekte (Studios) bzw. Termine (Produktionen) / € pro
+    // Stunde. Stunden und € pro Stunde rechnen wie Ø Stunde (gueltige Zeit, bis heute,
+    // Geschwister-Termine derselben Produktion ohne eigene Gage zaehlen mit). Bei
+    // € pro Stunde nur Eintraege mit mindestens 4 Stunden, sonst kippt ein Einzeltermin.
+    var _rkMin=function(t){ if(!(t.uhrzeit&&t.uhrzeit_bis&&/^\d\d:\d\d/.test(t.uhrzeit)&&/^\d\d:\d\d/.test(t.uhrzeit_bis))) return 0;
+      var m=(parseInt(t.uhrzeit_bis.slice(0,2))*60+parseInt(t.uhrzeit_bis.slice(3,5)))-(parseInt(t.uhrzeit.slice(0,2))*60+parseInt(t.uhrzeit.slice(3,5))); return m>0?m:0; };
+    var _rkS={}, _rkP={}, _rkPool={};
+    var _rkEntry=function(M,k,name){ if(!M[k]) M[k]={name:name,g:0,h:0,gz:0,n:0,proj:{}}; return M[k]; };
+    all.forEach(function(t){
+      var g=calcNet(t)||0, sk=(t.studio||'Unbekannt').toLowerCase(), pn=(t.titel||t.studio||'?').trim(), pk=pn.toLowerCase().replace(/\s+/g,' '), m=_rkMin(t);
+      var a=_rkEntry(_rkS,sk,sk), b=_rkEntry(_rkP,pk,pn);
+      if(b.name===b.name.toUpperCase() && pn!==pn.toUpperCase()) b.name=pn;   // "THE TERROR" und "The Terror" sind eine Produktion
+      a.g+=g; b.g+=g; a.n++; b.n++; a.proj[_regieProjektKey(t.titel)]=1;
+      if(m>0 && g>0 && t.datum<=_heute1250){ a.h+=m/60; b.h+=m/60; a.gz+=g; b.gz+=g; _rkPool[_prodKey1256(t)]={s:sk,p:pk}; }
     });
-    html+='</div>';
-    html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
-      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA3" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="12" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA3)"><path d="M17.2 3.8 7 14.1l-2 4.9 4.9-2L20.1 6.8z"/><path d="M14.9 6.2l2.9 2.8"/></g></svg>TOP PRODUKTIONEN</div>';
-    prodKeys.forEach(function(k,i){
-      var v=prodMap[k]; var w=Math.round((v/prodMax)*100);
-      html+='<div style="margin-bottom:10px">'
-        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
-        +'<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%">'+esc(k)+'</div>'
-        +'<div style="font-size:12px;font-weight:600;color:var(--warm)">'+fmtEur(v)+'</div></div>'
-        +'<div style="height:7px;background:var(--cream2);border-radius:4px;overflow:hidden">'
-        +'<div style="height:100%;width:'+w+'%;background:'+COLORS[(i+3)%COLORS.length]+';border-radius:4px"></div>'
-        +'</div></div>';
+    (db.termine||[]).forEach(function(t){
+      if(!t.datum||!t.datum.startsWith(String(_zahlYear))||t.datum>_heute1250||(calcNet(t)||0)>0) return;
+      var m=_rkMin(t), x=_rkPool[_prodKey1256(t)]; if(!m||!x) return;
+      _rkS[x.s].h+=m/60; _rkP[x.p].h+=m/60;
     });
-    html+='</div>';
+    var _rkList=function(M){ return Object.keys(M).map(function(k){ var e=M[k]; return {name:e.name,g:e.g,h:e.h,n:e.n,p:Object.keys(e.proj).length,r:(e.h>=4&&e.gz>0)?e.gz/e.h:0}; }); };
+    window._rk1259={s:_rkList(_rkS), p:_rkList(_rkP), sort:(window._rk1259&&window._rk1259.sort)||{s:'g',p:'g'}, open:{s:'',p:''}, col:COLORS};
+    html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA1" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA1)"><path d="M5.1 19.9 5 9.2M12 20 11.9 4.3M18.9 19.8l.1-7.9"/><path d="M5.1 9.2c2-1.4 4.9-1.5 6.8-4.8" opacity=".4"/></g></svg>TOP STUDIOS</div>'
+      +_rk1259Tabs('s')+'<div id="rk-s">'+_rk1259Liste('s')+'</div></div>';
+    html+='<div style="padding:12px 16px;border-top:1px solid var(--cream2)">'
+      +'<div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:12px"><svg width="15" height="15" viewBox="0 0 24 24" style="display:inline-block;vertical-align:-2px;margin-right:6px" aria-hidden="true"><defs><filter id="krisA3" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="12" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.3" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="var(--ink)" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisA3)"><path d="M17.2 3.8 7 14.1l-2 4.9 4.9-2L20.1 6.8z"/><path d="M14.9 6.2l2.9 2.8"/></g></svg>TOP PRODUKTIONEN</div>'
+      +_rk1259Tabs('p')+'<div id="rk-p">'+_rk1259Liste('p')+'</div></div>';
     var total2=totalAll||1;
     var r=42,cx=60,cy=60,circ=2*Math.PI*r;
     var bezPct=Math.round((bezahltAll/total2)*100);
@@ -26366,6 +26370,48 @@ function _feiertageBerlin1253(y){
   if(y===2020||y===2025) F[y+'-05-08']=1;
   return F;
 }
+// Build 1259: Rangliste fuer Top Studios / Top Produktionen (Reiter + Details)
+function _rk1259Def(w){ return w==='s'
+  ? [['g','Gage'],['h','Stunden'],['p','Projekte'],['r','€ / Stunde']]
+  : [['g','Gage'],['h','Stunden'],['n','Termine'],['r','€ / Stunde']]; }
+function _rk1259Tabs(w){
+  var R=window._rk1259, k=R.sort[w];
+  return '<div id="rk-t'+w+'" style="display:flex;gap:6px;margin-bottom:10px">'+_rk1259Def(w).map(function(d){
+    var on=d[0]===k; return '<div onclick="rk1259Sort(\''+w+'\',\''+d[0]+'\')" style="flex:1;text-align:center;font-size:11.5px;padding:6px 2px;border-radius:14px;cursor:pointer;touch-action:manipulation;'+(on?'background:var(--accent);color:#fff;font-weight:600':'background:var(--cream2);color:var(--ink2)')+'">'+d[1]+'</div>';
+  }).join('')+'</div>';
+}
+function _rk1259Wert(k,e){ return k==='g'?fmtEur(e.g):k==='h'?(Math.round(e.h*10)/10).toLocaleString('de-DE')+' h':k==='p'?e.p+(e.p===1?' Projekt':' Projekte'):k==='n'?e.n+(e.n===1?' Termin':' Termine'):(e.r>0?fmtEur(e.r):'—'); }
+function _rk1259Liste(w){
+  var R=window._rk1259, k=R.sort[w], L=R[w].slice();
+  if(k==='r') L=L.filter(function(e){ return e.r>0; });
+  L.sort(function(a,b){ return (b[k]-a[k]) || (b.g-a.g); });
+  L=L.slice(0,8); if(!L.length) return '<div style="font-size:12px;color:var(--ink3)">Keine Daten</div>';
+  var mx=L[0][k]||1, h='';
+  L.forEach(function(e,i){
+    var w2=Math.max(3,Math.round((e[k]/mx)*100)), op=R.open[w]===e.name, col=R.col[(w==='s'?i:i+3)%R.col.length];
+    h+='<div onclick="rk1259Auf(\''+w+'\','+i+')" data-n="'+esc(e.name).replace(/"/g,'&quot;')+'" style="margin-bottom:10px;cursor:pointer;touch-action:manipulation">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px">'
+      +'<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e.name)+'</div>'
+      +'<div style="font-size:12px;font-weight:600;color:'+(w==='s'?'var(--accent)':'var(--warm)')+';white-space:nowrap">'+_rk1259Wert(k,e)+'</div></div>'
+      +'<div style="height:7px;background:var(--cream2);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+w2+'%;background:'+col+';border-radius:4px"></div></div>';
+    if(op){
+      var z=[['Gage',fmtEur(e.g)],['Stunden',(Math.round(e.h*10)/10).toLocaleString('de-DE')],[w==='s'?'Projekte':'Termine',String(w==='s'?e.p:e.n)],['€ / h',e.r>0?fmtEur(e.r):'—']];
+      h+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px">'+z.map(function(x){
+        return '<div style="background:var(--paper2);border:1px solid var(--hair);border-radius:8px;padding:6px 7px"><div style="font-size:10px;color:var(--ink3)">'+x[0]+'</div><div style="font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap">'+x[1]+'</div></div>';
+      }).join('')+'</div>';
+    }
+    h+='</div>';
+  });
+  if(k==='r') h+='<div style="font-size:10.5px;color:var(--ink4);margin-top:2px">Gage pro gebuchter Studiostunde · nur ab 4 Stunden</div>';
+  return h;
+}
+function rk1259Sort(w,k){ var R=window._rk1259; if(!R) return; R.sort[w]=k; R.open[w]='';
+  var t=document.getElementById('rk-t'+w); if(t) t.outerHTML=_rk1259Tabs(w);
+  var l=document.getElementById('rk-'+w); if(l) l.innerHTML=_rk1259Liste(w); }
+function rk1259Auf(w,i){ var R=window._rk1259; if(!R) return; var l=document.getElementById('rk-'+w); if(!l) return;
+  var el=l.children[i]; var n=el?el.getAttribute('data-n'):''; var tmp=document.createElement('div'); tmp.innerHTML=n; n=tmp.textContent;
+  R.open[w]=(R.open[w]===n)?'':n; l.innerHTML=_rk1259Liste(w); }
+
 // Build 1252: Jahresanalyse-Karte, Klicks ohne Neuaufbau der Liste
 function _ja1252Oben(lab,val,sub){
   var a=document.getElementById('ja-lab'),b=document.getElementById('ja-val'),c=document.getElementById('ja-sub');
@@ -26383,7 +26429,12 @@ function ja1252Monat(i){
   var J=window._ja1252; if(!J) return;
   if(J.sel===i || !(J.m[i]>0)){ ja1252Zeile(0); return; }
   J.sel=i; _ja1252Markiere(-1,i);
-  _ja1252Oben(J.mn[i]+' '+J.y, fmtEur(J.m[i]), J.c[i]+' Termine'+((new Date().getFullYear()===J.y&&new Date().getMonth()===i)?' · laufender Monat':''));
+  // Build 1258: laufender Monat mit Zeitraum "1. bis 7." (Tims Idee, 07.10.2026). Sind
+  // schon Termine nach heute kalkuliert, steht ihr Anteil als "geplant" dabei.
+  var _now=new Date(), _lauf=(_now.getFullYear()===J.y&&_now.getMonth()===i);
+  var _f=(J.f&&J.f[i])||0;
+  _ja1252Oben(J.mn[i]+' '+J.y+(_lauf?' · 1. bis '+_now.getDate()+'.':''), fmtEur(J.m[i]),
+    J.c[i]+' Termine'+(_lauf&&_f>0?' · davon '+fmtEur(_f)+' geplant':''));
 }
 
 var _regieSort1246 = 'projekte', _regieAlle1246 = false;   // Build 1248: Projekte zuerst
