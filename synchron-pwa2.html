@@ -595,6 +595,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
       <div class="settings-row" onclick="switchView('stammdaten')"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris4" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris4)"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.6c1.6 1.4 1.6 3.6 0 5.4-1.6-1.8-1.6-4 0-5.4zM6.6 12c1.4-1.6 3.6-1.6 5.4 0-1.8 1.6-4 1.6-5.4 0zM12 17.4c-1.6-1.4-1.6-3.6 0-5.4 1.6 1.8 1.6 4 0 5.4zM17.4 12c-1.4 1.6-3.6 1.6-5.4 0 1.8-1.6 4-1.6 5.4 0z"/></g></svg><div><div class="sr-label">Stammdaten</div><div class="sr-sub">Name · Adresse · Steuer · Bank</div></div></div><div class="sr-right" id="stammdaten-status">›</div></div>
       <div class="settings-row" onclick="openAuftraggeberSheet()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris5" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris5)"><path d="M4 6.5c5-1 11-1 16 0"/><path d="M5 6.8c-.1 4.5-.1 9 0 13.2M19 6.8c.1 4.2.1 9 0 13.2"/><path d="M9.2 7c-.1 4.3-.1 8.6 0 12.9M14.8 7c.1 4.3.1 8.6 0 12.9"/><path d="M12 7v7"/></g></svg><div><div class="sr-label">Auftraggeber</div><div class="sr-sub">Adressbuch für Rechnungen</div></div></div><div class="sr-right" id="auftraggeber-status">›</div></div>
       <div class="settings-row" onclick="openApiKeySheet()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris6" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris6)"><path d="M14 5c3.5 1 5.5 4.5 4.6 8-.7 2.8-3.2 4.8-6 5-1.4 3-4 5-4 5l-2-2 1.5-1.5-1.5-1.5 1.6-1.6C7 15 8 9.5 11 6.6 11.9 5.7 12.9 5.2 14 5z"/><circle cx="14.5" cy="9.5" r="1.4"/></g></svg><div><div class="sr-label">KI-Schlüssel</div><div class="sr-sub">Anthropic API — liest deine Belege</div></div></div><div class="sr-right" id="api-key-status">Nicht gesetzt</div></div>
+      <div class="settings-row" onclick="toggleOfflineLeser()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4"/></g></svg><div><div class="sr-label">Belege lokal lesen</div><div class="sr-sub">Studio-Gutschriften, GVL, eigene Rechnungen ohne KI</div></div></div><div class="sr-right" id="offline-leser-status">An</div></div>
       <div class="settings-row" onclick="openIcalWorkerSheet()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris7" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris7)"><circle cx="6" cy="12" r="3"/><circle cx="12" cy="12" r="3.4"/><path d="M18.5 9.2A3.4 3.4 0 1 0 20 12"/><circle cx="18" cy="12" r="3.4" opacity=".28"/></g></svg><div><div class="sr-label">Kalender-Sync</div><div class="sr-sub">iCal-URL</div></div></div><div class="sr-right" id="ical-worker-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioEmailSheet()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris8" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris8)"><path d="M4.1 12.1 11 4.2l1.4 4.4 4.7-4.4-1 6.8 3.9 1.1-6.9 7.8-1.4-4.4L7 19.8l1-6.8z"/></g></svg><div><div class="sr-label">E-Mail-Adressen</div><div class="sr-sub">Studios</div></div></div><div class="sr-right" id="studio-email-status">Nicht gesetzt</div></div>
       <div class="settings-row" onclick="openStudioPwSheet()"><div class="sr-left" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" style="flex:none;margin-right:13px" aria-hidden="true"><defs><filter id="kris9" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#kris9)"><path d="M12 3.5l2.5 2.5-.4 1h-4.2l-.4-1z"/><path d="M8 7.5c1-.5 7-.5 8 0 .8 2 .8 9-4 12.5C7.2 16.5 7.2 9.5 8 7.5z"/><path d="M12 11v4M10.5 13h3" opacity=".5"/></g></svg><div><div class="sr-label">PDF-Passwörter</div><div class="sr-sub">Studios</div></div></div><div class="sr-right" id="studio-pw-status">Nicht gesetzt</div></div>
@@ -5392,7 +5393,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1262';
+  if(elH) elH.textContent = '1263';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -13574,6 +13575,8 @@ function rProfil(){
   // API-Key Status in Profil-Liste
   var apiStatus=document.getElementById('api-key-status');
   if(apiStatus) apiStatus.textContent=getKey()?'Gesetzt ✓':'Nicht gesetzt';
+  var _olStatus=document.getElementById('offline-leser-status');
+  if(_olStatus) _olStatus.textContent=_offlineLeserAktiv()?'An':'Aus';
   // iCal Status in Profil-Liste
   var icalStatus=document.getElementById('ical-worker-status');
   var icalUrl=(p.icalWorkerUrl)||localStorage.getItem('ical_worker_url')||'';
@@ -14724,7 +14727,7 @@ function syncDokGotFiles(inp){
 
 function syncAnalyseNew(ids,cb){
   var key=db.profil&&db.profil.apiKey?db.profil.apiKey:null;
-  if(!key){showToast('Kein API-Key - bitte im Profil setzen');cb([]);return;}
+  if(!key && !_offlineLeserAktiv()){showToast('Kein API-Key - bitte im Profil setzen');cb([]);return;} // Build 1263: lokal lesbare Belege brauchen keinen Schluessel
   var docs=(db.dokumente||[]).filter(function(d){return ids.indexOf(d.id)>=0;});
   var results=[],done=0;
   if(!docs.length){cb([]);return;}
@@ -15676,7 +15679,7 @@ function dokQueueClear(){
 // ── ANALYSE ALLE NICHT ZUGEORDNETEN ─────────────────────────
 function dokRefreshAll(){
   var key = db.profil&&db.profil.apiKey ? db.profil.apiKey : null;
-  if(!key){ showToast('Kein API-Key gesetzt'); return; }
+  if(!key && !_offlineLeserAktiv()){ showToast('Kein API-Key gesetzt'); return; } // Build 1263
   var pending = (db.dokumente||[]).filter(function(d){return !d.typ||d.typ==='offen';});
   if(!pending.length){ showToast('Keine neuen Dokumente'); return; }
   var btn = document.getElementById('dok-refresh-btn');
@@ -16265,7 +16268,7 @@ function dokAblehnen(){
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
   var key=db.profil&&db.profil.apiKey?db.profil.apiKey:null;
-  if(!key){showToast('Kein API-Key – bitte im Profil setzen');return;}
+  if(!key && !_offlineLeserAktiv()){showToast('Kein API-Key – bitte im Profil setzen');return;} // Build 1263
   d.typ=null; d.bestaetigt=false;
   showToast('Neu analysieren…');
   dokAnalyseDoc(d,key,function(){
@@ -16442,6 +16445,535 @@ function resizeImageB64(dataURL, maxPx, quality, cb){
   img.src=dataURL;
 }
 
+/* Synchron · Offline-Gagenleser (Build-Kandidat 1263)
+   Liest Gagenabrechnungen lokal aus pdf.js-Textitems. Keine Daten verlassen das Gerät.
+   Einstieg: glLesenAusSeiten(seiten)  -> {format, rows:[...]}
+     seiten = Array pro PDF-Seite: Array von pdf.js-TextItems ({str, transform, width})
+   Ausgabe je Row (dbv2-nah): klasse, beleg_nr, beleg_nr_typ, ausstellungs_datum, leistungs_datum_von/bis,
+     brutto, ust_satz, ust_basis, ust_betrag, sv_kv_an, sv_rv_an, sv_pv_an, auszahlung, titel, rolle, takes,
+     posten[], termine[] (Titel+Datum-Gruppen), _hinweise[]
+   Abgeleitet 08.10.2026 aus 99 Dateien (Gagenabrechnungen.zip), geprüft gegen Backup 2026-10-08-0935:
+   166/171 textbasierte Abrechnungen exakt, 5 erklärte Abweichungen, 3 Bilder/Scans -> KI-Rückfall. */
+
+var GL_MON = {januar:1,februar:2,'märz':3,april:4,mai:5,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12};
+var GL_EMON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+function glNum(s){
+  s = String(s).trim().replace(/€/g,'').replace(/\s/g,'');
+  var neg = /^-/.test(s) || /-$/.test(s);
+  s = s.replace(/^-|-$/g,'').replace(/\./g,'').replace(',','.');
+  var v = parseFloat(s); if(isNaN(v)) return null;
+  return neg ? -v : v;
+}
+function glDeDate(s){
+  var p = s.split('.'); var y = p[2]; if(y.length===2) y = '20'+y;
+  return y+'-'+('0'+parseInt(p[1],10)).slice(-2)+'-'+('0'+parseInt(p[0],10)).slice(-2);
+}
+function glR2(v){ return Math.round(v*100)/100; }
+
+/* ---------------------------------------------------------------- Zeilenrekonstruktion
+   pdf.js liefert Items ungeordnet. Gruppierung nach y (Toleranz 2.5pt), Sortierung nach x,
+   Lücken werden zu Leerzeichen (ca. 3.5pt je Leerzeichen), damit Spaltenlücken >= 2 Leerzeichen bleiben. */
+function glZeilenAusItems(items){
+  var zeilen = [];
+  items.forEach(function(it){
+    if(!it || !it.str || !it.str.trim()) return;
+    var x = it.transform[4], y = it.transform[5];
+    var z = null;
+    for(var i=0;i<zeilen.length;i++){ if(Math.abs(zeilen[i].y - y) <= 2.5){ z = zeilen[i]; break; } }
+    if(!z){ z = {y:y, items:[]}; zeilen.push(z); }
+    z.items.push({x:x, w:it.width||0, s:it.str});
+  });
+  zeilen.sort(function(a,b){ return b.y - a.y; });
+  // linken Seitenrand abziehen, damit Zeilen wie bei pdftotext -layout in Spalte 0 beginnen
+  var minX = Infinity;
+  zeilen.forEach(function(z){ z.items.forEach(function(it){ if(it.x < minX) minX = it.x; }); });
+  if(minX === Infinity) minX = 0;
+  return zeilen.map(function(z){
+    z.items.sort(function(a,b){ return a.x - b.x; });
+    var out = '', ende = null;
+    z.items.forEach(function(it){
+      if(ende === null){ out += new Array(Math.max(0, Math.round((it.x-minX)/3.5))+1).join(' '); }
+      else {
+        var gap = it.x - ende;
+        var n = gap > 1.5 ? Math.max(1, Math.round(gap/3.5)) : 0;
+        if(n===0 && !/\s$/.test(out) && !/^\s/.test(it.s) && gap > 0.3) n = 1;
+        out += new Array(n+1).join(' ');
+      }
+      out += it.s; ende = it.x + it.w;
+    });
+    return out.replace(/\s+$/,'');
+  }).join('\n');
+}
+
+/* ---------------------------------------------------------------- Formaterkennung */
+function glErkennen(txt){
+  if(!txt || !txt.trim()) return 'leer';
+  if(txt.indexOf('SESAM-Lohn')>=0 && txt.indexOf('GAGE / Gutschrift')>=0) return 'sesam_gnr_termin';
+  if(txt.indexOf('SESAM-Lohn')>=0 && txt.indexOf('Monats-Gutschrift')>=0) return 'sesam_gnr_monats';
+  if(txt.indexOf('Studio Hamburg Synchron')>=0 && txt.indexOf('Gehaltsabrechnung')>=0) return 'studio_hh';
+  if(txt.indexOf('GVL')>=0 && /Gutschrift Nr\.\s*:/.test(txt)) return 'gvl';
+  if(txt.indexOf('Remittance Total')>=0) return 'netflix_remittance';
+  if(txt.indexOf('Gagenschein')>=0 && txt.indexOf('VSI')>=0) return 'vsi_gagenschein';
+  if(/in Rechnung zu stellen/.test(txt) && /(Rechnungsnummer|Rg\.-Nr)/.test(txt)) return 'eigen_rech';
+  return 'unbekannt';
+}
+
+function glM(re, txt){ var m = re.exec(txt); return m ? m : null; }
+
+/* ---------------------------------------------------------------- SESAM Einzelgutschrift (Klasse 1a) */
+function glSesamEinzel(page){
+  var r = {format:'sesam_gnr_termin', klasse:'1a', beleg_nr_typ:'sesam_gnr_termin', _hinweise:[]};
+  var m;
+  m = glM(/SESAM-Lohn:\s*(\d{4})\s+(.+)/, page); r.studio_kurz = m ? m[2].trim() : null;
+  m = glM(/^Lizenz:\s+(.+?)\s{2,}/m, page); r.lizenz = m ? m[1].trim() : null;
+  m = glM(/Beträge in EUR\s+(\d\d\.\d\d\.\d{4})/, page); r.ausstellungs_datum = m ? glDeDate(m[1]) : null;
+  m = glM(/Gutschrifts-Nr\.:\s*([A-Z]?\d+\/\d{8})/, page); r.beleg_nr = m ? m[1] : null;
+  m = glM(/von:\s+(\d\d\.\d\d\.\d{4})/, page); r.leistungs_datum_von = m ? glDeDate(m[1]) : null;
+  m = glM(/bis:\s+(\d\d\.\d\d\.\d{4})/, page); r.leistungs_datum_bis = m ? glDeDate(m[1]) : null;
+  m = glM(/BRUTTO GAGE\s+(-?[\d.]+,\d\d)/, page); r.brutto = m ? glNum(m[1]) : null;
+  [['sv_kv_an','Krankenversicherung'],['sv_rv_an','Rentenversicherung'],['sv_pv_an','Pflegeversicherung'],['sv_av_an','Arbeitslosenversicherung']].forEach(function(kl){
+    var mm = new RegExp('-\\s*'+kl[1]+'\\s+(-?[\\d.]+,\\d\\d)').exec(page); r[kl[0]] = mm ? glNum(mm[1]) : 0;
+  });
+  m = glM(/Mehrwertsteuer \((\d+)% von (-?[\d.]+,\d\d)\)\s+(-?[\d.]+,\d\d)/, page);
+  if(m){ r.ust_satz = parseInt(m[1],10)/100; r.ust_basis = glNum(m[2]); r.ust_betrag = glNum(m[3]); }
+  else { r.ust_satz = 0; r.ust_basis = r.brutto; r.ust_betrag = 0; }
+  m = glM(/\bAUSZAHLUNG\s+(-?[\d.]+,\d\d)/, page); r.auszahlung = m ? glNum(m[1]) : null;
+  m = glM(/NETTO GAGE\s+(-?[\d.]+,\d\d)/, page); r.netto = m ? glNum(m[1]) : null;
+
+  // Posten: "+ Art  TT.MM.JJJJ  [N x Satz =] Betrag"; Folgezeile eingerückt: Rolle [Fibu-Spalten] Titel (Iyuno: nur Titel; TNT: Titel in Klammern)
+  var posten = [], lines = page.split('\n');
+  for(var i=0;i<lines.length;i++){
+    var l = lines[i];
+    if(/Mehrwertsteuer/.test(l)) continue;
+    var pm = /^\+\s+(.+?)\s+(\d\d\.\d\d\.\d{4})\s+(?:(-?\d+(?:,\d+)?)\s*x\s+(-?[\d.]+,\d\d)\s*=?\s+)?(-?[\d.]+,\d\d)/.exec(l);
+    if(!pm) continue;
+    var p = {art:pm[1].trim().replace(/^\(\d+\)\s*/,''), datum:glDeDate(pm[2]), anzahl:pm[3]?glNum(pm[3]):null,
+             satz:pm[4]?glNum(pm[4]):null, betrag:glNum(pm[5]), rolle:null, titel:null};
+    var nxt = lines[i+1] || '';
+    if(/^\s{3}/.test(nxt) && nxt.trim() && !/^\s*[+-]/.test(nxt) && nxt.indexOf('BRUTTO')<0){
+      var cols = nxt.trim().split(/\s{2,}/).filter(function(c){ return !/^\d{6,}$/.test(c); });   // TaunusFilm: Auftragsnummer hinter dem Titel
+      if(!cols.length) cols = [nxt.trim()];
+      var einzug = nxt.length - nxt.replace(/^\s+/,'').length;
+      if(cols.length>1) p.rolle = cols[0];
+      else if(einzug < 12) p.rolle = cols[0];
+      if(cols.length>1 || p.rolle===null) p.titel = cols[cols.length-1];
+    } else {
+      var km = /\(([^()]+)\)\s*$/.exec(p.art);
+      if(km){ p.titel = km[1]; p.art = p.art.slice(0, km.index).trim(); }
+    }
+    if(p.titel){
+      var fc = /^(\d{3,}(?:-\d+)?)\s+/.exec(p.titel); if(fc) p.filmcode = fc[1];          // FFS: Kostenstelle/Filmcode vor dem Titel (9101, 8717-10)
+      var fp = /^P(\d+)-/.exec(p.titel); if(fp) p.filmcode = 'P'+fp[1];                   // Oxygen: P436-
+      p.titel = p.titel.replace(/^\d{3,}(?:-\d+)?\s+/,'').replace(/^P\d+-/,'').replace(/\s+\d{6,}$/,'').trim();
+    }
+    if(p.rolle){ p.rolle = p.rolle.replace(/\s*[-+]\s*\d+\s*Takes?$/,'').trim(); }
+    posten.push(p);
+  }
+  r.posten = posten;
+  // Termine = Gruppen (Titel, Datum): ein Gutschein kann mehrere Produktionen und mehrere Drehtage tragen
+  var grp = {}, order = [];
+  posten.forEach(function(p){
+    var stamm = p.filmcode ? String(p.filmcode).slice(0,4) : (p.titel||'?');
+    var k = p.datum+'|'+(p.rolle||'')+'|'+stamm;
+    if(!grp[k]){ grp[k] = {titel:p.titel, rolle:p.rolle, filmcode:p.filmcode||null, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0}; order.push(k); }
+    var q = grp[k]; q.brutto = glR2(q.brutto + p.betrag);
+    if(p.titel && q.titel && /(\bTR\b|Teaser|Sonder)/i.test(q.titel) && !/(\bTR\b|Teaser|Sonder)/i.test(p.titel)) q.titel = p.titel;   // Haupttitel statt Teaser-Zeile
+    var paket = Math.abs(p.anzahl)===1 && /\d+-\d+/.test(p.art);   // "Takegage 1-10  1 x 42,00" ist ein Paket, kein Take
+    if(/take/i.test(p.art) && p.anzahl && !paket){ q.takes += p.anzahl; if(p.satz) q.take_gage = Math.abs(p.satz); }
+    else q.grundgage = glR2(q.grundgage + p.betrag);   // Grundgage, Pauschale, Paketzeile, Sonstiges
+  });
+  r.termine = order.map(function(k){ return grp[k]; });
+  r.titel = r.termine.length ? r.termine[0].titel : null;
+  r.rolle = r.termine.length ? r.termine[0].rolle : null;
+  r.takes = r.termine.reduce(function(a,q){ return a+q.takes; }, 0) || null;
+  if(!r.ausstellungs_datum){ r.ausstellungs_datum = r.leistungs_datum_von; r._hinweise.push('Ausstellungsdatum nicht im Beleg, Leistungsdatum übernommen'); }
+  // Plausibilität
+  if(r.brutto!==null && r.posten.length){
+    var summe = glR2(r.posten.reduce(function(a,p){ return a+p.betrag; },0));
+    if(Math.abs(summe - r.brutto) > 0.01) r._hinweise.push('Postensumme '+summe+' ≠ Brutto '+r.brutto);
+  }
+  if(r.brutto!==null && r.auszahlung!==null){
+    var soll = glR2(r.brutto - r.sv_kv_an - r.sv_rv_an - r.sv_pv_an - r.sv_av_an + r.ust_betrag);
+    if(Math.abs(soll - r.auszahlung) > 0.011) r._hinweise.push('Auszahlung rechnerisch '+soll+' ≠ '+r.auszahlung);
+  }
+  if(r.sv_av_an){
+    // Die App fuehrt keine Arbeitslosenversicherung (av_abzug fehlt). Sichtbar machen statt verschweigen.
+    r._hinweise.push('Arbeitslosenversicherung '+String(r.sv_av_an.toFixed(2)).replace('.',',')+' € abgezogen, die App hat dafür noch kein Feld');
+  }
+  return r;
+}
+
+/* ---------------------------------------------------------------- SESAM Monats-Gutschrift (Klasse 1b) */
+function glSesamMonat(page){
+  var r = {format:'sesam_gnr_monats', klasse:'1b', beleg_nr_typ:'sesam_gnr_monats', _hinweise:[]};
+  var m;
+  m = glM(/SESAM-Lohn:\s*(\d{4})\s+(.+)/, page); r.studio_kurz = m ? m[2].trim() : null;
+  m = glM(/^Lizenz:\s+(.+?)\s{2,}/m, page); r.lizenz = m ? m[1].trim() : null;
+  m = glM(/Beträge in EUR\s+(\d\d\.\d\d\.\d{4})/, page); r.ausstellungs_datum = m ? glDeDate(m[1]) : null;
+  m = glM(/Monats-Gutschrift\s+(\d+\/\d{6})/, page); r.beleg_nr = m ? m[1] : null;
+  m = glM(/Brutto Gagen:\s+(-?[\d.]+,\d\d)/, page); r.brutto = m ? glNum(m[1]) : null;
+  m = glM(/Mwst\. \((\d+)%\):\s+(-?[\d.]+,\d\d)/, page);
+  r.ust_satz = m ? parseInt(m[1],10)/100 : 0; r.ust_betrag = m ? glNum(m[2]) : 0; r.ust_basis = r.brutto;
+  [['sv_kv_an','KV AN'],['sv_rv_an','RV AN'],['sv_pv_an','PV AN']].forEach(function(kl){
+    var mm = new RegExp(kl[1]+':\\s+(-?[\\d.]+,\\d\\d)').exec(page); r[kl[0]] = mm ? Math.abs(glNum(mm[1])) : 0;
+  });
+  m = glM(/AV AN:\s+(-?[\d.]+,\d\d)/, page); r.sv_av_an = m ? Math.abs(glNum(m[1])) : 0;
+  if(r.sv_av_an) r._hinweise.push('Arbeitslosenversicherung '+String(r.sv_av_an.toFixed(2)).replace('.',',')+' € abgezogen, die App hat dafür noch kein Feld');
+  m = glM(/Auszahlungsbetrag:\s+(-?[\d.]+,\d\d)/, page); r.auszahlung = m ? glNum(m[1]) : null;
+  var posten = [];
+  page.split('\n').forEach(function(l){
+    var pm = /^(Mo|Di|Mi|Do|Fr|Sa|So)\s+(\d\d\.\d\d\.\d\d)\s+(.+?)\s+(-?[\d.]+,\d\d)\s+(\d+)%/.exec(l);
+    if(!pm) return;
+    var mitte = pm[3];
+    var art = /Grundgage/.test(mitte) ? 'Grundgage' : (/Take/.test(mitte) ? 'Takegage' : 'Sonstiges');
+    // Aufbau: LA [Anzahl] Art[ Zusatz] [Code 4-8 Ziffern] Titel [Sender/Kennung]
+    // Mit Produktionscode (4-8 Ziffern): Titel steht dahinter (Arena "Streaming 1-10 Ta 7001  City of God 1  WARN")
+    var titel = null, reCode = /\s(\d{4,8})\s+/g, mc;
+    while((mc = reCode.exec(mitte))){
+      var kand = mitte.slice(mc.index + mc[0].length).trim().replace(/\s+(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/,'').replace(/\s+\d{6,}$/,'').trim();
+      if(kand && !/^\d+$/.test(kand) && !/^(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/.test(kand)){ titel = kand; break; }
+    }
+    if(!titel){
+      var mt = /(?:Grundgage|Takegage|Takes|Kinotrailer|Pauschale)\S*(?:\s+[A-Za-z\-]{1,8})?\s+(.+?)\s*$/.exec(mitte);
+      titel = mt ? mt[1].trim().replace(/\s+(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/,'').replace(/\s+\d{6,}$/,'').replace(/^\d{3,}\s+/,'').replace(/\s{2,}/g,' ').trim() : null;
+    }
+    if(titel){ titel = titel.replace(/\s+(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/,'').replace(/\s+\d{6,}$/,''); }
+    var ma = /^\d+\s+(\d+)\s+(?:Take|Grund)/.exec(mitte);
+    posten.push({datum:glDeDate(pm[2]), art:art, titel:titel, anzahl: ma?parseInt(ma[1],10):null, betrag:glNum(pm[4])});
+  });
+  r.posten = posten;
+  var grp = {}, order = [];
+  posten.forEach(function(p){
+    var k = (p.titel||'?')+'|'+p.datum;
+    if(!grp[k]){ grp[k] = {titel:p.titel, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0}; order.push(k); }
+    grp[k].brutto = glR2(grp[k].brutto + p.betrag);
+    if(p.art==='Takegage' && p.anzahl){ grp[k].takes += p.anzahl; if(p.betrag) grp[k].take_gage = glR2(p.betrag/p.anzahl); }
+    else grp[k].grundgage = glR2(grp[k].grundgage + p.betrag);
+  });
+  r.termine = order.map(function(k){ return grp[k]; });
+  var daten = posten.map(function(p){ return p.datum; }).sort();
+  r.leistungs_datum_von = daten.length ? daten[0] : null; r.leistungs_datum_bis = daten.length ? daten[daten.length-1] : null;
+  r.titel = r.termine.length ? r.termine[0].titel : null;
+  r.takes = r.termine.reduce(function(a,q){ return a+q.takes; },0) || null;
+  if(!r.ausstellungs_datum){ r.ausstellungs_datum = r.leistungs_datum_von; r._hinweise.push('Ausstellungsdatum nicht im Beleg, Leistungsdatum übernommen'); }
+  if(r.brutto!==null && posten.length){
+    var summe = glR2(posten.reduce(function(a,p){ return a+p.betrag; },0));
+    if(Math.abs(summe - r.brutto) > 0.01) r._hinweise.push('Postensumme '+summe+' ≠ Brutto '+r.brutto);
+  }
+  return r;
+}
+
+/* ---------------------------------------------------------------- Studio Hamburg Lohnabrechnung (Klasse 4) */
+function glStudioHH(seitenTexte){
+  var out = [];
+  seitenTexte.forEach(function(pg){
+    if(pg.indexOf('Gehaltsabrechnung')<0) return;
+    var r = {format:'studio_hh', klasse:'4', beleg_nr_typ:'studio_hh', beleg_nr:'', studio_kurz:'Studio Hamburg', _hinweise:[]};
+    var m = /(Korrektur )?Gehaltsabrechnung (\d{1,2})\/(\d{4})(?: \(für (\d{1,2})\/(\d{4})\))?/.exec(pg);
+    r.ist_korrektur = !!m[1];
+    r.abrechnungs_monat = m[3]+'-'+('0'+m[2]).slice(-2);
+    r.lohnsteuer_zielmonat = m[4] ? m[5]+'-'+('0'+m[4]).slice(-2) : r.abrechnungs_monat;
+    var gagen = [], tage = [];
+    pg.split('\n').forEach(function(l){
+      var mg = /^603\s+Gage Synchronsprecher (.+?)\s{2,}(-?[\d.]+,\d\d) ([+-])/.exec(l);
+      if(mg) gagen.push({titel:mg[1].replace(/\s*-\s*L\s*B$/,'').trim(), betrag:glNum(mg[2])*(mg[3]==='+'?1:-1)});
+      var mz = /^\s+(\d\d\.\d\d\.)-(\d\d\.\d\d\.)\s+PGS \d+ BGS \d+ EUR\s+(-?[\d.]+,\d\d)/.exec(l);
+      if(mz){ var y = r.lohnsteuer_zielmonat.slice(0,4); tage.push({von:glDeDate(mz[1]+y), bis:glDeDate(mz[2]+y), betrag:glNum(mz[3])}); }
+    });
+    r.posten = gagen; r.tage = tage;
+    r.termine = tage.map(function(t,i){ return {titel:(gagen[i]||gagen[0]||{}).titel||null, datum:t.von, brutto:t.betrag, takes:0}; });
+    m = /Gesamtbrutto\s+(-?[\d.]+,\d\d)/.exec(pg); r.brutto = m ? glNum(m[1]) : 0;
+    m = /Nettoverdienst\s+(-?[\d.]+,\d\d)/.exec(pg); r.netto = m ? glNum(m[1]) : 0;
+    var kv = 0, re = /KV-(?:Brutto|Zusatz) lfd\.\s+[\d.,]+\s+[\d,]+ %\s+(-?[\d.]+,\d\d)/g, mm;
+    while((mm = re.exec(pg))) kv += Math.abs(glNum(mm[1]));
+    r.sv_kv_an = glR2(kv);
+    m = /PV-Brutto lfd\.\s+[\d.,]+\s+[\d,]+ %\s+(-?[\d.]+,\d\d)/.exec(pg); r.sv_pv_an = m ? Math.abs(glNum(m[1])) : 0;
+    m = /RV-Brutto lfd\.\s+[\d.,]+\s+[\d,]+ %\s+(-?[\d.]+,\d\d)/.exec(pg); r.sv_rv_an = m ? Math.abs(glNum(m[1])) : 0;
+    m = /996\s+Umsatzsteuer (\d+)%[\s\S]*?([\d.]+,\d\d)\s+[\d,]+ %\s+(-?[\d.]+,\d\d)/.exec(pg);
+    if(m){ r.ust_satz = parseInt(m[1],10)/100; r.ust_basis = glNum(m[2]); r.ust_betrag = glNum(m[3]); }
+    else { r.ust_satz = 0.07; r.ust_basis = r.brutto; r.ust_betrag = 0; }
+    m = /Verbindlichkeit \d\d\/\d{4}\s+(-?[\d.]+,\d\d)/.exec(pg); r.verbindlichkeit = m ? glNum(m[1]) : null;
+    m = /Differenz aus Vormonat\s+(-?[\d.]+,\d\d)/.exec(pg); r.saldo_vormonat = m ? glNum(m[1]) : 0;
+    m = /bereits erhalten\s+(-?[\d.]+,\d\d)/.exec(pg); r.saldo_bereits_erhalten = m ? glNum(m[1]) : 0;
+    m = /Differenz für Folgemonate\s+EUR\s+(-?[\d.]+,\d\d)/.exec(pg); r.saldo_folgemonat = m ? glNum(m[1]) : null;
+    m = /Holvi Payment Services.*?EUR\s+(-?[\d.]+,\d\d)/.exec(pg); r.ueberweisung = m ? glNum(m[1]) : null;
+    if(!m){ m = /Hamburger Sparkasse.*?EUR\s+(-?[\d.]+,\d\d)/.exec(pg); if(m){ r.ueberweisung = glNum(m[1]); r.auszahlungs_ziel = 'sparkasse'; } }
+    else r.auszahlungs_ziel = 'holvi';
+    m = /RB:\d{8} - (\d\d\.\d\d\.\d{4})/.exec(pg); r._print_datum = m ? glDeDate(m[1]) : null;
+    // Auszahlung = Verbindlichkeit des Monats; ohne Verbindlichkeitszeile: Differenz für Folgemonate; Normalseite: Überweisungsbetrag
+    r.auszahlung = r.verbindlichkeit!==null ? r.verbindlichkeit : (r.saldo_folgemonat!==null ? r.saldo_folgemonat : r.ueberweisung);
+    r.ist_leer_korrektur = r.brutto===0 && !gagen.length;
+    r.leistungs_datum_von = tage.length ? tage.map(function(t){return t.von;}).sort()[0] : null;
+    r.leistungs_datum_bis = tage.length ? tage.map(function(t){return t.bis;}).sort().reverse()[0] : null;
+    r.ausstellungs_datum = r.leistungs_datum_von;   // App-Konvention bei SH (Beleg trägt nur Druckdatum)
+    r.titel = gagen.length ? gagen[0].titel : null;
+    out.push(r);
+  });
+  return out;
+}
+
+/* ---------------------------------------------------------------- GVL Auszahlungsmitteilung */
+function glGVL(txt){
+  var r = {format:'gvl', klasse:null, beleg_nr_typ:null, studio_kurz:'GVL', _hinweise:[]};
+  var m;
+  m = /Gutschrift Nr\.\s*:\s*(\d+)/.exec(txt); r.beleg_nr = m ? m[1] : null;
+  m = /Gutschriftdatum\s*:\s*(\d\d\.\d\d\.\d{4})/.exec(txt); var d = m ? glDeDate(m[1]) : null;
+  r.ausstellungs_datum = r.leistungs_datum_von = r.leistungs_datum_bis = d;
+  m = /^\s*((?:Vergütung|Weiterleitung) .+?)\s*$/m.exec(txt); r.art = m ? m[1].trim() : null;
+  var privat = /Private Vervielfältigung/.test(r.art||'');
+  m = /Vergütungsbetrag\s+(-?[\d.]+,\d\d) €/.exec(txt); r.verguetungsbetrag = m ? glNum(m[1]) : null;
+  m = /Zwischensumme\s+(-?[\d.]+,\d\d) €/.exec(txt); r.zwischensumme = m ? glNum(m[1]) : null;
+  if(r.verguetungsbetrag===null) r.verguetungsbetrag = r.zwischensumme;
+  m = /Auszahlungsbetrag\s+(-?[\d.]+,\d\d) €/.exec(txt); r.auszahlung = m ? glNum(m[1]) : null;
+  m = /abzgl\. anteilige Verwaltungskosten GVL \/ Inkassokosten\s+(-?[\d.]+,\d\d) €/.exec(txt); r.verwaltungskosten_netto = m ? Math.abs(glNum(m[1])) : 0;
+  m = /abzgl\. 19,00 % USt\. von anteilige Verwaltungskosten[^\n]*?\s+(-?[\d.]+,\d\d) €/.exec(txt); r.verwaltungskosten_ust = m ? Math.abs(glNum(m[1])) : 0;
+  var mu = /zzgl\. (\d+),00 % USt\.[^\n]*?\s+(-?[\d.]+,\d\d) €/.exec(txt);
+  r.brutto = r.verguetungsbetrag; r.ust_basis = r.brutto;
+  if(privat){ r.steuerfrei = true; r.ust_satz = 0; r.ust_betrag = 0; r.titel = 'GVL Privatkopie (USt-frei)'; }
+  else { r.steuerfrei = false; r.ust_satz = mu ? parseInt(mu[1],10)/100 : 0.07; r.ust_betrag = mu ? glNum(mu[2]) : null; r.titel = 'GVL Rechteüberlassung'; }
+  r.sv_kv_an = r.sv_rv_an = r.sv_pv_an = null;
+  return [r];
+}
+
+/* ---------------------------------------------------------------- Eigenrechnung (Klasse 3) */
+function glEigenRechnung(txt){
+  var r = {format:'eigen_rech', klasse:'3', beleg_nr_typ:'eigen_rech', _hinweise:[]};
+  var m;
+  m = /(?:Rechnungsnummer|Rg\.-Nr\.?)\s*:?\s*(\d+\/\d{4})/.exec(txt); r.beleg_nr = m ? m[1] : null;
+  m = /Berlin, (\d\d\.\d\d\.\d{4})/.exec(txt); r.ausstellungs_datum = m ? glDeDate(m[1]) : null;
+  m = /Leistungsdatum:\s*(\d\d\.\d\d\.\d{4})/.exec(txt);
+  r.leistungs_datum_von = r.leistungs_datum_bis = m ? glDeDate(m[1]) : r.ausstellungs_datum;
+  m = /Titel:\s*(.+)/.exec(txt); r.titel = m ? m[1].trim() : null;
+  if(!r.titel){ m = /Projekt\s*"\s*(.+?)\s*"/.exec(txt); r.titel = m ? m[1].trim() : null; }
+  m = /zzgl\.\s*(\d+)\s*% MW?St\.?\s+(-?[\d.]+,\d\d)/i.exec(txt); r.ust_satz = m ? parseInt(m[1],10)/100 : 0; r.ust_betrag = m ? glNum(m[2]) : 0;
+  m = /zus\.:\s+(-?[\d.]+,\d\d)/.exec(txt); r.brutto = r.auszahlung = m ? glNum(m[1]) : null;
+  m = /Nettobetrag\s+(-?[\d.]+,\d\d)/.exec(txt); r.netto = m ? glNum(m[1]) : (r.brutto!==null ? glR2(r.brutto - r.ust_betrag) : null);
+  r.ust_basis = r.netto;
+  // Empfaenger: erste Zeile im Kopf (vor "Rechnung") mit Firmenzusatz, ausser der Absenderzeile (enthaelt "·")
+  var emp = null, kopf = txt.split(/\n\s*Rechnung\s*\n|Rechnungsnummer|Rg\.-Nr/)[0];
+  kopf.split('\n').some(function(l){ l = l.trim();
+    if(!l || l.indexOf('·')>=0 || /^(Steuer|Finanzamt|Berlin,)/.test(l)) return false;
+    if(/\b(GmbH|AG|UG|KG|e\.V\.|mbH)\b/i.test(l)){ emp = l; return true; } return false; });
+  r.empfaenger = emp; r.studio_kurz = emp;
+  r.sv_kv_an = r.sv_rv_an = r.sv_pv_an = null;
+  return [r];
+}
+
+/* ---------------------------------------------------------------- Netflix Remittance (Drittland, steuerfrei) */
+function glNetflix(txt){
+  var r = {format:'netflix_remittance', klasse:null, beleg_nr_typ:null, studio_kurz:'Netflix', steuerfrei:true, ust_satz:0, ust_betrag:0, _hinweise:[]};
+  var m = /Issue Date:\s+(\d{1,2})-([A-Za-z]{3})-(\d{4})/.exec(txt);
+  r.ausstellungs_datum = m ? m[3]+'-'+('0'+GL_EMON[m[2].toLowerCase()]).slice(-2)+'-'+('0'+m[1]).slice(-2) : null;
+  m = /Payment No\.:\s+(\d+)/.exec(txt); r.beleg_nr = m ? m[1] : null;
+  m = /Remittance Total :\s+([\d.]+,\d\d)/.exec(txt); r.brutto = r.auszahlung = r.ust_basis = m ? glNum(m[1]) : null;
+  var posten = [], re = /(S-\d+ [A-Z\-]+\w+)\s+(\d{1,2})-([A-Za-z]{3})-(\d{4})\s+(.+?)\s{2,}/g, mm;
+  while((mm = re.exec(txt))) posten.push({nr:mm[1], datum:mm[4]+'-'+('0'+GL_EMON[mm[3].toLowerCase()]).slice(-2)+'-'+('0'+mm[2]).slice(-2), titel:mm[5].split(' + ')[0]});
+  r.posten = posten; r.termine = posten.map(function(p){ return {titel:p.titel, datum:p.datum}; });
+  var d = posten.map(function(p){return p.datum;}).sort();
+  r.leistungs_datum_von = d.length ? d[0] : r.ausstellungs_datum; r.leistungs_datum_bis = d.length ? d[d.length-1] : r.ausstellungs_datum;
+  r.titel = 'Netflix Participations Drittland';
+  r.sv_kv_an = r.sv_rv_an = r.sv_pv_an = null;
+  return [r];
+}
+
+/* ---------------------------------------------------------------- Einstieg */
+function glLesenAusText(seitenTexte){
+  var txt = seitenTexte.join('\f');
+  var f = glErkennen(txt), rows = [];
+  if(f==='sesam_gnr_termin') rows = seitenTexte.filter(function(p){ return p.indexOf('GAGE / Gutschrift')>=0; }).map(glSesamEinzel);
+  else if(f==='sesam_gnr_monats') rows = seitenTexte.filter(function(p){ return p.indexOf('Monats-Gutschrift')>=0; }).map(glSesamMonat);
+  else if(f==='studio_hh') rows = glStudioHH(seitenTexte);
+  else if(f==='gvl') rows = glGVL(txt);
+  else if(f==='netflix_remittance') rows = glNetflix(txt);
+  else if(f==='eigen_rech') rows = glEigenRechnung(txt);
+  return {format:f, rows:rows, ki_noetig: (f==='leer'||f==='unbekannt'||f==='vsi_gagenschein')};
+}
+function glLesenAusSeiten(seitenItems){
+  return glLesenAusText(seitenItems.map(glZeilenAusItems));
+}
+
+/* ---------------------------------------------------------------- Adapter: Leser-Ergebnis -> KI-JSON der App
+   Liefert exakt die Struktur, die dokAnalyseDoc heute von der KI erwartet (typ, sessions, termine, K4-Felder),
+   damit der gesamte nachgelagerte Pfad (Split, Termin-Match, Bestaetigung, Konsolidierung) unveraendert bleibt. */
+// Titel wie die KI bereinigen: Staffel/Season/Feature/Teaser-Zusaetze abschneiden, Staffel separat liefern
+function glTitelBereinigen(t){
+  if(!t) return {titel:t, staffel:null};
+  var staffel = null, x = String(t).trim();
+  var m = /\b(?:S|Season\s|Staffel\s)(\d{1,2})\b/.exec(x); if(m) staffel = String(parseInt(m[1],10));
+  x = x.replace(/^Folge:\s*/i,'').replace(/^.*\|\s*Projekt:\s*/i,'');                 // Eigenrechnungen: "Folge: X", "PO Nr.: 13244 | Projekt: X"
+  x = x.replace(/:\s*S\d{1,2}\s*:.*$/,'').replace(/\s+S\d{1,2}\s*(#|-\s*EP).*$/i,'');  // "WWE Follow Doc: S1: Batch 1", "Sunny Nights S01 #101-108", "Re:Zero S4 - EP01-11"
+  for(var i=0;i<4;i++){
+    x = x.replace(/\s*\(\d+x\d+\)\s*$/,'')
+         .replace(/\s+-\s+(Feature|TR|Teaser|s\d{1,2}|S\d{1,2}|Season\s*\d+|Staffel\s*\d+)\s*$/i,'')
+         .replace(/\s+(S\d{1,2}(?:\s*Part\s*\d+)?|Season\s*\d+|Staffel\s*\d+|TR|Feature|YR\d+)\s*$/,'')
+         .replace(/\s+S\d{1,2}\+S\d{1,2}\s*$/,'').trim();
+  }
+  return {titel:x, staffel:staffel};
+}
+function glZuKiJson(res){
+  var rows = res.rows || [];
+  if(!rows.length) return null;
+  var f = res.format;
+  function sum(k){ return glR2(rows.reduce(function(a,r){ return a + (parseFloat(r[k])||0); }, 0)); }
+  function termin(t){ var tb = glTitelBereinigen(t.titel); return {datum:t.datum, titel:tb.titel||null, rolle:t.rolle||null, filmcode:t.filmcode||'', takes:t.takes||0, grundgage:t.grundgage||0, take_gage:t.take_gage||0, brutto_termin:t.brutto, gvl_staffel_header:tb.staffel}; }
+  function studioName(r){
+    var s = r.studio_kurz || '';
+    var map = [[/^RC/i,'RC'],[/^FFS/i,'FFS'],[/^VSI/i,'VSI'],[/^TNT/i,'TNT'],[/Arena/i,'Arena'],[/Interopa/i,'Interopa'],[/Taunus/i,'Taunus'],[/Iyuno/i,'Iyuno'],[/Oxygen/i,'Oxygen Sound Studios'],[/Cinephon/i,'Cinephon'],[/^DMT/i,'DMT'],[/Splendid/i,'Splendid Synchron'],[/EVA/i,'EVA Studios'],[/Scheune/i,'Scheune München'],[/G\s*&\s*G/i,'G&G'],[/Level ?45/i,'Level 45'],[/Think Global/i,'Think Global Media'],[/Neue Tonfilm/i,'Neue Tonfilm München'],[/Pluto/i,'Pluto Sound'],[/Antares/i,'Antares Film'],[/Mo Synchron/i,'Mo Synchron']];
+    for(var i=0;i<map.length;i++) if(map[i][0].test(s)) return map[i][1];
+    return s.replace(/\s+(GmbH|Berlin|Synchron)$/i,'').trim() || null;
+  }
+  var j = {typ:'abrechn', beschr:null, datum:null, ausstellungsdatum:null, studio:null, titel:null, regie:null, rolle:null, uhrzeit:null, bis_uhrzeit:null,
+           takes:null, episode:null, gvl_staffel_header:null, gvl_episode_header:null, gvl_takes_detail:null, gutschrift_nr:null, take_gage:null, grundgage:null,
+           brutto:null, netto:null, mwst:null, auszahlung:null, kv_abzug:null, rv_abzug:null, pv_abzug:null, ust_satz:null, ust_details:null, ausgabe_kat:null,
+           produktionstyp_kino:null, sessions:null, _offline:true, _format:f, _hinweise:[]};
+  rows.forEach(function(r){ (r._hinweise||[]).forEach(function(h){ j._hinweise.push((r.beleg_nr?r.beleg_nr+': ':'')+h); }); });
+
+  if(f==='sesam_gnr_termin'){
+    var sessions = rows.map(function(r, i){
+      var t0 = (r.termine && r.termine[0]) || {};
+      var s = {datum:r.leistungs_datum_von, page_nr:i+1, ausstellungsdatum:r.ausstellungs_datum, titel:r.titel, rolle:r.rolle, takes:r.takes||0,
+               take_gage:t0.take_gage||0, grundgage:t0.grundgage||0, brutto_termin:r.brutto, gutschrift_nr:r.beleg_nr, mwst:r.ust_betrag, auszahlung:r.auszahlung,
+               kv_abzug:r.sv_kv_an, rv_abzug:r.sv_rv_an, pv_abzug:r.sv_pv_an, netto:r.netto};
+      if(r.termine && r.termine.length>1) s.termine = r.termine.map(termin);
+      return s;
+    });
+    var r0 = rows[0];
+    sessions.forEach(function(s0){ var tb0 = glTitelBereinigen(s0.titel); s0.titel = tb0.titel; if(tb0.staffel) s0.gvl_staffel_header = tb0.staffel; });
+    var tb = glTitelBereinigen(r0.titel);
+    j.studio = studioName(r0); j.gutschrift_nr = r0.beleg_nr; j.datum = r0.leistungs_datum_von; j.ausstellungsdatum = r0.ausstellungs_datum;
+    j.titel = tb.titel; j.gvl_staffel_header = tb.staffel; j.rolle = r0.rolle; j.ust_satz = r0.ust_satz; j.produktionstyp_kino = /kino/i.test(JSON.stringify(r0.posten||[]));
+    j.beschr = r0.beleg_nr+' ('+(r0.leistungs_datum_von||'').split('-').reverse().join('.')+')';
+    if(rows.length>1){
+      j.typ = 'monats_abrechn'; j.sessions = sessions;
+      j.brutto = sum('brutto'); j.mwst = sum('ust_betrag'); j.auszahlung = sum('auszahlung'); j.kv_abzug = sum('sv_kv_an'); j.rv_abzug = sum('sv_rv_an'); j.pv_abzug = sum('sv_pv_an'); j.netto = sum('netto');
+    } else {
+      j.brutto = r0.brutto; j.mwst = r0.ust_betrag; j.auszahlung = r0.auszahlung; j.kv_abzug = r0.sv_kv_an; j.rv_abzug = r0.sv_rv_an; j.pv_abzug = r0.sv_pv_an; j.netto = r0.netto;
+      j.takes = r0.takes; j.take_gage = sessions[0].take_gage; j.grundgage = sessions[0].grundgage;
+      if(r0.termine && r0.termine.length>1){
+        // ein Gutschein, mehrere Produktionen/Drehtage: wie die KI beim VSI-Fall 528/20260701 -> monats_abrechn mit Sessions ohne eigene Auszahlung
+        j.typ = 'monats_abrechn';
+        j.sessions = r0.termine.map(function(t){ var x = termin(t); x.gutschrift_nr = r0.beleg_nr; x.ausstellungsdatum = r0.ausstellungs_datum; return x; });
+      }
+    }
+    return j;
+  }
+  if(f==='sesam_gnr_monats'){
+    var r1 = rows[0];
+    j.typ = 'monats_abrechn'; j.studio = studioName(r1); j.gutschrift_nr = r1.beleg_nr; j.datum = r1.leistungs_datum_von; j.ausstellungsdatum = r1.ausstellungs_datum;
+    var tb1 = glTitelBereinigen(r1.titel); j.titel = tb1.titel; j.gvl_staffel_header = tb1.staffel; j.brutto = r1.brutto; j.mwst = r1.ust_betrag; j.auszahlung = r1.auszahlung; j.kv_abzug = r1.sv_kv_an; j.rv_abzug = r1.sv_rv_an; j.pv_abzug = r1.sv_pv_an; j.ust_satz = r1.ust_satz;
+    j.beschr = 'Monats-Gutschrift '+r1.beleg_nr;
+    j.sessions = (r1.termine||[]).map(function(t){ var x = termin(t); x.ausstellungsdatum = null; x.kuerzel = null; return x; });
+    if(j.sessions.length===1){   // ein Drehtag: wie die KI als Einzelabrechnung (Prompt: ein Datum ist immer "abrechn")
+      var s1 = j.sessions[0]; j.typ = 'abrechn'; j.takes = s1.takes; j.take_gage = s1.take_gage; j.grundgage = s1.grundgage; j.rolle = s1.rolle; j.sessions = null;
+    }
+    return j;
+  }
+  if(f==='studio_hh'){
+    var gagenSeiten = rows.filter(function(r){ return r.posten && r.posten.length; });
+    var leer = rows.filter(function(r){ return !(r.posten && r.posten.length); });
+    var k = gagenSeiten[0] || rows[0];
+    // Folgemonatsseite zur Korrektur: Gehaltsabrechnung <Zielmonat> ohne Gage (traegt Salden und Ueberweisung)
+    var folge = leer.filter(function(r){ return r.abrechnungs_monat === k.lohnsteuer_zielmonat; })[0] || leer[0] || null;
+    j.typ = 'monats_abrechn'; j.studio = 'Studio Hamburg'; j.gutschrift_nr = '';
+    j.datum = k.leistungs_datum_von; j.ausstellungsdatum = k.leistungs_datum_von; j.titel = k.titel; j.ust_satz = 0.07;
+    j.brutto = glR2(gagenSeiten.reduce(function(a,r){ return a+r.brutto; },0)); j.mwst = glR2(gagenSeiten.reduce(function(a,r){ return a+(r.ust_betrag||0); },0));
+    j.kv_abzug = glR2(gagenSeiten.reduce(function(a,r){ return a+r.sv_kv_an; },0)); j.rv_abzug = glR2(gagenSeiten.reduce(function(a,r){ return a+r.sv_rv_an; },0)); j.pv_abzug = glR2(gagenSeiten.reduce(function(a,r){ return a+r.sv_pv_an; },0));
+    j.netto = glR2(gagenSeiten.reduce(function(a,r){ return a+(r.netto||0); },0));
+    j.auszahlung = k.auszahlung;
+    j.beschr = 'Studio Hamburg '+(k.ist_korrektur?'Korrektur ':'')+k.abrechnungs_monat;
+    j.sessions = gagenSeiten.map(function(r, i){
+      var s = {datum:r.leistungs_datum_von, page_nr:i+1, titel:r.titel, rolle:null, takes:0, take_gage:0, grundgage:r.brutto, brutto_termin:r.brutto, gutschrift_nr:'',
+               mwst:r.ust_betrag, auszahlung:r.auszahlung, kv_abzug:r.sv_kv_an, rv_abzug:r.sv_rv_an, pv_abzug:r.sv_pv_an, netto:r.netto};
+      if(r.termine && r.termine.length>1) s.termine = r.termine.map(termin);
+      return s;
+    });
+    // K4-Felder (Build 757/763), bisher aus dem zweiten KI-Lauf _studioHamburgBankMatchScan
+    j.verbindlichkeit_monat = k.abrechnungs_monat;
+    j.lohnsteuer_zielmonat = k.lohnsteuer_zielmonat;
+    j.print_datum = k._print_datum || null;
+    j.ist_leer_korrektur = !!k.ist_leer_korrektur;
+    j.saldo_vormonat = folge ? folge.saldo_vormonat : k.saldo_vormonat;
+    var be = (folge && folge.saldo_bereits_erhalten) ? folge.saldo_bereits_erhalten : k.saldo_bereits_erhalten;
+    if(be) j.saldo_bereits_erhalten = be > 0 ? -be : be;
+    j.saldo_folgemonat = folge && folge.ueberweisung!=null ? folge.ueberweisung : k.saldo_folgemonat;
+    if(folge && folge.ueberweisung!=null) j.restzahlung = folge.ueberweisung;
+    if(folge && folge.auszahlungs_ziel) j.auszahlungs_ziel = folge.auszahlungs_ziel;
+    return j;
+  }
+  if(f==='gvl'){
+    var g = rows[0];
+    j.studio = 'GVL'; j.titel = g.titel; j.gutschrift_nr = g.beleg_nr; j.datum = g.ausstellungs_datum; j.ausstellungsdatum = g.ausstellungs_datum;
+    j.brutto = g.brutto; j.netto = g.brutto; j.mwst = g.ust_betrag; j.auszahlung = g.auszahlung; j.ust_satz = g.ust_satz; j.ust_frei = !!g.steuerfrei;
+    if(g.steuerfrei){ j.gvl_verwaltungskosten_netto = g.verwaltungskosten_netto; j.gvl_verwaltungskosten_ust = g.verwaltungskosten_ust; }
+    j.beschr = 'GVL '+g.beleg_nr;
+    return j;
+  }
+  if(f==='eigen_rech'){
+    var e = rows[0];
+    j.studio = (e.empfaenger||'').replace(/\s+(GmbH|AG|UG|KG)$/,'').trim() || null; j.titel = glTitelBereinigen(e.titel).titel; j.gutschrift_nr = e.beleg_nr;
+    j.datum = e.leistungs_datum_von; j.ausstellungsdatum = e.ausstellungs_datum;
+    j.brutto = e.brutto; j.netto = e.netto; j.mwst = e.ust_betrag; j.auszahlung = e.auszahlung; j.ust_satz = e.ust_satz;
+    j.beschr = 'Rechnung '+e.beleg_nr;
+    return j;
+  }
+  if(f==='netflix_remittance'){
+    var n = rows[0];
+    j.studio = 'Netflix'; j.titel = n.titel; j.gutschrift_nr = n.beleg_nr; j.datum = n.leistungs_datum_von; j.ausstellungsdatum = n.ausstellungs_datum;
+    j.brutto = n.brutto; j.netto = n.brutto; j.mwst = 0; j.auszahlung = n.auszahlung; j.ust_satz = 0; j.ust_frei = true;
+    j.beschr = 'Netflix Remittance '+n.beleg_nr;
+    return j;
+  }
+  return null;
+}
+
+
+// ── Build 1263: Offline-Auslesung ─────────────────────────────────────────────
+// Liest Gagenabrechnungen lokal aus den pdf.js-Textitems (kein Upload an die KI),
+// wenn das Format bekannt ist. Erzeugt dasselbe JSON wie die KI und laeuft durch
+// den unveraenderten Verarbeitungspfad. Schalter: db.profil.offlineLeser (Standard an).
+function _offlineLeserAktiv(){
+  return !(db && db.profil && db.profil.offlineLeser === false);
+}
+// Studio-Namen an den Bestand angleichen, damit keine doppelten Abrechner entstehen
+// (z.B. "mobyDOK GmbH" -> "mobydok", "FRIDGE Tonstudios Frankfurt GmbH & Co.KG" -> "FRIDGE Tonstudios Frankfurt").
+// Bei mehreren passenden Namen gewinnt der mit den meisten Abrechnungen.
+function _offlineStudioAngleichen(name){
+  if(!name || typeof dbv2==='undefined' || !dbv2 || !dbv2.abrechner) return name;
+  function norm(x){ return String(x||'').toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/gmbh|&\s*co\.?\s*kg|\bkg\b|\bag\b|\bug\b/g,'').replace(/[^a-z0-9]/g,''); }
+  var n = norm(name); if(n.length < 3) return name;
+  // nach Namen zaehlen (derselbe Name kann mehrere Abrechner-Eintraege haben)
+  var nameVon = {}; dbv2.abrechner.forEach(function(a){ nameVon[a.id] = a.name; });
+  var zahl = {}; (dbv2.abrechnungen||[]).forEach(function(a){ var nm = nameVon[a.abrechner_id]; if(nm) zahl[nm] = (zahl[nm]||0)+1; });
+  var best = null, bestZ = -1;
+  dbv2.abrechner.forEach(function(a){
+    var m = norm(a.name); if(m.length < 3) return;
+    if(m===n || m.indexOf(n)===0 || n.indexOf(m)===0){
+      var z = zahl[a.name]||0; if(z > bestZ){ best = a.name; bestZ = z; }
+    }
+  });
+  return best || name;
+}
+// Textitems aller Seiten holen; onDone(res|null); onPw() bei PasswordException.
+function _offlineLesen(dataURL, password, onDone, onPw){
+  if(typeof pdfjsLib==='undefined' || typeof glLesenAusSeiten!=='function'){ onDone(null); return; }
+  try{
+    var b64 = dataURL.split(',')[1]; var bin = atob(b64); var arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var params = {data: arr}; if(password) params.password = password;
+    pdfjsLib.getDocument(params).promise.then(function(pdf){
+      var n = Math.min(pdf.numPages, 40), ps = [];
+      for(var p=1;p<=n;p++) ps.push(pdf.getPage(p).then(function(pg){ return pg.getTextContent().then(function(tc){ return tc.items; }); }));
+      return Promise.all(ps).then(function(seiten){
+        var res = glLesenAusSeiten(seiten); res.seitenAnzahl = pdf.numPages; onDone(res);
+      });
+    }).catch(function(e){
+      if(e && e.name==='PasswordException'){ if(onPw) onPw(); else onDone(null); }
+      else { console.warn('[1263] offline lesen:', e); onDone(null); }
+    });
+  }catch(e){ console.warn('[1263] offline lesen:', e); onDone(null); }
+}
 function dokAnalyseDoc(d, key, cb){
   // Bild nicht mehr im Speicher — iOS hat es verworfen
   if(!d.dataURL && d.mime!=='application/pdf'){
@@ -17176,42 +17708,98 @@ function dokAnalyseDoc(d, key, cb){
     });
   }
 
-  function _sendToAPI(dataURL){
-    if(!dataURL){ showToast('Kein PDF-Inhalt — bitte neu einlesen'); if(cb) cb(); return; }
-    var b64 = dataURL.split(',')[1];
-    if(!b64){ showToast('Bild konnte nicht gelesen werden'); if(cb) cb(); return; }
-    var contentBlock = mime==='application/pdf'
-      ? {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
-      : {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}};
-    
-    var bodyStr;
-    try {
-      bodyStr = JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
-        messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
-    } catch(e) {
-      showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
-    }
-    
-    var _kb = Math.round(bodyStr.length/1024);
-    var _mb = (_kb/1024).toFixed(1);
-    if(_kb > 3000){
-      showToast('⚠ Großes PDF ('+_mb+'MB) — Analyse kann 2–3 Min dauern…');
-    } else {
-      showToast('Analysiere ('+_kb+'KB)…');
-    }
-    
-    // XHR statt fetch — stabiler in iOS Safari für große Bodies
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST','https://api.anthropic.com/v1/messages');
-    // Timeout MUSS nach open() gesetzt werden (iOS Safari Spec)
-    xhr.timeout = _kb > 3000 ? 180000 : 60000;
-    xhr.setRequestHeader('Content-Type','application/json');
-    xhr.setRequestHeader('x-api-key', key);
-    xhr.setRequestHeader('anthropic-version','2023-06-01');
-    xhr.setRequestHeader('anthropic-dangerous-direct-browser-access','true');
-    xhr.onload = function(){
+  // Build 1263: Antwortverarbeitung aus _sendToAPI herausgezogen, damit der Offline-Leser
+  // dasselbe JSON ueber denselben Pfad einspeisen kann. Inhalt unveraendert.
+  // Build 1263: Studio-Hamburg-Uebernahme aus dem Passwort-Pfad herausgezogen (Inhalt unveraendert),
+  // damit der Offline-Leser sie mit _offline=true direkt aufrufen kann.
+  function _uebernehmeSthH(_j, pageDataURLs, _offline){
+            if(!_offline){ delete d._offlineGelesen; delete d._leseHinweise; } // Build 1263: KI hat gelesen
+            d.typ = _dokTypAufloesen(d, _j.typ, _j.gutschrift_nr); d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
+            d.ausstellungsdatum = _j.ausstellungsdatum||null; // Build 747
+            d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
+            // Build 787: SthH-Titel-Präfix ("Gage Synchronsprecher ...") abschneiden
+            if(d.titel && /studio hamburg/i.test(String(d.studio||''))){
+              d.titel = _bereinigeSthHTitel(d.titel);
+            }
+            d.regie=_j.regie||null; d.rolle=_j.rolle||null; d.uhrzeit=_j.uhrzeit||null;
+            d.bis_uhrzeit=_j.bis_uhrzeit||d.bis_uhrzeit||null;   // Build 1028
+            d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
+            d.auszahlung=_j.auszahlung||null; d.gutschrift_nr=_j.gutschrift_nr||null;
+            d.kv_abzug=_j.kv_abzug||null; d.rv_abzug=_j.rv_abzug||null; d.pv_abzug=_j.pv_abzug||null;
+            // USt-Satz sanitieren
+            if(_j.ust_satz!=null){ var _ru=parseFloat(_j.ust_satz)||0; d.ustSatz=Math.abs(_ru-0.19)<0.02?0.19:Math.abs(_ru-0.07)<0.02?0.07:_ru===0?0:0.07; }
+            // Build 845: GVL Privatkopie — USt-frei-Flag + Verwaltungskosten (wie Site 1)
+            if(_j.ust_frei != null) d.ust_frei = !!_j.ust_frei;
+            if(_j.gvl_verwaltungskosten_netto != null) d.gvl_vwk_netto = parseFloat(_j.gvl_verwaltungskosten_netto)||null;
+            if(_j.gvl_verwaltungskosten_ust  != null) d.gvl_vwk_ust  = parseFloat(_j.gvl_verwaltungskosten_ust)||null;
+            d.sessions=_j.sessions||null;
+            // Build 753: Fallback wenn Beleg-Header-Titel/Rolle leer → aus erster Session ableiten
+            if(!d.titel && d.sessions && Array.isArray(d.sessions)){
+              for(var _xi=0; _xi<d.sessions.length; _xi++){
+                var _xst = d.sessions[_xi];
+                var _xt = _xst && (_xst.titel || _xst.produktion);
+                if(_xt){ d.titel = _xt; break; }
+              }
+              // Build 787: auch hier SthH-Präfix abschneiden
+              if(d.titel && /studio hamburg/i.test(String(d.studio||''))){
+                d.titel = _bereinigeSthHTitel(d.titel);
+              }
+            }
+            if(!d.rolle && d.sessions && Array.isArray(d.sessions)){
+              for(var _xri=0; _xri<d.sessions.length; _xri++){
+                var _xsr = d.sessions[_xri];
+                if(_xsr && _xsr.rolle){ d.rolle = _xsr.rolle; break; }
+              }
+            }
+            showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
+            // ─── Build 771: Auto-Match Session→Kalendertermin (NUR Studio Hamburg) ───
+            // Der SH-Spezialpfad hat — anders als der normale monats_abrechn-Pfad —
+            // bisher KEINEN Auto-Match auf Kalendertermine gemacht. Dadurch blieben
+            // SH-Sessions immer orange ("Tippen zum Zuordnen"), obwohl der passende
+            // Kalendertermin existierte. Hier gezielt nachgezogen — greift nur für
+            // Studio Hamburg, lässt alle anderen Studios unberührt.
+            if(d.sessions && Array.isArray(d.sessions) && d.sessions.length){
+              // Build 787: SthH-Session-Titel ebenfalls vom "Gage Synchronsprecher"-Präfix bereinigen
+              if(/studio hamburg/i.test(String(d.studio||''))){
+                d.sessions.forEach(function(s){
+                  if(s && s.titel) s.titel = _bereinigeSthHTitel(s.titel);
+                  if(s && s.produktion) s.produktion = _bereinigeSthHTitel(s.produktion);
+                });
+              }
+              var _shBelegte = [];
+              (db.dokumente||[]).forEach(function(x){
+                if(x.id === d.id) return;
+                if(x.terminId) _shBelegte.push(x.terminId);
+                if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) _shBelegte.push(ss.terminId); });
+              });
+              d.sessions.forEach(function(s){
+                if(s.terminId || !s.datum) return;
+                var _tm = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, _shBelegte, true);
+                if(_tm){ s.terminId = _tm.id; _shBelegte.push(_tm.id); }
+              });
+            }
+            save(db); rDokumente();
+            // ─── Build 762: zweiter KI-Call für Bank-Match-Felder ───
+            // Nur wenn Studio Hamburg erkannt und PDF-Daten verfügbar
+            if(_offline){
+              // Build 1263: K4-Felder kommen direkt aus dem Offline-Leser (sonst zweiter KI-Lauf _studioHamburgBankMatchScan)
+              ['verbindlichkeit_monat','lohnsteuer_zielmonat','print_datum','saldo_vormonat','saldo_bereits_erhalten','saldo_folgemonat','auszahlungs_ziel','ist_leer_korrektur','restzahlung'].forEach(function(k){ if(_j[k]!=null) d[k]=_j[k]; });
+              d._offlineGelesen = true; d._leseHinweise = (_j._hinweise && _j._hinweise.length) ? _j._hinweise.slice(0,6) : null;
+              try { _reassignSthHTermine(); } catch(e){ console.warn('[1263] reassign:', e); }
+              save(db); rDokumente(); if(cb) cb();
+            } else if(d.studio === 'Studio Hamburg' && pageDataURLs && pageDataURLs.length){
+              _studioHamburgBankMatchScan(d, key, pageDataURLs, function(){
+                // Build 788: reihenfolge-unabhängige Termin-Zuordnung über alle SthH-Belege
+                try { _reassignSthHTermine(); } catch(e){ console.warn('[788] reassign:', e); }
+                save(db); rDokumente(); if(cb) cb();
+              });
+            } else {
+              if(cb) cb();
+            }
+  }
+  function _verarbeiteKiAntwort(_respText){
       var data;
-      try { data = JSON.parse(xhr.responseText); } catch(e){ showToast('Parse Fehler: '+e.message); if(cb) cb(); return; }
+      try { data = JSON.parse(_respText); } catch(e){ showToast('Parse Fehler: '+e.message); if(cb) cb(); return; }
       if(!data.content||!data.content[0]){
         var rawErr = (data.error&&data.error.message) || JSON.stringify(data).slice(0,200);
         showToast('API Fehler: '+rawErr);
@@ -17234,7 +17822,9 @@ function dokAnalyseDoc(d, key, cb){
       }
       txt = txt.slice(start, end+1);
       var j = JSON.parse(txt);
-      d._kiAnalysiert = true; // Build 1236: Marker fuer "KI hat gelesen" (Ausgaben-Knopf)
+      if(!j._offline) d._kiAnalysiert = true; // Build 1236: Marker fuer "KI hat gelesen" (Ausgaben-Knopf); Build 1263: Offline-Leser setzt stattdessen _offlineGelesen
+      if(j._offline){ d._offlineGelesen = true; d._leseHinweise = (j._hinweise && j._hinweise.length) ? j._hinweise.slice(0,6) : null; }
+      else { delete d._offlineGelesen; delete d._leseHinweise; } // Build 1263: KI hat gelesen, Marker zuruecknehmen
       d.typ     = _dokTypAufloesen(d, j.typ, j.gutschrift_nr);
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
@@ -17440,6 +18030,7 @@ function dokAnalyseDoc(d, key, cb){
             // page_nr vom KI nutzen wenn vorhanden, sonst Fallback auf Session-Index
             zielDok._splitPageNr = s.page_nr || (si2 + 1);
             zielDok.awaitConfirm = true;
+            if(d._offlineGelesen){ zielDok._offlineGelesen = true; zielDok._leseHinweise = (d._leseHinweise||[]).filter(function(h){ return h.indexOf(zielDok.gutschrift_nr+':')===0; }); if(!zielDok._leseHinweise.length) zielDok._leseHinweise=null; } // Build 1263
 
             // ── Multi-Termin pro Gutschrift: termine-Array vom KI ──
             var subTermine = (s.termine && s.termine.length > 1) ? s.termine : null;
@@ -17670,13 +18261,77 @@ function dokAnalyseDoc(d, key, cb){
     }
     // Recherche nur auf Knopfdruck im Termin — nicht automatisch
     if(cb) cb();
-    };
+  }
+  function _sendToAPI(dataURL){
+    if(!dataURL){ showToast('Kein PDF-Inhalt — bitte neu einlesen'); if(cb) cb(); return; }
+    var b64 = dataURL.split(',')[1];
+    if(!b64){ showToast('Bild konnte nicht gelesen werden'); if(cb) cb(); return; }
+    var contentBlock = mime==='application/pdf'
+      ? {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
+      : {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}};
+    
+    var bodyStr;
+    try {
+      bodyStr = JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
+        messages:[{role:'user',content:[contentBlock,{type:'text',text:prompt}]}]});
+    } catch(e) {
+      showToast('JSON Fehler: '+e.message); if(cb) cb(); return;
+    }
+    
+    var _kb = Math.round(bodyStr.length/1024);
+    var _mb = (_kb/1024).toFixed(1);
+    if(_kb > 3000){
+      showToast('⚠ Großes PDF ('+_mb+'MB) — Analyse kann 2–3 Min dauern…');
+    } else {
+      showToast('Analysiere ('+_kb+'KB)…');
+    }
+    
+    // XHR statt fetch — stabiler in iOS Safari für große Bodies
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST','https://api.anthropic.com/v1/messages');
+    // Timeout MUSS nach open() gesetzt werden (iOS Safari Spec)
+    xhr.timeout = _kb > 3000 ? 180000 : 60000;
+    xhr.setRequestHeader('Content-Type','application/json');
+    xhr.setRequestHeader('x-api-key', key);
+    xhr.setRequestHeader('anthropic-version','2023-06-01');
+    xhr.setRequestHeader('anthropic-dangerous-direct-browser-access','true');
+    xhr.onload = function(){ _verarbeiteKiAntwort(xhr.responseText); };
     xhr.onerror = function(){ showToast('XHR Netzfehler '+xhr.status); d.typ='sonstig'; if(cb) cb(); };
     // Timeout wird dynamisch nach Dateigröße gesetzt (siehe unten vor xhr.send)
     xhr.ontimeout = function(){ showToast('⚠ Timeout — PDF zu groß oder Verbindung zu langsam. Bitte nochmal versuchen.'); d.typ='sonstig'; if(cb) cb(); };
     try { xhr.send(bodyStr); } catch(e){ showToast('Send: '+e.message); if(cb) cb(); }
   } // end _sendToAPI
 
+  // Build 1263: Offline-Leser zuerst. Bekanntes Format -> KI-JSON nachbauen -> gleicher Pfad wie bisher.
+  // Unbekanntes Format, Scan ohne Textebene oder Fehler -> alter KI-Pfad unveraendert.
+  function _kiPfad(){ _kiPfadStart(); }
+  if(mime==='application/pdf' && _offlineLeserAktiv()){
+    var _pwKand = _findPdfPassword(d.studio||'', d.dateiname||'') || [];
+    var _pwIdx = -1;
+    var _nachOffline = function(res){
+      var j = null;
+      try { j = (res && !res.ki_noetig && res.rows && res.rows.length) ? glZuKiJson(res) : null; } catch(e){ console.warn('[1263] adapter:', e); j = null; }
+      if(!j){ _kiPfad(); return; }
+      if(j.studio) j.studio = _offlineStudioAngleichen(j.studio);
+      showToast('Lokal gelesen: '+(j.sessions&&j.sessions.length>1 ? j.sessions.length+' Abrechnungen' : (j.gutschrift_nr||j.beschr||res.format))+(j._hinweise&&j._hinweise.length?' · '+j._hinweise.length+' Hinweis(e)':''));
+      try{
+        if(res.format==='studio_hh'){ _uebernehmeSthH(j, null, true); }
+        else { _verarbeiteKiAntwort(JSON.stringify({content:[{type:'text', text:JSON.stringify(j)}]})); }
+      }catch(e){ console.warn('[1263] uebernahme:', e); showToast('Lokales Lesen fehlgeschlagen, KI übernimmt'); _kiPfad(); }
+    };
+    var _versuch = function(){
+      var pw = _pwIdx < 0 ? null : _pwKand[_pwIdx];
+      _offlineLesen(d.dataURL, pw, _nachOffline, function(){
+        _pwIdx++;
+        if(_pwIdx < _pwKand.length) _versuch(); else _kiPfad();   // kein passendes Passwort: KI-Pfad fragt wie bisher
+      });
+    };
+    _versuch();
+    return;
+  }
+  _kiPfadStart();
+  function _kiPfadStart(){
+  if(!key){ showToast('Nicht lokal lesbar: '+(d.dateiname||'Beleg')+' braucht den KI-Schlüssel'); if(cb) cb(); return; } // Build 1263
   // PDF: zuerst bekanntes Passwort versuchen — Studio aus Dateinamen als Fallback
   if(mime==='application/pdf'){
     var pwStudio = d.studio || '';
@@ -17741,83 +18396,7 @@ function dokAnalyseDoc(d, key, cb){
             if(_s<0||_e<0){ showToast('KI: kein JSON'); d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return; }
             _txt = _txt.slice(_s,_e+1);
             var _j = JSON.parse(_txt);
-            // Felder direkt übernehmen (gleiche Logik wie _sendToAPI)
-            d.typ = _dokTypAufloesen(d, _j.typ, _j.gutschrift_nr); d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
-            d.ausstellungsdatum = _j.ausstellungsdatum||null; // Build 747
-            d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
-            // Build 787: SthH-Titel-Präfix ("Gage Synchronsprecher ...") abschneiden
-            if(d.titel && /studio hamburg/i.test(String(d.studio||''))){
-              d.titel = _bereinigeSthHTitel(d.titel);
-            }
-            d.regie=_j.regie||null; d.rolle=_j.rolle||null; d.uhrzeit=_j.uhrzeit||null;
-            d.bis_uhrzeit=_j.bis_uhrzeit||d.bis_uhrzeit||null;   // Build 1028
-            d.brutto=_j.brutto||null; d.netto=_j.netto||null; d.mwst=_j.mwst||null;
-            d.auszahlung=_j.auszahlung||null; d.gutschrift_nr=_j.gutschrift_nr||null;
-            d.kv_abzug=_j.kv_abzug||null; d.rv_abzug=_j.rv_abzug||null; d.pv_abzug=_j.pv_abzug||null;
-            // USt-Satz sanitieren
-            if(_j.ust_satz!=null){ var _ru=parseFloat(_j.ust_satz)||0; d.ustSatz=Math.abs(_ru-0.19)<0.02?0.19:Math.abs(_ru-0.07)<0.02?0.07:_ru===0?0:0.07; }
-            // Build 845: GVL Privatkopie — USt-frei-Flag + Verwaltungskosten (wie Site 1)
-            if(_j.ust_frei != null) d.ust_frei = !!_j.ust_frei;
-            if(_j.gvl_verwaltungskosten_netto != null) d.gvl_vwk_netto = parseFloat(_j.gvl_verwaltungskosten_netto)||null;
-            if(_j.gvl_verwaltungskosten_ust  != null) d.gvl_vwk_ust  = parseFloat(_j.gvl_verwaltungskosten_ust)||null;
-            d.sessions=_j.sessions||null;
-            // Build 753: Fallback wenn Beleg-Header-Titel/Rolle leer → aus erster Session ableiten
-            if(!d.titel && d.sessions && Array.isArray(d.sessions)){
-              for(var _xi=0; _xi<d.sessions.length; _xi++){
-                var _xst = d.sessions[_xi];
-                var _xt = _xst && (_xst.titel || _xst.produktion);
-                if(_xt){ d.titel = _xt; break; }
-              }
-              // Build 787: auch hier SthH-Präfix abschneiden
-              if(d.titel && /studio hamburg/i.test(String(d.studio||''))){
-                d.titel = _bereinigeSthHTitel(d.titel);
-              }
-            }
-            if(!d.rolle && d.sessions && Array.isArray(d.sessions)){
-              for(var _xri=0; _xri<d.sessions.length; _xri++){
-                var _xsr = d.sessions[_xri];
-                if(_xsr && _xsr.rolle){ d.rolle = _xsr.rolle; break; }
-              }
-            }
-            showToast('✓ Studio Hamburg: '+(_j.sessions?_j.sessions.length+' Sessions':'analysiert'));
-            // ─── Build 771: Auto-Match Session→Kalendertermin (NUR Studio Hamburg) ───
-            // Der SH-Spezialpfad hat — anders als der normale monats_abrechn-Pfad —
-            // bisher KEINEN Auto-Match auf Kalendertermine gemacht. Dadurch blieben
-            // SH-Sessions immer orange ("Tippen zum Zuordnen"), obwohl der passende
-            // Kalendertermin existierte. Hier gezielt nachgezogen — greift nur für
-            // Studio Hamburg, lässt alle anderen Studios unberührt.
-            if(d.sessions && Array.isArray(d.sessions) && d.sessions.length){
-              // Build 787: SthH-Session-Titel ebenfalls vom "Gage Synchronsprecher"-Präfix bereinigen
-              if(/studio hamburg/i.test(String(d.studio||''))){
-                d.sessions.forEach(function(s){
-                  if(s && s.titel) s.titel = _bereinigeSthHTitel(s.titel);
-                  if(s && s.produktion) s.produktion = _bereinigeSthHTitel(s.produktion);
-                });
-              }
-              var _shBelegte = [];
-              (db.dokumente||[]).forEach(function(x){
-                if(x.id === d.id) return;
-                if(x.terminId) _shBelegte.push(x.terminId);
-                if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) _shBelegte.push(ss.terminId); });
-              });
-              d.sessions.forEach(function(s){
-                if(s.terminId || !s.datum) return;
-                var _tm = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, _shBelegte, true);
-                if(_tm){ s.terminId = _tm.id; _shBelegte.push(_tm.id); }
-              });
-            }
-            save(db); rDokumente();
-            // ─── Build 762: zweiter KI-Call für Bank-Match-Felder ───
-            // Nur wenn Studio Hamburg erkannt und PDF-Daten verfügbar
-            if(d.studio === 'Studio Hamburg' && pageDataURLs && pageDataURLs.length){
-              _studioHamburgBankMatchScan(d, key, pageDataURLs, function(){
-                // Build 788: reihenfolge-unabhängige Termin-Zuordnung über alle SthH-Belege
-                try { _reassignSthHTermine(); } catch(e){ console.warn('[788] reassign:', e); }
-                save(db); rDokumente(); if(cb) cb();
-              });
-            } else {
-              if(cb) cb();
-            }
+            _uebernehmeSthH(_j, pageDataURLs, false);
           } catch(e){
             showToast('Parse Fehler: '+e.message); d.typ='sonstig'; if(cb) cb();
           }
@@ -17852,6 +18431,7 @@ function dokAnalyseDoc(d, key, cb){
       _sendToAPI(resized);
     });
   }
+  } // end _kiPfadStart
 } // end dokAnalyseDoc
 
 // Passwort-Dialog wenn PDF geschützt und kein gespeichertes Passwort gefunden
@@ -19731,6 +20311,16 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     }
   }
 
+  // Build 1263: Herkunft und Prueffhinweise des Offline-Lesers sichtbar machen
+  if(d && d._offlineGelesen && d.awaitConfirm){
+    var _lh = (d._leseHinweise||[]).filter(function(h){ return h.indexOf('Ausstellungsdatum nicht im Beleg')<0; });
+    var _ad = (d._leseHinweise||[]).some(function(h){ return h.indexOf('Ausstellungsdatum nicht im Beleg')>=0; });
+    body = '<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:'+(_lh.length?'#f6ead9':'#eef0ea')+';font-size:12.5px;line-height:1.45;color:#201E1A">'
+      + '<b>Lokal gelesen</b>, ohne KI. '+(_lh.length ? 'Bitte prüfen:' : 'Rechenprobe stimmt.')
+      + (_lh.length ? '<br>'+_lh.map(function(h){ return esc(h); }).join('<br>') : '')
+      + (_ad ? '<br><span style="opacity:.75">Kein Ausstellungsdatum im Beleg, erster Drehtag übernommen.</span>' : '')
+      + '</div>' + body;
+  }
   document.getElementById('dok-detail-body').innerHTML = body;
 
   // PDF-Canvas rendern falls vorhanden
@@ -22397,7 +22987,7 @@ function dokAnalyseOne(){
   var d = (db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
   var key = (db.profil&&db.profil.apiKey) || localStorage.getItem('anthropic_api_key') || null;
-  if(!key){ showToast('Kein API-Key gesetzt'); return; }
+  if(!key && !_offlineLeserAktiv()){ showToast('Kein API-Key gesetzt'); return; } // Build 1263
   if(!d.dataURL){ showToast('PDF nicht mehr im Speicher — bitte Dokument neu einlesen'); return; }
 
   // Spinner-Overlay anzeigen
@@ -28381,6 +28971,14 @@ function showZahlungPopup(terminId){
 //  - Dateiname "Rechnung_..." / "Rechnung ..." (NICHT "Abrechnung_...") → Eigenrechnung
 //  - GS-Nr im Format NN/YYYY → Eigenrechnung
 // So muss der User seine eigenen Rechnungen nie mehr manuell umklassifizieren.
+// Build 1263: Schalter fuer den Offline-Leser (Einstellungen > Einrichtung)
+function toggleOfflineLeser(){
+  if(!db.profil) db.profil={};
+  db.profil.offlineLeser = !_offlineLeserAktiv();
+  save(db);
+  var el=document.getElementById('offline-leser-status'); if(el) el.textContent=db.profil.offlineLeser?'An':'Aus';
+  showToast(db.profil.offlineLeser?'Belege werden lokal gelesen, KI nur als Rückfall':'Belege gehen wieder an die KI');
+}
 function _dokTypAufloesen(d, kiTyp, kiGs){
   if(d && d._folderTyp) return d._folderTyp;
   var fn = String((d&&d.dateiname)||'');
