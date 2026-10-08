@@ -5392,7 +5392,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1259';
+  if(elH) elH.textContent = '1260';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -26303,9 +26303,15 @@ function rZahlungen(){
       +'<div style="display:flex;align-items:center;gap:20px">'
       +'<svg width="120" height="120" viewBox="0 0 120 120">'
       +'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--cream2)" stroke-width="14"/>'
-      +(offenAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--red)" stroke-width="14" stroke-dasharray="'+offDash+' '+circ+'" stroke-dashoffset="'+(circ/4)+'" stroke-linecap="round"/>':'')
-      +(abgAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--orange)" stroke-width="14" stroke-dasharray="'+abgDash+' '+circ+'" stroke-dashoffset="'+(circ/4-offDash)+'" stroke-linecap="round"/>':'')
-      +(bezahltAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--accent)" stroke-width="14" stroke-dasharray="'+bezDash+' '+circ+'" stroke-dashoffset="'+(circ/4-offDash-abgDash)+'" stroke-linecap="round"/>':'')
+      // Build 1260: Ring schliesst jetzt. Vorher Startpunkt per dashoffset (circ/4) und
+      // runde Linienenden: Bezahlt ueberdeckte Offen, oben blieb eine Luecke. Jetzt
+      // Drehung um -90 Grad (Start oben), Segmente mit negativem Versatz hintereinander,
+      // gerade Enden. Summe der drei Segmente = voller Umfang.
+      +'<g transform="rotate(-90 60 60)">'
+      +(bezahltAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--accent)" stroke-width="14" stroke-dasharray="'+bezDash+' '+circ+'" stroke-dashoffset="0"/>':'')
+      +(offenAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--red)" stroke-width="14" stroke-dasharray="'+offDash+' '+circ+'" stroke-dashoffset="'+(-bezDash)+'"/>':'')
+      +(abgAll>0?'<circle cx="60" cy="60" r="42" fill="none" stroke="var(--orange)" stroke-width="14" stroke-dasharray="'+abgDash+' '+circ+'" stroke-dashoffset="'+(-bezDash-offDash)+'"/>':'')
+      +'</g>'
       +'<text x="60" y="56" text-anchor="middle" font-size="13" font-weight="900" fill="var(--ink)">'+bezPct+'%</text>'
       +'<text x="60" y="70" text-anchor="middle" font-size="9" fill="var(--ink3)">bezahlt</text>'
       +'</svg>'
