@@ -3396,6 +3396,15 @@ function _konsolidiereDokumentNachV2(dokId){
       sessionsPerTermin[tid].push(s);
     });
 
+    // Build 1265: Summe ALLER Sessions des Belegs fuer die Pruefung gegen das Beleg-Brutto (Build 1177).
+    // Vorher wurde der Anteil des EINZELNEN Termins gegen das Beleg-Brutto verglichen; jeder korrekte
+    // mehrtaegige Beleg bekam so "summe_vs_beleg" (Bestand 08.10.2026: 10 Fehlalarme, z.B. Iyuno
+    // 677/20260802: 358 + 127 = 485 = Beleg).
+    var _gruppeBruttoPruef1265 = 0;
+    gruppenSessionsEff.forEach(function(s){
+      _gruppeBruttoPruef1265 += Math.abs(parseFloat(s.brutto_termin) || parseFloat(s.brutto) || 0);
+    });
+    _gruppeBruttoPruef1265 = Math.round(_gruppeBruttoPruef1265*100)/100;
     Object.keys(sessionsPerTermin).forEach(function(tid){
       var sList = sessionsPerTermin[tid];
 
@@ -3527,7 +3536,7 @@ function _konsolidiereDokumentNachV2(dokId){
       // aus Monatssammlern wuerden sonst dauerhaft falsch melden.
       var _belegBr1177 = parseFloat(d.brutto) || 0;
       if(bruttoCheck === 'ok' && _belegBr1177 > 0 && gruppenSessionsEff.length > 1
-         && hatBruttoPruef && Math.abs(anyBruttoPruef - _belegBr1177) > 1.5){
+         && hatBruttoPruef && Math.abs(_gruppeBruttoPruef1265 - _belegBr1177) > 1.5){   // Build 1265: Belegsumme statt Termin-Anteil
         bruttoCheck = 'abweichung';
         checkGrund  = 'summe_vs_beleg';
       }
@@ -5393,7 +5402,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1263';
+  if(elH) elH.textContent = '1266';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -16882,11 +16891,16 @@ function glZuKiJson(res){
     j.netto = glR2(gagenSeiten.reduce(function(a,r){ return a+(r.netto||0); },0));
     j.auszahlung = k.auszahlung;
     j.beschr = 'Studio Hamburg '+(k.ist_korrektur?'Korrektur ':'')+k.abrechnungs_monat;
-    j.sessions = gagenSeiten.map(function(r, i){
-      var s = {datum:r.leistungs_datum_von, page_nr:i+1, titel:r.titel, rolle:null, takes:0, take_gage:0, grundgage:r.brutto, brutto_termin:r.brutto, gutschrift_nr:'',
-               mwst:r.ust_betrag, auszahlung:r.auszahlung, kv_abzug:r.sv_kv_an, rv_abzug:r.sv_rv_an, pv_abzug:r.sv_pv_an, netto:r.netto};
-      if(r.termine && r.termine.length>1) s.termine = r.termine.map(termin);
-      return s;
+    // Eine Session pro Drehtag (Zeitraum-Zeile "TT.MM.-TT.MM. … EUR x"), nicht pro Seite.
+    // Geld (Brutto, SV, USt, Auszahlung) bleibt am Beleg; die Sessions tragen nur Datum, Titel und Anteil.
+    // Build 1264. Realfall SH 03-2026: 17.02. 484 € + 27.02. 372 €, vorher hing alles am 17.02.
+    j.sessions = [];
+    gagenSeiten.forEach(function(r, i){
+      var tage = (r.termine && r.termine.length) ? r.termine : [{datum:r.leistungs_datum_von, titel:r.titel, brutto:r.brutto}];
+      tage.forEach(function(t){
+        var tb = glTitelBereinigen(t.titel || r.titel);
+        j.sessions.push({datum:t.datum, page_nr:i+1, titel:tb.titel, rolle:null, takes:0, take_gage:0, grundgage:t.brutto, brutto_termin:t.brutto, gutschrift_nr:''});
+      });
     });
     // K4-Felder (Build 757/763), bisher aus dem zweiten KI-Lauf _studioHamburgBankMatchScan
     j.verbindlichkeit_monat = k.abrechnungs_monat;
@@ -21495,11 +21509,16 @@ function dokBestaetigenMonat(dokId){
     _sessionsMitTermin_716.forEach(function(s){
       var _t = (db.termine||[]).find(function(x){return x.id===s.terminId;});
       if(!_t) return;
-      if(s.takes) _t.takes = parseInt(s.takes)||0;
+      // Build 1266: Takes NICHT aus der Abrechnung ueberschreiben. Arena rechnet die Takes 1-10 in der
+      // "Grundgage 1-10" ab und weist nur den Rest als Takes aus (Navy CIS 08.12.2025: Dispo 130, Gutschrift
+      // 120). Ueberschreiben machte daraus 120 Takes und eine falsche Differenz von 40 EUR.
+      if(s.takes && !_t.takes) _t.takes = parseInt(s.takes)||0;
       if(s.rolle && !_t.rolle) _t.rolle = s.rolle;
       if(s.titel && (!_t.titel||_t.titel===_t.studio)) _t.titel = s.titel;
-      if(s.take_gage) _t.rate = parseFloat(s.take_gage)||0;
-      if(s.grundgage) _t.kommgage = parseFloat(s.grundgage)||0;
+      // Build 1265: rate/kommgage kommen aus der Dispo und werden hier nicht ueberschrieben
+      // (Regel "kommgage NUR aus Dispo"). Nur ein leerer Termin wird befuellt, wie im Einzelpfad.
+      if(s.take_gage && !_t.rate) _t.rate = parseFloat(s.take_gage)||0;
+      if(s.grundgage && !_t.kommgage) _t.kommgage = parseFloat(s.grundgage)||0;
       if(s.brutto_termin) _t.brutto_termin = parseFloat(s.brutto_termin)||0;
       if(s._mwst_anteil != null) _t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz != null) _t.ust_satz = s._ust_satz;
