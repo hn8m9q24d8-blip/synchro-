@@ -5402,7 +5402,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1266';
+  if(elH) elH.textContent = '1268';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -16480,6 +16480,39 @@ function glDeDate(s){
 }
 function glR2(v){ return Math.round(v*100)/100; }
 
+/* Build 1267: 10-Take-Paket. Arena ("Grundgage 1-10") und Interopa (Kino 150 € = 100 € + 10 x 5 €) rechnen die
+   Takes 1-10 in der Grundgage ab und weisen nur die Takes darueber als Takegage aus. Fuer das Befuellen eines
+   leeren Termins braucht die App dann den Tarif (Grundgage ohne Paket) und die Gesamt-Takes.
+   Tarife wie in der App (TV 80/4, Streaming 85/4,20, Kino 100/5). */
+var GL_TARIFE = [[80,4],[85,4.2],[100,5]];
+function glPaket(q, label){
+  if(q._nullTakes) return;                       // VSI/Iyuno zaehlen die Takes 1-10 als "0,00"-Zeilen mit: Takes sind schon vollstaendig
+  if(q._paketZeile){                             // Build 1268, TNT: "Takegage 1-10 1 x 42,00" neben eigener Grundgage-Zeile
+    q.paket_1_10 = true; q.kommgage_tarif = q.grundgage; q.rate_tarif = q.take_gage;
+    q.takes_gesamt = q.takes > 0 ? q.takes + 10 : null; return;
+  }
+  if(q.grundgage > 0 && !(q.take_gage > 0) && !(q.takes > 0)){
+    // Build 1268: nur die Paketzeile, keine Takes darueber (z.B. Arena "Streaming 1-10 Ta 127,00").
+    // Der Belegwert bleibt stehen (Regel Build 1178: eine Zahl im Beleg wird nie durch eine Rechenregel ersetzt).
+    // Fuer das Befuellen eines LEEREN Termins gibt es den Tarif getrennt: 127 = 85 + 10 x 4,20. Takes: 1 bis 10, unbekannt.
+    var _lbl = label;
+    for(var i=0;i<GL_TARIFE.length;i++){
+      var t = GL_TARIFE[i];
+      if(Math.abs(t[0] + 10*t[1] - q.grundgage) < 0.01){
+        q.paket_1_10 = true; q.kommgage_tarif = t[0]; q.rate_tarif = t[1]; q.takes_gesamt = null; return;
+      }
+    }
+    return;
+  }
+  if(!(q.grundgage > 0) || !(q.take_gage > 0)) return;
+  var basis = glR2(q.grundgage - 10*q.take_gage);
+  var tarif = GL_TARIFE.some(function(t){ return Math.abs(t[0]-basis) < 0.01 && Math.abs(t[1]-q.take_gage) < 0.001; });
+  if(!label && !tarif) return;
+  q.paket_1_10 = true;
+  q.kommgage_tarif = basis; q.rate_tarif = q.take_gage;
+  q.takes_gesamt = q.takes > 0 ? q.takes + 10 : null;   // ohne Takegage-Zeile: 1 bis 10 Takes, genaue Zahl nur aus der Dispo
+}
+
 /* ---------------------------------------------------------------- Zeilenrekonstruktion
    pdf.js liefert Items ungeordnet. Gruppierung nach y (Toleranz 2.5pt), Sortierung nach x,
    Lücken werden zu Leerzeichen (ca. 3.5pt je Leerzeichen), damit Spaltenlücken >= 2 Leerzeichen bleiben. */
@@ -16587,12 +16620,24 @@ function glSesamEinzel(page){
     var k = p.datum+'|'+(p.rolle||'')+'|'+stamm;
     if(!grp[k]){ grp[k] = {titel:p.titel, rolle:p.rolle, filmcode:p.filmcode||null, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0}; order.push(k); }
     var q = grp[k]; q.brutto = glR2(q.brutto + p.betrag);
+    if(/grund/i.test(p.art) && /1\s*-\s*10/.test(p.art)) q._label110 = true;
+    if(/take/i.test(p.art) && p.anzahl && p.satz === 0) q._nullTakes = true;
     if(p.titel && q.titel && /(\bTR\b|Teaser|Sonder)/i.test(q.titel) && !/(\bTR\b|Teaser|Sonder)/i.test(p.titel)) q.titel = p.titel;   // Haupttitel statt Teaser-Zeile
     var paket = Math.abs(p.anzahl)===1 && /\d+-\d+/.test(p.art);   // "Takegage 1-10  1 x 42,00" ist ein Paket, kein Take
     if(/take/i.test(p.art) && p.anzahl && !paket){ q.takes += p.anzahl; if(p.satz) q.take_gage = Math.abs(p.satz); }
-    else q.grundgage = glR2(q.grundgage + p.betrag);   // Grundgage, Pauschale, Paketzeile, Sonstiges
+    else if(/^take/i.test(p.art) && paket && p.satz){   // nur echte "Takegage 1-10"-Zeilen, nicht "Mindestgage 1-10 Takes" (FFS)
+      // Build 1268: TNT-Paket "Takegage 1-10 (Titel) 1 x 42,00" — Takes 1-10 pauschal, Satz = 42/10
+      q._paketZeile = true; q.paket_betrag = glR2((q.paket_betrag||0) + p.betrag);
+      if(!q.take_gage) q.take_gage = glR2(Math.abs(p.betrag)/10);
+    }
+    else if(/sonder|zuschlag|ausfall|mehrarbeit|fahrt|spesen|nachzahlung|korrektur/i.test(p.art)){
+      // Build 1268: Sonderpositionen zaehlen zum Termin-Brutto, aber nicht zur Grundgage
+      // (FFS 3298/20260101 "Sonderregelung 400,00": Grundgage bleibt 85, wie im KI-Prompt "Betrag der + Grundgage-Zeile")
+      q.sonstige = glR2((q.sonstige||0) + p.betrag);
+    }
+    else q.grundgage = glR2(q.grundgage + p.betrag);   // Grundgage, Pauschale, Stundenposten
   });
-  r.termine = order.map(function(k){ return grp[k]; });
+  r.termine = order.map(function(k){ glPaket(grp[k], grp[k]._label110); return grp[k]; });
   r.titel = r.termine.length ? r.termine[0].titel : null;
   r.rolle = r.termine.length ? r.termine[0].rolle : null;
   r.takes = r.termine.reduce(function(a,q){ return a+q.takes; }, 0) || null;
@@ -16647,9 +16692,12 @@ function glSesamMonat(page){
       var mt = /(?:Grundgage|Takegage|Takes|Kinotrailer|Pauschale)\S*(?:\s+[A-Za-z\-]{1,8})?\s+(.+?)\s*$/.exec(mitte);
       titel = mt ? mt[1].trim().replace(/\s+(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/,'').replace(/\s+\d{6,}$/,'').replace(/^\d{3,}\s+/,'').replace(/\s{2,}/g,' ').trim() : null;
     }
+    // Build 1268: Senderkuerzel aus der Zeile (KI-Prompt: "kuerzel IMMER aus der Zeile uebernehmen")
+    var mk = /\s(TV|KINO|Kino|ST-S|PRO7|PRO|WARN|AMAZ|NFLX|DISN|APPLE|ARD|ZDF|RTL|SAT1|VOX|SKY|PARA|HBO|ARTE|MDR|NDR|WDR|BR|SWR|KIKA)\s*$/.exec(mitte);
+    var kuerzel = mk ? mk[1] : null;
     if(titel){ titel = titel.replace(/\s+(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/,'').replace(/\s+\d{6,}$/,''); }
     var ma = /^\d+\s+(\d+)\s+(?:Take|Grund)/.exec(mitte);
-    posten.push({datum:glDeDate(pm[2]), art:art, titel:titel, anzahl: ma?parseInt(ma[1],10):null, betrag:glNum(pm[4])});
+    posten.push({datum:glDeDate(pm[2]), art:art, titel:titel, anzahl: ma?parseInt(ma[1],10):null, betrag:glNum(pm[4]), label110: /Grundgage\s+1\s*-\s*10|1\s*-\s*10\s+Ta/.test(mitte), kuerzel:kuerzel});
   });
   r.posten = posten;
   var grp = {}, order = [];
@@ -16657,10 +16705,12 @@ function glSesamMonat(page){
     var k = (p.titel||'?')+'|'+p.datum;
     if(!grp[k]){ grp[k] = {titel:p.titel, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0}; order.push(k); }
     grp[k].brutto = glR2(grp[k].brutto + p.betrag);
-    if(p.art==='Takegage' && p.anzahl){ grp[k].takes += p.anzahl; if(p.betrag) grp[k].take_gage = glR2(p.betrag/p.anzahl); }
+    if(p.art==='Takegage' && p.anzahl){ grp[k].takes += p.anzahl; if(p.betrag) grp[k].take_gage = glR2(p.betrag/p.anzahl); else grp[k]._nullTakes = true; }
     else grp[k].grundgage = glR2(grp[k].grundgage + p.betrag);
+    if(p.label110) grp[k]._label110 = true;
+    if(p.kuerzel && !grp[k].kuerzel) grp[k].kuerzel = p.kuerzel;
   });
-  r.termine = order.map(function(k){ return grp[k]; });
+  r.termine = order.map(function(k){ glPaket(grp[k], grp[k]._label110); return grp[k]; });
   var daten = posten.map(function(p){ return p.datum; }).sort();
   r.leistungs_datum_von = daten.length ? daten[0] : null; r.leistungs_datum_bis = daten.length ? daten[daten.length-1] : null;
   r.titel = r.termine.length ? r.termine[0].titel : null;
@@ -16825,7 +16875,10 @@ function glZuKiJson(res){
   if(!rows.length) return null;
   var f = res.format;
   function sum(k){ return glR2(rows.reduce(function(a,r){ return a + (parseFloat(r[k])||0); }, 0)); }
-  function termin(t){ var tb = glTitelBereinigen(t.titel); return {datum:t.datum, titel:tb.titel||null, rolle:t.rolle||null, filmcode:t.filmcode||'', takes:t.takes||0, grundgage:t.grundgage||0, take_gage:t.take_gage||0, brutto_termin:t.brutto, gvl_staffel_header:tb.staffel}; }
+  function termin(t){ var tb = glTitelBereinigen(t.titel); var x = {datum:t.datum, titel:tb.titel||null, rolle:t.rolle||null, filmcode:t.filmcode||'', takes:t.takes||0, grundgage:t.grundgage||0, take_gage:t.take_gage||0, brutto_termin:t.brutto, gvl_staffel_header:tb.staffel};
+    if(t.paket_1_10){ x.paket_1_10 = true; x.kommgage_tarif = t.kommgage_tarif; x.rate_tarif = t.rate_tarif; x.takes_gesamt = t.takes_gesamt; }   // Build 1267/1268
+    if(t.kuerzel) x.kuerzel = t.kuerzel;   // Build 1268
+    return x; }
   function studioName(r){
     var s = r.studio_kurz || '';
     var map = [[/^RC/i,'RC'],[/^FFS/i,'FFS'],[/^VSI/i,'VSI'],[/^TNT/i,'TNT'],[/Arena/i,'Arena'],[/Interopa/i,'Interopa'],[/Taunus/i,'Taunus'],[/Iyuno/i,'Iyuno'],[/Oxygen/i,'Oxygen Sound Studios'],[/Cinephon/i,'Cinephon'],[/^DMT/i,'DMT'],[/Splendid/i,'Splendid Synchron'],[/EVA/i,'EVA Studios'],[/Scheune/i,'Scheune München'],[/G\s*&\s*G/i,'G&G'],[/Level ?45/i,'Level 45'],[/Think Global/i,'Think Global Media'],[/Neue Tonfilm/i,'Neue Tonfilm München'],[/Pluto/i,'Pluto Sound'],[/Antares/i,'Antares Film'],[/Mo Synchron/i,'Mo Synchron']];
@@ -16844,6 +16897,7 @@ function glZuKiJson(res){
       var s = {datum:r.leistungs_datum_von, page_nr:i+1, ausstellungsdatum:r.ausstellungs_datum, titel:r.titel, rolle:r.rolle, takes:r.takes||0,
                take_gage:t0.take_gage||0, grundgage:t0.grundgage||0, brutto_termin:r.brutto, gutschrift_nr:r.beleg_nr, mwst:r.ust_betrag, auszahlung:r.auszahlung,
                kv_abzug:r.sv_kv_an, rv_abzug:r.sv_rv_an, pv_abzug:r.sv_pv_an, netto:r.netto};
+      if(t0.paket_1_10 && (!r.termine || r.termine.length===1)){ s.paket_1_10 = true; s.kommgage_tarif = t0.kommgage_tarif; s.rate_tarif = t0.rate_tarif; s.takes_gesamt = t0.takes_gesamt; }   // Build 1267/1268
       if(r.termine && r.termine.length>1) s.termine = r.termine.map(termin);
       return s;
     });
@@ -16872,10 +16926,10 @@ function glZuKiJson(res){
     j.typ = 'monats_abrechn'; j.studio = studioName(r1); j.gutschrift_nr = r1.beleg_nr; j.datum = r1.leistungs_datum_von; j.ausstellungsdatum = r1.ausstellungs_datum;
     var tb1 = glTitelBereinigen(r1.titel); j.titel = tb1.titel; j.gvl_staffel_header = tb1.staffel; j.brutto = r1.brutto; j.mwst = r1.ust_betrag; j.auszahlung = r1.auszahlung; j.kv_abzug = r1.sv_kv_an; j.rv_abzug = r1.sv_rv_an; j.pv_abzug = r1.sv_pv_an; j.ust_satz = r1.ust_satz;
     j.beschr = 'Monats-Gutschrift '+r1.beleg_nr;
-    j.sessions = (r1.termine||[]).map(function(t){ var x = termin(t); x.ausstellungsdatum = null; x.kuerzel = null; return x; });
-    if(j.sessions.length===1){   // ein Drehtag: wie die KI als Einzelabrechnung (Prompt: ein Datum ist immer "abrechn")
-      var s1 = j.sessions[0]; j.typ = 'abrechn'; j.takes = s1.takes; j.take_gage = s1.take_gage; j.grundgage = s1.grundgage; j.rolle = s1.rolle; j.sessions = null;
-    }
+    j.sessions = (r1.termine||[]).map(function(t){ var x = termin(t); x.ausstellungsdatum = null; if(!x.kuerzel) x.kuerzel = null; return x; });
+    // Build 1268: auch mit nur einem Drehtag bleibt eine Monats-Gutschrift "monats_abrechn" (KI-Prompt Kriterium 1,
+    // so stehen alle bestaetigten Monats-Gutschriften im Bestand). Kopf-Felder zusaetzlich fuer die Anzeige.
+    if(j.sessions.length===1){ var s1 = j.sessions[0]; j.takes = s1.takes; j.take_gage = s1.take_gage; j.grundgage = s1.grundgage; }
     return j;
   }
   if(f==='studio_hh'){
@@ -21512,13 +21566,16 @@ function dokBestaetigenMonat(dokId){
       // Build 1266: Takes NICHT aus der Abrechnung ueberschreiben. Arena rechnet die Takes 1-10 in der
       // "Grundgage 1-10" ab und weist nur den Rest als Takes aus (Navy CIS 08.12.2025: Dispo 130, Gutschrift
       // 120). Ueberschreiben machte daraus 120 Takes und eine falsche Differenz von 40 EUR.
-      if(s.takes && !_t.takes) _t.takes = parseInt(s.takes)||0;
+      // Build 1267: Bei 10-Take-Paket (Arena "Grundgage 1-10", Interopa Kino 150 = 100 + 10 x 5) stehen auf
+      // der Gutschrift nur die Takes ueber 10. Ein leerer Termin bekommt die Gesamt-Takes, sonst gar keine.
+      if(s.paket_1_10){ if(s.takes_gesamt && !_t.takes) _t.takes = parseInt(s.takes_gesamt)||0; }
+      else if(s.takes && !_t.takes) _t.takes = parseInt(s.takes)||0;
       if(s.rolle && !_t.rolle) _t.rolle = s.rolle;
       if(s.titel && (!_t.titel||_t.titel===_t.studio)) _t.titel = s.titel;
       // Build 1265: rate/kommgage kommen aus der Dispo und werden hier nicht ueberschrieben
       // (Regel "kommgage NUR aus Dispo"). Nur ein leerer Termin wird befuellt, wie im Einzelpfad.
-      if(s.take_gage && !_t.rate) _t.rate = parseFloat(s.take_gage)||0;
-      if(s.grundgage && !_t.kommgage) _t.kommgage = parseFloat(s.grundgage)||0;
+      if(s.paket_1_10 ? s.rate_tarif : s.take_gage){ if(!_t.rate) _t.rate = parseFloat(s.paket_1_10 ? s.rate_tarif : s.take_gage)||0; }   // Build 1268
+      if(s.grundgage && !_t.kommgage) _t.kommgage = s.paket_1_10 ? (parseFloat(s.kommgage_tarif)||0) : (parseFloat(s.grundgage)||0);   // Build 1267: Tarif statt Paketbetrag
       if(s.brutto_termin) _t.brutto_termin = parseFloat(s.brutto_termin)||0;
       if(s._mwst_anteil != null) _t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz != null) _t.ust_satz = s._ust_satz;
@@ -21606,11 +21663,12 @@ function dokBestaetigenMonat(dokId){
     var t=s.terminId?(db.termine||[]).find(function(x){return x.id===s.terminId;}):null;
     if(t){
       // Felder aus Session in Termin eintragen
-      if(s.takes && !t.takes) t.takes=s.takes;
+      if(s.paket_1_10){ if(s.takes_gesamt && !t.takes) t.takes=s.takes_gesamt; }   // Build 1267
+      else if(s.takes && !t.takes) t.takes=s.takes;
       if(s.rolle && !t.rolle) t.rolle=s.rolle;
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
-      if(s.take_gage && !t.rate) t.rate=s.take_gage;
-      if(s.grundgage && !t.kommgage) t.kommgage=s.grundgage;
+      if((s.paket_1_10 ? s.rate_tarif : s.take_gage) && !t.rate) t.rate = s.paket_1_10 ? s.rate_tarif : s.take_gage;   // Build 1268
+      if(s.grundgage && !t.kommgage) t.kommgage = s.paket_1_10 ? s.kommgage_tarif : s.grundgage;   // Build 1267
       if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
       else if(!t.brutto_termin && d.sessions && d.sessions.length===1 && parseFloat(d.brutto)) t.brutto_termin=parseFloat(d.brutto);
       // Sender aus Kürzel
