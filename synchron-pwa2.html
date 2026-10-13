@@ -5402,7 +5402,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1272';
+  if(elH) elH.textContent = '1274';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -16634,8 +16634,10 @@ function glStudioHH(seitenTexte){
     r.lohnsteuer_zielmonat = m[4] ? m[5]+'-'+('0'+m[4]).slice(-2) : r.abrechnungs_monat;
     var gagen = [], tage = [];
     pg.split('\n').forEach(function(l){
-      var mg = /^603\s+Gage Synchronsprecher (.+?)\s{2,}(-?[\d.]+,\d\d) ([+-])/.exec(l);
-      if(mg) gagen.push({titel:mg[1].replace(/\s*-\s*L\s*B$/,'').trim(), betrag:glNum(mg[2])*(mg[3]==='+'?1:-1)});
+      // Build 1273: Vorzeichen optional. Korrekturseiten tragen "152,00 +", normale Monatsseiten nur "284,00".
+      // Vorher fiel jede normale Monatsseite mit Gage durch (Realfall SH 10-2026: Blue Lights 02.10., La Pie Voleuse 06.10.).
+      var mg = /^603\s+Gage Synchronsprecher (.+?)\s{2,}(-?[\d.]+,\d\d)(?: ([+-]))?\s*$/.exec(l);
+      if(mg) gagen.push({titel:mg[1].replace(/\s*-\s*L\s*B$/,'').trim(), betrag:glNum(mg[2])*(mg[3]==='-'?-1:1)});
       var mz = /^\s+(\d\d\.\d\d\.)-(\d\d\.\d\d\.)\s+PGS \d+ BGS \d+ EUR\s+(-?[\d.]+,\d\d)/.exec(l);
       if(mz){ var y = r.lohnsteuer_zielmonat.slice(0,4); tage.push({von:glDeDate(mz[1]+y), bis:glDeDate(mz[2]+y), betrag:glNum(mz[3])}); }
     });
@@ -16834,38 +16836,61 @@ function glZuKiJson(res){
   if(f==='studio_hh'){
     var gagenSeiten = rows.filter(function(r){ return r.posten && r.posten.length; });
     var leer = rows.filter(function(r){ return !(r.posten && r.posten.length); });
-    var k = gagenSeiten[0] || rows[0];
-    // Folgemonatsseite zur Korrektur: Gehaltsabrechnung <Zielmonat> ohne Gage (traegt Salden und Ueberweisung)
-    var folge = leer.filter(function(r){ return r.abrechnungs_monat === k.lohnsteuer_zielmonat; })[0] || leer[0] || null;
-    j.typ = 'monats_abrechn'; j.studio = 'Studio Hamburg'; j.gutschrift_nr = '';
-    j.datum = k.leistungs_datum_von; j.ausstellungsdatum = k.leistungs_datum_von; j.titel = k.titel; j.ust_satz = 0.07;
-    j.brutto = glR2(gagenSeiten.reduce(function(a,r){ return a+r.brutto; },0)); j.mwst = glR2(gagenSeiten.reduce(function(a,r){ return a+(r.ust_betrag||0); },0));
-    j.kv_abzug = glR2(gagenSeiten.reduce(function(a,r){ return a+r.sv_kv_an; },0)); j.rv_abzug = glR2(gagenSeiten.reduce(function(a,r){ return a+r.sv_rv_an; },0)); j.pv_abzug = glR2(gagenSeiten.reduce(function(a,r){ return a+r.sv_pv_an; },0));
-    j.netto = glR2(gagenSeiten.reduce(function(a,r){ return a+(r.netto||0); },0));
-    j.auszahlung = k.auszahlung;
-    j.beschr = 'Studio Hamburg '+(k.ist_korrektur?'Korrektur ':'')+k.abrechnungs_monat;
-    // Eine Session pro Drehtag (Zeitraum-Zeile "TT.MM.-TT.MM. … EUR x"), nicht pro Seite.
-    // Geld (Brutto, SV, USt, Auszahlung) bleibt am Beleg; die Sessions tragen nur Datum, Titel und Anteil.
-    // Build 1264. Realfall SH 03-2026: 17.02. 484 € + 27.02. 372 €, vorher hing alles am 17.02.
-    j.sessions = [];
-    gagenSeiten.forEach(function(r, i){
-      var tage = (r.termine && r.termine.length) ? r.termine : [{datum:r.leistungs_datum_von, titel:r.titel, brutto:r.brutto}];
-      tage.forEach(function(t){
-        var tb = glTitelBereinigen(t.titel || r.titel);
-        j.sessions.push({datum:t.datum, page_nr:i+1, titel:tb.titel, rolle:null, takes:0, take_gage:0, grundgage:t.brutto, brutto_termin:t.brutto, gutschrift_nr:''});
+    // Build 1273/1274: Ein PDF kann neben Korrekturseiten eine REGULAERE Monatsabrechnung mit eigener Gage enthalten
+    // (Realfall 13.10.2026: Korrektur 9/2026 (für 10/2026) 152 € + Gehaltsabrechnung 10/2026 600 €, zwei Zahlungen).
+    // Alle Korrekturseiten bleiben EIN Beleg wie bisher (auch Jahreskorrekturen mit vielen Monaten "für 12/YYYY",
+    // eine Zahlung). Jede regulaere Monatsseite mit Gage wird ein eigener Beleg.
+    // Nur Korrekturseiten (+ Saldoseite ohne Gage, z.B. 2/2026 + 3/2026): Verhalten unveraendert.
+    var gruppen = [], gIdx = {};
+    gagenSeiten.forEach(function(r){ var key = r.ist_korrektur ? 'K' : 'R'+r.abrechnungs_monat; if(!(key in gIdx)){ gIdx[key] = gruppen.length; gruppen.push([]); } gruppen[gIdx[key]].push(r); });
+    var mehrere = gruppen.length > 1;
+    var basis = JSON.parse(JSON.stringify(j));
+    function shBeleg(jj, gs){
+      var k = gs[0] || rows[0];
+      // Folgemonatsseite zur Korrektur: Gehaltsabrechnung <Zielmonat> ohne Gage (traegt Salden und Ueberweisung)
+      var folge = leer.filter(function(r){ return r.abrechnungs_monat === k.lohnsteuer_zielmonat; })[0] || (mehrere ? null : leer[0]) || null;
+      jj.typ = 'monats_abrechn'; jj.studio = 'Studio Hamburg'; jj.gutschrift_nr = '';
+      jj.datum = k.leistungs_datum_von; jj.ausstellungsdatum = k.leistungs_datum_von; jj.titel = k.titel; jj.ust_satz = 0.07;
+      jj.brutto = glR2(gs.reduce(function(a,r){ return a+r.brutto; },0)); jj.mwst = glR2(gs.reduce(function(a,r){ return a+(r.ust_betrag||0); },0));
+      jj.kv_abzug = glR2(gs.reduce(function(a,r){ return a+r.sv_kv_an; },0)); jj.rv_abzug = glR2(gs.reduce(function(a,r){ return a+r.sv_rv_an; },0)); jj.pv_abzug = glR2(gs.reduce(function(a,r){ return a+r.sv_pv_an; },0));
+      jj.netto = glR2(gs.reduce(function(a,r){ return a+(r.netto||0); },0));
+      jj.auszahlung = k.auszahlung;
+      jj.beschr = 'Studio Hamburg '+(k.ist_korrektur?'Korrektur ':'')+k.abrechnungs_monat;
+      // Eine Session pro Drehtag (Zeitraum-Zeile "TT.MM.-TT.MM. … EUR x"), nicht pro Seite.
+      // Geld (Brutto, SV, USt, Auszahlung) bleibt am Beleg; die Sessions tragen nur Datum, Titel und Anteil.
+      // Build 1264. Realfall SH 03-2026: 17.02. 484 € + 27.02. 372 €, vorher hing alles am 17.02.
+      jj.sessions = [];
+      gs.forEach(function(r){
+        var seite = gagenSeiten.indexOf(r) + 1;
+        var tage = (r.termine && r.termine.length) ? r.termine : [{datum:r.leistungs_datum_von, titel:r.titel, brutto:r.brutto}];
+        tage.forEach(function(t){
+          var tb = glTitelBereinigen(t.titel || r.titel);
+          jj.sessions.push({datum:t.datum, page_nr:seite, titel:tb.titel, rolle:null, takes:0, take_gage:0, grundgage:t.brutto, brutto_termin:t.brutto, gutschrift_nr:''});
+        });
       });
-    });
-    // K4-Felder (Build 757/763), bisher aus dem zweiten KI-Lauf _studioHamburgBankMatchScan
-    j.verbindlichkeit_monat = k.abrechnungs_monat;
-    j.lohnsteuer_zielmonat = k.lohnsteuer_zielmonat;
-    j.print_datum = k._print_datum || null;
-    j.ist_leer_korrektur = !!k.ist_leer_korrektur;
-    j.saldo_vormonat = folge ? folge.saldo_vormonat : k.saldo_vormonat;
-    var be = (folge && folge.saldo_bereits_erhalten) ? folge.saldo_bereits_erhalten : k.saldo_bereits_erhalten;
-    if(be) j.saldo_bereits_erhalten = be > 0 ? -be : be;
-    j.saldo_folgemonat = folge && folge.ueberweisung!=null ? folge.ueberweisung : k.saldo_folgemonat;
-    if(folge && folge.ueberweisung!=null) j.restzahlung = folge.ueberweisung;
-    if(folge && folge.auszahlungs_ziel) j.auszahlungs_ziel = folge.auszahlungs_ziel;
+      // K4-Felder (Build 757/763), bisher aus dem zweiten KI-Lauf _studioHamburgBankMatchScan
+      jj.verbindlichkeit_monat = k.abrechnungs_monat;
+      jj.lohnsteuer_zielmonat = k.lohnsteuer_zielmonat;
+      jj.print_datum = k._print_datum || null;
+      jj.ist_leer_korrektur = !!k.ist_leer_korrektur;
+      // Build 1273: Bei mehreren Monaten gehoeren "Differenz aus Vormonat / bereits erhalten" einer normalen
+      // Monatsseite zum Vormonat, nicht zu diesem Beleg. Dort also nicht uebernehmen.
+      var fremdSaldo = mehrere && !k.ist_korrektur;
+      jj.saldo_vormonat = folge ? folge.saldo_vormonat : (fremdSaldo ? null : k.saldo_vormonat);
+      var be = (folge && folge.saldo_bereits_erhalten) ? folge.saldo_bereits_erhalten : (fremdSaldo ? 0 : k.saldo_bereits_erhalten);
+      if(be) jj.saldo_bereits_erhalten = be > 0 ? -be : be;
+      jj.saldo_folgemonat = folge && folge.ueberweisung!=null ? folge.ueberweisung : k.saldo_folgemonat;
+      if(folge && folge.ueberweisung!=null) jj.restzahlung = folge.ueberweisung;
+      if(folge && folge.auszahlungs_ziel) jj.auszahlungs_ziel = folge.auszahlungs_ziel;
+      else if(k.auszahlungs_ziel) jj.auszahlungs_ziel = k.auszahlungs_ziel;
+      return jj;
+    }
+    shBeleg(j, gruppen[0] || []);
+    if(mehrere){
+      j._weitereBelege = gruppen.slice(1).map(function(gs){ var jx = shBeleg(JSON.parse(JSON.stringify(basis)), gs); jx._seite = gagenSeiten.indexOf(gs[0]) + 1; return jx; });
+      var hin = 'PDF enthält '+gruppen.length+' Abrechnungen ('+gruppen.map(function(g){ return (g[0].ist_korrektur?'Korrektur ':'')+g[0].abrechnungs_monat; }).join(', ')+'), je Abrechnung ein eigener Beleg';
+      j._hinweise = (j._hinweise||[]).concat([hin]);
+    }
     return j;
   }
   if(f==='gvl'){
@@ -16941,6 +16966,69 @@ function _offlineLesen(dataURL, password, onDone, onPw){
     });
   }catch(e){ console.warn('[1263] offline lesen:', e); onDone(null); }
 }
+// Build 1273 (Tim, 13.10.2026): Ein Studio-Hamburg-PDF kann Gagen aus zwei Abrechnungsmonaten enthalten
+// (Korrektur 9/2026 + Gehaltsabrechnung 10/2026). SH-Belege werden je Abrechnungsmonat gefuehrt
+// (Korrekturkette ueber verbindlichkeit_monat, Bankabgleich je Auszahlung), also ein Beleg je Monat.
+// Weitere Monate werden als Split-Kinder des Original-PDFs angelegt, wie beim bestehenden Gutschrift-Split
+// (_splitFromPdf, kein eigenes dataURL, einzeln zu bestaetigen). Nur der lokale Leser erzeugt das; der
+// KI-Weg ist unberuehrt. Bei erneutem Lesen werden unbestaetigte Teilbelege dieses PDFs ersetzt,
+// ein schon bestaetigter Monat wird nicht noch einmal angelegt.
+// Build 1274: Ein Objekt aus "weitere_abrechnungen" der KI in die Struktur bringen, die der lokale Leser liefert.
+// Unvollstaendige Eintraege (kein Monat, kein Brutto) werden verworfen statt geraten.
+function _sthHKiZuVorgabe(w){
+  if(!w) return null;
+  var num = function(v){ if(v==null||v==='') return null; var n = (typeof v==='number') ? v : parseFloat(String(v).replace(/\./g,'').replace(',','.')); return isNaN(n) ? null : Math.round(n*100)/100; };
+  var vm = String(w.verbindlichkeit_monat||'').trim();
+  var brutto = num(w.brutto);
+  if(!/^\d{4}-\d{2}$/.test(vm) || !(brutto > 0)) return null;
+  var sess = (Array.isArray(w.sessions) ? w.sessions : []).map(function(x){
+    var b = num(x.brutto_termin!=null ? x.brutto_termin : x.grundgage);
+    return {datum:x.datum||null, page_nr:null, titel:x.titel||w.titel||null, rolle:null, takes:0, take_gage:0, grundgage:b, brutto_termin:b, gutschrift_nr:''};
+  });
+  return {typ:'monats_abrechn', studio:'Studio Hamburg', gutschrift_nr:'', datum:w.datum||(sess[0]&&sess[0].datum)||null,
+    ausstellungsdatum:w.datum||(sess[0]&&sess[0].datum)||null, titel:w.titel||(sess[0]&&sess[0].titel)||null, ust_satz:0.07,
+    brutto:brutto, mwst:num(w.mwst), kv_abzug:num(w.kv_abzug), rv_abzug:num(w.rv_abzug), pv_abzug:num(w.pv_abzug), netto:num(w.netto),
+    auszahlung:num(w.auszahlung), beschr:'Studio Hamburg '+vm, sessions:sess,
+    verbindlichkeit_monat:vm, lohnsteuer_zielmonat:vm, auszahlungs_ziel:w.auszahlungs_ziel||null};
+}
+// Build 1274: Der Bankfeld-Scan (_studioHamburgBankMatchScan) liest die Bankzeile der LETZTEN Seite. Enthaelt das PDF
+// eine regulaere Monatsabrechnung, gehoert diese Zeile zu deren Beleg, nicht zur Korrektur. Die Korrektur behaelt dann
+// nur ihre eigene "Differenz für Folgemonate" (= auszahlung), wie beim lokalen Leser.
+function _sthHHauptNachTeilung(d){
+  if(!d) return;
+  delete d.restzahlung; delete d.saldo_bereits_erhalten; d.saldo_vormonat = null;
+  d.saldo_folgemonat = d.auszahlung || null;
+  save(db);
+}
+function _sthHTeilbelegeAnlegen(mutter, liste, key, done, quelle){
+  var alt = (db.dokumente||[]).filter(function(x){ return x._sthHTeilVon === mutter.id; });
+  var bestaetigtMonate = {};
+  alt.forEach(function(x){ if(x.bestaetigt && x.verbindlichkeit_monat) bestaetigtMonate[x.verbindlichkeit_monat] = true; });
+  db.dokumente = (db.dokumente||[]).filter(function(x){ return !(x._sthHTeilVon === mutter.id && !x.bestaetigt); });
+  var offen = liste.filter(function(jx){ return !bestaetigtMonate[jx.verbindlichkeit_monat]; });
+  var i = 0, angelegt = 0;
+  function next(){
+    if(i >= offen.length){
+      save(db); try { rDokumente(); } catch(e){ console.warn('[1273] rDokumente:', e); }
+      if(angelegt) showToast('Zweiter Abrechnungsmonat als eigener Beleg angelegt'+(angelegt>1?' ('+angelegt+')':''));
+      if(done) done(); return;
+    }
+    var jx = offen[i++];
+    var kind = {
+      id: uid(), dateiname: mutter.dateiname, mime: 'application/pdf',
+      dataURL: null, thumb: null, addedAt: mutter.addedAt || new Date().toISOString(),
+      typ: null, bestaetigt: false, awaitConfirm: true,
+      _splitFromPdf: mutter.id, _splitGroup: mutter.id,
+      _splitTotal: liste.length + 1, _splitIdx: i, _splitPageNr: jx._seite || null,
+      _sthHTeilVon: mutter.id, _sthHVorgabe: jx, _sthHQuelle: quelle || 'lokal'
+    };
+    delete jx._seite;
+    db.dokumente.push(kind); angelegt++;
+    dokAnalyseDoc(kind, key, next);
+  }
+  next();
+}
+
 function dokAnalyseDoc(d, key, cb){
   // Bild nicht mehr im Speicher — iOS hat es verworfen
   if(!d.dataURL && d.mime!=='application/pdf'){
@@ -17342,7 +17430,23 @@ function dokAnalyseDoc(d, key, cb){
     +'    STUDIO HAMBURG SYNCHRON — SESAM-JAHRESKORREKTUR-FORMAT (NUR bei diesem Studio!):\n'
     +'    Erkennbar an: "Studio Hamburg Synchron GmbH" + Überschrift "Korrektur Gehaltsabrechnung X/YEAR (für Y/YEAR)"\n'
     +'    Das "(für Y/YEAR)" variiert — kann "für 12/2025" (Jahreskorrektur) ODER "für 2/2026" (laufende Korrektur) sein\n'
-    +'    Auch "Gehaltsabrechnung X/YEAR" ohne "Korrektur" = Nullseite — überspringen!\n'
+    +'    Auch "Gehaltsabrechnung X/YEAR" ohne "Korrektur" mit Gesamtbrutto 0,00 = Nullseite — überspringen!\n'
+    +'    ⚠⚠⚠ AUSNAHME (Build 1274): "Gehaltsabrechnung X/YEAR" OHNE "Korrektur" MIT eigenen Gagenzeilen\n'
+    +'      ("603 Gage Synchronsprecher …", Gesamtbrutto > 0) ist eine EIGENE regulaere Monatsabrechnung mit eigener Ueberweisung.\n'
+    +'      Sie gehoert NICHT in sessions, brutto, kv/rv/pv, netto, mwst oder auszahlung der Korrektur!\n'
+    +'      Gib sie stattdessen auf TOP-LEVEL als Liste "weitere_abrechnungen" zurueck, ein Objekt je solcher Seite:\n'
+    +'        {"verbindlichkeit_monat":"YYYY-MM" (Monat aus dieser Ueberschrift), "datum" (erster Zeitraum-Tag), "titel",\n'
+    +'         "brutto" (Gesamtbrutto der Seite), "kv_abzug" (beide KV-Zeilen addiert), "rv_abzug", "pv_abzug",\n'
+    +'         "netto" (Nettoverdienst), "mwst" (996 Umsatzsteuer 7%), "auszahlung" (Betrag der Bank-Zeile "Holvi …/Hamburger Sparkasse … EUR x"),\n'
+    +'         "auszahlungs_ziel" ("holvi" oder "sparkasse"),\n'
+    +'         "sessions": EINE session PRO Zeitraum-Zeile "TT.MM.-TT.MM. PGS … EUR x" mit datum, titel der zugehoerigen 603-Zeile,\n'
+    +'           grundgage = brutto_termin = Betrag dieser Zeile}\n'
+    +'      Verschiedene Produktionen oder Tage NIE zu einer session zusammenfassen.\n'
+    +'      Beispiel: "Korrektur Gehaltsabrechnung 9/2026 (für 10/2026)" mit 152,00 + "Gehaltsabrechnung 10/2026" mit 284,00 (02.10.) und 316,00 (06.10.)\n'
+    +'        → Hauptfelder = nur die Korrektur (brutto 152.00, auszahlung 133.46, eine session 24.09.),\n'
+    +'        → weitere_abrechnungen = [{"verbindlichkeit_monat":"2026-10","brutto":600.00,"auszahlung":526.83,\n'
+    +'           "sessions":[{"datum":"2026-10-02","titel":"Blue Lights I-II","brutto_termin":284.00},{"datum":"2026-10-06","titel":"La Pie Voleuse","brutto_termin":316.00}], …}]\n'
+    +'      Gibt es KEINE Korrekturseite mit Gage, ist die regulaere Seite der Hauptbeleg (normale Felder, kein weitere_abrechnungen).\n'
     +'    ⚠⚠⚠ DIESE REGELN NUR BEI STUDIO HAMBURG ANWENDEN — NICHT auf andere Studios übertragen!\n'
     +'\n'
     +'    SCHRITT 1: WELCHE SEITEN RELEVANT SIND\n'
@@ -17554,6 +17658,18 @@ function dokAnalyseDoc(d, key, cb){
     +lernEx;
 
   var mime = d.mime||'image/jpeg';
+  // Build 1273: Teilbeleg aus einem Studio-Hamburg-PDF mit mehreren Abrechnungsmonaten. Die Werte hat der
+  // lokale Leser beim Original schon gelesen; hier nur denselben Uebernahmeweg (_uebernehmeSthH) durchlaufen.
+  if(d._sthHVorgabe){
+    var _jv1273 = d._sthHVorgabe; delete d._sthHVorgabe;
+    if(d._sthHQuelle === 'ki'){   // Build 1274: KI hat gelesen, nicht der lokale Leser
+      var _cbV1274 = cb;
+      cb = function(){ delete d._offlineGelesen; d._leseHinweise = null; d._kiAnalysiert = true; save(db); if(_cbV1274) _cbV1274(); };
+    }
+    try { _uebernehmeSthH(_jv1273, null, true); }
+    catch(e1273){ console.warn('[1273] Teilbeleg:', e1273); save(db); if(cb) cb(); }
+    return;
+  }
   if(!d.dataURL){ if(cb) cb(); return; }
 
   // PDF → alle Seiten als Bild rendern, numPages an Callback übergeben
@@ -18290,7 +18406,12 @@ function dokAnalyseDoc(d, key, cb){
       if(j.studio) j.studio = _offlineStudioAngleichen(j.studio);
       showToast('Lokal gelesen: '+(j.sessions&&j.sessions.length>1 ? j.sessions.length+' Abrechnungen' : (j.gutschrift_nr||j.beschr||res.format))+(j._hinweise&&j._hinweise.length?' · '+j._hinweise.length+' Hinweis(e)':''));
       try{
-        if(res.format==='studio_hh'){ _uebernehmeSthH(j, null, true); }
+        if(res.format==='studio_hh'){
+          // Build 1273: weitere Abrechnungsmonate desselben PDFs als eigene Belege (nach dem Original)
+          var _weitere1273 = j._weitereBelege || []; delete j._weitereBelege;
+          if(_weitere1273.length){ var _cbOrig1273 = cb; cb = function(){ _sthHTeilbelegeAnlegen(d, _weitere1273, key, _cbOrig1273); }; }
+          _uebernehmeSthH(j, null, true);
+        }
         else { _verarbeiteKiAntwort(JSON.stringify({content:[{type:'text', text:JSON.stringify(j)}]})); }
       }catch(e){ console.warn('[1263] uebernahme:', e); showToast('Lokales Lesen fehlgeschlagen, KI übernimmt'); _kiPfad(); }
     };
@@ -18371,6 +18492,14 @@ function dokAnalyseDoc(d, key, cb){
             if(_s<0||_e<0){ showToast('KI: kein JSON'); d.typ='sonstig'; d.beschr=d.dateiname; if(cb) cb(); return; }
             _txt = _txt.slice(_s,_e+1);
             var _j = JSON.parse(_txt);
+            // Build 1274: regulaere Monatsabrechnung(en) im selben SH-PDF -> eigene Belege, wie beim lokalen Leser
+            var _weitereKI = (Array.isArray(_j.weitere_abrechnungen) && /hamburg/i.test(String(_j.studio||'')))
+              ? _j.weitere_abrechnungen.map(_sthHKiZuVorgabe).filter(Boolean) : [];
+            delete _j.weitere_abrechnungen;
+            if(_weitereKI.length){
+              var _cbOrigKI = cb;
+              cb = function(){ _sthHHauptNachTeilung(d); _sthHTeilbelegeAnlegen(d, _weitereKI, key, _cbOrigKI, 'ki'); };
+            }
             _uebernehmeSthH(_j, pageDataURLs, false);
           } catch(e){
             showToast('Parse Fehler: '+e.message); d.typ='sonstig'; if(cb) cb();
