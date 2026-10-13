@@ -5402,7 +5402,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1271';
+  if(elH) elH.textContent = '1272';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -18271,7 +18271,15 @@ function dokAnalyseDoc(d, key, cb){
 
   // Build 1263: Offline-Leser zuerst. Bekanntes Format -> KI-JSON nachbauen -> gleicher Pfad wie bisher.
   // Unbekanntes Format, Scan ohne Textebene oder Fehler -> alter KI-Pfad unveraendert.
-  function _kiPfad(){ _kiPfadStart(); }
+  // Build 1272: Faellt das lokale Lesen auf die KI zurueck, sagt die App das jetzt,
+  // statt still weiterzumachen (der Spinner stand vorher ohnehin immer auf "KI").
+  function _kiPfad(){
+    try{
+      var _ot=document.getElementById('_analyse-overlay-txt'); if(_ot) _ot.textContent='KI analysiert…';
+      if(key) showToast('Lokal nicht lesbar – KI liest den Beleg');
+    }catch(e){ console.warn('[1272 kiPfad-Hinweis]', e); }
+    _kiPfadStart();
+  }
   if(mime==='application/pdf' && _offlineLeserAktiv()){
     var _pwKand = _findPdfPassword(d.studio||'', d.dateiname||'') || [];
     var _pwIdx = -1;
@@ -19430,7 +19438,10 @@ function dokOpenDetail(id, _keepEdit){
     // Erkennung: hat das Dok schon erkannte Felder (titel/regie/studio/beschreibung/datum)?
     var _schonAnalysiert = !!(d.titel || d.regie || d.studio || d.beschreibung || d.datum
                               || (d.posten && d.posten.length) || (d.sessions && d.sessions.length));
-    var _analyseBtnLabel = _schonAnalysiert ? 'Nochmal analysieren' : 'KI-Analyse';
+    // Build 1272 (Tim, 13.10.): Bei eingeschaltetem lokalem Lesen liest die App PDFs zuerst
+    // auf dem Geraet. Fotos gehen weiterhin an die KI (lokales Dispo-Lesen gibt es noch nicht).
+    var _lokal1272 = _offlineLeserAktiv() && (d.mime||'')==='application/pdf';
+    var _analyseBtnLabel = _schonAnalysiert ? 'Nochmal analysieren' : (_lokal1272 ? 'Lokal auslesen' : 'KI-Analyse');
     body+='<div style="margin-bottom:12px">';
     // Build 1045: grosser Button NUR bei Erstanalyse; danach uebernimmt das Reload-Icon im Foto
     if(!_schonAnalysiert){
@@ -23002,7 +23013,8 @@ function dokAnalyseOne(){
   overlay.id = '_analyse-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
   overlay.innerHTML = '<div style="width:56px;height:56px;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:_spin 0.8s linear infinite"></div>'
-    +'<div style="color:#fff;font-size:15px;font-weight:700">KI analysiert…</div>';
+    +'<div id="_analyse-overlay-txt" style="color:#fff;font-size:15px;font-weight:700">'
+    +((_offlineLeserAktiv() && (d.mime||'')==='application/pdf') ? 'Wird lokal gelesen…' : 'KI analysiert…')+'</div>';   // Build 1272
   // Spinner CSS
   if(!document.getElementById('_spin-style')){
     var st=document.createElement('style');
