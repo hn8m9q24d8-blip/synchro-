@@ -5402,7 +5402,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1268';
+  if(elH) elH.textContent = '1271';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5728,6 +5728,32 @@ function rTermine(){
   list.innerHTML=html;
 }
 
+// Build 1269 (Tim, 13.10.2026): Eine Dispo gilt nur als vorhanden, wenn ein echter
+// Dateiname dranhaengt, unter dem sie aufgerufen werden kann (Foto in der App oder
+// archiviert und ueber den Namen in der Dateien-App auffindbar). Regie, Atelier,
+// Staffel und Folgenaufteilung sind KEINE Dispo-Spur: sie kommen auch aus dem
+// Kalender oder von Hand. Keine Zuordnung ueber Datum+Studio (das war Raten).
+// Einzige Quelle fuer tCard-Ampel, openDetail-Ampel und hasDispo2 (Abgleichskarte).
+var _DISPO_DATEI_RE=/\.(jpe?g|png|heic|heif|pdf|webp|tiff?)$/i;
+function _dispoSpur(t){
+  if(!t) return null;
+  if(t._dispoDateiname && _DISPO_DATEI_RE.test(t._dispoDateiname)) return {name:t._dispoDateiname, quelle:'termin'};
+  var ids=t.dokIds||[], doks=(db&&db.dokumente)||[];
+  for(var i=0;i<doks.length;i++){
+    var d=doks[i];
+    if(!d || d.typ!=='dispo') continue;
+    if(d.terminId!==t.id && ids.indexOf(d.id)<0 && d.id!==t.dispoDocId) continue;
+    if(d.dateiname && _DISPO_DATEI_RE.test(d.dateiname)) return {name:d.dateiname, quelle:d.dataURL?'app':'dok'};
+  }
+  var log=(db&&db._archivLog)||[];
+  for(var j=0;j<log.length;j++){
+    var e=log[j];
+    if(e && e.terminId===t.id && e.typ==='dispo' && e.dateiname && _DISPO_DATEI_RE.test(e.dateiname)) return {name:e.dateiname, quelle:'archiv'};
+  }
+  if(t.dispoImg) return {name:'Dispo (Foto in der App)', quelle:'img'};
+  return null;
+}
+
 function tCard(t){
   var d=fe(t.datum);
   var dayNames=['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -5741,11 +5767,7 @@ function tCard(t){
     var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
     return dok && dok.typ==='dispo' && dok.bestaetigt;
   });
-  var hasDispo=!!(t.dispoImg||dispoDok||_dispoDokLinked||t._dispoDateiname||
-    (t.gvl_takes_detail&&t.gvl_takes_detail.length>0)||
-    (db._archivLog&&db._archivLog.find(function(e){
-      return e.terminId===t.id&&(e.typ==='dispo'||/dispo/i.test(e.dateiname||''));
-    })));
+  var hasDispo=!!_dispoSpur(t);   // Build 1269: eine Quelle, siehe _dispoSpur
   // ── v2 LESE-PFAD (ersetzt den alten db.abrechnungen-Zugriff) ────────
   // Primärquelle: dbv2 über v2TerminView(). Bei leerem v2-Store fällt
   // v2TerminView() automatisch auf die alte db zurück (Sicherheitsnetz).
@@ -5990,101 +6012,11 @@ function openDetail(id){
     return istDispo && istLinked;
   });
   // t._dispoDateiname hat ERSTE Priorität — wird bei Bestätigung gesetzt, überlebt alles
-  var dispoDateinamen = t._dispoDateiname ? [t._dispoDateiname] : [];
-  // Fallback: aus allDispoDoks (nur echter Dateiname, nicht lesbarer Titel)
-  if(!dispoDateinamen.length){
-    dispoDateinamen = allDispoDoks.map(function(d){
-      return d.dateiname||null;
-    }).filter(Boolean);
-  }
-  // Fallback: t.dispoImg existiert aber kein Dokument verknüpft (altes Format)
-  if(!dispoDateinamen.length && t.dispoImg) dispoDateinamen=['Dispo (verknüpft)'];
-  // Fallback: Dispo zugeordnet aber noch nicht bestätigt (_pendingDelete)
-  if(!dispoDateinamen.length){
-    var pendDispo=(db.dokumente||[]).find(function(x){return x.terminId===id&&(x.typ==='dispo'||(!x.typ&&/dispo/i.test(x.dateiname||'')));});
-    if(pendDispo) dispoDateinamen=[pendDispo.dateiname||pendDispo.beschr||'Dispo (ausstehend)'];
-  }
-  // Fallback: Dispo bestätigt aber terminId nicht gesetzt — über Datum+Studio suchen
-  if(!dispoDateinamen.length){
-    var linkedDispo=(db.dokumente||[]).find(function(x){
-      return x.typ==='dispo' && x.bestaetigt && x.datum===t.datum && x.studio && t.studio &&
-        x.studio.toLowerCase().indexOf(t.studio.toLowerCase().slice(0,4))>=0;
-    });
-    if(linkedDispo){
-      // terminId nachträglich setzen
-      if(!linkedDispo.terminId){ linkedDispo.terminId=id; save(db); }
-      dispoDateinamen=[linkedDispo.dateiname||linkedDispo.beschr||'Dispo '+fd(linkedDispo.datum)];
-    }
-  }
-  // Frühzeitiger _archivLog-Fallback: vor dem GVL-Block prüfen
-  if(!dispoDateinamen.length && db._archivLog){
-    // Prio 1: Einträge mit explizitem typ='dispo' oder 'dispo' im Dateinamen
-    var dispArchEntry = db._archivLog.find(function(e){
-      return e.terminId===id && (e.typ==='dispo' || /dispo/i.test(e.dateiname||''));
-    });
-    // Prio 2: Einträge für diesen Termin die KEIN abrechn-Typ haben
-    // (UUID-Dateinamen aus iOS haben keinen 'dispo'-String, aber sind trotzdem Dispos)
-    // Build 1153: Alt-Eintraege mit typ:null bestanden diesen Test ebenfalls
-    // (null!=='abrechn' ist wahr) — dadurch landete der ABRECHNUNGS-Dateiname in
-    // dispoDateinamen, die Dispo-Ampel wurde rot und das Popup zeigte die
-    // Abrechnung als "Dispo" an. Real: VSI-2013-Termine, _archivLog-Eintrag
-    // {dateiname:'Abrechnung_528 8.pdf', typ:null} — geschrieben von dem einen
-    // Aufrufer in Z. ~19187, der den typ-Parameter nicht weitergab (jetzt gefixt).
-    // Zwei zusaetzliche Ausschluesse, die die iOS-UUID-Absicht unberuehrt lassen:
-    //   a) Dateiname ist als Abrechnung am Termin gestempelt
-    //   b) Dateiname beginnt erkennbar mit "Abrechnung"/"Gutschrift"/"Monats-"
-    if(!dispArchEntry){
-      dispArchEntry = db._archivLog.find(function(e){
-        if(e.terminId!==id) return false;
-        if(e.typ==='abrechn' || e.typ==='monats_abrechn') return false;
-        if(!e.dateiname || e.dateiname.length <= 3) return false;
-        if(t.abrechn_dateiname && e.dateiname === t.abrechn_dateiname) return false;
-        if(/^(abrechnung|gutschrift|monats)/i.test(e.dateiname)) return false;
-        return true;
-      });
-    }
-    if(dispArchEntry && dispArchEntry.dateiname) dispoDateinamen=[dispArchEntry.dateiname];
-  }
-  // Direkter Dateiname-Fallback (nach dokDeleteAll)
-  if(!dispoDateinamen.length && t._dispoDateiname) dispoDateinamen=[t._dispoDateiname];
-  // Letzter Fallback: GVL-Daten am Termin = Dispo war mal da
-  if(!dispoDateinamen.length && (t.gvl_staffel||t.gvl_folge||t.gvl_takes_detail||t.regie||t.atelier)){
-    // Suche 1: direkt via terminId (zuverlässigste Methode)
-    var archivedDispo = (db.dokumente||[]).find(function(x){
-      return (x.typ==='dispo'||(!x.typ&&/dispo/i.test(x.dateiname||''))) && x.terminId===id;
-    });
-    // Suche 2: via Datum + Studio (Fallback)
-    if(!archivedDispo){
-      archivedDispo = (db.dokumente||[]).find(function(x){
-        if(x.typ!=='dispo' && !(!x.typ&&/dispo/i.test(x.dateiname||''))) return false;
-        var studioMatch = x.studio && t.studio &&
-          (x.studio.toLowerCase().indexOf((t.studio||'').toLowerCase().slice(0,4))>=0 ||
-           (t.studio||'').toLowerCase().indexOf((x.studio||'').toLowerCase().slice(0,4))>=0);
-        return studioMatch && x.datum===t.datum;
-      });
-    }
-    var dispName = archivedDispo
-      ? (archivedDispo.dateiname||archivedDispo.beschr||null)
-      : null;
-    // Suche 3: importedFiles Log
-    if(!dispName && db._archivLog){
-      var archEntry = db._archivLog.find(function(e){
-        return e.terminId===id && (e.typ==='dispo' || /dispo/i.test(e.dateiname||''));
-      });
-      if(archEntry) dispName = archEntry.dateiname;
-    }
-    // Suche 4: dateiname aus _importedFiles enthält Datum oder Studio
-    if(!dispName && db.importedFiles){
-      var tDat = (t.datum||'').replace(/-/g,'');
-      var tStudio = (t.studio||'').toLowerCase().slice(0,4);
-      var found = db.importedFiles.find(function(f){
-        var fl = (f||'').toLowerCase();
-        return /dispo|dispatch/i.test(fl) && (fl.indexOf(tStudio)>=0 || fl.indexOf(tDat)>=0);
-      });
-      if(found) dispName = found;
-    }
-    dispoDateinamen=[dispName || 'Dispo (bestätigt · Foto gelöscht)'];
-  }
+  // Build 1269: Dispo-Dateiname kommt nur noch aus _dispoSpur (eine Quelle fuer
+  // Kartenampel, Detail-Ampel, Abgleichskarte). Die alte Kaskade riet ueber Regie,
+  // Atelier, Staffel, GVL und Datum+Studio und speicherte dabei still (save(db)).
+  var _dSpur = _dispoSpur(t);
+  var dispoDateinamen = _dSpur ? [_dSpur.name] : [];
   // Erweiterte Abrechn-Dok-Suche: auch bestaetigt+dataURL=null einschliessen
   var allAbDoks = (db.dokumente||[]).filter(function(x){
     var istAb = x.typ==='abrechn'||x.typ==='monats_abrechn';
@@ -6200,24 +6132,8 @@ function openDetail(id){
   } catch(eVD){ console.warn('[v2] openDetail Lese-Pfad Fehler:', eVD); }
 
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
-  // hasDispo: Dispo-Dokument vorhanden ODER Archiv-Spuren (Dateiname, _archivLog)
-  // gvl_staffel allein reicht NICHT — kann auch vom Kalender-Import kommen
-  // gvl_takes_detail = konkrete Take-Einträge → sicheres Dispo-Signal
-  var _hasDispoDoc = !!(t.dispoImg || dispoDoks.length || dispoDateinamen.length);
-  var _hasDispoGVL = !!(t.gvl_takes_detail && t.gvl_takes_detail.length > 0);
-  var _hasDispoArchiv = !!(t._dispoDateiname || (db._archivLog && db._archivLog.find(function(e){
-    if(e.terminId !== id) return false;
-    if(e.typ === 'dispo') return true;
-    // Build 1153: Alt-Eintraege ohne typ (vor dem Fix in Z. ~19187 geschrieben)
-    // duerfen NICHT allein wegen des Dateinamens als Dispo gelten, wenn derselbe
-    // Dateiname am Termin als Abrechnung gestempelt ist. Sonst faerbt die
-    // Dispo-Ampel bei reinen Abrechnungsbelegen ein — real aufgetreten bei den
-    // VSI-2013-Terminen, wo direkt darunter "Dispo fehlt" stand.
-    if(e.typ) return false;                       // typ gesetzt, aber nicht 'dispo'
-    if(t.abrechn_dateiname && e.dateiname === t.abrechn_dateiname) return false;
-    return /dispo/i.test(e.dateiname||'');
-  })));
-  var hasDispo = _hasDispoDoc || _hasDispoGVL || _hasDispoArchiv;
+  // Build 1269: Dispo-Ampel nur mit echtem, aufrufbarem Dateinamen (Tim, 13.10.).
+  var hasDispo = !!_dSpur;
   // hasAbrechn: abId, abgerechnet-Flag, abrechn-Dok, _archivLog oder direkt gespeicherter Dateiname
   var hasAbrechn=!!(t.abId||abDoks.length||t.abgerechnet||t.abrechn_dateiname||
     (db._archivLog && db._archivLog.find(function(e){
@@ -6724,24 +6640,7 @@ function openDetail(id){
     // hasDispo2: gleiche Logik wie hasDispo-Ampel — nicht nur dokIds prüfen
     var _keinPlanAb1157 = !(parseFloat(t.takes)||0) && !t.dispoImg
                           && !((t.gvl_takes_detail||[]).length);   // Build 1157
-    var hasDispo2 = !!(t.dispoImg || dispoDoks.length ||
-      // Build 1159: t.dispoDocId fehlte in der Bedingung, obwohl es die direkteste
-      // Verknuepfung zur Dispo ist — die Ampel liest es, diese Karte nicht.
-      t.dispoDocId ||
-      (t.gvl_takes_detail && t.gvl_takes_detail.length > 0) ||
-      (db._archivLog && db._archivLog.find(function(e){
-        // Build 1159: Der Test lief gegen den DATEINAMEN. Dispos aus der Foto-
-        // Mediathek heissen IMG_5294.HEIC — da steht "dispo" nirgends drin, also
-        // fiel jede Foto-Dispo durch und die Karte meldete "Dispo fehlt", waehrend
-        // die Ampel korrekt verlinkte. Das Feld typ tragen die Eintraege seit
-        // Build 1153; es ist die verlaessliche Quelle. Der Namenstest bleibt als
-        // Fallback fuer Altlasten ohne typ (typ:null).
-        return e.terminId===id && (e.typ==='dispo' || /dispo/i.test(e.dateiname||''));
-      })) ||
-      (t.dokIds && t.dokIds.some(function(did){
-        var dok=(db.dokumente||[]).find(function(d){return d.id===did;});
-        return dok && dok.typ==='dispo' && dok.bestaetigt;
-      })));
+    var hasDispo2 = !!_dispoSpur(t);   // Build 1269: gleiche Quelle wie die Ampel
     // Differenz nur anzeigen wenn Dispo vorhanden — sonst kein Vergleichswert
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk
@@ -19316,6 +19215,29 @@ function dokEditFieldInline(rowEl, dokId, field){
 }
 
 function dokOpenDetail(id, _keepEdit){
+  // Build 1270 (Tim, 13.10.): Die Felder in "Erkannte Daten" sind direkt beschreibbar
+  // (dedit-*), werden aber erst beim Bestaetigen ins Dokument gelesen. Jeder Neuaufbau
+  // der Ansicht (GVL speichern, Typ, Drehen, Notiz) hat getippte Werte verworfen.
+  // Darum: Vor dem Neuaufbau DESSELBEN, gerade sichtbaren Dokuments alle vom Nutzer
+  // geaenderten Eingaben (value != defaultValue) merken und danach wieder einsetzen,
+  // aber nur in Felder, die der Neuaufbau unveraendert gelassen hat.
+  var _pend1270 = null;
+  try {
+    var _tEl1270 = document.getElementById('dok-detail-title');
+    if(_dokCurrentId===id && _tEl1270 && _tEl1270.offsetParent!==null){
+      document.querySelectorAll('input[id^="dedit-"],textarea[id^="dedit-"]').forEach(function(el){
+        if(el.value!==el.defaultValue){ _pend1270=_pend1270||{}; _pend1270[el.id]={v:el.value, alt:el.defaultValue}; }
+      });
+    }
+  } catch(e1270){ _pend1270=null; }
+  if(_pend1270){
+    setTimeout(function(){
+      Object.keys(_pend1270).forEach(function(k){
+        var el=document.getElementById(k);
+        if(el && el.value===_pend1270[k].alt) el.value=_pend1270[k].v;
+      });
+    },0);
+  }
   // Build 1042: Bei echtem Oeffnen in der Vorschau starten (_dokEditOpen=false);
   // der Toggle-Rerender ruft mit _keepEdit=true und behaelt den Editor-Zustand.
   if(!_keepEdit) window._dokEditOpen=false;
@@ -21017,6 +20939,10 @@ function dokShowFullImg(id){
 function dokGotoKalender(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
+  // Build 1271 (Tim, 13.10.): Getippte Korrekturen (Titel, Studio ...) stehen nur in den
+  // dedit-*-Feldern der Dokumentansicht. Dieser Weg verlaesst die Ansicht, bevor bestaetigt
+  // wird, also vorher ins Dokument uebernehmen. Sonst gelten wieder die alten Werte.
+  try { _applyEditedFields(d); save(db); } catch(e1271){ console.error('[1271 Eingaben uebernehmen]', e1271); }
   _pendingDokLink=dokId;
   _returnToDokId=null; // Keine Rücknavigation zum Dok-Panel
   // Dok-Panel direkt schließen ohne switchView-Nebenwirkungen
@@ -22991,6 +22917,10 @@ function dokLinkMultiConfirm(){
 function dokNewTerminAusDok(dokId){
   var d=(db.dokumente||[]).find(function(x){return x.id===dokId;});
   if(!d) return;
+  // Build 1271 (Tim, 13.10.): Getippte Korrekturen (Titel, Studio ...) stehen nur in den
+  // dedit-*-Feldern der Dokumentansicht. Dieser Weg verlaesst die Ansicht, bevor bestaetigt
+  // wird, also vorher ins Dokument uebernehmen. Sonst gelten wieder die alten Werte.
+  try { _applyEditedFields(d); save(db); } catch(e1271){ console.error('[1271 Eingaben uebernehmen]', e1271); }
   dokLinkCancel();
   _pendingDokLink=dokId;
   var sheet=document.getElementById('termin-sheet');
