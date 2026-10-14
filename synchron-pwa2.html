@@ -933,9 +933,10 @@ body.diskret input.dsk-in:not(:focus){-webkit-text-security:disc}
   <div style="display:flex;gap:8px;padding:0 12px 10px;flex-shrink:0;background:var(--cream);align-items:center;position:relative">
     <input id="dok-upload-input" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="dokGotFiles(this)">
     <input id="dok-folder-input" type="file" accept="image/*,application/pdf" multiple webkitdirectory style="display:none" onchange="dokGotFilesFolder(this)">
-    <div onclick="document.getElementById('dok-folder-input').click()" title="Belege reinholen" style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;touch-action:manipulation"><svg width="28" height="28" viewBox="0 0 40 40"><defs><filter id="krisSch" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.09 0.28" numOctaves="3" seed="7" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.7" result="d"/><feGaussianBlur in="d" stdDeviation="0.2"/></filter></defs><g filter="url(#krisSch)"><g stroke="#201e1a" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="20" cy="19" rx="11" ry="3.4"/><path d="M9 19c0 8 4 13 11 13s11-5 11-13"/><path d="M20 3v10M15.5 9.5l4.5 4 4.5-4"/></g></g></svg></div>
-    <div onclick="dokMenuToggle(event)" title="Mehr" style="margin-left:auto;width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;color:var(--ink2);font-size:20px;touch-action:manipulation">&#8943;</div>
-    <div id="dok-menu" style="display:none;position:absolute;top:50px;right:12px;z-index:60;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.13);padding:6px;min-width:190px">
+    <!-- Build 1280 (Tim, 14.10.2026): Drei Punkte links ohne Kasten, Schale rechts -->
+    <div onclick="dokMenuToggle(event)" title="Mehr" style="width:34px;height:44px;display:flex;align-items:center;justify-content:flex-start;cursor:pointer;color:var(--ink);font-size:22px;touch-action:manipulation">&#8943;</div>
+    <div onclick="document.getElementById('dok-folder-input').click()" title="Belege reinholen" style="margin-left:auto;width:46px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--hair);border-radius:11px;cursor:pointer;touch-action:manipulation"><svg width="28" height="28" viewBox="0 0 40 40"><defs><filter id="krisSch" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.09 0.28" numOctaves="3" seed="7" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.7" result="d"/><feGaussianBlur in="d" stdDeviation="0.2"/></filter></defs><g filter="url(#krisSch)"><g stroke="#201e1a" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="20" cy="19" rx="11" ry="3.4"/><path d="M9 19c0 8 4 13 11 13s11-5 11-13"/><path d="M20 3v10M15.5 9.5l4.5 4 4.5-4"/></g></g></svg></div>
+    <div id="dok-menu" style="display:none;position:absolute;top:50px;left:12px;z-index:60;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.13);padding:6px;min-width:190px">
       <div onclick="document.getElementById('dok-upload-input').click();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--ink)">Dateien</div>
       <div onclick="dokDeleteAll();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--red)">Pipeline leeren</div>
       <div onclick="importedFilesReset();dokMenuClose()" style="display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:13.5px;cursor:pointer;border-radius:9px;touch-action:manipulation;color:var(--red)">Zurücksetzen</div>
@@ -5447,7 +5448,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1278';
+  if(elH) elH.textContent = '1280';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -29789,7 +29790,8 @@ var _dskObs = null;
 function _dskAktiv(){ try { return localStorage.getItem('synchron_diskret') === '1'; } catch(e){ return false; } }
 // Betrag erkennen: mit €-Zeichen (auch ganze Zahlen) oder deutsche Dezimalzahl mit genau 2 Nachkommastellen.
 // Nicht: Prozente (7,00 %), Teile laengerer Zahlen (1,345), Datum, Uhrzeit, Takes, Belegnummern.
-var _DSK_RE = /€\s?-?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|-?\d{1,3}(?:\.\d{3})*,\d{2}(?:\s?€)?|-?\d{1,3}(?:\.\d{3})+\s?€|-?\d+\s?€/g;
+// Build 1279: auch Punkt-Dezimal neben € (Bankabgleich zeigt "129.96 €", Realfall 14.10.2026)
+var _DSK_RE = /-?\d+\.\d{2}\s?€|€\s?-?\d+\.\d{2}(?!\d)|€\s?-?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|-?\d{1,3}(?:\.\d{3})*,\d{2}(?:\s?€)?|-?\d{1,3}(?:\.\d{3})+\s?€|-?\d+\s?€/g;
 function _dskTreffer(txt){
   var out = []; _DSK_RE.lastIndex = 0; var m;
   while((m = _DSK_RE.exec(txt))){
@@ -29822,7 +29824,8 @@ function _dskVerarbeiten(root){
     var frag = document.createDocumentFragment(), pos2 = 0;
     hits.forEach(function(h){
       if(h[0] > pos2) frag.appendChild(document.createTextNode(txt.slice(pos2, h[0])));
-      var sp = document.createElement('span'); sp.className = 'dsk'; sp.setAttribute('data-o', txt.slice(h[0], h[1])); sp.textContent = _DSK_PUNKTE;
+      var _orig = txt.slice(h[0], h[1]);
+      var sp = document.createElement('span'); sp.className = 'dsk'; sp.setAttribute('data-o', _orig); sp.textContent = _orig.replace(/\s/g,'').length <= 5 ? '・・' : _DSK_PUNKTE;   // Build 1279: kurze Betraege (80€) nur zwei Punkte, sonst brechen Tarif-Kacheln um
       frag.appendChild(sp); pos2 = h[1];
     });
     if(pos2 < txt.length) frag.appendChild(document.createTextNode(txt.slice(pos2)));
