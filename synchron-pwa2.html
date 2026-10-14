@@ -452,6 +452,11 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 .nav-btn svg{display:block}
 .nav-btn svg .nav-ink{stroke:var(--ink3);fill:none;stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
 .nav-btn.active svg .nav-ink{stroke:var(--accent)}
+
+/* Build 1277: Diskret-Modus (Betraege verbergen, um die App zu zeigen) */
+.dsk-auge{background:none;border:none;padding:8px;margin:-8px -6px -8px 0;opacity:.6;line-height:0;cursor:pointer;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+.dsk{display:inline-block;letter-spacing:.35em;opacity:.55;line-height:1;vertical-align:baseline;white-space:nowrap}
+body.diskret input.dsk-in:not(:focus){-webkit-text-security:disc}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -460,7 +465,7 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
   <div class="app-header"><div class="header-left">
     <div class="header-title" id="heute-greet">Guten Tag</div>
     <div class="header-sub" id="heute-date"></div>
-  </div></div>
+  </div><div class="header-right"><button class="dsk-auge" onclick="diskretUmschalten()" aria-label="Beträge verbergen"></button></div></div>
   <div class="scroll" style="padding-left:16px;padding-right:16px">
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
       <filter id="enso-rough" filterUnits="userSpaceOnUse" x="-10" y="-10" width="116" height="116"><feTurbulence type="fractalNoise" baseFrequency=".12 .4" numOctaves="3" seed="4"/><feDisplacementMap in="SourceGraphic" scale="3.2"/></filter>
@@ -2391,6 +2396,46 @@ function _ohneEmojiVorne1255(x){ return String(x||'').replace(/^(?:[\u2600-\u27B
     console.log('[Build 1226] K3-Auszahlung gesetzt', geheilt);
   }
   saveV2(dbv2);
+})();
+// ─── Build 1275: verwaiste Abrechnungs-Stempel an Terminen entfernen (einmalig) ───
+// Ein Termin-Stempel abrechn_dateiname ohne jede Beleg-Spur (kein Dokument dieses Namens,
+// nicht im Archiv, nicht in importedFiles) stammt aus dem Antippen eines nie bestaetigten
+// Belegs (Build 714, vor 1275). Er sperrt die Datei beim Ordner-Scan. Nur Abrechnungen,
+// Dispo-Stempel bleiben unangetastet. Gegen Backup 13.10.2026 16:50: genau 2 Termine
+// (24.09. und 02.10., beide "Abrechnung Studio Hamburg GmbH (s) 10-2026 2.pdf").
+(function(){
+  if(!db || db._mig1275Done) return;
+  var namen = {};
+  (db.dokumente||[]).forEach(function(d){ if(d.dateiname) namen[d.dateiname]=1; });
+  (db._archivLog||[]).forEach(function(e){ if(e.dateiname) namen[e.dateiname]=1; });
+  (db.importedFiles||[]).forEach(function(n){ if(n) namen[n]=1; });
+  var n = 0;
+  (db.termine||[]).forEach(function(t){
+    if(t.abrechn_dateiname && !namen[t.abrechn_dateiname]){ t.abrechn_dateiname = ''; n++; }
+  });
+  if(n) console.log('[1275] verwaiste Abrechnungs-Stempel entfernt:', n);
+  db._mig1275Done = true; save(db);
+})();
+// ─── Build 1276: Dispo-Foto, das im Abrechnungsfeld gelandet ist, ins Dispo-Feld (einmalig) ───
+// Ein Foto (jpeg/heic/png) im Feld abrechn_dateiname, das im Archiv fuer diesen Termin NUR als
+// "sonstig" oder "dispo" gefuehrt ist (nie als Abrechnung), war eine Dispo. Abfotografierte
+// Abrechnungen stehen im Archiv als "abrechn" und bleiben unberuehrt (Toneworx 26.02., Hoerspiel 02.06.).
+// Gegen Backup 14.10.2026 12:01: genau 1 Termin (Iyuno LEGO Star Wars 06.10.).
+(function(){
+  if(!db || db._mig1276Done) return;
+  var n = 0;
+  (db.termine||[]).forEach(function(t){
+    var name = t.abrechn_dateiname;
+    if(!name || t._dispoDateiname || !/\.(jpe?g|heic|heif|png)$/i.test(name)) return;
+    var eintr = (db._archivLog||[]).filter(function(e){ return e.terminId===t.id && e.dateiname===name; });
+    if(!eintr.length) return;
+    if(!eintr.every(function(e){ return e.typ==='sonstig' || e.typ==='dispo'; })) return;
+    t._dispoDateiname = name; t.abrechn_dateiname = '';
+    eintr.forEach(function(e){ e.typ = 'dispo'; });
+    n++;
+  });
+  if(n) console.log('[1276] Dispo-Fotos ins Dispo-Feld verschoben:', n);
+  db._mig1276Done = true; save(db);
 })();
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════
@@ -5402,7 +5447,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1274';
+  if(elH) elH.textContent = '1278';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -7185,6 +7230,7 @@ function saveMergeChanges(){
   if(t){
     t._hasPendingMerge=false;
     t._mergeSuggestions=null;
+    delete t._peekVorher;   // Build 1275: gespeichert, kein Ruecksetz-Stand mehr noetig
   }
   // Alle Dokumente mit _pendingDelete archivieren
   var deletedDoks=[];
@@ -7466,9 +7512,10 @@ function _inlineField(terminId, field, label, val, inputType, hideEmpty){
 function inlineEditActivate(row, terminId, field, inputType){
   var valEl = row.querySelector('.ir-val') || row; // Fallback: row selbst (für bd-*)
   if(valEl.querySelector('input')) return; // already editing
-  var curVal = (valEl.firstChild && valEl.firstChild.nodeType===3)
-    ? (valEl.firstChild.textContent||'').trim()
-    : valEl.textContent.replace('✎','').replace('','').trim();
+  var _srcEl = (typeof _dskKlon==='function' && _dskKlon(valEl)) || valEl;   // Build 1277: Diskret-Modus, Klartext lesen
+  var curVal = (_srcEl.firstChild && _srcEl.firstChild.nodeType===3)
+    ? (_srcEl.firstChild.textContent||'').trim()
+    : _srcEl.textContent.replace('✎','').replace('','').trim();
   var inp = document.createElement('input');
   inp.type = inputType||'text';
   inp.value = curVal.trim();
@@ -7494,6 +7541,7 @@ function inlineEditCommit(inp, terminId, field){
     _mergeSnapshot = JSON.parse(JSON.stringify(t));
     _mergeTerminId = terminId;
     t._hasPendingMerge = true;
+    _peekVorherMerken(t);   // Build 1275
   }
   t[field] = newVal;
   // Feld als manuell markieren — hat höchste Priorität beim Merge
@@ -8784,6 +8832,7 @@ function terminBackBtn(){
           var _snap = JSON.parse(JSON.stringify(_mergeSnapshot));
           delete _snap._fromDokId;
           delete _snap._fromSessionIdx;
+          delete _snap._peekVorher;   // Build 1275
           _snap._hasPendingMerge = false;
           db.termine[revertIdx] = _snap;
           save(db);
@@ -8944,6 +8993,7 @@ function dokSessionPeek(elOrId, sessionIdx){
   _mergeTerminId = t.id;
   dokMergeIntoTermin(pseudoDok, t);
   t._hasPendingMerge = true;
+  _peekVorherMerken(t);   // Build 1275
   save(db);
 
   _returnToDokId = _dokCurrentId;
@@ -8987,6 +9037,7 @@ function dokPeekTermin(terminId){
     _peekDok._skipAbCreate = true;
     dokMergeIntoTermin(_peekDok, t);
     t._hasPendingMerge = true;
+    _peekVorherMerken(t);   // Build 1275
     // Build 1079: KEIN Stempel, KEINE importedFiles-Sperre mehr an dieser Stelle.
     // Vorher wurden _dispoDateiname/abrechn_dateiname + _archiveDateiname hier sofort
     // gesetzt ("nicht warten auf dokBestaetigen"). Das war der Verlustpfad: closeDetail()
@@ -9144,8 +9195,20 @@ function revertMergeField(terminId, field, oldVal){
   showToast('✕ '+field+' nicht übernommen');
 }
 
+// Build 1275: Den Ruecksetz-Stand eines angetippten Belegs (Peek) auch AM TERMIN speichern.
+// _mergeSnapshot lebt nur im Arbeitsspeicher; nach einem Neuladen der App konnte "Verwerfen"
+// die eingetragenen Werte nicht mehr zuruecknehmen. Der frueheste Stand gewinnt.
+function _peekVorherMerken(t){
+  if(!t || !_mergeSnapshot || _mergeTerminId !== t.id || t._peekVorher) return;
+  var c = JSON.parse(JSON.stringify(_mergeSnapshot));
+  delete c._peekVorher;
+  t._peekVorher = c;
+}
 function discardMergeChanges(){
   var t=(db.termine||[]).find(function(x){return x.id===(_mergeTerminId||ctid);});
+  // Build 1275: Ruecksetz-Stand nach Neuladen der App vom Termin holen
+  if(!_mergeSnapshot && t && t._peekVorher){ _mergeSnapshot = t._peekVorher; _mergeTerminId = t.id; }
+  if(_mergeSnapshot) delete _mergeSnapshot._peekVorher;
 
   if(_mergeSnapshot && _mergeTerminId){
     // Build 1092 (Audit Befund 8): Symmetrie zum Peek. (1) d.terminId auf den Vorzustand
@@ -9166,6 +9229,7 @@ function discardMergeChanges(){
   } else if(t){
     // Kein Snapshot — zumindest _hasPendingMerge und _mergeSuggestions löschen
     t._hasPendingMerge=false;
+    delete t._peekVorher;   // Build 1275
     t._mergeSuggestions=null;
   }
 
@@ -16308,6 +16372,8 @@ function dokDeleteAll(){
   // damit ein Re-Upload ohne Umbenennen möglich ist. Multi-Doc-PDFs bleiben gesperrt,
   // solange noch ein bestätigtes Teil-Dokument denselben Dateinamen trägt.
   rest.forEach(function(d){ _dateinameFreigeben(d.dateiname); });
+  // Build 1275: nie bestaetigte Abrechnungen vollstaendig zuruecknehmen (siehe _abrechnEinpflegeZuruecknehmen)
+  rest.forEach(function(d){ if(!d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn')) _abrechnEinpflegeZuruecknehmen(d.dateiname); });
   // Build 1188: Chronik-Eintrag. Bewusst OHNE Undo-Zweig — die Aktion ist nicht
   // umkehrbar, die Bilddaten sind weg. Rueckholbar ist trotzdem das meiste:
   // unbestaetigte Belege kommen ueber den freigegebenen Dateinamen beim naechsten
@@ -17051,7 +17117,9 @@ function dokAnalyseDoc(d, key, cb){
     +'  Unsichere Werte → lieber null als falsche Zahl. Der Nutzer korrigiert manuell.\n'
     +'\n'
     +'Bestimme typ:\n'
-    +'  "dispo" = Synchron-Dispoblatt\n'
+    +'  "dispo" = Synchron-Dispoblatt. AUCH OHNE Studionamen, Logo oder bekannte Produktion: Ein Blatt mit Tabelle aus Rolle/Character, Sprecher/Actor, Zeiten und Takes ist IMMER \"dispo\", nie \"sonstig\".\n'
+    +'  IYUNO-DISPO (Build 1276): Ueberschrift \"Recording\", oben links ein Arbeitstitel (oft ein Codename wie \"MS FARMBOY\" oder \"HELLMOUTH\"), Tabelle Character(Role)/Actor/Start/End/Takes/Episodes,\n'
+    +'    Fusszeile \"IYUNO Property - Private and Confidential\" → typ=\"dispo\", studio=\"Iyuno\" (NIE den Arbeitstitel als Studio!), titel = der Arbeitstitel.\n'
     +'  "abrechn" = EINZEL-Gagenabrechnung/Gutschrift für GENAU EINEN Aufnahmetag\n'
     +'  "monats_abrechn" = Monats-Sammelabrechnung mit TABELLE die MEHRERE VERSCHIEDENE Aufnahmedaten auflistet\n'
     +'  WICHTIG: Eine Abrechnung mit NUR EINEM Aufnahmedatum ("von:/bis:" gleich) ist IMMER "abrechn", NIEMALS "monats_abrechn"!\n'
@@ -17797,7 +17865,7 @@ function dokAnalyseDoc(d, key, cb){
   // damit der Offline-Leser sie mit _offline=true direkt aufrufen kann.
   function _uebernehmeSthH(_j, pageDataURLs, _offline){
             if(!_offline){ delete d._offlineGelesen; delete d._leseHinweise; } // Build 1263: KI hat gelesen
-            d.typ = _dokTypAufloesen(d, _j.typ, _j.gutschrift_nr); d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
+            d.typ = _dokTypAufloesen(d, _j.typ, _j.gutschrift_nr, _j); d.beschr=_j.beschr||d.dateiname; d.datum=_j.datum||null;
             d.ausstellungsdatum = _j.ausstellungsdatum||null; // Build 747
             d.studio=_j.studio||null; d.titel=_j.titel||_j.produktion||null;
             // Build 787: SthH-Titel-Präfix ("Gage Synchronsprecher ...") abschneiden
@@ -17908,7 +17976,7 @@ function dokAnalyseDoc(d, key, cb){
       if(!j._offline) d._kiAnalysiert = true; // Build 1236: Marker fuer "KI hat gelesen" (Ausgaben-Knopf); Build 1263: Offline-Leser setzt stattdessen _offlineGelesen
       if(j._offline){ d._offlineGelesen = true; d._leseHinweise = (j._hinweise && j._hinweise.length) ? j._hinweise.slice(0,6) : null; }
       else { delete d._offlineGelesen; delete d._leseHinweise; } // Build 1263: KI hat gelesen, Marker zuruecknehmen
-      d.typ     = _dokTypAufloesen(d, j.typ, j.gutschrift_nr);
+      d.typ     = _dokTypAufloesen(d, j.typ, j.gutschrift_nr, j);
       d.beschr  = j.beschr || d.dateiname;
       d.datum   = j.datum || null;
       // Build 1043: Fallback — kein Datum erkannt? Aufnahmedatum des Fotos (EXIF) nehmen.
@@ -22312,6 +22380,7 @@ function dokBestaetigenMitTermin(dokId, terminId){
     _mergeTerminId = terminId;
     dokMergeIntoTermin(d, t);
     t._hasPendingMerge = true;
+    _peekVorherMerken(t);   // Build 1275
   }
   d.bestaetigt = true;
   d.awaitConfirm = false;
@@ -22468,8 +22537,11 @@ function dokMergeIntoTermin(d, termin){
 
     // Session-Vergleich: keine neue Abrechnung anlegen — nur Diff zeigen
     if(d._skipAbCreate){
-      // Build 714: Dateiname am Termin setzen — damit Ampel-Klick zum PDF führt
-      if(d.dateiname) termin.abrechn_dateiname = d.dateiname;
+      // Build 1275: KEIN Dateiname-Stempel mehr beim blossen Antippen (Build 714 setzte ihn hier).
+      // Das unterlief Build 1079 ("Stempel ausschliesslich in saveMergeChanges"): ging der
+      // Ruecksetz-Stand verloren (App neu geladen, mehrfach angetippt), blieb der Name am Termin
+      // haengen, und der Ordner-Scan hielt die nie bestaetigte Datei fuer eingepflegt
+      // (Realfall 13.10.2026, Studio Hamburg 10-2026 2.pdf an 24.09. und 02.10.).
       // Diff-Check gegen bestehende Dispo-Werte
       var dispTakes2 = parseInt(termin.takes)||0;
       var dispRate2  = parseFloat(termin.rate)||0;
@@ -23098,6 +23170,24 @@ function _terminSheetFelder(zeigen){
 // Namen ODER ein Termin kennt die Datei (Dispo-/Abrechn-Verknüpfung). Build 850 fixt
 // die 849-Regression: eingepflegte Dispos (Pipeline gelöscht) tauchten beim
 // Ordner-Scan wieder auf, weil nur "bestaetigt" geprüft wurde.
+// Build 1275 (Tim, 13.10.2026): Eine NIE bestaetigte Abrechnung ist nicht eingepflegt (gebucht wird
+// erst beim Bestaetigen). Wird sie geloescht (Pipeline leeren, Einzel-Loeschen), duerfen keine Spuren
+// bleiben, die den Ordner-Scan glauben lassen, die Datei sei schon drin: Termin-Stempel, Archiv,
+// importedFiles. Nur Abrechnungen; Dispos laufen ueber einen anderen Weg (Bestaetigen im Termin) und
+// bleiben unberuehrt. Greift nicht, solange ein bestaetigtes oder offenes Dokument denselben Namen traegt
+// (Split-PDFs, geschonte Geschwister aus Build 1202).
+function _abrechnEinpflegeZuruecknehmen(name){
+  if(!name) return 0;
+  if((db.dokumente||[]).some(function(x){ return x.dateiname===name; })) return 0;
+  var n = 0;
+  (db.termine||[]).forEach(function(t){ if(t.abrechn_dateiname===name){ t.abrechn_dateiname=''; n++; } });
+  if(db._archivLog) db._archivLog = db._archivLog.filter(function(e){
+    return !(e.dateiname===name && (!e.typ || e.typ==='abrechn' || e.typ==='monats_abrechn'));
+  });
+  if(db.importedFiles) db.importedFiles = db.importedFiles.filter(function(x){ return x !== name; });
+  return n;
+}
+
 function _dateinameFreigeben(name){
   if(!name || !db.importedFiles) return;
   var nochGenutzt =
@@ -23125,6 +23215,7 @@ function dokDeleteCurrent(){
   if(!confirm((d.beschr||'Dokument')+' löschen?')) return;
   db.dokumente=(db.dokumente||[]).filter(function(x){return x.id!==_dokCurrentId;});
   _dateinameFreigeben(d.dateiname); // Build 849: Re-Upload wieder möglich
+  if(!d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn')) _abrechnEinpflegeZuruecknehmen(d.dateiname);   // Build 1275
   save(db); dokDetailClose(); rDokumente();
   showToast('Gelöscht');
 }
@@ -26846,18 +26937,27 @@ function rZahlungen(){
       if(_terminZahlStatus(t.id)==='bezahlt') prods[key].bezahlt+=net; else prods[key].offen+=net;
     });
     var sortedP=Object.keys(prods).sort(function(a,b){return prods[b].net-prods[a].net;});
+    var maxP=(sortedP.length && prods[sortedP[0]].net>0) ? prods[sortedP[0]].net : 1;
     var html='';
     sortedP.forEach(function(key){
       var g=prods[key];
       var gid='zp-'+key.replace(/[^a-z0-9]/gi,'_');
-      html+='<div style="border-bottom:1.5px solid var(--cream2)">'
-        +'<div onclick="zgToggle(\''+gid+'\')" style="display:flex;align-items:center;padding:12px 16px;gap:10px;cursor:pointer;background:#fff;touch-action:manipulation">'
-        +'<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.displayKey||key)+'</div>'
-        +'<div style="font-size:11px;color:var(--ink3);margin-top:1px">'+esc(g.studio)+' · '+g.termine.length+' Termine'
+      // Build 1278 (Tim, 14.10.2026): Optik wie Tab "Monat" (Papierton statt Weiss, gleiche Schriftgewichte,
+      // Balken im Verhaeltnis zur groessten Produktion). Antippen/Aufklappen unveraendert; der Pfeil bleibt
+      // als unsichtbares Element fuer zgToggle erhalten.
+      var barWP=Math.max(2, Math.min(100, Math.round(g.net/maxP*100)));
+      html+='<div style="border-bottom:1px solid var(--cream2)">'
+        +'<div onclick="zgToggle(\''+gid+'\')" style="padding:12px 16px;cursor:pointer;touch-action:manipulation">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.displayKey||key)+'</div>'
+        +'<div style="font-size:11px;color:var(--ink3)">'+esc(g.studio)+' · '+g.termine.length+' Termine'
         +(g.offen>0?' · <span style="color:var(--red)">'+fmtEur(g.offen)+' offen</span>':'')
         +'</div></div>'
-        +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:900">'+fmtEur(g.net)+'</div>'
-        +'<div id="'+gid+'-arr" style="font-size:11px;color:#ccc">'+((_zpOffen1223||{})[gid]?'&#9662;':'&#9656;')+'</div></div></div>'
+        +'<div style="font-size:16px;font-weight:900;flex-shrink:0">'+fmtEur(g.net)+'</div>'
+        +'<div id="'+gid+'-arr" style="display:none">'+((_zpOffen1223||{})[gid]?'&#9662;':'&#9656;')+'</div></div>'
+        +'<div style="height:6px;background:var(--cream2);border-radius:3px;overflow:hidden">'
+        +'<div style="height:100%;width:'+barWP+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px"></div>'
+        +'</div></div>'
         // Build 1223: Produktionen starten zugeklappt; aufgeklappte bleiben es beim
         // Neuzeichnen (bis die App neu geladen wird).
         +'<div id="'+gid+'"'+((_zpOffen1223||{})[gid]?'':' style="display:none"')+'>'
@@ -29127,11 +29227,20 @@ function toggleOfflineLeser(){
   var el=document.getElementById('offline-leser-status'); if(el) el.textContent=db.profil.offlineLeser?'An':'Aus';
   showToast(db.profil.offlineLeser?'Belege werden lokal gelesen, KI nur als Rückfall':'Belege gehen wieder an die KI');
 }
-function _dokTypAufloesen(d, kiTyp, kiGs){
+function _dokTypAufloesen(d, kiTyp, kiGs, kiJ){
   if(d && d._folderTyp) return d._folderTyp;
   var fn = String((d&&d.dateiname)||'');
   var gs = String(kiGs||(d&&d.gutschrift_nr)||'');
   if(/^rechnung[ _\-]/i.test(fn) || /^r?\d{1,3}\/\d{4}$/.test(gs)) return 'abrechn';
+  // Build 1276 (Tim, 14.10.2026): Ein Blatt mit Takes und Rolle oder Folgenaufteilung, aber ohne
+  // Geldbetrag, ist eine Dispo, auch wenn die KI "sonstig" sagt (Realfall Iyuno 06.10.2026,
+  // Codename MS FARMBOY ohne Studionamen: als sonstig eingestuft, im Abrechnungsfeld gelandet).
+  if((!kiTyp || kiTyp==='sonstig') && kiJ){
+    var tk = parseInt(kiJ.takes)||0;
+    var gvl = Array.isArray(kiJ.gvl_takes_detail) && kiJ.gvl_takes_detail.length > 0;
+    var geld = (parseFloat(kiJ.brutto)||0) > 0 || (parseFloat(kiJ.auszahlung)||0) > 0;
+    if(tk > 0 && (kiJ.rolle || gvl) && !geld) return 'dispo';
+  }
   return kiTyp || 'sonstig';
 }
 // Build 837: Nach einer Konsolidierung die aktuell sichtbare Ansicht sofort neu
@@ -29662,6 +29771,115 @@ function _mev6PeekHtml(r,idx){
     </div>
   </div>
 </div>
+
+<script>
+// ─── Build 1277 (Tim, 14.10.2026): Diskret-Modus ──────────────────────────────
+// Ein Tipp aufs Auge ersetzt jeden Eurobetrag in der Anzeige durch stille Punkte,
+// ein zweiter Tipp zeigt sie wieder. Rein in der Anzeige: Daten, PDFs (jsPDF aus den
+// Daten), Exporte und Druckfenster bleiben unberuehrt. Zustand bleibt beim Neustart.
+// Betraege werden per MutationObserver in jeder neu gezeichneten Ansicht ersetzt; das
+// Original steht im Attribut data-o und wird beim Ausschalten zurueckgesetzt.
+// Eingabefelder mit Betraegen werden abgedeckt, ausser beim Bearbeiten (Fokus).
+// inlineEditActivate liest den Klartext aus data-o (sonst wuerden Punkte gespeichert).
+var _DSK_DEFS = '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="krisAuge" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/><feGaussianBlur in="d" stdDeviation="0.18"/></filter></defs></svg>';
+var _DSK_OFFEN = '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisAuge)"><path d="M2.6 12.2c2.6-3.9 5.8-5.9 9.4-5.9s6.8 2 9.4 5.9"/><path d="M3.1 12.5c2.5 3.5 5.6 5.3 8.9 5.3s6.4-1.8 9-5.5" opacity=".55"/><circle cx="12" cy="11.9" r="2.9" stroke-width="1.5"/><circle cx="12.4" cy="11.6" r=".7" fill="#201E1A" stroke="none"/></g></svg>';
+var _DSK_ZU = '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#201E1A" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" filter="url(#krisAuge)"><path d="M2.8 10.6c2.6 3.5 5.7 5.3 9.2 5.3s6.6-1.8 9.2-5.4"/><path d="M3.2 10.4c2.6-2.9 5.6-4.4 8.9-4.4s6.3 1.5 8.9 4.4" stroke-dasharray="1.4 2.8" opacity=".4"/><path d="M7.3 14.3l-1.1 2.2M12 15.9v2.4M16.7 14.3l1.1 2.2" stroke-width="1.4" opacity=".6"/></g></svg>';
+var _DSK_PUNKTE = '・・・・';
+var _dskObs = null;
+function _dskAktiv(){ try { return localStorage.getItem('synchron_diskret') === '1'; } catch(e){ return false; } }
+// Betrag erkennen: mit €-Zeichen (auch ganze Zahlen) oder deutsche Dezimalzahl mit genau 2 Nachkommastellen.
+// Nicht: Prozente (7,00 %), Teile laengerer Zahlen (1,345), Datum, Uhrzeit, Takes, Belegnummern.
+var _DSK_RE = /€\s?-?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|-?\d{1,3}(?:\.\d{3})*,\d{2}(?:\s?€)?|-?\d{1,3}(?:\.\d{3})+\s?€|-?\d+\s?€/g;
+function _dskTreffer(txt){
+  var out = []; _DSK_RE.lastIndex = 0; var m;
+  while((m = _DSK_RE.exec(txt))){
+    var a = m.index, e = a + m[0].length;
+    var vor = a > 0 ? txt.charAt(a-1) : '';
+    var nach = txt.slice(e, e+2);
+    if(/[\d.,A-Za-zÄÖÜäöü]/.test(vor)) continue;
+    if(/^\d/.test(nach) || /^\s?%/.test(nach)) continue;
+    out.push([a, e]);
+  }
+  return out;
+}
+function _dskVerarbeiten(root){
+  if(!root || !_dskAktiv()) return;
+  if(root.nodeType === 3) root = root.parentNode;
+  if(!root || root.nodeType !== 1) return;
+  if(root.closest && root.closest('script,style,textarea,.dsk')) return;
+  var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n, liste = [];
+  while((n = w.nextNode())) liste.push(n);
+  liste.forEach(function(tn){
+    var p = tn.parentNode; if(!p || p.nodeType !== 1) return;
+    if(p.closest('script,style,textarea,.dsk,option')) return;
+    var txt = tn.nodeValue; if(!txt || txt.length > 4000) return;
+    var hits = _dskTreffer(txt); if(!hits.length) return;
+    if(p.namespaceURI === 'http://www.w3.org/2000/svg'){
+      if(!p.hasAttribute('data-dsko')) p.setAttribute('data-dsko', txt);
+      var s2 = '', pos = 0; hits.forEach(function(h){ s2 += txt.slice(pos, h[0]) + _DSK_PUNKTE; pos = h[1]; }); s2 += txt.slice(pos);
+      tn.nodeValue = s2; return;
+    }
+    var frag = document.createDocumentFragment(), pos2 = 0;
+    hits.forEach(function(h){
+      if(h[0] > pos2) frag.appendChild(document.createTextNode(txt.slice(pos2, h[0])));
+      var sp = document.createElement('span'); sp.className = 'dsk'; sp.setAttribute('data-o', txt.slice(h[0], h[1])); sp.textContent = _DSK_PUNKTE;
+      frag.appendChild(sp); pos2 = h[1];
+    });
+    if(pos2 < txt.length) frag.appendChild(document.createTextNode(txt.slice(pos2)));
+    p.replaceChild(frag, tn);
+  });
+  var ins = root.tagName === 'INPUT' ? [root] : Array.prototype.slice.call(root.querySelectorAll('input'));
+  ins.forEach(function(inp){ if(inp.type!=='hidden' && inp.type!=='checkbox' && inp.type!=='radio' && _dskTreffer(String(inp.value||'')).length) inp.classList.add('dsk-in'); });
+}
+function _dskAufheben(){
+  document.querySelectorAll('span.dsk').forEach(function(sp){ var p = sp.parentNode; sp.replaceWith(document.createTextNode(sp.getAttribute('data-o')||'')); if(p && p.normalize) p.normalize(); });
+  document.querySelectorAll('[data-dsko]').forEach(function(el){ el.textContent = el.getAttribute('data-dsko'); el.removeAttribute('data-dsko'); });
+  document.querySelectorAll('input.dsk-in').forEach(function(i){ i.classList.remove('dsk-in'); });
+}
+function _dskBeobachten(){ if(_dskObs) _dskObs.observe(document.body, {childList:true, subtree:true, characterData:true}); }
+function _dskStart(){
+  document.body.classList.add('diskret');
+  if(!_dskObs){
+    _dskObs = new MutationObserver(function(muts){
+      if(!_dskAktiv()) return;
+      _dskObs.disconnect();
+      try {
+        muts.forEach(function(m){
+          if(m.type === 'characterData') _dskVerarbeiten(m.target);
+          else m.addedNodes.forEach(function(x){ _dskVerarbeiten(x); });
+        });
+      } catch(e){ console.warn('[1277 diskret]', e); }
+      _dskBeobachten();
+    });
+  }
+  _dskObs.disconnect(); _dskVerarbeiten(document.body); _dskBeobachten();
+}
+function _dskAugenAktualisieren(){
+  var an = _dskAktiv();
+  document.querySelectorAll('.dsk-auge').forEach(function(b){ b.innerHTML = an ? _DSK_ZU : _DSK_OFFEN; b.setAttribute('aria-label', an ? 'Beträge zeigen' : 'Beträge verbergen'); });
+}
+function diskretUmschalten(){
+  var an = !_dskAktiv();
+  try { localStorage.setItem('synchron_diskret', an ? '1' : '0'); } catch(e){ console.warn('[1277 diskret] speichern', e); }
+  if(_dskObs) _dskObs.disconnect();
+  if(an){ _dskAugenAktualisieren(); _dskStart(); }
+  else { document.body.classList.remove('diskret'); _dskAufheben(); _dskAugenAktualisieren(); }
+}
+// Klartext eines Anzeige-Elements (Punkte durch Original ersetzt), fuer inlineEditActivate
+function _dskKlon(el){
+  if(!el || !el.querySelector || !el.querySelector('span.dsk')) return null;
+  var c = el.cloneNode(true);
+  c.querySelectorAll('span.dsk').forEach(function(sp){ sp.replaceWith(document.createTextNode(sp.getAttribute('data-o')||'')); });
+  c.normalize(); return c;
+}
+(function(){
+  try {
+    var d = document.createElement('div'); d.innerHTML = _DSK_DEFS; document.body.appendChild(d.firstChild);
+    _dskAugenAktualisieren();
+    if(_dskAktiv()) _dskStart();
+  } catch(e){ console.warn('[1277 diskret] Start', e); }
+})();
+</script>
 
 </body>
 </html>
