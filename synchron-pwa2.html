@@ -5448,7 +5448,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1284';
+  if(elH) elH.textContent = '1285';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5837,6 +5837,16 @@ function _k4Anteile1283(t){
     }
   } catch(e){ console.warn('[1283 anteile]', e); }
   return null;
+}
+// Build 1285 (Tim, 15.10.2026): Studio Hamburg nennt keine Takes, nur das Brutto je Drehtag. Rueckgerechnet
+// (Brutto - Komm.-Gage) / Rate, nur wenn das glatt aufgeht (ganze Zahl, Toleranz 1 Cent je Take). Geht es
+// nicht auf, stimmt der Tarif nicht, dann null statt einer erfundenen Zahl.
+function _k4TakesRechnerisch1285(t, brutto){
+  var kg = parseFloat(t.kommgage)||0, rt = parseFloat(t.rate)||0, br = parseFloat(brutto)||0;
+  if(!(kg > 0) || !(rt > 0) || !(br > kg)) return null;
+  var x = (br - kg) / rt, n = Math.round(x);
+  if(n < 1 || Math.abs(x - n) * rt > 0.01) return null;
+  return n;
 }
 // Brutto laut Dispo (Komm.-Gage + Takes x Rate, 10er-Paket wie im Termin-Detail) gegen abgerechnetes Brutto
 function _k4BruttoDiff1283(t){
@@ -6790,6 +6800,15 @@ function openDetail(id){
           '<div class="ir-val" style="color:var(--orange);font-weight:700;font-size:11px">'+
           'Posten ergeben nicht das Beleg-Brutto</div></div>'
         : '')
+      +(_k4c ? (function(){
+          // Build 1285: rechnerische Takes zum Vergleich mit der Dispo
+          var n = _k4TakesRechnerisch1285(t, abBrutto); if(n == null) return '';
+          var tk = parseInt(t.takes)||0, gleich = (tk === n) || (tk > 0 && tk < 10 && n === 10);
+          return '<div class="info-row"'+(gleich?'':' style="background:#fff5f5;border-radius:6px"')+'><div class="ir-key" style="'+(gleich?'':'color:var(--orange);font-weight:700')+'">Takes <span style="font-size:9px;color:#aaa;font-weight:400">rechnerisch · '+fmtEur(parseFloat(t.kommgage)||0)+' + '+fmtEur(parseFloat(t.rate)||0)+'/Take</span></div>'
+            +'<div class="ir-val" style="'+(gleich?'color:var(--accent);font-weight:700':'color:var(--orange);font-weight:900')+'">'+n
+            +(n===10 && tk>0 && tk<10?' <span style="font-size:10px;color:#aaa;font-weight:400">(10er-Paket)</span>':'')
+            +(!gleich && tk ? ' <span style="font-size:10px;font-weight:700;color:var(--orange)">· laut Dispo '+tk+'</span>' : '')+'</div></div>';
+        })() : '')
       +(_k4c && !(ab.kv||ab.rv||ab.pv||ab.mwst||ab.auszahlung!=null) ? (function(){
           // Build 1283: Anteile je Drehtag direkt aus dem gebuchten Beleg, im Verhaeltnis
           // Drehtag-Brutto zu Beleg-Brutto. NICHT aus t.mwst_anteil: dokBestaetigenMonat verteilt die
@@ -6973,7 +6992,9 @@ function openDetail(id){
         +'</div>'
         +'<div style="font-size:12px;color:#8a6a3f">Brutto: <b>'+fmtEur(_bd1283.abger)+' abgerechnet</b>, laut Dispo '+fmtEur(_bd1283.dispo)+'</div>'
         +'<div style="font-size:13px;font-weight:900;margin-top:4px;color:'+(_bd1283.diff>0?'var(--accent)':'var(--orange)')+'">'
-        +fmtEur(Math.abs(_bd1283.diff))+(_bd1283.diff>0?' mehr abgerechnet':' zu wenig abgerechnet')+'</div>'
+        +fmtEur(Math.abs(_bd1283.diff))+(_bd1283.diff>0?' mehr abgerechnet':' zu wenig abgerechnet')
+        +(function(){ var n=_k4TakesRechnerisch1285(t,_bd1283.abger), tk=parseInt(t.takes)||0; return (n!=null && tk && n!==tk) ? ' <span style="font-size:11px;font-weight:700">· rechnerisch '+n+' statt '+tk+' Takes</span>' : ''; })()   // Build 1285
+        +'</div>'
         +(_bd1283.diff<0?'<div style="font-size:10px;color:var(--orange);margin-top:4px">Grundlage für Mahnung falls nicht beglichen</div>':'')
         +'</div>';
     }
