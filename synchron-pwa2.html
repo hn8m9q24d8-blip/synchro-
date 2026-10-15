@@ -5448,7 +5448,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1280';
+  if(elH) elH.textContent = '1282';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5655,7 +5655,7 @@ function _tagesSumme1213(items){
     });
     if(!(sum > 0)) return '';
     var betrag = geschaetzt
-      ? 'ca. ' + Math.round(sum).toLocaleString('de-DE') + ' €'
+      ? Math.round(sum).toLocaleString('de-DE') + ' €'   // Build 1282 (Tim, 15.10.): ohne "ca.", geschaetzt bleibt auf ganze Euro gerundet
       : (Math.round(sum*100)/100).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
     return '<div style="text-align:right;font-size:12px;color:var(--ink3);padding:6px 6px 18px;letter-spacing:.01em">'
       + items.length + (items.length === 1 ? ' Termin · ' : ' Termine · ') + betrag + '</div>';
@@ -17073,6 +17073,9 @@ function _sthHTeilbelegeAnlegen(mutter, liste, key, done, quelle){
   alt.forEach(function(x){ if(x.bestaetigt && x.verbindlichkeit_monat) bestaetigtMonate[x.verbindlichkeit_monat] = true; });
   db.dokumente = (db.dokumente||[]).filter(function(x){ return !(x._sthHTeilVon === mutter.id && !x.bestaetigt); });
   var offen = liste.filter(function(jx){ return !bestaetigtMonate[jx.verbindlichkeit_monat]; });
+  // Build 1281: Original-PDF wie beim bestehenden Gutschrift-Split als erstes Gruppenmitglied
+  // kennzeichnen (sonst zeigt die Liste "2 von 2 · 1 fehlt").
+  if(offen.length){ mutter._splitFromPdf = mutter.id; mutter._splitGroup = mutter.id; mutter._splitTotal = liste.length + 1; mutter._splitIdx = 0; }
   var i = 0, angelegt = 0;
   function next(){
     if(i >= offen.length){
@@ -17087,7 +17090,8 @@ function _sthHTeilbelegeAnlegen(mutter, liste, key, done, quelle){
       typ: null, bestaetigt: false, awaitConfirm: true,
       _splitFromPdf: mutter.id, _splitGroup: mutter.id,
       _splitTotal: liste.length + 1, _splitIdx: i, _splitPageNr: jx._seite || null,
-      _sthHTeilVon: mutter.id, _sthHVorgabe: jx, _sthHQuelle: quelle || 'lokal'
+      _sthHTeilVon: mutter.id, _sthHVorgabe: jx, _sthHQuelle: quelle || 'lokal',
+      _folderTyp: mutter._folderTyp || undefined, _sthHTyp: mutter.typ || 'abrechn'   // Build 1281: gleiche Art wie das Original
     };
     delete jx._seite;
     db.dokumente.push(kind); angelegt++;
@@ -17731,6 +17735,9 @@ function dokAnalyseDoc(d, key, cb){
   // lokale Leser beim Original schon gelesen; hier nur denselben Uebernahmeweg (_uebernehmeSthH) durchlaufen.
   if(d._sthHVorgabe){
     var _jv1273 = d._sthHVorgabe; delete d._sthHVorgabe;
+    // Build 1281: Art vom Original uebernehmen ("monats_abrechn" hat kein Etikett und erschien als "Sonstiges")
+    var _typ1281 = d._sthHTyp; delete d._sthHTyp;
+    if(_typ1281){ var _cbT1281 = cb; cb = function(){ d.typ = _typ1281; save(db); if(_cbT1281) _cbT1281(); }; }
     if(d._sthHQuelle === 'ki'){   // Build 1274: KI hat gelesen, nicht der lokale Leser
       var _cbV1274 = cb;
       cb = function(){ delete d._offlineGelesen; d._leseHinweise = null; d._kiAnalysiert = true; save(db); if(_cbV1274) _cbV1274(); };
