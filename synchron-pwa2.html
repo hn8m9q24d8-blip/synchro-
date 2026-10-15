@@ -5448,7 +5448,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1282';
+  if(elH) elH.textContent = '1284';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -5798,6 +5798,54 @@ function _dispoSpur(t){
   }
   if(t.dispoImg) return {name:'Dispo (Foto in der App)', quelle:'img'};
   return null;
+}
+
+// Build 1283 (Tim, 15.10.2026): Studio-Hamburg-Abrechnung (Klasse 4) erkennen, auch WAEHREND des
+// Durchtippens (Beleg noch nicht gebucht). Studio Hamburg weist je Drehtag nur ein Gesamtbrutto aus,
+// keine Grundgage und keine Takes. Vergleiche "Grundgage 316 statt 80" sind dort sinnlos; verglichen
+// wird das Brutto mit der Rechnung laut Dispo. Vorher griff die Regel aus Build 1208 erst nach der
+// Buchung, und die Abrechnungskarte zeigte nach der Buchung trotzdem "Grundgage ≠ Dispo".
+function _k4Termin1283(t){
+  if(!t) return false;
+  try {
+    if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
+      var hit = dbv2.abrechnung_termin_links.some(function(l){
+        if(l.termin_id !== t.id) return false;
+        var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id === l.abrechnung_id; });
+        return a && !a._ueberholt_durch && (String(a.klasse) === '4' || (a.leistungs_monat && !a.beleg_nr));
+      });
+      if(hit) return true;
+    }
+    return (db.dokumente||[]).some(function(d){
+      return !d.bestaetigt && /studio hamburg/i.test(String(d.studio||'')) && (d.sessions||[]).some(function(x){ return x.terminId === t.id; });
+    });
+  } catch(e){ console.warn('[1283 k4]', e); return false; }
+}
+// Anteile eines Drehtags an einem Studio-Hamburg-Beleg (MwSt, SV, Auszahlung) im Verhaeltnis der Brutto-Anteile
+function _k4Anteile1283(t){
+  try {
+    var links = (dbv2 && dbv2.abrechnung_termin_links)||[];
+    for(var i=0;i<links.length;i++){
+      var l = links[i]; if(l.termin_id !== t.id) continue;
+      var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id === l.abrechnung_id; });
+      if(!a || a._ueberholt_durch || !(String(a.klasse)==='4' || (a.leistungs_monat && !a.beleg_nr))) continue;
+      var br = parseFloat(a.brutto)||0, an = parseFloat(l.brutto_anteil_display)||0;
+      if(!(br > 0) || !(an > 0)) continue;
+      var q = an/br, r2 = function(v){ return Math.round((parseFloat(v)||0)*q*100)/100; };
+      var kv = r2(a.sv_kv_an), rv = r2(a.sv_rv_an), pv = r2(a.sv_pv_an), mw = r2(a.ust_betrag);
+      return {mwst: mw, kv: kv, rv: rv, pv: pv, sv: kv+rv+pv, ausz: Math.round((an - kv - rv - pv + mw)*100)/100, auszGesamt: parseFloat(a.auszahlung)||0};
+    }
+  } catch(e){ console.warn('[1283 anteile]', e); }
+  return null;
+}
+// Brutto laut Dispo (Komm.-Gage + Takes x Rate, 10er-Paket wie im Termin-Detail) gegen abgerechnetes Brutto
+function _k4BruttoDiff1283(t){
+  var kg = parseFloat(t.kommgage)||0, rt = parseFloat(t.rate)||0, tk = parseInt(t.takes)||0;
+  var pk = true; try { pk = _paketRegelGilt(t.kommgage, t.rate); } catch(e){ console.warn('[1283 paket]', e); }
+  if(pk && tk > 0 && tk < 10) tk = 10;
+  var disp = Math.round((kg + tk*rt)*100)/100;
+  var abr = parseFloat(t.brutto_termin) || parseFloat(t.kommgage_abgerechnet) || 0;
+  return {dispo: disp, abger: abr, diff: (disp > 0 && abr > 0) ? Math.round((abr - disp)*100)/100 : 0};
 }
 
 function tCard(t){
@@ -6569,6 +6617,8 @@ function openDetail(id){
         if(is1to10GG)    kommMismatch  = false;
         if(_fremdeRate)  rateMismatch  = false;
       }
+      // Build 1283: Studio Hamburg weist nur Brutto aus, Grundgage/Takes/Rate nicht einzeln vergleichen
+      if(_k4Termin1283(t)){ kommMismatch = false; rateMismatch = false; takesMismatch = 0; }
 
       // 1-10-Regel-Erkennung für Brutto-Diff (Studio zahlt nur echte Takes)
       var bruttoOhne1to10 = Math.abs(_effBrutto - (kommgage2 + rawTakes2 * rate2)) < 0.5;
@@ -6691,6 +6741,8 @@ function openDetail(id){
     var takesDiff = ab.takes && hasDispo2 && (parseInt(ab.takes)!==parseInt(t.takes)) && !_gg1to10;
     var gageDiff = ab.grundgage && hasDispo2 && Math.abs(_abGG-_tKomm)>0.02 && !_kommOk
                    && !t.differenz_geklaert;   // Build 1157
+    var _k4c = _k4Termin1283(t);   // Build 1283: Studio Hamburg, nur Brutto vergleichen
+    if(_k4c){ takesDiff = false; gageDiff = false; }
     abHtml='<div class="info-card" style="border-left:4px solid '+(netBruttoOk?'var(--accent)':'var(--orange)')+'">'
       +'<div class="info-card-header"><span>Abrechnung'
       +(ab._v2IstTeilVonSammel?' <span style="font-size:10px;background:#FDFCFA;color:#4A5A4E;padding:2px 6px;border-radius:6px;font-weight:700">'+ab._v2AnzahlTermineInSammel+'er-Sammelrechnung</span>':'')
@@ -6707,19 +6759,19 @@ function openDetail(id){
       +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4A5A4E;margin-bottom:8px;padding:6px 8px;background:#FDFCFA;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
       +(!hasDispo2?'<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;padding:6px 8px;background:var(--card);border-radius:6px">Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
       +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
-      +(ab.takes?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
+      +(ab.takes && !_k4c?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(takesDiff?'color:var(--orange);font-weight:700':'')+'">Takes (abgr.)</div>'+
         '<div class="ir-val" style="'+(takesDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
         ab.takes+(takesDiff?' <span style="font-size:10px;font-weight:700;color:var(--orange)">≠ Dispo: '+t.takes+'</span>':'')+'</div></div>':'')
-      +(ab.grundgage?'<div class="info-row"'+(gageDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
+      +(ab.grundgage && !_k4c?'<div class="info-row"'+(gageDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(gageDiff?'color:var(--orange);font-weight:700':'')+'">Grundgage</div>'+
         '<div class="ir-val" style="'+(gageDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
         fmtEur(ab.grundgage)+(gageDiff?' <span style="font-size:10px;font-weight:700;color:var(--orange)">≠ Dispo: '+fmtEur(t.kommgage)+'</span>':'')+'</div></div>':'')
-      +(ab.take_gage?'<div class="info-row"><div class="ir-key" style="color:#888">Take-Gage</div><div class="ir-val" style="color:#888">'+fmtEur(ab.take_gage)+' / Take</div></div>':'')
+      +(ab.take_gage && !_k4c?'<div class="info-row"><div class="ir-key" style="color:#888">Take-Gage</div><div class="ir-val" style="color:#888">'+fmtEur(ab.take_gage)+' / Take</div></div>':'')
       +'<div class="info-row" style="border-top:1px solid #eee;padding-top:8px;margin-top:4px">'+
         '<div class="ir-key" style="color:'+matchCol+';font-weight:800">'
-        + (bruttoAnteilFehlt
-            ? 'Brutto-Anteil'
+        + ((bruttoAnteilFehlt || _k4c)
+            ? 'Brutto-Anteil'+(_k4c && !netBruttoOk ? ' <span style="font-size:10px;font-weight:700">· laut Dispo '+fmtEur(net)+'</span>' : '')
             : ((ab.klasse === '3' || _istEigenRg2)
                 ? 'Brutto (inkl. USt)'
                 : 'Brutto = App-Netto'))
@@ -6738,6 +6790,16 @@ function openDetail(id){
           '<div class="ir-val" style="color:var(--orange);font-weight:700;font-size:11px">'+
           'Posten ergeben nicht das Beleg-Brutto</div></div>'
         : '')
+      +(_k4c && !(ab.kv||ab.rv||ab.pv||ab.mwst||ab.auszahlung!=null) ? (function(){
+          // Build 1283: Anteile je Drehtag direkt aus dem gebuchten Beleg, im Verhaeltnis
+          // Drehtag-Brutto zu Beleg-Brutto. NICHT aus t.mwst_anteil: dokBestaetigenMonat verteilt die
+          // MwSt, als steckte sie im Brutto (brutto*satz/(1+satz)), bei Gutschriften liegt sie oben drauf.
+          var w = _k4Anteile1283(t); if(!w) return '';
+          var h = '<div class="info-row"><div class="ir-key" style="color:#888">MwSt '+Math.round(ur*100)+'% <span style="font-size:9px;color:#aaa;font-weight:400">anteilig</span></div><div class="ir-val" style="color:#888">'+fmtEur(w.mwst)+'</div></div>';
+          if(w.sv > 0) h += '<div class="info-row"><div class="ir-key" style="color:#888">SV-Abzüge <span style="font-size:9px">(anteilig)</span></div><div class="ir-val" style="color:#888;font-size:11px">'+(w.kv?'KV '+fmtEur(w.kv)+' ':'')+(w.rv?'RV '+fmtEur(w.rv)+' ':'')+(w.pv?'PV '+fmtEur(w.pv):'')+'</div></div>';
+          h += '<div class="info-row" style="font-weight:800;font-size:15px;border-top:1px solid #eee;padding-top:8px;margin-top:4px"><div class="ir-key">Auszahlung <span style="font-size:9px;color:#aaa;font-weight:400">anteilig</span></div><div class="ir-val">'+fmtEur(w.ausz)+' <span style="font-size:9px;color:#aaa;font-weight:400">(Gesamt: '+fmtEur(w.auszGesamt)+')</span></div></div>';
+          return h;
+        })() : '')
       +(ab.kv||ab.rv||ab.pv?'<div class="info-row" style="margin-top:2px"><div class="ir-key" style="color:#888">SV-Abzüge</div><div class="ir-val" style="color:#888;font-size:11px">'+
         (ab.kv?'KV '+fmtEur(ab.kv)+' ':'')+(ab.rv?'RV '+fmtEur(ab.rv)+' ':'')+(ab.pv?'PV '+fmtEur(ab.pv):'')+'</div></div>':'')
       +(ab.netto?'<div class="info-row"><div class="ir-key" style="color:#888">Netto (n. SV)</div><div class="ir-val" style="color:#888">'+fmtEur(ab.netto)+'</div></div>':'')
@@ -6754,7 +6816,7 @@ function openDetail(id){
         +(ab.gesamt_auszahlung&&ab.auszahlung&&Math.abs(parseFloat(ab.gesamt_auszahlung)-parseFloat(ab.auszahlung))>0.05
           ?' <span style="font-size:9px;color:#aaa">(Gesamt: '+fmtEur(ab.gesamt_auszahlung)+')</span>':'')
         +'</div></div>')
-      +(!netBruttoOk?'<div style="font-size:12px;color:var(--orange);padding-top:6px;font-weight:700;border-top:1px solid #ead4d1;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+'</div>':'')
+      +(!netBruttoOk?'<div style="font-size:12px;color:var(--orange);padding-top:6px;font-weight:700;border-top:1px solid #ead4d1;margin-top:6px">Differenz: '+fmtEur(Math.abs(net-abBrutto))+(_k4c?(abBrutto>net?' mehr abgerechnet als laut Dispo':' weniger abgerechnet als laut Dispo'):'')+'</div>':'')
       +'</div></div>';
     } // end Abrechnungs-Block
   }
@@ -6893,26 +6955,28 @@ function openDetail(id){
   // wenn sie einmal da sind, sollen sie auch geprueft werden.
   // Im Daten-Check taucht der Fall nicht auf, die Tarif-Regel (Build 1171)
   // verlangt rate_abgerechnet > 0 und steigt vorher aus.
-  var _k4_1208 = false;
-  try{
-    if(typeof dbv2!=='undefined' && dbv2 && dbv2.abrechnung_termin_links){
-      var _l1208 = dbv2.abrechnung_termin_links.filter(function(l){ return l.termin_id === t.id; });
-      _k4_1208 = _l1208.some(function(l){
-        var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id === l.abrechnung_id; });
-        return a && (String(a.klasse) === '4' || (a.leistungs_monat && !a.beleg_nr));
-      });
-    }
-  }catch(e){ _k4_1208 = false; }
+  var _k4_1208 = _k4Termin1283(t);   // Build 1283: auch waehrend des Durchtippens
   var _kommDiffEff1208 = _k4_1208 ? 0 : _kommDiff1163;
 
   var hasDiff = (_takesDiff1163 && _takesDiff1163 !== 0)
              || (t.rate_differenz && t.rate_differenz !== 0)
              || (_kommDiffEff1208 && _kommDiffEff1208 !== 0);
-  if(_k4_1208 && !hasDiff && _kommDiff1163 && _kommDiff1163 !== 0){
-    diffWarnHtml = '<div style="background:var(--cream2);border:1px solid var(--hair);border-radius:12px;padding:10px 14px;margin-bottom:12px">'
-      +'<div style="font-size:11px;color:var(--ink3)">Monatssaldo-Abrechnung (Klasse 4) — Grundgage '
-      + (t.kommgage_abgerechnet||'?') + '€ ist der Monatssaldo, nicht die Tagesgage. Kein Tagesvergleich möglich.</div>'
-      +'</div>';
+  // Build 1283: Bei Studio Hamburg das Brutto vergleichen (abgerechnet gegen laut Dispo), nicht Grundgage/Takes.
+  if(_k4_1208){
+    hasDiff = false;
+    var _bd1283 = _k4BruttoDiff1283(t);
+    if(Math.abs(_bd1283.diff) >= 0.02 && !t.differenz_geklaert){
+      diffWarnHtml = '<div style="background:var(--orange2);border:2px solid var(--orange);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        +'<div style="font-size:12px;font-weight:900;color:var(--orange)">⚠ Abrechnungs-Differenz</div>'
+        +'<button type="button" onclick="terminDifferenzKlaeren(\''+id+'\')" style="background:var(--hair);color:var(--ink);border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">✓ Geklärt</button>'
+        +'</div>'
+        +'<div style="font-size:12px;color:#8a6a3f">Brutto: <b>'+fmtEur(_bd1283.abger)+' abgerechnet</b>, laut Dispo '+fmtEur(_bd1283.dispo)+'</div>'
+        +'<div style="font-size:13px;font-weight:900;margin-top:4px;color:'+(_bd1283.diff>0?'var(--accent)':'var(--orange)')+'">'
+        +fmtEur(Math.abs(_bd1283.diff))+(_bd1283.diff>0?' mehr abgerechnet':' zu wenig abgerechnet')+'</div>'
+        +(_bd1283.diff<0?'<div style="font-size:10px;color:var(--orange);margin-top:4px">Grundlage für Mahnung falls nicht beglichen</div>':'')
+        +'</div>';
+    }
   }
   if(hasDiff && !t.differenz_geklaert){
     var diffLines = '';
@@ -21639,21 +21703,31 @@ function dokBestaetigenMonat(dokId){
   });
 
   // MwSt pro Session berechnen (proportional nach Brutto)
-  var mwstSumme = 0;
-  sessionsMitTermin.forEach(function(s, idx){
-    var brutto = parseFloat(s.brutto_termin)||0;
-    var mwst;
-    if(idx < sessionsMitTermin.length-1){
-      // proportional: Brutto * Satz / (1 + Satz) = MwSt-Anteil
-      mwst = Math.round((brutto * ustSatz / (1 + ustSatz)) * 100) / 100;
-      mwstSumme += mwst;
-    } else {
-      // Letzter Termin: Restbetrag für Cent-Ausgleich
-      mwst = Math.round((gesamtMwst - mwstSumme) * 100) / 100;
+  // Build 1284 (Tim, 15.10.2026): Die gedruckte MwSt des Belegs wird im Verhaeltnis der Brutto-Anteile
+  // auf die Drehtage verteilt, Cent-genau nach dem Verfahren der groessten Reste. Vorher rechnete jeder
+  // Drehtag brutto*satz/(1+satz), als steckte die USt im Brutto, und der letzte bekam den Rest. Bei
+  // Gutschriften liegt sie oben drauf, so stand jeder Anteil daneben (La Pie Voleuse 23,42 statt 22,12).
+  // Geprueft gegen alle 22 Sammelbelege im Bestand 14.10.2026: jeder Anteil < 1 Cent vom exakten Wert,
+  // Summe jedes Mal gleich der gedruckten USt, fuer Gutschriften und eigene Rechnungen gleichermassen.
+  // USt-Voranmeldung und Jahresabschluss lesen die MwSt des Belegs, nicht diese Anteile.
+  (function(){
+    var anteile = sessionsMitTermin.map(function(s){ return parseFloat(s.brutto_termin)||0; });
+    var summeBr = anteile.reduce(function(x,y){ return x+y; }, 0);
+    var vz = gesamtMwst < 0 ? -1 : 1, gesCent = Math.round(Math.abs(gesamtMwst)*100);
+    var cents = anteile.map(function(){ return 0; });
+    if(gesCent > 0 && summeBr !== 0){
+      var roh = anteile.map(function(a){ return gesCent * a / summeBr; });
+      cents = roh.map(function(r){ return Math.floor(r + 1e-9); });
+      var rest = gesCent - cents.reduce(function(x,y){ return x+y; }, 0);
+      roh.map(function(r,i){ return {i:i, f:r-cents[i]}; })
+         .sort(function(p,q){ return q.f - p.f; })
+         .slice(0, Math.max(0, rest)).forEach(function(p){ cents[p.i] += 1; });
     }
-    s._mwst_anteil = mwst;
-    s._ust_satz    = ustSatz;
-  });
+    sessionsMitTermin.forEach(function(s, idx){
+      s._mwst_anteil = vz * cents[idx] / 100;
+      s._ust_satz    = ustSatz;
+    });
+  })();
 
   var linked=0, notFound=[];
 
