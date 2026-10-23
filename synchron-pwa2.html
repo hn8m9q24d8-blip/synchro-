@@ -5448,7 +5448,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1286';
+  if(elH) elH.textContent = '1287';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -16758,14 +16758,44 @@ function glSesamMonat(page){
   var grp = {}, order = [];
   posten.forEach(function(p){
     var k = (p.titel||'?')+'|'+p.datum;
-    if(!grp[k]){ grp[k] = {titel:p.titel, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0}; order.push(k); }
+    if(!grp[k]){ grp[k] = {titel:p.titel, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0, _vzTakes:0, _neg:false, _pos:{brutto:0, grundgage:0, take_gage:0, takes:0}}; order.push(k); }
+    // Build 1287: Vorzeichen mitfuehren (Korrektur = Storno- und Neu-Zeilen im selben Beleg, s. unten)
+    if(p.betrag < 0) grp[k]._neg = true;
+    else { var _ps = grp[k]._pos; _ps.brutto = glR2(_ps.brutto + p.betrag);
+      if(p.art==='Takegage' && p.anzahl){ _ps.takes += p.anzahl; if(p.betrag) _ps.take_gage = glR2(p.betrag/p.anzahl); }
+      else _ps.grundgage = glR2(_ps.grundgage + p.betrag); }
+    if(p.art==='Takegage' && p.anzahl) grp[k]._vzTakes += (p.betrag < 0 ? -p.anzahl : p.anzahl);
     grp[k].brutto = glR2(grp[k].brutto + p.betrag);
     if(p.art==='Takegage' && p.anzahl){ grp[k].takes += p.anzahl; if(p.betrag) grp[k].take_gage = glR2(p.betrag/p.anzahl); else grp[k]._nullTakes = true; }
     else grp[k].grundgage = glR2(grp[k].grundgage + p.betrag);
     if(p.label110) grp[k]._label110 = true;
     if(p.kuerzel && !grp[k].kuerzel) grp[k].kuerzel = p.kuerzel;
   });
-  r.termine = order.map(function(k){ glPaket(grp[k], grp[k]._label110); return grp[k]; });
+  // Build 1287 (Tim, 23.10.2026): Korrektur im selben Beleg. Realfall Interopa 2449/202610, Nobody Wants This 26.08.:
+  //   Grundgage -127 / +127, 5 Takegage -21,00 / 13 Takegage +54,60  ->  nachgezahlt 8 Takes = 33,60 EUR.
+  // Vorher wurden die Anzahlen ohne Vorzeichen addiert (18 Takes) und der Termin bekam 33,60 als Gage.
+  // Nur Gruppen mit negativen UND positiven Zeilen sind betroffen; reine Storno-Gruppen bleiben wie bisher.
+  // Die Gruppe traegt die Differenz dieses Belegs (Takes 8, Brutto 33,60, so auch in der Junction), dazu den
+  // neu abgerechneten Gesamtstand aus den positiven Zeilen (127 + 54,60 = 181,60; 13 + 10 = 23 Takes), aber nur,
+  // wenn die Neuabrechnung eine Grundgage enthaelt, also vollstaendig im Beleg steht.
+  r.termine = order.map(function(k){
+    var q = grp[k];
+    if(q._neg && q._pos.brutto > 0){
+      q.korrektur = true; q.takes = q._vzTakes; q.grundgage = glR2(q.grundgage);
+      if(q._pos.take_gage) q.take_gage = q._pos.take_gage;
+      if(q._pos.grundgage > 0){
+        var neu = {grundgage:q._pos.grundgage, take_gage:q._pos.take_gage, takes:q._pos.takes};
+        glPaket(neu, q._label110);
+        q.brutto_korrigiert = q._pos.brutto; q.grundgage_korrigiert = q._pos.grundgage; q.rate_korrigiert = q._pos.take_gage || null;
+        q.takes_korrigiert = neu.paket_1_10 ? (neu.takes_gesamt || null) : (q._pos.takes || null);
+      }
+      r._hinweise.push('Korrektur '+(q.titel||'')+' '+q.datum.split('-').reverse().join('.')+': '
+        +(q.takes>=0?'+':'')+q.takes+' Takes, '+String(q.brutto.toFixed(2)).replace('.',',')+' €'
+        +(q.brutto_korrigiert ? ', neu gesamt '+String(q.brutto_korrigiert.toFixed(2)).replace('.',',')+' €'+(q.takes_korrigiert?' / '+q.takes_korrigiert+' Takes':'') : ''));
+    } else glPaket(q, q._label110);
+    delete q._vzTakes; delete q._neg; delete q._pos;
+    return q;
+  });
   var daten = posten.map(function(p){ return p.datum; }).sort();
   r.leistungs_datum_von = daten.length ? daten[0] : null; r.leistungs_datum_bis = daten.length ? daten[daten.length-1] : null;
   r.titel = r.termine.length ? r.termine[0].titel : null;
@@ -16935,6 +16965,8 @@ function glZuKiJson(res){
   function termin(t){ var tb = glTitelBereinigen(t.titel); var x = {datum:t.datum, titel:tb.titel||null, rolle:t.rolle||null, filmcode:t.filmcode||'', takes:t.takes||0, grundgage:t.grundgage||0, take_gage:t.take_gage||0, brutto_termin:t.brutto, gvl_staffel_header:tb.staffel};
     if(t.paket_1_10){ x.paket_1_10 = true; x.kommgage_tarif = t.kommgage_tarif; x.rate_tarif = t.rate_tarif; x.takes_gesamt = t.takes_gesamt; }   // Build 1267/1268
     if(t.kuerzel) x.kuerzel = t.kuerzel;   // Build 1268
+    if(t.korrektur){ x.korrektur = true; x.brutto_korrigiert = t.brutto_korrigiert||null; x.takes_korrigiert = t.takes_korrigiert||null;
+      x.grundgage_korrigiert = t.grundgage_korrigiert||null; x.rate_korrigiert = t.rate_korrigiert||null; }   // Build 1287
     return x; }
   function studioName(r){
     var s = r.studio_kurz || '';
@@ -21700,6 +21732,16 @@ function dokSessionSkip(dokId, si){
   dokOpenDetail(dokId);
 }
 
+// Build 1287: Termin nach einer Korrektur im selben Beleg (Storno + Neuabrechnung). Nur Werte aus dem Beleg:
+// Gesamt-Brutto und Takes der Neuabrechnung. Ohne Grundgage in der Neuabrechnung bleibt der Termin unveraendert.
+function _korrTermin1287(t, s){
+  if(!t || !s || !s.korrektur || !(parseFloat(s.brutto_korrigiert) > 0)) return;
+  t.brutto_termin = parseFloat(s.brutto_korrigiert);
+  if(s.grundgage_korrigiert) t.kommgage_abgerechnet = parseFloat(s.grundgage_korrigiert)||0;
+  if(s.rate_korrigiert) t.rate_abgerechnet = parseFloat(s.rate_korrigiert)||0;
+  var tk = parseInt(s.takes_korrigiert)||0;
+  if(tk){ t.takes_abgerechnet = tk; var disp = parseInt(t.takes)||0; t.takes_differenz = (disp && disp !== tk) ? (disp - tk) : 0; }
+}
 function dokBestaetigenMonat(dokId){
   pushSnapshotVorAktion(); // Build 778: Snapshot vor Aktion
   try {
@@ -21809,7 +21851,8 @@ function dokBestaetigenMonat(dokId){
       // 120). Ueberschreiben machte daraus 120 Takes und eine falsche Differenz von 40 EUR.
       // Build 1267: Bei 10-Take-Paket (Arena "Grundgage 1-10", Interopa Kino 150 = 100 + 10 x 5) stehen auf
       // der Gutschrift nur die Takes ueber 10. Ein leerer Termin bekommt die Gesamt-Takes, sonst gar keine.
-      if(s.paket_1_10){ if(s.takes_gesamt && !_t.takes) _t.takes = parseInt(s.takes_gesamt)||0; }
+      if(s.korrektur){ if(s.takes_korrigiert && !_t.takes) _t.takes = parseInt(s.takes_korrigiert)||0; }   // Build 1287: nie die Differenz
+      else if(s.paket_1_10){ if(s.takes_gesamt && !_t.takes) _t.takes = parseInt(s.takes_gesamt)||0; }
       else if(s.takes && !_t.takes) _t.takes = parseInt(s.takes)||0;
       if(s.rolle && !_t.rolle) _t.rolle = s.rolle;
       if(s.titel && (!_t.titel||_t.titel===_t.studio)) _t.titel = s.titel;
@@ -21817,7 +21860,10 @@ function dokBestaetigenMonat(dokId){
       // (Regel "kommgage NUR aus Dispo"). Nur ein leerer Termin wird befuellt, wie im Einzelpfad.
       if(s.paket_1_10 ? s.rate_tarif : s.take_gage){ if(!_t.rate) _t.rate = parseFloat(s.paket_1_10 ? s.rate_tarif : s.take_gage)||0; }   // Build 1268
       if(s.grundgage && !_t.kommgage) _t.kommgage = s.paket_1_10 ? (parseFloat(s.kommgage_tarif)||0) : (parseFloat(s.grundgage)||0);   // Build 1267: Tarif statt Paketbetrag
-      if(s.brutto_termin) _t.brutto_termin = parseFloat(s.brutto_termin)||0;
+      // Build 1287: Korrektur -> der Termin traegt den neu abgerechneten Gesamtstand (wie bei getrennten Storno-
+      // und Neu-Gutschriften: TNT Spy x Family, RC Bad Apples), nicht die Nachzahlung. Fehlt der Gesamtstand: unveraendert.
+      if(s.korrektur){ _korrTermin1287(_t, s); }
+      else if(s.brutto_termin) _t.brutto_termin = parseFloat(s.brutto_termin)||0;
       if(s._mwst_anteil != null) _t.mwst_anteil = s._mwst_anteil;
       if(s._ust_satz != null) _t.ust_satz = s._ust_satz;
       var _sGutNr = s.gutschrift_nr || gutschriftNr;
@@ -21904,13 +21950,15 @@ function dokBestaetigenMonat(dokId){
     var t=s.terminId?(db.termine||[]).find(function(x){return x.id===s.terminId;}):null;
     if(t){
       // Felder aus Session in Termin eintragen
-      if(s.paket_1_10){ if(s.takes_gesamt && !t.takes) t.takes=s.takes_gesamt; }   // Build 1267
+      if(s.korrektur){ if(s.takes_korrigiert && !t.takes) t.takes=s.takes_korrigiert; }   // Build 1287
+      else if(s.paket_1_10){ if(s.takes_gesamt && !t.takes) t.takes=s.takes_gesamt; }   // Build 1267
       else if(s.takes && !t.takes) t.takes=s.takes;
       if(s.rolle && !t.rolle) t.rolle=s.rolle;
       if(s.titel && (!t.titel||t.titel===t.studio)) t.titel=s.titel;
       if((s.paket_1_10 ? s.rate_tarif : s.take_gage) && !t.rate) t.rate = s.paket_1_10 ? s.rate_tarif : s.take_gage;   // Build 1268
       if(s.grundgage && !t.kommgage) t.kommgage = s.paket_1_10 ? s.kommgage_tarif : s.grundgage;   // Build 1267
-      if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
+      if(s.korrektur){ /* Build 1287: unten nach dem Takes-Abgleich */ }
+      else if(s.brutto_termin) t.brutto_termin=parseFloat(s.brutto_termin)||0;
       else if(!t.brutto_termin && d.sessions && d.sessions.length===1 && parseFloat(d.brutto)) t.brutto_termin=parseFloat(d.brutto);
       // Sender aus Kürzel
       if(s.kuerzel && !t.sender){
@@ -21969,6 +22017,7 @@ function dokBestaetigenMonat(dokId){
       } else {
         t.takes_differenz = 0;
       }
+      if(s.korrektur) _korrTermin1287(t, s);   // Build 1287: ueberschreibt die aus der Differenz gerechneten Werte
 
       // ── db.abrechnungen Eintrag anlegen (wie Einzel-abrechn) ───
       // Nur wenn noch kein abId — verhindert Duplikate bei Neu-Analyse
