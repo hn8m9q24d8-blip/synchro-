@@ -5448,7 +5448,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1287';
+  if(elH) elH.textContent = '1288';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -6235,6 +6235,41 @@ function openDetail(id){
     }
   } catch(eVD){ console.warn('[v2] openDetail Lese-Pfad Fehler:', eVD); }
 
+  // ── Build 1288: mehrere Gutschriften an einem Termin (Korrekturkette) ──────────
+  // v2TerminView liefert nur die ERSTE Junction. Die Karte zeigte deshalb bei Korrekturen den alten
+  // Stand: Nobody Wants This 148,00 statt 181,60 (2449/202609 + Nachzahlung 2449/202610), Super Cube
+  // 101,80 statt 127,00, Spy x Family 369,60 statt 450,40, Bad Apples -396,00 statt des Saldos.
+  // Jetzt: Summe aller Anteile = was fuer diesen Termin insgesamt abgerechnet ist, Kopfwerte (Nr., MwSt,
+  // SV, Auszahlung, Rechenpruefung) von der juengsten Gutschrift, Takes/Grundgage aus dem Termin-Stand
+  // nach der letzten Abrechnung. Studio Hamburg (Klasse 4, Monatssalden) bleibt wie bisher.
+  // Nur Anzeige im Termin-Detail; v2TerminView, Listen, USt und Jahresabschluss bleiben unberuehrt.
+  try {
+    var _jk1288 = v2JunctionsForTermin(id);
+    var _ids1288 = _jk1288.map(function(l){ return l.abrechnung_id; }).filter(function(x,i,a){ return a.indexOf(x)===i; });
+    if(ab && ab._v2Source && _ids1288.length > 1 && !_k4Termin1283(t)){
+      var _kt = _jk1288.map(function(l){ return {l:l, a:v2AbrechnungById(l.abrechnung_id)}; }).filter(function(x){ return x.a; });
+      _kt.sort(function(x,y){ return String(x.a.ausstellungs_datum||'').localeCompare(String(y.a.ausstellungs_datum||''))
+                                  || String(x.l.erstellt_am||'').localeCompare(String(y.l.erstellt_am||'')); });
+      var _ls = _kt[_kt.length-1];
+      var _sum = Math.round(_kt.reduce(function(acc,x){ return acc + (parseFloat(x.l.brutto_anteil_display)||0); },0)*100)/100;
+      var _anzLs = (dbv2.abrechnung_termin_links||[]).filter(function(l){ return l.abrechnung_id===_ls.a.id; }).length;
+      var _sam = _anzLs > 1;
+      ab.id = _ls.a.id; ab.gutschrift_nr = _ls.a.beleg_nr; ab.klasse = _ls.a.klasse||null;
+      ab.ust_satz = _ls.a.ust_satz||null; ab.ust_betrag = null; ab.dokId = _ls.a.pdf_datei_id; ab.datum = _ls.a.ausstellungs_datum;
+      ab.brutto = _sum;
+      if(parseInt(t.takes_abgerechnet)) ab.takes = parseInt(t.takes_abgerechnet);
+      if(parseFloat(t.kommgage_abgerechnet)) ab.grundgage = parseFloat(t.kommgage_abgerechnet);
+      if(parseFloat(t.rate_abgerechnet)) ab.take_gage = parseFloat(t.rate_abgerechnet);
+      ab.mwst = _sam ? null : _ls.a.ust_betrag; ab.gesamt_mwst = _sam ? _ls.a.ust_betrag : null;
+      ab.kv = _sam ? null : _ls.a.sv_kv_an; ab.rv = _sam ? null : _ls.a.sv_rv_an; ab.pv = _sam ? null : _ls.a.sv_pv_an;
+      ab.auszahlung = _sam ? null : _ls.a.auszahlung;
+      ab._v2IstTeilVonSammel = false; ab._v2AnzahlTermineInSammel = 1; ab._v2GesamtBrutto = _ls.a.brutto;
+      ab._v2BerechnungCheck = _ls.l.berechnung_check || null;
+      ab._v2CheckNeu = Object.prototype.hasOwnProperty.call(_ls.l, 'check_grund');
+      ab._kette = _kt.map(function(x){ return {nr:x.a.beleg_nr||'', anteil:x.l.brutto_anteil_display}; });
+    }
+  } catch(eK1288){ console.warn('[1288] Korrekturkette:', eK1288); }
+
   var zahlung=(db.zahlungen||[]).find(function(z){return z.terminId===id;});
   // Build 1269: Dispo-Ampel nur mit echtem, aufrufbarem Dateinamen (Tim, 13.10.).
   var hasDispo = !!_dSpur;
@@ -6768,7 +6803,11 @@ function openDetail(id){
       +'<div style="padding:0 16px 14px">'
       +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4A5A4E;margin-bottom:8px;padding:6px 8px;background:#FDFCFA;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
       +(!hasDispo2?'<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;padding:6px 8px;background:var(--card);border-radius:6px">Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
-      +(ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':'')
+      +(ab._kette   // Build 1288: jede Gutschrift der Kette mit ihrem Anteil, darunter die Summe
+        ? ab._kette.map(function(k){ return '<div class="info-row"><div class="ir-key">Gutschrift '+esc(k.nr)+'</div><div class="ir-val">'
+            +(k.anteil==null||k.anteil===''?'<span style="color:var(--ink3);font-style:italic">ohne Anteil</span>':fmtEur(parseFloat(k.anteil)))+'</div></div>'; }).join('')
+          +'<div class="info-row"><div class="ir-key" style="font-weight:700">Abgerechnet gesamt</div><div class="ir-val" style="font-weight:800">'+fmtEur(parseFloat(ab.brutto)||0)+'</div></div>'
+        : (ab.gutschrift_nr?'<div class="info-row"><div class="ir-key">Gutschrift-Nr.</div><div class="ir-val">'+esc(ab.gutschrift_nr)+'</div></div>':''))
       +(ab.takes && !_k4c?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(takesDiff?'color:var(--orange);font-weight:700':'')+'">Takes (abgr.)</div>'+
         '<div class="ir-val" style="'+(takesDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
@@ -9082,6 +9121,10 @@ function dokSessionPeek(elOrId, sessionIdx){
   _mergeSnapshot._fromSessionIdx = si;
   _mergeTerminId = t.id;
   dokMergeIntoTermin(pseudoDok, t);
+  // Build 1288 (Tim, 23.10.2026): die Vorschau behandelte eine Korrektur-Session (Storno + Neuabrechnung im selben
+  // Beleg, Build 1287) wie eine normale Abrechnung: Nobody Wants This 26.08. zeigte "+15 Takes nicht abgerechnet,
+  // 63 EUR ausstehend" (23 Dispo minus 8 nachgezahlt). Jetzt dieselben Werte wie beim Bestaetigen.
+  if(s.korrektur) _korrTermin1287(t, s);
   t._hasPendingMerge = true;
   _peekVorherMerken(t);   // Build 1275
   save(db);
