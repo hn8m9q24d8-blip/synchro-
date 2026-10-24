@@ -1840,6 +1840,10 @@ const DBK='synchron_v4';
 // ── UTILS ─────────────────────────────────────────────────────
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Build 1293: Text als JS-String in einem onclick-Attribut ('...'). esc() allein reicht dort nicht, weil es das
+// Apostroph nicht anfasst: "Woman's Hell" beendet den String, der Knopf wirft einen Syntaxfehler, und ein
+// praeparierter Titel koennte beim Antippen Code ausfuehren. Erst JS-maskieren, dann HTML-maskieren.
+function _escJsAttr1293(s){ return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,'\\n')); }
 // Build 795: PII-frei. Liefert den User-Namen zur Laufzeit aus dem Profil.
 // Wird in KI-Prompts und PDF-Templates eingesetzt — so steht im Code-Quelltext
 // kein konkreter Personenname mehr. Fallback ist generisch, damit Prompts auch
@@ -3017,7 +3021,8 @@ function _konsolidiereDokumentNachV2(dokId){
       datum: d.datum, titel: d.titel, studio: d.studio,
       gutschrift_nr: d.gutschrift_nr,
       brutto: d.brutto, grundgage: d.grundgage, take_gage: d.take_gage,
-      takes: d.takes, terminId: d.terminId, kuerzel: d.kuerzel
+      takes: d.takes, terminId: d.terminId, kuerzel: d.kuerzel,
+      sonstige: d.sonstige   // Build 1292
     }];
   }
 
@@ -3512,6 +3517,12 @@ function _konsolidiereDokumentNachV2(dokId){
         var sGG = parseFloat(s.grundgage) || 0;
         var sR  = parseFloat(s.take_gage) || 0;
         var sT  = parseInt(s.takes)       || 0;
+        // Build 1292: Sonderregelung (FFS "Sonderregelung Berlin" 400/500 EUR neben Grundgage und Takes).
+        // Der Leser legte sie seit 1263 in q.sonstige, reichte sie aber nicht an die Session weiter. Hier zaehlte dann nur
+        // Grundgage + Takes: FFS 3298/20260403 (MPG 25.03.2026) Beleg 1.406, Anteil 906, 500 EUR fehlten am Termin
+        // (differenz_geklaert am Termin schaltet den Rechenweg hier ohnehin auf die Posten). Geht in die Postensumme,
+        // nicht in grundgage_anteil/maxGG_einzel, damit Tarifvergleich und Anzeige der Grundgage unveraendert bleiben.
+        var sSo = parseFloat(s.sonstige) || 0;
         // ── Build 1187: bei Stornos die Betraege absolut sammeln ─────────────
         // Alle Aufnahmepruefungen unten sind "> 0"-Existenztests. Bei einem Storno
         // liest die KI die Vorzeichen uneinheitlich: RC 839/20260302 vom 28.03.2025
@@ -3526,7 +3537,9 @@ function _konsolidiereDokumentNachV2(dokId){
           sGG   = Math.abs(sGG);
           sR    = Math.abs(sR);
           sT    = Math.abs(sT);
+          sSo   = Math.abs(sSo);   // Build 1292
         }
+        if(sSo > 0){ summeGG += sSo; hatGG = true; }   // Build 1292 (bewusst nicht in maxGG_einzel)
         if(sBroh > 0){ anyBruttoPruef += sBroh; hatBruttoPruef = true; }   // Build 1155
         var sB  = _termGeklaert ? 0 : sBroh;
         if(sB > 0){ anyBrutto += sB; hatBrutto = true; }
@@ -3901,7 +3914,7 @@ function _konsolidiereDokumentNachV2(dokId){
       var sT  = parseInt(s.takes)       || 0;
       // Bevorzugt expliziter Brutto-Wert pro Session, sonst Posten-Berechnung
       if(sB > 0) postenSumme += sB;
-      else postenSumme += sGG + (sT * sR);
+      else postenSumme += sGG + (sT * sR) + (parseFloat(s.sonstige)||0);   // Build 1292
     });
     if(_anteilsNichtPruefbar848){
       checks.posten = { status:'nicht_pruefbar', grund:'Monats-Sammel/Storno ohne Einzel-Anteile im PDF — Posten sind Anzeige-Schätzung' };
@@ -3957,6 +3970,27 @@ function _konsolidiereDokumentNachV2(dokId){
         checks.takeDeckung = { status:'ok' };
       }
     }catch(e){ checks.takeDeckung = { status:'nicht_pruefbar', grund:'Take-Vergleich fehlgeschlagen' }; }
+
+    // Build 1291: Termin schon aus anderem Beleg desselben Studios mit gleichem Betrag abgerechnet
+    // (Monats- neben Einzelgutschrift, Realfall Arena 2559/202610 neben 2559/20261001-03). Kein Block,
+    // aber Verdacht wie bei 851: Status "fehler", Toast beim Bestaetigen, Marker in der Jahresuebersicht.
+    try{
+      var _dblT1291 = [];
+      (dbv2.abrechnung_termin_links||[]).filter(function(l){ return l.abrechnung_id===v2Ab.id; }).forEach(function(l){
+        var andere = (dbv2.abrechnung_termin_links||[]).filter(function(o){
+          if(o.termin_id!==l.termin_id || o.abrechnung_id===v2Ab.id) return false;
+          var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id===o.abrechnung_id; });
+          if(!a || a._ueberholt_durch || String(a.klasse||'')==='4' || a.pdf_datei_id===dokId) return false;
+          if(a.abrechner_id!==v2Ab.abrechner_id || (a.beleg_nr||'')===belegNr) return false;
+          return Math.abs((parseFloat(o.brutto_anteil_display)||0) - (parseFloat(l.brutto_anteil_display)||0)) <= 0.009 && (parseFloat(l.brutto_anteil_display)||0)!==0;
+        });
+        andere.forEach(function(o){ var a=(dbv2.abrechnungen||[]).find(function(x){ return x.id===o.abrechnung_id; }); if(a && _dblT1291.indexOf(a.beleg_nr)<0) _dblT1291.push(a.beleg_nr); });
+      });
+      if(_dblT1291.length){
+        checks.terminDublette = { status:'doppelzaehlung_verdacht', belege:_dblT1291,
+          grund:'Termin(e) bereits über '+_dblT1291.join(', ')+' mit gleichem Betrag abgerechnet — vermutlich Einzel- und Monatsgutschrift doppelt!' };
+      }
+    }catch(eD1291){ console.warn('[1291] Termin-Dublette:', eD1291); }
 
     // Build 851: globales GS-Nr-Duplikat → harter Konsistenz-Fehler
     if(_gsDup851){
@@ -4142,6 +4176,9 @@ function _autoKonsolidiereNachBestaetigen(dokId){
           var c = a._konsistenz.checks || {};
           if(c.bruttoSumme && c.bruttoSumme.status==='abweichung'){
             probleme.push('Brutto-Anteile '+(c.bruttoSumme.diff>0?'+':'')+(c.bruttoSumme.diff).toFixed(2).replace('.',',')+'€');
+          }
+          if(c.terminDublette && c.terminDublette.status==='doppelzaehlung_verdacht'){
+            probleme.push('Termin schon über '+(c.terminDublette.belege||[]).join(', ')+' abgerechnet — doppelt?');   // Build 1291
           }
           if(c.posten && c.posten.status==='doppelzaehlung_verdacht'){
             probleme.push('Posten-Doppelzählung möglich!');
@@ -5448,7 +5485,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1288';
+  if(elH) elH.textContent = '1293';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -6301,7 +6338,7 @@ function openDetail(id){
     var clkAttr='';
     var clickable = ok && (customOnclick || (dateinamen&&dateinamen.length));
     if(ok && customOnclick) clkAttr=' onclick="'+customOnclick+'"';
-    else if(ok&&dateinamen&&dateinamen.length) clkAttr=' onclick="showDateinamen(this)" data-namen="'+dateinamen.join('|')+'" data-label="'+label+'"';
+    else if(ok&&dateinamen&&dateinamen.length) clkAttr=' onclick="showDateinamen(this)" data-namen="'+esc(dateinamen.join('|'))+'" data-label="'+esc(label)+'"';   // Build 1293: Dateinamen kommen von aussen (Mail-Anhang)
     return '<div style="display:flex;align-items:center;gap:5px;cursor:'+(clickable?'pointer':'default')+'"'+clkAttr+'>'
       +'<div style="width:10px;height:10px;border-radius:50%;background:'+bg+'"></div>'
       +'<div style="font-size:11px;color:'+tc+';font-weight:'+(ok?'700':'400')+'">'+label+'</div>'
@@ -6447,7 +6484,7 @@ function openDetail(id){
         var sNr=fs.length===3?fs[0]:fs.length===4?fs.slice(0,2):fs.length>2?String(parseInt(fs.slice(0,-2))):'1';
         var fNr=fs.length>=3?String(parseInt(fs.slice(fs.length===4?2:1))):String(parseInt(fs)||0);
         var chipLabel = isFilmEntry ? 'Film' : ('S'+sNr+' F'+fNr);
-        gvlHtml+='<div style="background:var(--card);border:1px solid var(--accent2);border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:600;color:var(--accent)">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:700;color:var(--accent)">'+td.takes+'</div>'+'</div>';
+        gvlHtml+='<div style="background:var(--card);border:1px solid var(--accent2);border-radius:7px;padding:4px 8px;text-align:center;min-width:48px">'+'<div style="font-size:9px;font-weight:600;color:var(--accent)">'+chipLabel+'</div>'+'<div style="font-size:14px;font-weight:700;color:var(--accent)">'+esc(String(td.takes||0))+'</div>'+'</div>';   // Build 1293
       });
       gvlHtml+='</div>';
       // ── Build 1180: Gesamt aus dem Detail-Array rechnen, nicht aus t.gvl_takes ──
@@ -6811,7 +6848,7 @@ function openDetail(id){
       +(ab.takes && !_k4c?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(takesDiff?'color:var(--orange);font-weight:700':'')+'">Takes (abgr.)</div>'+
         '<div class="ir-val" style="'+(takesDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
-        ab.takes+(takesDiff?' <span style="font-size:10px;font-weight:700;color:var(--orange)">≠ Dispo: '+t.takes+'</span>':'')+'</div></div>':'')
+        esc(String(ab.takes))+(takesDiff?' <span style="font-size:10px;font-weight:700;color:var(--orange)">≠ Dispo: '+esc(String(t.takes))+'</span>':'')+'</div></div>':'')   // Build 1293
       +(ab.grundgage && !_k4c?'<div class="info-row"'+(gageDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(gageDiff?'color:var(--orange);font-weight:700':'')+'">Grundgage</div>'+
         '<div class="ir-val" style="'+(gageDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
@@ -15256,6 +15293,34 @@ function _sessionSchonVerbucht(dok, s){
 }
 // Titelvergleich: grosszuegig. Nur wenn KEINE nennenswerte Ueberschneidung besteht,
 // gilt der Titel als abweichend (dann Rueckfrage-Optik statt gruenem Haken).
+// Build 1291 (Lauf 23.10.2026): Gleicher Betrag fuer denselben Termin schon aus einem anderen Beleg desselben Studios.
+// Realfall Arena Oktober: Einzelgutschriften 2559/20261001-03 bestaetigt, danach die Monats-Gutschrift 2559/202610 ueber
+// dieselben drei Drehtage eingelesen. Der 851/1097-Schutz prueft nur die Beleg-Nr., die ist hier verschieden, also wurden
+// alle drei Termine ein zweites Mal verbucht (439,80 EUR doppelt). Liefert die Beleg-Nr. des anderen Belegs oder null.
+// Storno/Neu-Ketten bleiben unberuehrt (Betraege verschieden oder Vorzeichen anders); Studio Hamburg (Klasse 4) ausgenommen.
+// Gegen Backup 1701 geprueft: kein bestehender Termin mit zwei Abrechnungen erfuellt das Kriterium (0 Fehlalarme).
+function _terminBetragSchonVerbucht1291(terminId, betrag, studio, belegNr, dokId){
+  try{
+    if(!terminId || !betrag || !dbv2) return null;
+    var b = parseFloat(betrag)||0; if(!b) return null;
+    function norm(x){ return String(x||'').toLowerCase().replace(/gmbh|&\s*co\.?\s*kg|\bkg\b/g,'').replace(/[^a-z0-9]/g,''); }
+    var ns = norm(studio);
+    var nameVon = {}; (dbv2.abrechner||[]).forEach(function(a){ nameVon[a.id] = a.name; });
+    var lnks = (dbv2.abrechnung_termin_links||[]).filter(function(l){ return l.termin_id===terminId; });
+    for(var i=0;i<lnks.length;i++){
+      var l = lnks[i];
+      var a = (dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; });
+      if(!a || a._ueberholt_durch || String(a.klasse||'')==='4') continue;
+      if(dokId && a.pdf_datei_id===dokId) continue;
+      if(belegNr && (a.beleg_nr||'')===belegNr) continue;
+      if(Math.abs((parseFloat(l.brutto_anteil_display)||0) - b) > 0.009) continue;
+      var na = norm(nameVon[a.abrechner_id]);
+      if(ns && na && ns.length>=3 && na.length>=3 && na.indexOf(ns.slice(0,4))<0 && ns.indexOf(na.slice(0,4))<0) continue;
+      return a.beleg_nr || '(ohne Nr.)';
+    }
+  }catch(e){}
+  return null;
+}
 function _titelAehnlich(a, b){
   try{
     var norm=function(x){ return String(x||'').toLowerCase()
@@ -16326,7 +16391,12 @@ function dokBestaetigen(){
       if(d.typ==='abrechn'&&d.auszahlung){t2.abgerechnet=true;t2.abrechnungBrutto=parseFloat(d.auszahlung);}
     }
   } else if(d.datum&&d.studio&&!d._keinTermin){
-    var match=dokFindTermin(d.datum,d.studio);
+    // Build 1290: Rueckfall-Suche beim Bestaetigen bekam nur Datum und Studio, also weder Titel noch strictDate.
+    // Regel 2 aus 1181 (kein Treffer ohne Studio- oder Titelmerkmal) greift ohne Titel nicht, und ohne strictDate
+    // reichte ein Nachbartag. Folge im Lauf vom 23.10. ueber alle 104 PDFs: GVL 202594118 (24.08.) haengte sich an
+    // THE SOCIAL RECKONING, Netflix 4164143 (08.07.) an Couture, mobyDOK-Rechnung 01/2026 (23.01.) an Maxima II.
+    // Jetzt wie der Analysepfad (Z. ~18519): Titel, Uhrzeit, und bei Abrechnungen nur das exakte Datum.
+    var match=dokFindTermin(d.datum, d.studio, d.titel||'', d.uhrzeit||'', d.bis_uhrzeit||'', null, d.typ==='abrechn'||d.typ==='monats_abrechn');
     if(match){
       d.terminId=match.id;
       if(d.rolle&&!match.rolle) match.rolle=d.rolle;
@@ -16778,7 +16848,10 @@ function glSesamMonat(page){
     var pm = /^(Mo|Di|Mi|Do|Fr|Sa|So)\s+(\d\d\.\d\d\.\d\d)\s+(.+?)\s+(-?[\d.]+,\d\d)\s+(\d+)%/.exec(l);
     if(!pm) return;
     var mitte = pm[3];
-    var art = /Grundgage/.test(mitte) ? 'Grundgage' : (/Take/.test(mitte) ? 'Takegage' : 'Sonstiges');
+    // Build 1289: Arena schreibt in der Monats-Gutschrift "1 Streaming Grundg" / "24 Streaming Takes" (Realfall 2559/202610,
+    // American Horror Story 29.09.: vorher 0 Takes und Grundgage 185,80 statt 85,00 + 24 x 4,20). "Grundg" statt "Grundgage",
+    // und die Anzahl darf durch ein Tarifwort (Streaming/Kino/TV) von der Art getrennt sein.
+    var art = /Grundg/.test(mitte) ? 'Grundgage' : (/Take/.test(mitte) ? 'Takegage' : 'Sonstiges');
     // Aufbau: LA [Anzahl] Art[ Zusatz] [Code 4-8 Ziffern] Titel [Sender/Kennung]
     // Mit Produktionscode (4-8 Ziffern): Titel steht dahinter (Arena "Streaming 1-10 Ta 7001  City of God 1  WARN")
     var titel = null, reCode = /\s(\d{4,8})\s+/g, mc;
@@ -16794,7 +16867,7 @@ function glSesamMonat(page){
     var mk = /\s(TV|KINO|Kino|ST-S|PRO7|PRO|WARN|AMAZ|NFLX|DISN|APPLE|ARD|ZDF|RTL|SAT1|VOX|SKY|PARA|HBO|ARTE|MDR|NDR|WDR|BR|SWR|KIKA)\s*$/.exec(mitte);
     var kuerzel = mk ? mk[1] : null;
     if(titel){ titel = titel.replace(/\s+(TV|Kino|KINO|ST-S|PRO7|[A-Z0-9\-]{2,6})$/,'').replace(/\s+\d{6,}$/,''); }
-    var ma = /^\d+\s+(\d+)\s+(?:Take|Grund)/.exec(mitte);
+    var ma = /^\d+\s+(\d+)\s+(?:(?:Streaming|Kino|TV)\s+)?(?:Take|Grund)/.exec(mitte);   // Build 1289
     posten.push({datum:glDeDate(pm[2]), art:art, titel:titel, anzahl: ma?parseInt(ma[1],10):null, betrag:glNum(pm[4]), label110: /Grundgage\s+1\s*-\s*10|1\s*-\s*10\s+Ta/.test(mitte), kuerzel:kuerzel});
   });
   r.posten = posten;
@@ -17008,6 +17081,7 @@ function glZuKiJson(res){
   function termin(t){ var tb = glTitelBereinigen(t.titel); var x = {datum:t.datum, titel:tb.titel||null, rolle:t.rolle||null, filmcode:t.filmcode||'', takes:t.takes||0, grundgage:t.grundgage||0, take_gage:t.take_gage||0, brutto_termin:t.brutto, gvl_staffel_header:tb.staffel};
     if(t.paket_1_10){ x.paket_1_10 = true; x.kommgage_tarif = t.kommgage_tarif; x.rate_tarif = t.rate_tarif; x.takes_gesamt = t.takes_gesamt; }   // Build 1267/1268
     if(t.kuerzel) x.kuerzel = t.kuerzel;   // Build 1268
+    if(t.sonstige) x.sonstige = t.sonstige;   // Build 1292
     if(t.korrektur){ x.korrektur = true; x.brutto_korrigiert = t.brutto_korrigiert||null; x.takes_korrigiert = t.takes_korrigiert||null;
       x.grundgage_korrigiert = t.grundgage_korrigiert||null; x.rate_korrigiert = t.rate_korrigiert||null; }   // Build 1287
     return x; }
@@ -17029,6 +17103,7 @@ function glZuKiJson(res){
       var s = {datum:r.leistungs_datum_von, page_nr:i+1, ausstellungsdatum:r.ausstellungs_datum, titel:r.titel, rolle:r.rolle, takes:r.takes||0,
                take_gage:t0.take_gage||0, grundgage:t0.grundgage||0, brutto_termin:r.brutto, gutschrift_nr:r.beleg_nr, mwst:r.ust_betrag, auszahlung:r.auszahlung,
                kv_abzug:r.sv_kv_an, rv_abzug:r.sv_rv_an, pv_abzug:r.sv_pv_an, netto:r.netto};
+      if(t0.sonstige && (!r.termine || r.termine.length===1)) s.sonstige = t0.sonstige;   // Build 1292: Sonderregelung (FFS 400/500)
       if(t0.paket_1_10 && (!r.termine || r.termine.length===1)){ s.paket_1_10 = true; s.kommgage_tarif = t0.kommgage_tarif; s.rate_tarif = t0.rate_tarif; s.takes_gesamt = t0.takes_gesamt; }   // Build 1267/1268
       if(r.termine && r.termine.length>1) s.termine = r.termine.map(termin);
       return s;
@@ -17045,6 +17120,7 @@ function glZuKiJson(res){
     } else {
       j.brutto = r0.brutto; j.mwst = r0.ust_betrag; j.auszahlung = r0.auszahlung; j.kv_abzug = r0.sv_kv_an; j.rv_abzug = r0.sv_rv_an; j.pv_abzug = r0.sv_pv_an; j.netto = r0.netto;
       j.takes = r0.takes; j.take_gage = sessions[0].take_gage; j.grundgage = sessions[0].grundgage;
+      if(sessions[0].sonstige) j.sonstige = sessions[0].sonstige;   // Build 1292
       if(r0.termine && r0.termine.length>1){
         // ein Gutschein, mehrere Produktionen/Drehtage: wie die KI beim VSI-Fall 528/20260701 -> monats_abrechn mit Sessions ohne eigene Auszahlung
         j.typ = 'monats_abrechn';
@@ -18184,6 +18260,7 @@ function dokAnalyseDoc(d, key, cb){
       d.auszahlung = j.auszahlung || null;
       d.take_gage  = j.take_gage || null;
       d.grundgage  = j.grundgage || null;
+      if(j.sonstige) d.sonstige = j.sonstige;   // Build 1292: Sonderregelung (lokaler Leser, Einzelgutschrift)
       d.gutschrift_nr = j.gutschrift_nr || null;
       d.kv_abzug = j.kv_abzug || null;
       d.rv_abzug = j.rv_abzug || null;
@@ -18336,6 +18413,7 @@ function dokAnalyseDoc(d, key, cb){
             zielDok.takes = s.takes||0;
             zielDok.take_gage = s.take_gage||0;
             zielDok.grundgage = s.grundgage||0;
+            if(s.sonstige) zielDok.sonstige = s.sonstige;   // Build 1292: Sonderregelung mit auf das Kind-Dok
             zielDok.brutto = s.brutto_termin||0;
             zielDok.mwst = parseFloat(s.mwst)||null;
             zielDok.auszahlung = parseFloat(s.auszahlung)||null;
@@ -20015,7 +20093,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         if(mappedTitel && mappedTitel !== (d.titel||'').trim()){
           body+='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:8px;padding:7px 10px;margin:4px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
             +'<div style="font-size:11px;color:#8a6a3f">Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
-            +'<button type="button" onclick="dokTitelMapping(\''+esc(mappedTitel)+'\')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
+            +'<button type="button" onclick="dokTitelMapping(\''+_escJsAttr1293(mappedTitel)+'\')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
             +'</div>';
         }
       }
@@ -20077,7 +20155,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
         if(mappedTitel && mappedTitel !== (d.titel||'').trim()){
           body+='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:8px;padding:7px 10px;margin:4px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
             +'<div style="font-size:11px;color:#8a6a3f">Letztes Mal: <b>'+esc(mappedTitel)+'</b></div>'
-            +'<button type="button" onclick="dokTitelMapping(\''+esc(mappedTitel)+'\')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
+            +'<button type="button" onclick="dokTitelMapping(\''+_escJsAttr1293(mappedTitel)+'\')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">Übernehmen</button>'
             +'</div>';
         }
       }
@@ -20282,7 +20360,25 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       // Reine Anzeige — kein Eingriff, Bestaetigen bleibt moeglich (und wird dann vom
       // Duplikatschutz 851/1097 abgewiesen).
       var _v1099Schon = d.sessions.filter(function(s){ return _sessionSchonVerbucht(d,s); }).length;
+      // Build 1291: gleicher Betrag fuer denselben Termin schon aus einem anderen Beleg (Monats- neben Einzelgutschrift)
+      var _dbl1291 = d.sessions.map(function(s){
+        if(s._done) return null;
+        var _tid = s.terminId;
+        // noch nicht zugeordnet: den Termin nur zum Pruefen suchen, nichts speichern (Kandidat wie im Peek, exaktes Datum)
+        if(!_tid && s.datum){ try{ var _c = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, null, true); _tid = _c ? _c.id : null; }catch(e){} }
+        return _tid ? _terminBetragSchonVerbucht1291(_tid, s.brutto_termin, d.studio, d.gutschrift_nr, d.id) : null;
+      });
+      var _dbl1291N = _dbl1291.filter(function(x){ return !!x; }).length;
       body+='<div style="margin-bottom:12px">';
+      if(_dbl1291N>0){
+        var _dblNrn = _dbl1291.filter(function(x){ return !!x; }).filter(function(x,i,a){ return a.indexOf(x)===i; });
+        body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;'
+          +'padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.45;color:var(--ink2)">'
+          +'<b>'+(_dbl1291N===d.sessions.length ? 'Alle '+d.sessions.length+' Drehtage sind schon abgerechnet' : _dbl1291N+' von '+d.sessions.length+' Drehtagen schon abgerechnet')+'</b><br>'
+          +'Gleicher Betrag bereits über '+esc(_dblNrn.join(', '))+' verbucht (vermutlich Einzel- und Monatsgutschrift desselben Studios). '
+          +'Beim Bestätigen würde das Geld doppelt zählen.'
+          +'</div>';
+      }
       if(_v1099Schon>0){
         body+='<div style="background:var(--card);border:1.5px solid var(--hair);border-radius:10px;'
           +'padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.45;color:var(--ink2)">'
@@ -20324,15 +20420,19 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
           ((tm && !_v1099TitelWeicht)
             ? ' onclick="dokSessionPeek(this)" data-dokid="'+d.id+'" data-si="'+si+'"'
             : ' onclick="dokSessionGotoKalender(\''+d.id+'\','+si+')"');
+        var _dblHier1291 = _dbl1291[si] || null;   // Build 1291
+        if(_dblHier1291 && !isDone && !_v1099Verbucht){ matchColor='var(--orange)'; matchBg='var(--orange2)'; matchBorder='#e7dbc6'; }
         var statusLabel = isDone
           ? '✓ Gespeichert'+(tm?' · '+esc(tm.titel||tm.studio||''):'')
           : (_v1099Verbucht
               ? '● bereits verbucht'
+              : (_dblHier1291
+              ? '● schon über '+esc(_dblHier1291)+' abgerechnet'
               : (tm
                   ? (_v1099TitelWeicht
                       ? '? '+esc(tm.titel||tm.studio||'Termin')+' — Titel weicht ab →'
                       : '✓ '+esc(tm.titel||tm.studio||'Termin gefunden')+' →')
-                  : '⚠ Tippen zum Zuordnen'));
+                  : '⚠ Tippen zum Zuordnen')));
         body+='<div style="background:'+matchBg+';border:1.5px solid '+matchBorder+';border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(isDone?'opacity:.6':'cursor:pointer;touch-action:manipulation')+'"'+sessionOnclick+'>';
         body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         body+='<div style="font-size:12px;font-weight:800">'+esc(s.datum?s.datum.split('-').reverse().join('.'):'?')+(s.titel?' · '+esc(s.titel):'')+'</div>';
@@ -21736,7 +21836,7 @@ function _buildMergePreview(d, t){
       +'</div>'
       // ✕ nur bei GEÄNDERT — NEU kann man nicht "nicht übernehmen" wenn es leer war
       +(!isNeu
-        ? '<button type="button" onclick="revertMergeField(\''+tid+'\',\''+r.tField+'\',\''+r.alt.replace(/'/g,"\\'")+'\')" '
+        ? '<button type="button" onclick="revertMergeField(\''+tid+'\',\''+r.tField+'\',\''+_escJsAttr1293(r.alt)+'\')" '
           +'style="background:var(--red2);color:var(--orange);border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation;flex-shrink:0">✕ nicht übernehmen</button>'
         : '')
       +'</div>'
