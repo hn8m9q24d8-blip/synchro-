@@ -5485,7 +5485,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1293';
+  if(elH) elH.textContent = '1294';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -6045,7 +6045,9 @@ function tCard(t){
     +'<div class="t-title">'+esc(t.titel)+'</div>'
     +(t.studio?'<div class="t-studio">'+esc(t.studio)+'</div>':'')
     +'<div class="t-chips">'
-    +(t.uhrzeit?'<span class="chip chip-time">'+esc(t.uhrzeit)+' Uhr</span>':'')
+    // Build 1294: Endzeit zeigen (450 von 455 Terminen haben uhrzeit_bis). Bei Spanne ohne "Uhr",
+    // sonst rutscht der Status bei laengeren Rollen-Chips in eine zweite Zeile (Vorschau 26.10.).
+    +(t.uhrzeit?'<span class="chip chip-time">'+esc(t.uhrzeit)+(t.uhrzeit_bis?'–'+esc(t.uhrzeit_bis):' Uhr')+'</span>':'')
     +(t.rolle?'<span style="background:var(--cream2);color:var(--ink2);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(_ohneEmojiVorne1255(t.rolle))+'</span>':'')
     +tlabel(ampelStatus)
     +'</div>'
