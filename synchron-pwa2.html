@@ -2402,6 +2402,41 @@ function _ohneEmojiVorne1255(x){ return String(x||'').replace(/^(?:[\u2600-\u27B
   }
   saveV2(dbv2);
 })();
+// ─── Build 1295: Eigenrechnung mit Brutto 0 heilen (einmalig) ───
+// Der lokale Leser kannte nur "zus.:" als Gesamtbetrag. Die neue Vorlage (ab 13/2026) schreibt
+// "Gesamtbetrag", dadurch wurde 13/2026 (mobyDok, Arte42, 27.10.2026) mit Brutto 0, ohne Auszahlung,
+// USt-Basis -17,50 und leerem Termin-Anteil verbucht; 250 EUR fehlten in Umsatz und EUER.
+// Gegen Backup 28.10.2026 13:25: genau dieser eine Beleg. Regel: Dokument bestaetigt, K3-Eigenrechnung,
+// Brutto leer, Netto > 0 -> Brutto = Auszahlung = Netto + MwSt am Dokument setzen und das Dokument
+// regulaer neu konsolidieren (gleicher Weg wie beim Bestaetigen: Abrechnung, Link, USt-Basis, Pruefung).
+(function(){
+  if(!db || !dbv2 || dbv2._mig1295Done) return;
+  var ziele = [];
+  (db.dokumente||[]).forEach(function(d){
+    if(!d.bestaetigt || d.typ !== 'abrechn') return;
+    if(parseFloat(d.brutto) > 0) return;
+    var netto = parseFloat(d.netto), mw = parseFloat(d.mwst)||0;
+    if(!(netto > 0)) return;
+    var a = (dbv2.abrechnungen||[]).find(function(x){ return x.pdf_datei_id === d.id; });
+    if(!a || String(a.klasse) !== '3' || a.steuerfrei || parseFloat(a.brutto) > 0) return;
+    d.brutto = Math.round((netto + mw)*100)/100; d.auszahlung = d.brutto;
+    if(!d.ust_satz && mw > 0) d.ust_satz = Math.round(mw/netto*100)/100;
+    ziele.push(d.id);
+  });
+  dbv2._mig1295Done = true;
+  if(!ziele.length){ saveV2(dbv2); return; }
+  save(db);
+  setTimeout(function(){
+    var geheilt = [];
+    ziele.forEach(function(id){
+      try{ _konsolidiereDokumentNachV2(id); var d=(db.dokumente||[]).find(function(x){ return x.id===id; }); geheilt.push(d && d.gutschrift_nr || id); }
+      catch(e){ console.warn('[Build 1295]', e); }
+    });
+    dbv2._mig1295 = { am: new Date().toISOString(), geheilt: geheilt };
+    console.log('[Build 1295] K3-Brutto gesetzt', geheilt);
+    saveV2(dbv2); save(db);
+  }, 0);
+})();
 // ─── Build 1275: verwaiste Abrechnungs-Stempel an Terminen entfernen (einmalig) ───
 // Ein Termin-Stempel abrechn_dateiname ohne jede Beleg-Spur (kein Dokument dieses Namens,
 // nicht im Archiv, nicht in importedFiles) stammt aus dem Antippen eines nie bestaetigten
@@ -5485,7 +5520,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1294';
+  if(elH) elH.textContent = '1295';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -17011,8 +17046,11 @@ function glEigenRechnung(txt){
   m = /Titel:\s*(.+)/.exec(txt); r.titel = m ? m[1].trim() : null;
   if(!r.titel){ m = /Projekt\s*"\s*(.+?)\s*"/.exec(txt); r.titel = m ? m[1].trim() : null; }
   m = /zzgl\.\s*(\d+)\s*% MW?St\.?\s+(-?[\d.]+,\d\d)/i.exec(txt); r.ust_satz = m ? parseInt(m[1],10)/100 : 0; r.ust_betrag = m ? glNum(m[2]) : 0;
-  m = /zus\.:\s+(-?[\d.]+,\d\d)/.exec(txt); r.brutto = r.auszahlung = m ? glNum(m[1]) : null;
+  // Build 1295: neue Rechnungsvorlage (ab 13/2026) schreibt "Gesamtbetrag 267,50 €" statt "zus.: 267,50".
+  // Vorher blieb brutto leer, die Abrechnung wurde mit Brutto 0 verbucht (13/2026, 28.10.2026).
+  m = /(?:zus\.:|Gesamtbetrag)\s+(-?[\d.]+,\d\d)/.exec(txt); r.brutto = r.auszahlung = m ? glNum(m[1]) : null;
   m = /Nettobetrag\s+(-?[\d.]+,\d\d)/.exec(txt); r.netto = m ? glNum(m[1]) : (r.brutto!==null ? glR2(r.brutto - r.ust_betrag) : null);
+  if(r.brutto===null && r.netto!==null){ r.brutto = r.auszahlung = glR2(r.netto + (r.ust_betrag||0)); }   // Build 1295: Rueckfall
   r.ust_basis = r.netto;
   // Empfaenger: erste Zeile im Kopf (vor "Rechnung") mit Firmenzusatz, ausser der Absenderzeile (enthaelt "·")
   var emp = null, kopf = txt.split(/\n\s*Rechnung\s*\n|Rechnungsnummer|Rg\.-Nr/)[0];
