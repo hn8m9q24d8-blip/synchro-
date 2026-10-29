@@ -2437,6 +2437,31 @@ function _ohneEmojiVorne1255(x){ return String(x||'').replace(/^(?:[\u2600-\u27B
     saveV2(dbv2); save(db);
   }, 0);
 })();
+// ─── Build 1296: fehlenden Brutto-Anteil am Termin nachtragen (einmalig) ───
+// Daten-Check 29.10.2026 meldete 5x "Fehlender Brutto-Anteil" (Barsoi Werbung 12.11.2025, Arte 42 26.01.,
+// Hoerspiel 02.06., Under Salt Marsh 02.07., Arte42 27.10.): genau ein Beleg am Termin mit Anteil > 0, aber
+// t.brutto_termin leer. Mehrere Uebersichten lesen brutto_termin direkt und zaehlen dann zu niedrig.
+// Regel wie die Meldung selbst: genau ein nicht stornierter Link mit Anteil > 0 -> brutto_termin = Anteil.
+// Per setTimeout, damit sie NACH der 1295-Heilung (ebenfalls setTimeout) laeuft, die den Anteil erst setzt.
+setTimeout(function(){
+  if(!db || !dbv2 || db._mig1296Done) return;
+  var n = [];
+  (db.termine||[]).forEach(function(t){
+    if(t.brutto_termin) return;
+    var js = (dbv2.abrechnung_termin_links||[]).filter(function(l){
+      if(l.termin_id!==t.id) return false;
+      var a=(dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; });
+      return a && !a.ist_storno;
+    });
+    if(js.length !== 1) return;
+    var an = parseFloat(js[0].brutto_anteil_display);
+    if(!(an > 0)) return;
+    t.brutto_termin = an; n.push((t.titel||'?')+' '+t.datum);
+  });
+  db._mig1296Done = true;
+  if(n.length){ db._mig1296 = { am:new Date().toISOString(), termine:n }; console.log('[Build 1296] brutto_termin nachgetragen', n); }
+  save(db);
+}, 0);
 // ─── Build 1275: verwaiste Abrechnungs-Stempel an Terminen entfernen (einmalig) ───
 // Ein Termin-Stempel abrechn_dateiname ohne jede Beleg-Spur (kein Dokument dieses Namens,
 // nicht im Archiv, nicht in importedFiles) stammt aus dem Antippen eines nie bestaetigten
@@ -5520,7 +5545,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1295';
+  if(elH) elH.textContent = '1296';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -25628,6 +25653,34 @@ function runIntegrityCheck(silent){
     // Grundgagenwert). Die Ausnahme verdeckte also genau den Fall, den sie erklaeren
     // sollte. Korrekt greift die Regel nur, wenn wenige Takes auf 10 aufgerundet wurden.
 
+
+    if(gvlGesamt < 10 && abTakes === 10) return;
+    // ── Build 1166: Paket ohne Zusatz-Takes ist keine Abweichung ────────
+    // Z. 19968 / 20069 schreiben bei erkannter 1-10-Konstellation bewusst
+    // takes_abgerechnet = takes + 10, weil die gelesenen Takes dort ZUSAETZLICH
+    // zum Paket anfallen (Navy CIS: 120 Takes + Paket = 130, Brutto 600 gegen
+    // Grundgage 120 — passt). Deckt der Beleg aber nur das Paket ab, sind die
+    // Takes keine Zusatzleistung, sondern dieselben: The Artful Dodger hat
+    // Brutto 127 = Grundgage 127, also 3 disponierte Takes im Paket, nicht 13.
+    // Erkennbar daran, dass Beleg-Brutto und Grundgage uebereinstimmen.
+    // Gegen Backup 2026-08-08-1744: 8 Termine mit takes+10, davon 2 nur Paket
+    // (The Artful Dodger 21.11.2025, Relationship Goals 16.12.2025).
+    var _btP1166 = parseFloat(t.brutto_termin)||0;
+    var _ggP1166 = parseFloat(t.kommgage_abgerechnet)||0;
+    if(_btP1166 > 0 && _ggP1166 > 0 && Math.abs(_btP1166 - _ggP1166) < 1.5
+       && abTakes === gvlGesamt + 10) return;
+    // Build 1165: vom Nutzer geprueft = kein Befund. Gleiche Semantik wie in den
+    // beiden Brutto-Differenz-Regeln (Build 1162) und in den Termin-Karten
+    // (Build 1157) — der Haken "✓ geprüft" soll ueberall gelten, nicht nur an
+    // zwei von drei Stellen. Betrifft 5 der 13 Meldungen im Backup
+    // 2026-08-08-1744. Rueckweg: grauer Haken im Termin schaltet das Flag ab.
+    if(t.differenz_geklaert) return;
+    warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
+  });
+
+  // Build 1296: Der Tarif-Block (1171) stand versehentlich INNERHALB der GVL-Schleife darueber
+  // und lief einmal je Termin mit GVL-Abweichung: im Daten-Check 29.10.2026 jede der 17 Tarif-
+  // Meldungen 16-mal (286 Befunde statt 30). Jetzt einmal, ausserhalb der Schleife.
   // ── Build 1171: Tarif-Abweichung Dispo gegen Abrechnung ──────────────
   // Bisher tauchte diese Klasse NUR im Termin selbst auf, nirgends in der
   // Uebersicht — ausgerechnet die einzige, die Geld kostet. Alle anderen
@@ -25668,30 +25721,6 @@ function runIntegrityCheck(silent){
         +'\u0001T'+t.id);
     });
   })();
-
-    if(gvlGesamt < 10 && abTakes === 10) return;
-    // ── Build 1166: Paket ohne Zusatz-Takes ist keine Abweichung ────────
-    // Z. 19968 / 20069 schreiben bei erkannter 1-10-Konstellation bewusst
-    // takes_abgerechnet = takes + 10, weil die gelesenen Takes dort ZUSAETZLICH
-    // zum Paket anfallen (Navy CIS: 120 Takes + Paket = 130, Brutto 600 gegen
-    // Grundgage 120 — passt). Deckt der Beleg aber nur das Paket ab, sind die
-    // Takes keine Zusatzleistung, sondern dieselben: The Artful Dodger hat
-    // Brutto 127 = Grundgage 127, also 3 disponierte Takes im Paket, nicht 13.
-    // Erkennbar daran, dass Beleg-Brutto und Grundgage uebereinstimmen.
-    // Gegen Backup 2026-08-08-1744: 8 Termine mit takes+10, davon 2 nur Paket
-    // (The Artful Dodger 21.11.2025, Relationship Goals 16.12.2025).
-    var _btP1166 = parseFloat(t.brutto_termin)||0;
-    var _ggP1166 = parseFloat(t.kommgage_abgerechnet)||0;
-    if(_btP1166 > 0 && _ggP1166 > 0 && Math.abs(_btP1166 - _ggP1166) < 1.5
-       && abTakes === gvlGesamt + 10) return;
-    // Build 1165: vom Nutzer geprueft = kein Befund. Gleiche Semantik wie in den
-    // beiden Brutto-Differenz-Regeln (Build 1162) und in den Termin-Karten
-    // (Build 1157) — der Haken "✓ geprüft" soll ueberall gelten, nicht nur an
-    // zwei von drei Stellen. Betrifft 5 der 13 Meldungen im Backup
-    // 2026-08-08-1744. Rueckweg: grauer Haken im Termin schaltet das Flag ab.
-    if(t.differenz_geklaert) return;
-    warnings.push('⚠ GVL/Abrechnung Takes: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): GVL '+gvlGesamt+' ≠ Abgerechnet '+abTakes+'\u0001T'+t.id);   // Build 1157: Termin-ID fuer Verlinkung
-  });
 
   // ── Build 1205: Dispo-Takes gegen abgerechnete Takes ────────────────────
   // Bisher verglich der Daten-Check nur GVL gegen Abrechnung (Regel oben) und
