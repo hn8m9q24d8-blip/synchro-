@@ -5545,7 +5545,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1296';
+  if(elH) elH.textContent = '1297';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -6900,7 +6900,7 @@ function openDetail(id){
           :(t.differenz_geklaert?'✓ geprüft'
             :(_keinPlanAb1157?'nicht prüfbar':'⚠ Differenz'))))+'</span></div>'
       +'<div style="padding:0 16px 14px">'
-      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4A5A4E;margin-bottom:8px;padding:6px 8px;background:#FDFCFA;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto € '+fmtEur(ab._v2GesamtBrutto||0).replace('€','').trim()+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
+      +(ab._v2IstTeilVonSammel?'<div style="font-size:11px;color:#4A5A4E;margin-bottom:8px;padding:6px 8px;background:#FDFCFA;border-radius:6px">Dieser Termin ist Teil einer Sammelrechnung mit '+ab._v2AnzahlTermineInSammel+' Terminen. Anteil an Gesamt-Brutto '+fmtEur(ab._v2GesamtBrutto||0)+': <strong>'+(ab.brutto==null?'<span style="color:var(--ink3);font-style:italic">nicht ausgewiesen</span>':fmtEur(ab.brutto))+'</strong></div>':'')
       +(!hasDispo2?'<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;padding:6px 8px;background:var(--card);border-radius:6px">Dispo fehlt — Takes/Gage-Vergleich nicht möglich</div>':'')
       +(ab._kette   // Build 1288: jede Gutschrift der Kette mit ihrem Anteil, darunter die Summe
         ? ab._kette.map(function(k){ return '<div class="info-row"><div class="ir-key">Gutschrift '+esc(k.nr)+'</div><div class="ir-val">'
@@ -6910,7 +6910,12 @@ function openDetail(id){
       +(ab.takes && !_k4c?'<div class="info-row"'+(takesDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(takesDiff?'color:var(--orange);font-weight:700':'')+'">Takes (abgr.)</div>'+
         '<div class="ir-val" style="'+(takesDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
-        esc(String(ab.takes))+(takesDiff?' <span style="font-size:10px;font-weight:700;color:var(--orange)">≠ Dispo: '+esc(String(t.takes))+'</span>':'')+'</div></div>':'')   // Build 1293
+        (function(){   // Build 1297: im 1-10-Paket zaehlt der Beleg nur die Takes ueber 10 (Jackass 27.05.: "1" statt 11)
+          var _ta = parseInt(t.takes_abgerechnet)||0, _tb = parseInt(ab.takes)||0;
+          // Nur-Paket-Belege (Brutto = Grundgage, vgl. Build 1166: Artful Dodger, Relationship Goals) nicht umdeuten
+          var _nurPaket = Math.abs((parseFloat(ab.brutto)||0) - (parseFloat(ab.grundgage)||0)) < 1.5;
+          return (_ta && _ta - _tb === 10 && !_nurPaket) ? esc(String(_ta))+' <span style="font-size:11px;font-weight:600;color:var(--ink3)">(10 im Paket + '+_tb+')</span>' : esc(String(ab.takes));
+        })()+(takesDiff?' <span style="font-size:10px;font-weight:700;color:var(--orange)">≠ Dispo: '+esc(String(t.takes))+'</span>':'')+'</div></div>':'')   // Build 1293
       +(ab.grundgage && !_k4c?'<div class="info-row"'+(gageDiff?' style="background:#fff5f5;border-radius:6px"':'')+'>'+
         '<div class="ir-key" style="'+(gageDiff?'color:var(--orange);font-weight:700':'')+'">Grundgage</div>'+
         '<div class="ir-val" style="'+(gageDiff?'color:var(--orange);font-weight:900':netBruttoOk?'color:var(--accent);font-weight:700':'')+'">'+
@@ -7198,7 +7203,8 @@ function openDetail(id){
       var takesDiff   = t.takes_differenz||0;
 
       abHtml = '<div class="info-card" style="border-left:4px solid var(--accent)">'
-        +'<div class="info-card-header"><span>Abrechnung (Monats-GS)</span></div>'
+        +'<div class="info-card-header"><span>'+(/^\d+\/\d{6}$/.test(String(t.gutschrift_nr||'')) ? 'Abrechnung (Monats-GS)'
+              : (/^\d{1,3}\/\d{4}$/.test(String(t.gutschrift_nr||'')) ? 'Rechnung' : 'Abrechnung'))+'</span></div>'   // Build 1297
         +'<div style="padding:0 16px 14px">';
 
       if(t.gutschrift_nr)
@@ -13828,8 +13834,9 @@ var _reStatus = 'offen';
 var _rePositionen = [];
 
 function fmtEur(v){
+  // Build 1297: deutsche Schreibweise "155,00 €" statt "€ 155,00" (Designpunkt 2, Anzeige ueberall gleich)
   var n = parseFloat(v)||0;
-  return '€\u00a0'+n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  return n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'\u00a0€';
 }
 
 // ── switchView overrides ──────────────────────────────────────
@@ -25773,8 +25780,8 @@ function runIntegrityCheck(silent){
     var _eu1205 = Math.abs(Math.round(_df1205 * _rt1205 * 100) / 100);
     warnings.push('⚠ Takes Dispo/Abrechnung: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '
       + 'disponiert '+_dp1205+' — abgerechnet '+_ab1205+' — '
-      + (_df1205 > 0 ? ('offen € '+fmtEur(_eu1205).replace('€','').trim())
-                     : ('zuviel gezahlt € '+fmtEur(_eu1205).replace('€','').trim()))
+      + (_df1205 > 0 ? ('offen '+fmtEur(_eu1205))
+                     : ('zuviel gezahlt '+fmtEur(_eu1205)))
       + '\u0001T'+t.id);
   });
 
@@ -25824,6 +25831,16 @@ function runIntegrityCheck(silent){
         return a && !a.ist_storno && !a._ueberholt_durch;
       });
       if(!aktiv.length) return;
+      // Build 1297: Korrekturkette desselben Studios (Original plus Nachtrag/Korrektur, z. B. Nobody Wants This
+      // 2449/202609 + 2449/202610) ist kein Befund; die Terminkarte summiert sie seit 1288 als Kette.
+      // Gleiche Betraege bleiben ein Befund: das ist das Muster Monats- neben Einzelgutschrift (1291).
+      if(aktiv.length > 1){
+        var _ab1297 = aktiv.map(function(l){ return (dbv2.abrechnungen||[]).find(function(x){ return x.id===l.abrechnung_id; }); });
+        var _gleichAbr = _ab1297.every(function(a){ return a && a.abrechner_id && a.abrechner_id===_ab1297[0].abrechner_id && String(a.klasse||'')!=='4'; });
+        var _betr = aktiv.map(function(l){ return Math.round((parseFloat(l.brutto_anteil_display)||0)*100); });
+        var _gleicheBetr = _betr.some(function(b,i){ return b && _betr.indexOf(b)!==i; });
+        if(_gleichAbr && !_gleicheBetr) return;
+      }
       if(aktiv.length > 1){
         // Kein stiller Vergleich gegen eine willkuerlich gewaehlte Abrechnung — das ist
         // ein eigener Befund und gehoert vom Menschen entschieden.
@@ -27165,7 +27182,7 @@ function rZahlungen(){
         +'<div style="position:absolute;inset:0;width:'+w+'%;border-radius:5px;background:linear-gradient(180deg,#B9C6AF,#93A88A 60%,#7E9376)"></div>'
         +'<div style="position:absolute;inset:0;width:'+w+'%;background:repeating-linear-gradient(90deg,transparent 0 18px,rgba(70,90,64,.4) 18px 19.5px)"></div>'
         +'</div>'
-        +'<div style="width:56px;flex:none;text-align:right;font-size:11px;color:var(--ink2)">'+fmtEur(g.net).replace('€\u00a0','')+'</div>'
+        +'<div style="width:56px;flex:none;text-align:right;font-size:11px;color:var(--ink2)">'+fmtEur(g.net).replace('\u00a0€','')+'</div>'
         +'</div>';
     });
     html+='</div>';
