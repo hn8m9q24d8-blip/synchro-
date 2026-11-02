@@ -5545,7 +5545,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1297';
+  if(elH) elH.textContent = '1298';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -29064,6 +29064,15 @@ function _mev6Extract(text){
     else if(digits.length===4 && digits.substr(0,2)==='20' && /^\d{1,3}$/.test(pref)) nnyyyy.push(pref+'/'+digits);
   }
   var rm=text.match(/(\d{8})\s*bis\s*(\d{8})/i);
+  // Build 1298: Bereich mit vollen Beleg-Nrn und Personalnr. dazwischen, wie Iyuno 16.10.2026:
+  // "GAGE 677/20260901 / 1208 BIS G AGE 677/20260906 / 1208". Die alte Regel verlangte die beiden
+  // 8-Stellen direkt um "bis"; erkannt wurden nur 901 und 906, Summe 355,79 statt 1.268,79 EUR, die
+  // Zahlung blieb als GS-NR-FEHLBETRAG haengen und fehlte in der USt-VA Oktober (USt 101,15 EUR).
+  // Nur derselbe Monat und aufsteigend, damit kein Zufallstreffer zum Bereich wird.
+  if(!rm){
+    var rm2=text.match(/(\d{8})(?!\d)[^\n]{0,30}?\bbis\b[^\n]{0,30}?\/\s*(\d{8})(?!\d)/i);
+    if(rm2 && rm2[1].substr(0,6)===rm2[2].substr(0,6) && rm2[2]>rm2[1]) rm=rm2;
+  }
   // Build 846: GVL-Beleg-Nrn — 9-stellig "20…" (z.B. 202527500), kein Slash-Format.
   // Nur wenn "GVL" im Text steht (Verwendungszweck "GVL-ID 66337 Beleg-Nr. 202527500/202527501"),
   // sonst Kollisionsgefahr mit beliebigen 9-stelligen Referenzen.
@@ -29838,7 +29847,9 @@ function _mev6RowBucket(r){
   var cutoff=_holviCutoff();
   var d=e.valuta||e.datum||'';
   var vorTracking = !!(cutoff && d && d < cutoff);
-  var istProblemTyp = (r.typ==='KEIN-MATCH'||r.typ==='BELEG-LUECKE'||r.typ==='MEHRDEUTIG');
+  // Build 1298: GS-NR-FEHLBETRAG und GS-NR-DIFF (Summe passt nicht) zaehlten weder als offen noch als
+  // Problemfall. Iyuno 16.10.2026 stand so unsichtbar bei "Offen 0 / Problemfaelle 0" und fehlte in der USt-VA.
+  var istProblemTyp = (r.typ==='KEIN-MATCH'||r.typ==='BELEG-LUECKE'||r.typ==='MEHRDEUTIG'||r.typ==='GS-NR-FEHLBETRAG'||r.typ==='GS-NR-DIFF');
   // Build 1054: verankerte Eingaenge (grüner Haken, in dbv2.zahlungsgruppen) sind
   // KEINE Problemfaelle mehr — auch wenn der Typ noch BELEG-LUECKE ist. Vorher blieben
   // sie faelschlich in der Problemfaelle-Liste stehen, obwohl bereits verankert.
