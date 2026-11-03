@@ -5545,7 +5545,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1298';
+  if(elH) elH.textContent = '1300';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -8482,6 +8482,25 @@ function _bereinigeSthHTitel(titel){
 //
 // Folgt derselben Logik wie der _ueberholt_durch-Mechanismus (Build 756/757):
 // der aktuellste Korrektur-Beleg trägt den finalen Stand und damit den Termin.
+// Build 1299: Termine, die fuer die Auto-Zuordnung eines Studio-Hamburg-Dokuments als "schon belegt" gelten.
+// Bisher zaehlte JEDES andere Dokument. Eine Korrektur-Abrechnung (Realfall "Korrektur Gehaltsabrechnung
+// 10/2026", 03.11.2026) umfasst aber dieselben Drehtage wie die Abrechnung, die sie ersetzt: Blue Lights 02.10.
+// war durch die alte Oktober-Abrechnung "belegt", also nahm die Suche den naechstbesten Termin des Tages,
+// Unaccustomed Earth (EVA Studios, 11:30). Jetzt zaehlen Studio-Hamburg-Dokumente desselben Monats nicht als
+// Belegung; die Kette (Build 757) ersetzt die alte Abrechnung ohnehin.
+function _shBelegteTermine1299(d){
+  var belegt = [];
+  var mon = function(x){ return String(x.verbindlichkeit_monat || x._verbindlichkeit_monat || x.datum || '').replace(/^(\d{2})\/(\d{4})$/,'$2-$1').slice(0,7); };
+  var dm = mon(d);
+  (db.dokumente||[]).forEach(function(x){
+    if(x.id === d.id) return;
+    if(dm && /studio hamburg/i.test(String(x.studio||'')) && mon(x) === dm) return;
+    if(x.terminId) belegt.push(x.terminId);
+    if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) belegt.push(ss.terminId); });
+  });
+  return belegt;
+}
+
 function _reassignSthHTermine(){
   if(!db || !db.dokumente) return;
   // Alle bestätigten Studio-Hamburg-Abrechnungsdokumente einsammeln
@@ -8521,8 +8540,12 @@ function _reassignSthHTermine(){
     var gewinner = liste[0];
     liste.forEach(function(e){ if(rang(e.doc) > rang(gewinner.doc)) gewinner = e; });
     // Den Termin, der irgendeiner Session dieses Drehtags zugeordnet ist, finden
+    // Build 1299: Vorrang hat der Termin aus einem AELTEREN Dokument (vom Nutzer schon bestaetigt), nicht die
+    // frische Auto-Zuordnung des Gewinners. Vorher gewann einfach der letzte gefundene Eintrag; lag die neue
+    // Korrektur hinten in der Liste, behielt sie ihren Fehlgriff (02.10. Unaccustomed Earth statt Blue Lights).
     var existierenderTerminId = null;
-    liste.forEach(function(e){ if(e.session.terminId) existierenderTerminId = e.session.terminId; });
+    liste.forEach(function(e){ if(e !== gewinner && e.session.terminId && !existierenderTerminId) existierenderTerminId = e.session.terminId; });
+    if(!existierenderTerminId && gewinner.session.terminId) existierenderTerminId = gewinner.session.terminId;
     // Verlierer lösen
     liste.forEach(function(e){
       if(e === gewinner) return;
@@ -18237,12 +18260,7 @@ function dokAnalyseDoc(d, key, cb){
                   if(s && s.produktion) s.produktion = _bereinigeSthHTitel(s.produktion);
                 });
               }
-              var _shBelegte = [];
-              (db.dokumente||[]).forEach(function(x){
-                if(x.id === d.id) return;
-                if(x.terminId) _shBelegte.push(x.terminId);
-                if(x.sessions) x.sessions.forEach(function(ss){ if(ss.terminId) _shBelegte.push(ss.terminId); });
-              });
+              var _shBelegte = _shBelegteTermine1299(d);
               d.sessions.forEach(function(s){
                 if(s.terminId || !s.datum) return;
                 var _tm = dokFindTermin(s.datum, d.studio||'', s.titel||'', null, null, _shBelegte, true);
@@ -23731,15 +23749,48 @@ function _fristFaellig(){
   return null;
 }
 
+// ─── Build 1300: Studio-Hamburg-Korrekturen in der USt nach Zahlungsfluss ───
+// Realfall 03.11.2026: "Korrektur Gehaltsabrechnung 10/2026" (892 EUR, 3 Drehtage) ueberholt die Oktober-
+// Abrechnung (600 EUR, am 16.10. mit 526,83 EUR bezahlt). Bisher fiel jede ueberholte Abrechnung aus der
+// USt-VA: der Oktober verlor nachtraeglich 600 EUR / 42 EUR USt (bereits gemeldet!), und der November haette
+// beim Eingang der Restzahlung 256,38 EUR die vollen 892 EUR / 62,44 EUR versteuert. Ist-Versteuerung heisst:
+// versteuert wird, was im Monat zufliesst. Daher:
+//  - eine ueberholte Studio-Hamburg-Abrechnung, die BEZAHLT ist, zaehlt weiter in ihrem Zahlungsmonat;
+//  - die neue Abrechnung zaehlt nur den Unterschied zu ihren bezahlten Vorgaengern (hier 292 / 20,44 / 256,38).
+// Unbezahlte Vorgaenger (Februar: 484 EUR ohne eigene Zahlung) bleiben wie bisher draussen. Andere Studios:
+// unveraendert (dort gibt es keine ueberholten Abrechnungen mit Zahlungsanker).
+function _vaZaehlt1300(a){
+  if(!a || !a.zahlungs_datum) return false;
+  if(!a._ueberholt_durch) return true;
+  return String(a.klasse)==='4';
+}
+function _k4BezahlteVorgaenger1300(a){
+  if(!a || String(a.klasse)!=='4' || a._ueberholt_durch) return [];
+  return ((typeof dbv2!=='undefined' && dbv2.abrechnungen)||[]).filter(function(b){
+    return b && b._ueberholt_durch===a.id && b.zahlungs_datum && String(b.klasse)==='4';
+  });
+}
+function _k4Ust1300(a){ var u=parseFloat(a.ust_betrag)||0; if(!u) u=Math.round(_v2Basis(a)*0.07*100)/100; return u; }
+// Werte fuer die USt-VA: Basis, USt, Auszahlung, bei K4 abzueglich bezahlter Vorgaenger.
+function _vaWerte1300(a, ustFn){
+  var basis=_v2Basis(a), ust=ustFn(a), aus=parseFloat(a.auszahlung)||0;
+  _k4BezahlteVorgaenger1300(a).forEach(function(b){
+    basis-=_v2Basis(b); ust-=ustFn(b); aus-=parseFloat(b.auszahlung)||0;
+  });
+  var r2=function(x){ return Math.round(x*100)/100; };
+  return {basis:r2(basis), ust:r2(ust), aus:r2(aus)};
+}
+
 function _ustMonatZahllast(yr, mo){
   var ym=yr+'-'+String(mo+1).padStart(2,'0');
   var einn=0;
   var v2abs=(typeof dbv2!=='undefined'&&dbv2.abrechnungen)||[];
   v2abs.forEach(function(a){
     var zd=a.zahlungs_datum;
-    if(!zd||zd.slice(0,7)!==ym||a._ueberholt_durch) return;
+    if(!zd||zd.slice(0,7)!==ym||!_vaZaehlt1300(a)) return;   // Build 1300
     var brutto=parseFloat(a.brutto)||0, ust=parseFloat(a.ust_betrag)||0;
     if(String(a.klasse)==='4'&&!ust) ust=Math.round(brutto*0.07*100)/100;
+    if(String(a.klasse)==='4') ust=_vaWerte1300(a,_k4Ust1300).ust;   // Build 1300
     if(a.steuerfrei) ust=0;
     einn+=ust;
   });
@@ -23804,10 +23855,11 @@ function rUstVoranmeldung(){
     var abrIdx={}; ((dbv2&&dbv2.abrechner)||[]).forEach(function(r){ abrIdx[r.id]=r; });
     v2abs.forEach(function(a){
       var zd=a.zahlungs_datum;
-      if(!zd || zd.slice(0,7)!==ym || a._ueberholt_durch) return;
+      if(!zd || zd.slice(0,7)!==ym || !_vaZaehlt1300(a)) return;   // Build 1300
       var brutto=_v2Basis(a); // Build 1089: Bemessungsgrundlage statt Rechnungsendbetrag
       var ust=parseFloat(a.ust_betrag)||0;
       if(String(a.klasse)==='4' && !ust) ust=Math.round(brutto*0.07*100)/100;
+      if(String(a.klasse)==='4'){ var _w1300=_vaWerte1300(a,_k4Ust1300); brutto=_w1300.basis; ust=_w1300.ust; }   // Build 1300
       var satz=a.ust_satz||0; satz=(Math.abs(satz-0.19)<0.02)?0.19:0.07;
       // Build 844: steuerfreie Umsätze (z.B. GVL Privatkopie) — 0% , keine Ausgangssteuer,
       // brutto = Bemessungsgrundlage für die Zeile "steuerfreie Umsätze" der USt-VA.
@@ -24268,12 +24320,13 @@ function _ustExportPDF(){
 
   // 1) Belege dieses Monats (nach Zufluss), nicht überholt
   var monBelege=v2abs.filter(function(a){
-    return a.zahlungs_datum && a.zahlungs_datum.slice(0,7)===ym && !a._ueberholt_durch;
+    return a.zahlungs_datum && a.zahlungs_datum.slice(0,7)===ym && _vaZaehlt1300(a);   // Build 1300
   });
   var belegUst=function(a){
     var u=parseFloat(a.ust_betrag)||0;
     if(String(a.klasse)==='4' && !u) u=Math.round(_v2Basis(a)*0.07*100)/100;
     if(a.steuerfrei) u=0;
+    if(String(a.klasse)==='4') u=_vaWerte1300(a,_k4Ust1300).ust;   // Build 1300
     return u;
   };
 
@@ -24282,7 +24335,7 @@ function _ustExportPDF(){
   grpById.forEach(function(g){
     if(!g.valuta || g.valuta.slice(0,7)!==ym) return;
     var bs=(g.beleg_ids||[]).map(function(id){return abById[id];})
-      .filter(function(a){return a && !a._ueberholt_durch && a.zahlungs_datum && a.zahlungs_datum.slice(0,7)===ym;});
+      .filter(function(a){return a && _vaZaehlt1300(a) && a.zahlungs_datum.slice(0,7)===ym;});   // Build 1300
     if(!bs.length) return;
     bs.forEach(function(a){ benutzt[a.id]=true; });
     bloecke.push({ valuta:g.valuta, betrag:g.betrag, gegen:g.gegenpartei||'', belege:bs, _grp:g });
@@ -24353,6 +24406,7 @@ function _ustExportPDF(){
     b.belege.forEach(function(a){
       newPageIf(6);
       var br=_v2Basis(a), u=belegUst(a), aus=parseFloat(a.auszahlung)||0; // Build 1089
+      if(String(a.klasse)==='4'){ var _w13=_vaWerte1300(a,_k4Ust1300); br=_w13.basis; aus=_w13.aus; }   // Build 1300
       var satz = a.steuerfrei?'steuerfrei':(String(a.klasse)==='4'?'7% K4':(_snap(a.ust_satz||0)===0.19?'19%':'7%'));
       var bn = a.beleg_nr || '—';
       // Build 1226: Teilzahlung → nur der Anteil dieser Zahlung
@@ -29440,13 +29494,14 @@ function _mev7Buckets(){
   var by={};
   (dbv2.abrechnungen||[]).forEach(function(a){
     if(!a.zahlungs_datum) return;
-    if(a._ueberholt_durch) return;            // Build 825: überholte K4-Korrektur nie zählen
+    if(!_vaZaehlt1300(a)) return;            // Build 1300 (vorher 825: ueberholte K4 nie zaehlen)
     var m=String(a.zahlungs_datum).slice(0,7);
     if(!by[m]) by[m]={u7:0,u19:0,k4:0,frei:0,n:0};
     var ust=parseFloat(a.ust_betrag);
     if(a.steuerfrei){ by[m].frei+=_v2Basis(a); } // Build 1089: Bemessungsgrundlage  // Build 844: Bemessungsgrundlage, keine USt
     else if(String(a.klasse)==='4'){
       if(!(ust>0)) ust=Math.round((parseFloat(a.brutto)||0)*0.07*100)/100;  // K4: 7% auf brutto (Konto 996)
+      ust=_vaWerte1300(a,_k4Ust1300).ust;   // Build 1300
       by[m].k4+=ust;
     } else if((parseFloat(a.ust_satz)||0)>=0.13){ by[m].u19+=(ust||0); }
     else { by[m].u7+=(ust||0); }
