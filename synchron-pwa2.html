@@ -5545,7 +5545,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1300';
+  if(elH) elH.textContent = '1301';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -20547,27 +20547,26 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
             + '✎ Werte korrigieren</div>';
         body+='</div>';
       });
-      if(allDone){
-        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Alle bestätigt — Foto löschen & abschließen</button>';
+      // Build 1301: ein Hauptknopf statt drei Wege. Vorher: Karten antippen, "Naechste Session pruefen"
+      // und (bei typ abrechn mit Sessions) zusaetzlich "Alle Felder uebernehmen & bestaetigen", das mit
+      // dokBestaetigenMitTermin den GANZEN Beleg auf EINEN Termin gemergt haette (Realfall Studio Hamburg
+      // Korrektur 10/2026, 3 Drehtage, 03.11.2026). dokBestaetigenMonat verbucht jede Session mit Termin
+      // selbst; das Durchklicken der Sessions ist nur noetig, wo etwas fehlt oder zweifelhaft ist.
+      var _offen1301 = [];
+      d.sessions.forEach(function(s, si){
+        if(s._done) return;
+        var tm=s.terminId?(db.termine||[]).find(function(t){return t.id===s.terminId;}):null;
+        var weicht = tm && s.titel && !_titelAehnlich(s.titel, tm.titel||tm.studio||'');
+        if(!tm || weicht) _offen1301.push({si:si, ohneTermin:!tm});
+      });
+      if(allDone || !_offen1301.length){
+        body+='<button type="button" onclick="dokBestaetigenMonat(\''+d.id+'\')" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">✓ Bestätigen</button>';
+        if(!allDone) body+='<div style="font-size:11px;color:var(--ink3);text-align:center;margin-top:8px">Alle Drehtage sind zugeordnet. Einen Tag antippen, um ihn vorher zu prüfen (optional).</div>';
       } else {
-        var doneCount = d.sessions.filter(function(s){return s._done;}).length;
-        // Nächste offene Session finden
-        var nextOpenIdx = -1;
-        d.sessions.forEach(function(s,si){ if(!s._done && nextOpenIdx<0) nextOpenIdx=si; });
-        var brokenFlow = doneCount > 0 && doneCount < d.sessions.length;
-        if(brokenFlow){
-          body+='<div style="background:var(--orange2);border:1.5px solid var(--orange);border-radius:10px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:8px">'
-            +''
-            +'<div style="font-size:12px;color:#8a6a3f;font-weight:700">Flow unterbrochen · '+doneCount+' von '+d.sessions.length+' erledigt<br>'
-            +'<span style="font-weight:400">Nächste Session antippen um fortzufahren</span></div>'
-            +'</div>';
-        } else {
-          body+='<div style="font-size:11px;color:#888;text-align:center;margin-top:8px">'+doneCount+' von '+d.sessions.length+' Sessions abgehakt</div>';
-        }
-        if(nextOpenIdx >= 0){
-          // Nächste Session mit Diff-Check öffnen
-          body+='<button type="button" onclick="dokSessionPeek(\''+d.id+'\','+nextOpenIdx+')" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">→ Nächste Session prüfen & zuordnen</button>';
-        }
+        var _n1301=_offen1301.length, _erst=_offen1301[0];
+        var _zielFn = (!_erst.ohneTermin && typeof dokSessionGotoKalender==='function') ? 'dokSessionGotoKalender' : 'dokSessionPeek';
+        body+='<button type="button" onclick="'+_zielFn+'(\''+d.id+'\','+_erst.si+')" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-top:4px">→ '+(_n1301===1?'1 Drehtag':_n1301+' Drehtage')+' zuordnen</button>';
+        body+='<div style="font-size:11px;color:var(--ink3);text-align:center;margin-top:8px">Bestätigen geht, sobald jeder Drehtag einen passenden Termin hat.</div>';
       }
       body+='</div>';
     } else {
@@ -20758,7 +20757,8 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       // ueberhaupt keinen Bestaetigen-Knopf, obwohl der Toast ihn ankuendigt).
       var _wegUeberTerminReicht = d.typ==='dispo'
         || (d.typ==='abrechn' && !(d.sessions && d.sessions.length));
-      if(termin && !_wegUeberTerminReicht) body += '<div style="padding:8px 0 20px">'
+      // Build 1301: nie bei Belegen mit mehreren Drehtagen (sonst landet alles auf einem Termin)
+      if(termin && !_wegUeberTerminReicht && !(d.sessions && d.sessions.length)) body += '<div style="padding:8px 0 20px">'
         + '<button type="button" onclick="dokBestaetigenMitTermin(\'' + d.id + '\',\'' + termin.id + '\')" '
         + 'style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:14px;'
         + 'padding:18px;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;'
