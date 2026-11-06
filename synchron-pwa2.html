@@ -5545,7 +5545,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1301';
+  if(elH) elH.textContent = '1304';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -19511,10 +19511,64 @@ function _editRow(field, label, val, altWert){
   return '<div style="padding:7px 0;border-bottom:1px solid var(--cream2)">'
     +'<div style="display:flex;align-items:center">'
     +'<div style="font-size:11px;color:#999;width:105px;flex-shrink:0">'+label+'</div>'
-    +'<input id="dedit-'+field+'" type="'+inputType+'"'+(_istGeld?' inputmode="decimal"':'')+' value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
+    +'<input id="dedit-'+field+'" type="'+inputType+'"'+(_istGeld?' inputmode="decimal"':'')
+    +(_SUCHFELDER_1302.indexOf(field)>=0 ? ' onchange="_dokSuchfeldGeaendert1302()"' : '')   // Build 1302
+    +' value="'+esc(String(val||''))+'" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;text-align:right;color:var(--ink);outline:none;padding:0 2px">'
     +'</div>'
     +altHtml
     +'</div>';
+}
+// Build 1302: Terminsuche nach Korrektur neu starten. Realfall 06.11.2026: FFS-Dispo "Troppo Invidiosa",
+// Datum auf dem Foto abgeschnitten ("04/11/20"), gelesen als 04.11.2020. Tim korrigierte auf 04.11.2026,
+// aber die Suche lief weiter mit dem alten Wert: Eingaben landen erst beim Bestaetigen im Dokument.
+// Jetzt: Aendert sich Datum, Uhrzeit, Studio oder Titel eines unbestaetigten Belegs, werden alle Felder
+// uebernommen, eine evtl. alte Auto-Zuordnung verworfen und die Ansicht neu aufgebaut (sucht neu).
+var _SUCHFELDER_1302 = ['datum','uhrzeit','bis_uhrzeit','studio','titel'];
+function _dokSuchfeldGeaendert1302(){
+  try{
+    var d = (db.dokumente||[]).find(function(x){ return x.id === _dokCurrentId; });
+    if(!d || d.bestaetigt) return;
+    _applyEditedFields(d);
+    d.terminId = null; d._keinTermin = false;
+    save(db);
+    if(window._rerenderDetail) window._rerenderDetail();
+  }catch(e){ console.warn('[1302]', e); }
+}
+// Build 1303: Jahreszahl-Pruefung. Realfall 06.11.2026: FFS-Dispo, Datum am Fotorand abgeschnitten
+// ("04/11/20"), gelesen als 04.11.2020. Liegt das Datum eines unbestaetigten Belegs ohne Termintreffer
+// mehr als ~10 Monate von heute weg, wird derselbe Tag im aktuellen, vorigen und naechsten Jahr gesucht.
+// Hinweis mit Knopf, nie stille Aenderung. Gutschriften nur bei echtem Treffer (alte Drehtage und GVL-
+// Verteilungsjahre sind dort oft richtig), Dispos auch ohne Treffer.
+function _jahreszahlVorschlag1303(d){
+  if(!d || !d.datum || d.bestaetigt || !/^\d{4}-\d{2}-\d{2}$/.test(d.datum)) return null;
+  var heute = new Date(), dt = new Date(d.datum+'T12:00:00');
+  if(Math.abs(heute - dt)/864e5 < 300) return null;
+  var md = d.datum.slice(4), J = heute.getFullYear(), treffer = null, neu = null;
+  [J, J-1, J+1].some(function(j){
+    var kand = j + md;
+    if(kand === d.datum) return false;
+    var t = null; try{ t = dokFindTermin(kand, d.studio, d.titel, d.uhrzeit, d.bis_uhrzeit, [], true); }catch(e){}
+    if(t){ treffer = t; neu = kand; return true; } return false;
+  });
+  if(!treffer && d.typ !== 'dispo') return null;
+  return { neu: neu || (J + md), termin: treffer };
+}
+function _jahreszahlHinweis1303(d){
+  var v = _jahreszahlVorschlag1303(d); if(!v) return '';
+  var dd = fd(v.neu), t = v.termin;
+  return '<div style="background:#fff;border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+    +'<div style="font-size:13px;font-weight:800;margin-bottom:4px">Jahreszahl falsch gelesen?</div>'
+    +'<div style="font-size:13px;color:var(--ink2);line-height:1.45">Erkannt wurde der '+fd(d.datum)+'. '
+    +(t ? 'Am <b>'+dd+'</b> gibt es einen passenden Termin: '+esc(t.titel||t.studio||'')+(t.uhrzeit?', '+esc(t.uhrzeit):'')+'.' : 'Eine Dispo liegt selten so weit zurück.')+'</div>'
+    +'<button type="button" onclick="_jahreszahlUebernehmen1303(\''+v.neu+'\')" style="margin-top:10px;width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation">Auf '+dd+' ändern</button>'
+    +'</div>';
+}
+function _jahreszahlUebernehmen1303(neu){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(neu))) return;
+  var el = document.getElementById('dedit-datum');
+  if(el){ el.value = neu; _dokSuchfeldGeaendert1302(); return; }
+  var d = (db.dokumente||[]).find(function(x){ return x.id === _dokCurrentId; });
+  if(d && !d.bestaetigt){ d.datum = neu; d.terminId = null; d._keinTermin = false; save(db); if(window._rerenderDetail) window._rerenderDetail(); }
 }
 // Build 1066: Kalender-Wert (durchgestrichen) ins Feld uebernehmen
 function _dokAltZurueck(field, altWert){
@@ -20572,11 +20626,19 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
     } else {
 
     // ── TERMIN-VORSCHLAG MIT MERGE-VORSCHAU ──
+    // Build 1304: GVL-Mitteilungen haben nie einen Drehtag. Bisher: "Kein passender Termin" → Optionen →
+    // "Keinen Termin zuordnen" → "Ohne Termin buchen & bestaetigen", vier Schritte fuer jeden GVL-Beleg
+    // (06.11.2026: 202772578 und 202772579). Jetzt springt ein unbestaetigter GVL-Beleg einmalig direkt in
+    // "Ohne Termin"; "Doch Termin zuordnen" bleibt und wird nicht wieder ueberschrieben.
+    if(!d.bestaetigt && !d.terminId && !d._keinTermin && !d._ohneDrehtagAuto1304
+       && (/\bgvl\b/i.test(String(d.studio||'')) || /^gvl\b/i.test(String(d.titel||'')))){
+      d._keinTermin = true; d._ohneDrehtagAuto1304 = true; save(db);
+    }
     if(d._keinTermin){
       // Build 839: Beleg bewusst OHNE Termin (GVL-Ausschüttung, Nachgage, Pauschale, …)
       body += '<div style="background:var(--blue2);border:1.5px solid #E7E3DA;border-radius:10px;padding:10px 14px;margin-bottom:10px">'
         + '<div style="font-size:11px;font-weight:800;color:var(--ai);margin-bottom:3px">Ohne Termin</div>'
-        + '<div style="font-size:12px;color:var(--ink)">Wird als Einnahme ohne Termin gebucht — kein Aufnahmetermin nötig. USt zählt im Monat des Zahlungseingangs (Ist).</div>'
+        + '<div style="font-size:12px;color:var(--ink)">'+(d._ohneDrehtagAuto1304 ? 'GVL-Zahlungen haben keinen Drehtag und werden ohne Termin gebucht.' : 'Wird als Einnahme ohne Termin gebucht, kein Aufnahmetermin nötig.')+' Die Umsatzsteuer zählt im Monat des Zahlungseingangs.</div>'
         + '<button type="button" onclick="dokDochTerminZuordnen(\''+d.id+'\')" style="margin-top:8px;background:#fff;color:var(--ai);border:1.5px solid #E7E3DA;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;touch-action:manipulation">↩ Doch Termin zuordnen</button>'
         + '</div>';
       /* Build 1136: Bestaetigen-Knopf. Fehlte hier seit Build 839 — der Toast
@@ -20705,6 +20767,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
             +'</div></div>';
         });
       } else {
+        if(_schonAnalysiert) body += _jahreszahlHinweis1303(d);   // Build 1303
         body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px'+(_schonAnalysiert?'':';display:none')+'">'
           +'<div onclick="window._dokTermOpt=window._dokTermOpt||{};window._dokTermOpt[\''+d.id+'\']=!window._dokTermOpt[\''+d.id+'\'];(window._rerenderDetail||function(){})();" style="cursor:pointer;touch-action:manipulation">'
           +'<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px;display:flex;justify-content:space-between"><span>Kein passender Termin gefunden</span><span style="color:var(--ink3);font-weight:600">'+((window._dokTermOpt&&window._dokTermOpt[d.id])?'✕':'Optionen ›')+'</span></div>'
