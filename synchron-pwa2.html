@@ -2158,8 +2158,24 @@ function loadV2(){
   }
 }
 
+// Build 1305: Wird eine Abrechnung geloescht, die eine andere ersetzt hatte (Korrektur), zeigte der
+// Vermerk "_ueberholt_durch" der alten ins Leere; die alte zaehlte nicht mehr, die neue gab es nicht.
+// Realfall Backup 06.11.2026 13:58: Studio-Hamburg-Oktober 600 EUR ohne Nachfolger, 600 EUR fehlten in
+// Umsatz und Jahresuebersicht. Jetzt wird vor jedem Speichern jeder verwaiste Verweis entfernt: die alte
+// Abrechnung gilt wieder, bis eine neue Korrektur sie ersetzt.
+function _ueberholtVerwaisteLoesen1305(d){
+  try{
+    if(!d || !d.abrechnungen) return 0;
+    var ids = {}; d.abrechnungen.forEach(function(a){ if(a && a.id) ids[a.id] = 1; });
+    var n = 0;
+    d.abrechnungen.forEach(function(a){ if(a && a._ueberholt_durch && !ids[a._ueberholt_durch]){ delete a._ueberholt_durch; n++; } });
+    if(n) console.log('[Build 1305] verwaiste Ueberholt-Verweise geloest:', n);
+    return n;
+  }catch(e){ return 0; }
+}
 function saveV2(d){
   try {
+    _ueberholtVerwaisteLoesen1305(d);
     localStorage.setItem(DBK_V2, JSON.stringify(d));
     return true;
   } catch(e) {
@@ -5545,7 +5561,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1304';
+  if(elH) elH.textContent = '1305';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -25383,17 +25399,41 @@ function mahnGemahntUndo(belegId){
   }
 }
 // Gemeinsame Filterquelle für Liste UND Badge — garantiert identische Zahl.
+// Build 1305: Zahlungserwartung je Beleg. Bisher fielen GVL und Studio Hamburg ganz aus dem Mahnwesen
+// (kein Mahnfall), blieb dort eine Zahlung aus, erinnerte nichts daran. Jetzt eine Regel fuer alle:
+//  - Studios: 30 Tage nach Ausstellung, Betrag = Brutto, mahnbar (wie bisher).
+//  - GVL: 14 Tage nach der Mitteilung, Betrag = Auszahlung, nicht mahnbar (nachfragen).
+//  - Studio Hamburg: Ende des Folgemonats der Verbindlichkeit, Betrag = "Differenz fuer Folgemonate"
+//    (sonst Auszahlung), nicht mahnbar. Realfall Korrektur 10/2026: 256,38 EUR bis 30.11.2026.
+// Gegen Backup 06.11.2026 14:23 geprueft: ausser den drei aktuell offenen (zwei GVL, eine SH) gibt es
+// keinen unbezahlten GVL- oder SH-Beleg, also keine Altlasten-Flut.
+function _zahlErwartung1305(ab){
+  if(!ab || ab._ueberholt_durch || ab.zahlungs_datum) return null;
+  if((parseFloat(ab.brutto)||0) <= 0) return null;
+  var iso = function(dt){ return dt.toISOString().slice(0,10); };
+  if(String(ab.klasse) === '4'){
+    var vm = String(ab._verbindlichkeit_monat || ab.leistungs_monat || '');
+    if(!/^\d{4}-\d{2}/.test(vm)) return null;
+    var y = +vm.slice(0,4), m = +vm.slice(5,7);
+    var fol = parseFloat(ab.saldo_folgemonat);
+    var betrag = (fol > 0) ? fol : (parseFloat(ab.auszahlung)||0);
+    if(!(betrag > 0)) return null;
+    return { art:'sh', faellig: iso(new Date(Date.UTC(y, m+1, 0))), betrag: betrag, mahnbar:false };
+  }
+  var fd0 = _mahnFaelligDatum(ab);
+  if(!fd0) return null;
+  if(/gvl/i.test(_mahnBelegStudio(ab))){
+    return { art:'gvl', faellig: iso(new Date(new Date(fd0).getTime() + 14*86400000)),
+             betrag: parseFloat(ab.auszahlung)||parseFloat(ab.brutto)||0, mahnbar:false };
+  }
+  return { art:'studio', faellig: iso(new Date(new Date(fd0).getTime() + _MAHN_FAELLIG_TAGE*86400000)),
+           betrag: parseFloat(ab.brutto)||0, mahnbar:true };
+}
 function _mahnOffeneBelege(){
   var heuteMs = new Date(today()).getTime();
   return (dbv2.abrechnungen||[]).filter(function(ab){
-    if(ab._ueberholt_durch) return false;             // überholter Korrektur-Vorgänger
-    if(ab.zahlungs_datum) return false;               // bezahlt (dbv2-Anker)
-    if((parseFloat(ab.brutto)||0) <= 0) return false; // Storno / Null-Beleg
-    if(ab.klasse === '4') return false;               // Studio-HH-Payroll, kein Mahnfall
-    if(/gvl/i.test(_mahnBelegStudio(ab))) return false;// GVL-Ausschüttung, kein Mahnfall
-    var fd0 = _mahnFaelligDatum(ab);
-    if(!fd0) return false;
-    return (new Date(fd0).getTime() + _MAHN_FAELLIG_TAGE*86400000) < heuteMs;
+    var e = _zahlErwartung1305(ab);
+    return !!(e && new Date(e.faellig).getTime() < heuteMs);
   });
 }
 
@@ -25417,9 +25457,10 @@ function rMahnwesen(){
   // Älteste Fälligkeit zuerst
   offen.sort(function(a,b){ return _mahnFaelligDatum(a) < _mahnFaelligDatum(b) ? -1 : 1; });
 
+  var _nMahnbar1305 = offen.filter(function(ab){ var e=_zahlErwartung1305(ab); return e && e.mahnbar; }).length;
   var html = '<div style="background:var(--red2);border:1.5px solid #e3c4c0;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
-    +'<div style="font-size:13px;font-weight:800;color:var(--orange);margin-bottom:3px">⚠ '+offen.length+' überfällige Forderung'+(offen.length>1?'en':'')+'</div>'
-    +'<div style="font-size:11px;color:#8a6a3f">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>'
+    +'<div style="font-size:13px;font-weight:800;color:var(--orange);margin-bottom:3px">⚠ '+offen.length+' ausstehende Zahlung'+(offen.length>1?'en':'')+'</div>'
+    +(_nMahnbar1305 ? '<div style="font-size:11px;color:#8a6a3f">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>' : '')
     +'</div>';
 
   offen.forEach(function(ab){
@@ -25433,9 +25474,10 @@ function rMahnwesen(){
         if(t && t.titel && titel.indexOf(t.titel)<0) titel.push(t.titel);
       });
       var fd0 = _mahnFaelligDatum(ab);
-      var faelligAm = new Date(new Date(fd0).getTime() + _MAHN_FAELLIG_TAGE*86400000);
+      var _erw = _zahlErwartung1305(ab) || {faellig:fd0, betrag:parseFloat(ab.brutto)||0, mahnbar:true, art:'studio'};   // Build 1305
+      var faelligAm = new Date(_erw.faellig);
       var tageSeit = Math.floor((heuteMs - faelligAm.getTime())/86400000);
-      var brutto = parseFloat(ab.brutto)||0;
+      var brutto = _erw.betrag;
       var titelTxt = titel.length
         ? (titel[0] + (titel.length>1 ? ' + '+(titel.length-1)+' weitere' : ''))
         : (ab.beleg_nr ? 'Beleg '+ab.beleg_nr : (studio||'Forderung'));
@@ -25457,16 +25499,18 @@ function rMahnwesen(){
         +'</div>'
         +'<div style="text-align:right">'
         +(brutto?'<div style="font-size:14px;font-weight:900;color:var(--ai)">'+fmtEur(brutto)+'</div>':'')
-        +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+tageSeit+' Tage überfällig</div>'
+        +'<div style="font-size:11px;font-weight:700;color:'+dringlichkeit+'">'+(_erw.mahnbar ? tageSeit+' Tage überfällig' : 'erwartet seit '+tageSeit+' Tag'+(tageSeit===1?'':'en'))+'</div>'
         +'</div>'
         +'</div>'
         +'<div style="font-size:10px;color:#888;margin-bottom:8px">'
-        +'Abrechnung: '+fd(fd0)+' · Fällig seit: '+fd(faelligAm.toISOString().split('T')[0])
+        +'Abrechnung: '+fd(fd0)+' · '+(_erw.mahnbar ? 'Fällig seit: ' : 'Erwartet bis: ')+fd(faelligAm.toISOString().split('T')[0])
         +'</div>'
+        +(_erw.mahnbar ? '' : '<div style="font-size:11px;color:var(--ink2);margin-bottom:8px">'
+            +(_erw.art==='sh' ? 'Restzahlung laut Abrechnung („Differenz für Folgemonate“). Kein Mahnfall, bei Studio Hamburg nachfragen.' : 'GVL-Ausschüttung. Kein Mahnfall, bei der GVL nachfragen.')+'</div>')
         +(_mlogLabel?'<div style="font-size:10px;color:var(--accent);font-weight:700;margin-bottom:8px">'+_mlogLabel+'</div>':'')
         +'<div style="display:flex;gap:8px">'
-        +'<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb2" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb2)"><path d="M6 6c4-1 8-1 12 0 .4 4 .4 8 0 12-4 1-8 1-12 0-.4-4-.4-8 0-12z"/><path d="M7 11c3.5.8 6.5.8 10 0"/><path d="M10.5 14.5l3 3M13.5 14.5l-3 3"/></g></svg>Zahlungserinnerung</button>'
-        +'<button type="button" ontouchstart="_mahnPressStart(\''+ab.id+'\')" ontouchmove="_mahnPressMove()" ontouchend="_mahnPressEnd(\''+ab.id+'\',event)" oncontextmenu="return false" style="background:'+(_gemahnt?'var(--green2)':'var(--cream2)')+';color:'+(_gemahnt?'var(--accent)':'var(--ink3)')+';border:none;border-radius:8px;padding:9px 13px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none" title="'+(_gemahnt?'Gemahnt am '+fd(_mlog[_mlog.length-1])+' — lang drücken zum Zurücknehmen':'Tippen: als gemahnt markieren')+'">✉</button>'
+        +(!_erw.mahnbar ? '' : '<button type="button" onclick="mahnEmail(\''+ab.id+'\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation"><svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:5px"><defs><filter id="kb2" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency="0.14 0.42" numOctaves="3" seed="5" result="w"/><feDisplacementMap in="SourceGraphic" in2="w" scale="1.4"/></filter></defs><g style="stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round" filter="url(#kb2)"><path d="M6 6c4-1 8-1 12 0 .4 4 .4 8 0 12-4 1-8 1-12 0-.4-4-.4-8 0-12z"/><path d="M7 11c3.5.8 6.5.8 10 0"/><path d="M10.5 14.5l3 3M13.5 14.5l-3 3"/></g></svg>Zahlungserinnerung</button>'
+        +'<button type="button" ontouchstart="_mahnPressStart(\''+ab.id+'\')" ontouchmove="_mahnPressMove()" ontouchend="_mahnPressEnd(\''+ab.id+'\',event)" oncontextmenu="return false" style="background:'+(_gemahnt?'var(--green2)':'var(--cream2)')+';color:'+(_gemahnt?'var(--accent)':'var(--ink3)')+';border:none;border-radius:8px;padding:9px 13px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none" title="'+(_gemahnt?'Gemahnt am '+fd(_mlog[_mlog.length-1])+' — lang drücken zum Zurücknehmen':'Tippen: als gemahnt markieren')+'">✉</button>')   // Build 1305: Mahn-Knoepfe nur bei mahnbaren
         +(ersterTerminId?'<button type="button" onclick="openDetail(\''+ersterTerminId+'\');switchView(\'termine\')" style="background:var(--cream2);color:var(--ink);border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">→ Termin</button>':'')
         +'</div>'
         +'</div>';
