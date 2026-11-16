@@ -457,6 +457,14 @@ body::after{content:'';position:fixed;inset:0;background-image:var(--washi);back
 .dsk-auge{background:none;border:none;padding:8px;margin:-8px -6px -8px 0;opacity:.6;line-height:0;cursor:pointer;-webkit-tap-highlight-color:transparent;flex-shrink:0}
 .dsk{display:inline-block;letter-spacing:.35em;opacity:.55;line-height:1;vertical-align:baseline;white-space:nowrap}
 body.diskret input.dsk-in:not(:focus){-webkit-text-security:disc}
+/* Build 1307 (Tim, 16.11.2026): .sheet-input hatte keine eigene Regel. Rechnungsformular und Profil zeigten nackte
+   Browserfelder: Empfaenger und Adresse halb breit nebeneinander, Adressbuch ragte rechts raus, Positionsbetrag abgeschnitten. */
+.sheet-input{display:block;width:100%;min-width:0;box-sizing:border-box;margin:0;background:var(--card);border:1.5px solid var(--hair);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:16px;line-height:1.35;color:var(--ink);outline:none;-webkit-appearance:none;appearance:none}
+.sheet-input:focus{border-color:var(--ink3)}
+.sheet-input::placeholder{color:var(--ink4)}
+textarea.sheet-input{line-height:1.4}
+input[type=date].sheet-input{min-height:44px}
+select.sheet-input{padding-right:28px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -1137,15 +1145,15 @@ body.diskret input.dsk-in:not(:focus){-webkit-text-security:disc}
 
     <!-- Empfänger / Studio -->
     <div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
-        <div style="font-size:11px;font-weight:700;color:#666">RECHNUNGSEMPFÄNGER</div>
-        <div onclick="reEmpfMerken()" style="font-size:11px;color:var(--accent);cursor:pointer;font-weight:600" title="Eingetippte Adresse ins Adressbuch übernehmen">Neue Adresse und merken</div>
-      </div>
+      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">RECHNUNGSEMPFÄNGER</div>
       <select id="re-empf-sel" class="sheet-input" style="appearance:auto;margin-bottom:6px" onchange="reEmpfSelected()">
-        <option value="">Adressbuch</option>
+        <option value="">Aus dem Adressbuch wählen …</option>
       </select>
-      <input id="re-empf" class="sheet-input" placeholder="Empfänger (Firma, Straße, PLZ Ort — eine Zeile pro Datenfeld)">
-      <textarea id="re-empf-adresse" class="sheet-input" rows="3" placeholder="Vollständige Adresse (mehrzeilig, optional — wird unter dem Namen aufs PDF gedruckt)" style="resize:none;margin-top:6px;font-size:13px"></textarea>
+      <!-- Build 1308: EIN Feld. Erste Zeile = Name, Rest = Anschrift. Die alten Felder bleiben versteckt als Speicherweg. -->
+      <textarea id="re-empf-block" class="sheet-input" rows="4" placeholder="Name&#10;Straße Nr.&#10;PLZ Ort&#10;(Adresse einfach hier reinkopieren)" style="resize:none" oninput="_reEmpfBlockEingabe1308()" onpaste="setTimeout(_reEmpfBlockAufteilen1308,0)" onblur="_reEmpfBlockAufteilen1308()"></textarea>
+      <div id="re-empf-status" style="font-size:11px;color:var(--ink3);margin-top:5px;min-height:14px"></div>
+      <input type="hidden" id="re-empf">
+      <input type="hidden" id="re-empf-adresse">
     </div>
 
     <!-- Termin-Feld entfernt (Build 1061): Verknuepfung laeuft ueber KI/Bankabgleich. re-termin-sel bleibt als hidden fuer Speicher-Kompatibilitaet. -->
@@ -2476,6 +2484,38 @@ setTimeout(function(){
   });
   db._mig1296Done = true;
   if(n.length){ db._mig1296 = { am:new Date().toISOString(), termine:n }; console.log('[Build 1296] brutto_termin nachgetragen', n); }
+  save(db);
+}, 0);
+// ─── Build 1308: Adressbuch-Eintraege mit Anschrift im Namen aufraeumen (einmalig) ───
+// Bis 1307 war der Empfaengername einzeilig; eingefuegte Anschriften standen dort in einer Zeile (tvinart 16.11.2026).
+// Mit dem neuen Ein-Feld-Empfaenger (erste Zeile = Name) wuerde sonst beim naechsten Speichern ein zweiter Eintrag
+// entstehen. Regel: Name mit PLZ wird wie beim Einfuegen aufgeteilt; Anschrift nur gesetzt, wenn sie leer ist oder
+// dieselbe Anschrift schon doppelt drinsteht. Danach gleiche Namen zusammenfuehren (aelterer Eintrag bleibt).
+setTimeout(function(){
+  if(!db || db._mig1308Done) return;
+  var log = [];
+  try{
+    (db.auftraggeber||[]).forEach(function(a){
+      var name = String(a.name||'').replace(/\s+/g,' ').trim();
+      if(!/\b\d{5}\s+\S/.test(name)) return;
+      var t = _reEmpfZeileAufteilen1308(name);
+      if(t.length < 2) return;
+      var rest = t.slice(1).join('\n'), adr = String(a.adresse||'').trim();
+      var adrEinz = adr.replace(/\s+/g,' ');
+      if(adr && adrEinz !== t.slice(1).join(' ') && name.indexOf(adrEinz) < 0) return;   // abweichende Anschrift: nicht anfassen
+      log.push(a.name+' -> '+t[0]);
+      a.name = t[0]; a.adresse = rest;
+    });
+    var gesehen = {};
+    db.auftraggeber = (db.auftraggeber||[]).filter(function(a){
+      var k = String(a.name||'').trim().toLowerCase(); if(!k) return true;
+      if(!gesehen[k]){ gesehen[k] = a; return true; }
+      if(a.adresse && !gesehen[k].adresse) gesehen[k].adresse = a.adresse;
+      log.push('doppelt entfernt: '+a.name); return false;
+    });
+  }catch(e){ console.warn('[Build 1308]', e); return; }
+  db._mig1308Done = true;
+  if(log.length){ db._mig1308 = { am:new Date().toISOString(), log:log }; console.log('[Build 1308] Adressbuch', log); }
   save(db);
 }, 0);
 // ─── Build 1275: verwaiste Abrechnungs-Stempel an Terminen entfernen (einmalig) ───
@@ -5561,7 +5601,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1305';
+  if(elH) elH.textContent = '1308';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -16892,7 +16932,7 @@ function glSesamEinzel(page){
   // Termine = Gruppen (Titel, Datum): ein Gutschein kann mehrere Produktionen und mehrere Drehtage tragen
   var grp = {}, order = [];
   posten.forEach(function(p){
-    var stamm = p.filmcode ? String(p.filmcode).slice(0,4) : (p.titel||'?');
+    var stamm = p.filmcode ? String(p.filmcode).slice(0,4) : String(p.titel||'?').replace(/\s+(?:TR|Trailer)$/i,'');   // Build 1306
     var k = p.datum+'|'+(p.rolle||'')+'|'+stamm;
     if(!grp[k]){ grp[k] = {titel:p.titel, rolle:p.rolle, filmcode:p.filmcode||null, datum:p.datum, brutto:0, takes:0, grundgage:0, take_gage:0}; order.push(k); }
     var q = grp[k]; q.brutto = glR2(q.brutto + p.betrag);
@@ -16911,8 +16951,19 @@ function glSesamEinzel(page){
       // (FFS 3298/20260101 "Sonderregelung 400,00": Grundgage bleibt 85, wie im KI-Prompt "Betrag der + Grundgage-Zeile")
       q.sonstige = glR2((q.sonstige||0) + p.betrag);
     }
+    else if(/^trailer$/i.test(String(p.art).trim())) q._trailer1306 = glR2((q._trailer1306||0) + p.betrag);   // Build 1306
     else q.grundgage = glR2(q.grundgage + p.betrag);   // Grundgage, Pauschale, Stundenposten
   });
+  // Build 1306 (Tim, 15.11.2026): Trailer am selben Drehtag. Realfall Cinephon 1384/20261002, 24.09.2026:
+  // "Dexter Resurrection S2" (Grundgage 80 + 11 Takes) und "Trailer 400" mit Titel "Dexter Resurrection S2 TR" wurden
+  // zwei Gruppen, also zwei Drehtage auf einem Beleg. Die zweite fand keinen Termin, Bestaetigen war gesperrt, und das
+  // Zuordnen auf denselben Termin schrieb dort 400 statt 524 EUR und 28 statt 36,68 MwSt. Jetzt zaehlt ein Titel mit
+  // angehaengtem "TR"/"Trailer" zur selben Gruppe (die Zeile darueber nimmt dann schon den Haupttitel), und der
+  // Trailer-Betrag ist sonstige wie die FFS-Sonderregelung, solange die Gruppe eine eigene Grundgage hat.
+  // Reiner Trailer-Beleg ohne Grundgage: Betrag bleibt Grundgage wie bisher.
+  order.forEach(function(k){ var q = grp[k]; if(!q._trailer1306) return;
+    if(q.grundgage) q.sonstige = glR2((q.sonstige||0) + q._trailer1306); else q.grundgage = glR2(q.grundgage + q._trailer1306);
+    delete q._trailer1306; });
   r.termine = order.map(function(k){ glPaket(grp[k], grp[k]._label110); return grp[k]; });
   r.titel = r.termine.length ? r.termine[0].titel : null;
   r.rolle = r.termine.length ? r.termine[0].rolle : null;
@@ -26451,7 +26502,7 @@ function openRechnungSheet(id){
   // Auftraggeber-Dropdown füllen (Build 790)
   var empfSel=document.getElementById('re-empf-sel');
   if(empfSel){
-    empfSel.innerHTML='<option value="">Adressbuch</option>';
+    empfSel.innerHTML='<option value="">Aus dem Adressbuch wählen …</option>';
     (db.auftraggeber||[]).slice().sort(function(a,b){
       return String(a.name||'').localeCompare(String(b.name||''));
     }).forEach(function(a){
@@ -26533,6 +26584,7 @@ function openRechnungSheet(id){
     if(ustEl) ustEl.value=String(r.ust!=null?r.ust:0.07);
   }
 
+  _reEmpfBlockAusFeldern1308();   // Build 1308
   reSetStatus(_reStatus);
   reRenderPositionen();
   reCalcTotal();
@@ -26575,6 +26627,7 @@ function reTerminSelected(){
   if(!t) return;
   var net=(parseFloat(t.kommgage)||0)+(parseInt(t.takes)||0)*(parseFloat(t.rate)||0);
   document.getElementById('re-empf').value=t.studio||'';
+  _reEmpfBlockAusFeldern1308();   // Build 1308
   document.getElementById('re-leistdatum').value=(t.datum||'');  // Build 1058: ISO für type=date
   document.getElementById('re-leistung').value='Synchronsprecherleistung: '+esc(t.titel||''+(t.regie?' – Regie: '+t.regie:''));
   _rePositionen=[{beschr:t.titel||(t.studio+' Synchronleistung'),menge:parseInt(t.takes)||1,einheit:parseInt(t.takes)?'Takes':'Pau.',preis:(parseInt(t.takes)||1)>0?parseFloat(t.rate)||net:net}];
@@ -26672,6 +26725,7 @@ function saveRechnung(){
   r.empf=document.getElementById('re-empf').value;
   var adrEl3=document.getElementById('re-empf-adresse');
   r.empfAdresse=adrEl3?adrEl3.value:'';
+  var _ab1308 = _reEmpfInsAdressbuch1308(r.empf, r.empfAdresse);   // Build 1308
   r.leistung=document.getElementById('re-leistung').value;
   r.leistdatum=document.getElementById('re-leistdatum').value;
   r.positionen=JSON.parse(JSON.stringify(_rePositionen));
@@ -26693,7 +26747,7 @@ function saveRechnung(){
   closeRechnungSheet();
   rRechnungen();
   rTermine();updateBadge();
-  showToast('✓ Rechnung '+(isNew?'erstellt':'gespeichert'));
+  showToast('✓ Rechnung '+(isNew?'erstellt':'gespeichert')+(_ab1308==='neu'?' · Empfänger ins Adressbuch übernommen':(_ab1308==='aktualisiert'?' · Adresse im Adressbuch aktualisiert':'')));
 }
 
 // ── AUFTRAGGEBER-ADRESSBUCH (Build 790) ───────────────────────
@@ -26731,6 +26785,102 @@ function reEmpfMerken(){
     }
   }catch(e){}
 }
+// ── Build 1308 (Tim, 16.11.2026): Empfaenger in EINEM Feld ─────────────
+// Vorher zwei Felder: links eine einzeilige Eingabe (Zeilenumbrueche beim Einfuegen gingen verloren, die ganze
+// Anschrift landete in einer Zeile und so auch auf dem PDF), rechts ein Adressfeld, plus Link "Neue Adresse und
+// merken". Realfall 15/2026 tvinart: Adresse links und rechts, also doppelt. Jetzt: ein mehrzeiliges Feld, erste
+// Zeile Name, Rest Anschrift. Einzeilig eingefuegte Adressen werden beim Einfuegen/Verlassen an Strasse und PLZ
+// umgebrochen. Beim Speichern kommt ein neuer Empfaenger automatisch ins Adressbuch, eine geaenderte Anschrift wird
+// dort aktualisiert. Gespeichert wird weiter in r.empf / r.empfAdresse (PDF, Liste, Bankabgleich unveraendert).
+var _STR_ENDUNG_1308 = '(?:stra(?:ß|ss)e|str\\.?|weg|allee|platz|damm|ring|gasse|ufer|chaussee|steig|pfad|markt|promenade|zeile|kamp|wall|graben|hof)';
+function _reEmpfZeileAufteilen1308(z){
+  z = String(z||'').replace(/\s+/g,' ').trim();
+  if(!z) return [];
+  // Kommas: "Firma, Strasse 5, 12345 Ort"
+  if(z.indexOf(',')>=0){ var kt = z.split(/\s*,\s*/).filter(Boolean); if(kt.length>=2) return kt; }
+  var teile = [z];
+  // PLZ + Ort ans Ende
+  var mp = /\s(?:D-\s?)?(\d{5}\s+\S.*)$/.exec(z);
+  if(mp){ teile = [z.slice(0, mp.index).trim(), mp[1].trim()]; }
+  var vorne = teile[0];
+  // Strasse mit Hausnummer am Ende des vorderen Teils
+  var reZus = new RegExp('(\\S*' + _STR_ENDUNG_1308 + ')\\s*(\\d+\\s?[a-zA-Z]?(?:\\s?[-/]\\s?\\d+[a-zA-Z]?)?)$', 'i');
+  var ms = reZus.exec(vorne);
+  if(ms && ms.index > 0){
+    var start = ms.index;
+    // Ortsadjektiv davor mitnehmen: "Gladbacher Straße", "Tonndorfer Hauptstraße", davor ggf. "Bergisch"
+    var worte = vorne.slice(0, start).trim().split(' ');
+    if(worte.length > 1 && /^[A-ZÄÖÜ][\wäöüß\-]*er$/.test(worte[worte.length-1])){
+      worte.pop();
+      if(worte.length > 1 && /^[A-ZÄÖÜ][\wäöüß\-]*(?:isch|sch)$/.test(worte[worte.length-1])) worte.pop();
+      start = worte.join(' ').length + 1;
+    }
+    var name = vorne.slice(0, start).trim(), str = vorne.slice(start).trim();
+    if(name) teile = [name, str].concat(teile.slice(1));
+  } else {
+    // Strassen ohne Endung: "Am Alten Hafen 3", "In der Aue 7", "Unter den Linden 12"
+    var mv = /\s((?:Am|An der|An den|Im|In der|In den|Auf der|Auf dem|Zum|Zur|Unter den|Hinter der|Alt-\S+)\s.*?\d+\s?[a-zA-Z]?)$/.exec(vorne);
+    if(mv && mv.index > 0) teile = [vorne.slice(0, mv.index).trim(), mv[1].trim()].concat(teile.slice(1));
+  }
+  return teile;
+}
+function _reEmpfBlockAufteilen1308(){
+  var el = document.getElementById('re-empf-block'); if(!el) return;
+  var zeilen = String(el.value||'').split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+  if(zeilen.length === 1){
+    var neu = _reEmpfZeileAufteilen1308(zeilen[0]);
+    if(neu.length > 1){ el.value = neu.join('\n'); }
+  }
+  _reEmpfBlockEingabe1308();
+}
+function _reEmpfBlockEingabe1308(){
+  var el = document.getElementById('re-empf-block'); if(!el) return;
+  var zeilen = String(el.value||'').split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+  var e = document.getElementById('re-empf'), a = document.getElementById('re-empf-adresse');
+  if(e) e.value = zeilen[0] || '';
+  if(a) a.value = zeilen.slice(1).join('\n');
+  _reEmpfStatus1308();
+}
+function _reEmpfBlockAusFeldern1308(){
+  var el = document.getElementById('re-empf-block'); if(!el) return;
+  var e = document.getElementById('re-empf'), a = document.getElementById('re-empf-adresse');
+  var name = String((e&&e.value)||'').trim(), adr = String((a&&a.value)||'').trim();
+  // Altbestand: Anschrift steht zusaetzlich am Ende der Namenszeile (15/2026) -> dort abschneiden
+  if(adr){
+    var adrEinz = adr.replace(/\s+/g,' ').trim();
+    if(adrEinz && name.replace(/\s+/g,' ').slice(-adrEinz.length) === adrEinz) name = name.replace(/\s+/g,' ').slice(0, -adrEinz.length).trim() || name;
+  }
+  var zeilen = [name].concat(adr ? adr.split(/\r?\n/) : []).map(function(x){ return x.trim(); }).filter(Boolean);
+  if(zeilen.length === 1){ var z2 = _reEmpfZeileAufteilen1308(zeilen[0]); if(z2.length > 1) zeilen = z2; }
+  el.value = zeilen.join('\n');
+  _reEmpfBlockEingabe1308();
+}
+function _reAdrNorm1308(x){ return String(x||'').split(/\r?\n/).map(function(z){ return z.replace(/\s+/g,' ').trim(); }).filter(Boolean).join('\n'); }
+function _reEmpfAdressbuchTreffer1308(name){
+  var n = String(name||'').trim().toLowerCase(); if(!n) return null;
+  return (db.auftraggeber||[]).find(function(x){ return String(x.name||'').trim().toLowerCase() === n; }) || null;
+}
+function _reEmpfStatus1308(){
+  var st = document.getElementById('re-empf-status'); if(!st) return;
+  var name = (document.getElementById('re-empf')||{}).value || '', adr = String((document.getElementById('re-empf-adresse')||{}).value || '').trim();
+  if(!String(name).trim()){ st.textContent = ''; return; }
+  var t = _reEmpfAdressbuchTreffer1308(name);
+  if(!t) st.textContent = 'Neu: kommt beim Speichern ins Adressbuch';
+  else if(adr && _reAdrNorm1308(t.adresse) !== _reAdrNorm1308(adr)) st.textContent = 'Anschrift geändert: wird im Adressbuch aktualisiert';
+  else st.textContent = '✓ Steht im Adressbuch';
+}
+function _reEmpfInsAdressbuch1308(name, adresse){
+  name = String(name||'').trim(); adresse = String(adresse||'').trim();
+  if(!name) return null;
+  db.auftraggeber = db.auftraggeber || [];
+  var t = _reEmpfAdressbuchTreffer1308(name);
+  if(!t){
+    db.auftraggeber.push({ id: uid(), name: name, adresse: adresse, createdAt: new Date().toISOString() });
+    return 'neu';
+  }
+  if(adresse && _reAdrNorm1308(t.adresse) !== _reAdrNorm1308(adresse)){ t.adresse = adresse; return 'aktualisiert'; }
+  return null;
+}
 function reEmpfSelected(){
   var sel=document.getElementById('re-empf-sel');
   if(!sel||!sel.value){ return; }
@@ -26741,6 +26891,7 @@ function reEmpfSelected(){
   var adr=document.getElementById('re-empf-adresse');
   if(emp) emp.value = a.name || '';
   if(adr) adr.value = a.adresse || '';
+  _reEmpfBlockAusFeldern1308();   // Build 1308
 }
 
 // Auftraggeber-Verwaltung als Bottom-Sheet
@@ -26763,6 +26914,7 @@ function auftraggeberWaehlen(id){
   if(e) e.value = a.name||'';
   if(ad) ad.value = a.adresse||'';
   if(sel) sel.value='';
+  _reEmpfBlockAusFeldern1308();   // Build 1308
   closeAuftraggeberSheet();
   showToast('\u2713 '+(a.name||'Auftraggeber')+' \u00fcbernommen');
 }
