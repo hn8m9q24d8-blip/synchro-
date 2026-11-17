@@ -2486,6 +2486,27 @@ setTimeout(function(){
   if(n.length){ db._mig1296 = { am:new Date().toISOString(), termine:n }; console.log('[Build 1296] brutto_termin nachgetragen', n); }
   save(db);
 }, 0);
+// ─── Build 1312: kommgage_abgerechnet um Trailer/Sonstiges ergaenzen (einmalig) ───
+setTimeout(function(){
+  if(!db || db._mig1312Done) return;
+  var log = [];
+  try{
+    (db.dokumente||[]).forEach(function(d){
+      var so = parseFloat(d.sonstige)||0; if(!d.bestaetigt || !(so > 0) || !d.terminId) return;
+      var t = (db.termine||[]).find(function(x){ return x.id===d.terminId; }); if(!t) return;
+      var gg = parseFloat(d.grundgage)||0, ka = parseFloat(t.kommgage_abgerechnet)||0;
+      if(Math.abs(ka - gg) > 0.01) return;
+      var neu = _ggMitSonstige1312(gg, so, t.kommgage); if(neu === gg) return;
+      t.kommgage_abgerechnet = neu;
+      var kg = parseFloat(t.kommgage)||0;
+      t.kommgage_differenz = Math.abs(kg - neu) > 0.5 ? Math.round((kg - neu)*100)/100 : 0;
+      log.push(t.datum+' '+(t.titel||'')+': '+gg+' -> '+neu);
+    });
+  }catch(e){ console.warn('[Build 1312]', e); return; }
+  db._mig1312Done = true;
+  if(log.length){ db._mig1312 = { am:new Date().toISOString(), log:log }; console.log('[Build 1312]', log); }
+  save(db);
+}, 0);
 // ─── Build 1308: Adressbuch-Eintraege mit Anschrift im Namen aufraeumen (einmalig) ───
 // Bis 1307 war der Empfaengername einzeilig; eingefuegte Anschriften standen dort in einer Zeile (tvinart 16.11.2026).
 // Mit dem neuen Ein-Feld-Empfaenger (erste Zeile = Name) wuerde sonst beim naechsten Speichern ein zweiter Eintrag
@@ -5601,7 +5622,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1310';
+  if(elH) elH.textContent = '1312';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -7195,6 +7216,7 @@ function openDetail(id){
         +(function(){ var n=_k4TakesRechnerisch1285(t,_bd1283.abger), tk=parseInt(t.takes)||0; return (n!=null && tk && n!==tk) ? ' <span style="font-size:11px;font-weight:700">· rechnerisch '+n+' statt '+tk+' Takes</span>' : ''; })()   // Build 1285
         +'</div>'
         +(_bd1283.diff<0?'<div style="font-size:10px;color:var(--orange);margin-top:4px">Grundlage für Mahnung falls nicht beglichen</div>':'')
+        +_nachgefragtHtml1312(t, id)   // Build 1312
         +'</div>';
     }
   }
@@ -7230,6 +7252,7 @@ function openDetail(id){
       +'</div>'
       +diffLines
       +'<div style="font-size:10px;color:var(--orange);margin-top:4px">Grundlage für Mahnung falls nicht beglichen</div>'
+      +_nachgefragtHtml1312(t, id)   // Build 1312
       +'</div>';
   }
 
@@ -9431,6 +9454,69 @@ function _updateMerklisteStern(t){
     span.textContent = '☆';
     btn.style.color = '';
   }
+}
+
+// ── Build 1312 (Tim, 17.11.2026) ─────────────────────────────────────────────
+// (1) Trailer/Sonstiges beim Gagenvergleich: Cinephon 1384/20261002 (24.09.) hat Grundgage 80 + Trailer 400.
+//     Tims Dispo-Gage 550 = 150 Festgage + 400 Trailer. Verglichen wurde 550 gegen 80 (Differenz 470 statt 70,
+//     Daten-Check haette 503 statt 103 gemeldet). Sonstige zaehlt mit, wenn die Dispo-Gage sie offensichtlich
+//     enthaelt (naeher an Grundgage+Sonstige als an Grundgage). FFS-Sonderregelung ohne Dispo-Anteil bleibt draussen.
+function _ggMitSonstige1312(gg, sonst, dispoKomm){
+  gg = parseFloat(gg)||0; var so = parseFloat(sonst)||0, dk = parseFloat(dispoKomm)||0;
+  if(so > 0 && dk > gg + 0.5 && Math.abs(dk - (gg + so)) < Math.abs(dk - gg)) return Math.round((gg + so)*100)/100;
+  return gg;
+}
+// (2) "Beim Studio nachgefragt": Datum am Termin. Nach 28 Tagen mit weiter offener Differenz -> Mahnwesen.
+var _NACHFRAGE_TAGE_1312 = 28;
+function _differenzOffen1312(t){
+  if(!t || t.differenz_geklaert) return false;
+  try{ if(_k4Termin1283(t)) return Math.abs(_k4BruttoDiff1283(t).diff) >= 0.02; }catch(e){}
+  var tkN = (t.takes==null||t.takes==='') ? null : (parseFloat(t.takes)||0);
+  var tkA = (t.takes_abgerechnet==null) ? null : (parseFloat(t.takes_abgerechnet)||0);
+  var kgN = (t.kommgage==null||t.kommgage==='') ? null : (parseFloat(t.kommgage)||0);
+  var kgA = (t.kommgage_abgerechnet==null) ? null : (parseFloat(t.kommgage_abgerechnet)||0);
+  var takesD = (tkN!==null && tkA!==null && tkN===tkA) ? 0 : (parseFloat(t.takes_differenz)||0);
+  var kommD  = (kgN!==null && kgA!==null && kgN===kgA) ? 0 : (parseFloat(t.kommgage_differenz)||0);
+  return !!(takesD || kommD || (parseFloat(t.rate_differenz)||0));
+}
+function _nachfrageFaellig1312(t){
+  if(!t || !t.nachgefragt_am) return null;
+  var ab = new Date(String(t.nachgefragt_am).slice(0,10)+'T12:00:00'); ab.setDate(ab.getDate() + _NACHFRAGE_TAGE_1312);
+  return ab.toISOString().slice(0,10);
+}
+function _nachgefragtHtml1312(t, id){
+  if(t.nachgefragt_am){
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(138,106,63,.35);font-size:11px;color:#8a6a3f;display:flex;justify-content:space-between;gap:8px;align-items:center">'
+      +'<span>✉ Nachgefragt am '+fd(String(t.nachgefragt_am).slice(0,10))+' · Erinnerung ab '+fd(_nachfrageFaellig1312(t))+'</span>'
+      +'<span onclick="terminNachgefragt1312(\''+id+'\')" style="text-decoration:underline;cursor:pointer;white-space:nowrap">zurücksetzen</span></div>';
+  }
+  return '<button type="button" onclick="terminNachgefragt1312(\''+id+'\')" style="margin-top:9px;width:100%;background:#fff;color:#8a6a3f;border:1.5px solid #e7dbc6;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation">✉ Beim Studio nachgefragt</button>';
+}
+function terminNachgefragt1312(terminId, nochmal){
+  var t=(db.termine||[]).find(function(x){return x.id===terminId;}); if(!t) return;
+  if(t.nachgefragt_am && !nochmal){
+    delete t.nachgefragt_am; save(db); openDetail(terminId); showToast('↩ Nachfrage zurückgesetzt'); return;
+  }
+  t.nachgefragt_am = today();
+  save(db);
+  if(nochmal){ try{ rMahnwesen(); }catch(e){} showToast('✉ Erneut nachgefragt · Erinnerung in 4 Wochen'); return; }
+  openDetail(terminId);
+  showToast('✉ Gemerkt · Erinnerung in 4 Wochen, falls keine Korrektur kommt');
+}
+function _nachfrageErinnerungen1312(){
+  var heute = today();
+  return (db.termine||[]).filter(function(t){
+    return t && t.nachgefragt_am && _nachfrageFaellig1312(t) <= heute && _differenzOffen1312(t);
+  }).sort(function(a,b){ return String(a.nachgefragt_am) < String(b.nachgefragt_am) ? -1 : 1; });
+}
+// (3) Doppelter bestaetigter Beleg ohne eigene Buchung, dessen Gutschrift-Nr. ueber einen anderen Beleg gebucht ist
+//     (Realfall 1384/20261001 doppelt nach erneutem Einlesen). Loeschen war bisher nur "PDF entfernen", der Beleg
+//     blieb und der Daten-Check meldete dauerhaft "Beleg NICHT verbucht".
+function _dokDoppelGebucht1312(d){
+  if(!d || !d.bestaetigt || !d.gutschrift_nr || typeof dbv2==='undefined' || !dbv2 || !dbv2.abrechnungen) return false;
+  var eigene = dbv2.abrechnungen.some(function(a){ return a.pdf_datei_id === d.id; });
+  if(eigene) return false;
+  return dbv2.abrechnungen.some(function(a){ return a.beleg_nr === d.gutschrift_nr && a.pdf_datei_id && a.pdf_datei_id !== d.id; });
 }
 
 function terminDifferenzKlaeren(terminId){
@@ -20022,7 +20108,7 @@ function dokOpenDetail(id, _keepEdit){
       body+='</div>';
     }
     if(d.dataURL){
-      body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">KI-Analyse starten</button>';
+      body+='<button type="button" onclick="dokAnalyseOne()" style="width:100%;background:var(--ai);color:#fff;border:none;border-radius:12px;padding:16px;text-align:center;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation;margin-bottom:8px">'+((_offlineLeserAktiv() && d.mime==='application/pdf') ? 'Lokal auslesen' : 'KI-Analyse starten')+'</button>';   // Build 1311: PDFs liest der Offline-Leser, nicht die KI
     } else {
       body+='<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#8a6a3f">⚠ Bild nicht im Speicher — App neu gestartet. Bitte neu einlesen.</div>';
       body+='<label style="width:100%;display:block"><input type="file" accept="image/*,application/pdf" style="display:none" onchange="dokReuploadFile(this,\''+d.id+'\')"><div style="width:100%;background:var(--cream2);color:var(--ink);border:1.5px solid var(--ink5);border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:14px;cursor:pointer;touch-action:manipulation;box-sizing:border-box">Datei neu einlesen</div></label>';
@@ -22377,7 +22463,7 @@ function dokBestaetigenMonat(dokId){
       }
       if(sTakes) t.takes_abgerechnet = sTakesEffektiv;
       if(s.take_gage) t.rate_abgerechnet = parseFloat(s.take_gage)||0;
-      if(s.grundgage) t.kommgage_abgerechnet = parseFloat(s.grundgage)||0;
+      if(s.grundgage) t.kommgage_abgerechnet = _ggMitSonstige1312(parseFloat(s.grundgage)||0, s.sonstige, t.kommgage);   // Build 1312
       if(sTakesEffektiv && dispTakes && sTakesEffektiv !== dispTakes){
         t.takes_differenz = dispTakes - sTakesEffektiv;
       } else {
@@ -23053,6 +23139,7 @@ function dokMergeIntoTermin(d, termin){
     var brutto=parseFloat(d.brutto)||0;
     var netto=parseFloat(d.netto)||0;
     var grundgage=parseFloat(d.grundgage)||0;
+    grundgage = _ggMitSonstige1312(grundgage, d.sonstige, termin && termin.kommgage);   // Build 1312
     var takeGage=parseFloat(d.take_gage)||0;
     var takes=parseInt(d.takes)||0;
     var auszahlung=parseFloat(d.auszahlung)||brutto||0;
@@ -23724,6 +23811,13 @@ function dokDeleteCurrent(){
   if(!_dokCurrentId) return;
   var d=(db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
+  // Build 1312: doppelter Beleg ohne eigene Buchung -> richtig loeschen, die Buchung haengt am anderen Beleg
+  if(_dokDoppelGebucht1312(d)){
+    if(!confirm('Doppelten Beleg '+d.gutschrift_nr+' löschen?\n\nDie Gutschrift ist über den anderen Beleg gebucht und bleibt erhalten.')) return;
+    db.dokumente=(db.dokumente||[]).filter(function(x){return x.id!==d.id;});
+    save(db); dokDetailClose(); rDokumente(); showToast('Doppelter Beleg gelöscht');
+    return;
+  }
   // Build 740: bestätigte Abrechnung → Stub-Modus (Daten bleiben)
   if(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn')){
     if(!confirm('PDF-Vorschau aus "'+(d.beschr||d.dateiname||'Dokument')+'" entfernen?\n\nDie eingepflegten Abrechnungsdaten bleiben vollständig erhalten.')) return;
@@ -23915,6 +24009,13 @@ function dokReuploadFile(inp, dokId){
 function dokDeleteOne(){
   var d = (db.dokumente||[]).find(function(x){return x.id===_dokCurrentId;});
   if(!d) return;
+  // Build 1312: doppelter Beleg ohne eigene Buchung -> richtig loeschen, die Buchung haengt am anderen Beleg
+  if(_dokDoppelGebucht1312(d)){
+    if(!confirm('Doppelten Beleg '+d.gutschrift_nr+' löschen?\n\nDie Gutschrift ist über den anderen Beleg gebucht und bleibt erhalten.')) return;
+    db.dokumente=(db.dokumente||[]).filter(function(x){return x.id!==d.id;});
+    save(db); dokDetailClose(); rDokumente(); showToast('Doppelter Beleg gelöscht');
+    return;
+  }
   // Build 740: bestätigte Abrechnung → Stub-Modus (Daten bleiben)
   if(d.bestaetigt && (d.typ==='abrechn'||d.typ==='monats_abrechn')){
     if(!confirm('PDF-Vorschau aus "'+(d.beschr||d.dateiname||'Dokument')+'" entfernen?\n\nDie eingepflegten Abrechnungsdaten bleiben vollständig erhalten.')) return;
@@ -25605,7 +25706,26 @@ function rMahnwesen(){
 
   var heuteMs = new Date(today()).getTime();
   var offen = _mahnOffeneBelege();
-  _updateMahnBadge(offen.length);
+  var _nf1312 = []; try{ _nf1312 = _nachfrageErinnerungen1312(); }catch(e){}   // Build 1312
+  _updateMahnBadge(offen.length + _nf1312.length);
+
+  var _nfHtml1312 = '';
+  if(_nf1312.length){
+    _nfHtml1312 += '<div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);font-weight:700;margin:2px 2px 8px">Nachgefragt, noch keine Korrektur ('+_nf1312.length+')</div>';
+    _nf1312.forEach(function(t){
+      var tage = Math.floor((heuteMs - new Date(String(t.nachgefragt_am).slice(0,10)).getTime())/86400000);
+      _nfHtml1312 += '<div style="background:var(--orange2);border:1.5px solid #e7dbc6;border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+        +'<div style="font-size:14px;font-weight:800">'+esc(t.titel||'Termin')+'</div>'
+        +'<div style="font-size:11px;color:#666;margin-top:1px">'+esc(t.studio||'')+(t.datum?' · '+fd(t.datum):'')+(t.gutschrift_nr?' · '+esc(t.gutschrift_nr):'')+'</div>'
+        +'<div style="font-size:11px;color:#8a6a3f;margin:6px 0 8px">Abrechnungs-Differenz, nachgefragt am '+fd(String(t.nachgefragt_am).slice(0,10))+' ('+tage+' Tage her)</div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button type="button" onclick="openDetail(\''+t.id+'\');switchView(\'termine\')" style="flex:1;background:var(--cream2);color:var(--ink);border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">Termin öffnen</button>'
+        +'<button type="button" onclick="terminNachgefragt1312(\''+t.id+'\',true)" style="flex:1;background:#fff;color:#8a6a3f;border:1.5px solid #e7dbc6;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">✉ Erneut nachgefragt</button>'
+        +'</div></div>';
+    });
+    if(offen.length) _nfHtml1312 += '<div style="height:8px"></div>';
+  }
+  if(!offen.length && _nfHtml1312){ el.innerHTML = _nfHtml1312; return; }
 
   if(!offen.length){
     el.innerHTML = '<div class="empty-state">'
@@ -25618,9 +25738,10 @@ function rMahnwesen(){
 
   // Älteste Fälligkeit zuerst
   offen.sort(function(a,b){ return _mahnFaelligDatum(a) < _mahnFaelligDatum(b) ? -1 : 1; });
+  var _vorspann1312 = _nfHtml1312;   // Build 1312
 
   var _nMahnbar1305 = offen.filter(function(ab){ var e=_zahlErwartung1305(ab); return e && e.mahnbar; }).length;
-  var html = '<div style="background:var(--red2);border:1.5px solid #e3c4c0;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
+  var html = _vorspann1312 + '<div style="background:var(--red2);border:1.5px solid #e3c4c0;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
     +'<div style="font-size:13px;font-weight:800;color:var(--orange);margin-bottom:3px">⚠ '+offen.length+' ausstehende Zahlung'+(offen.length>1?'en':'')+'</div>'
     +(_nMahnbar1305 ? '<div style="font-size:11px;color:#8a6a3f">Studios sind gesetzlich zur Zahlung binnen 30 Tagen verpflichtet (§ 271a BGB).</div>' : '')
     +'</div>';
@@ -25775,7 +25896,9 @@ function runIntegrityCheck(silent){
       if(a.pdf_datei_id){ (_v2ByPdf[a.pdf_datei_id]=_v2ByPdf[a.pdf_datei_id]||[]).push(a); }
     });
     (db.dokumente||[]).forEach(function(dok){
-      if(dok.bestaetigt && (dok.typ==='abrechn'||dok.typ==='monats_abrechn') && !_v2ByPdf[dok.id]){
+      if(dok.bestaetigt && (dok.typ==='abrechn'||dok.typ==='monats_abrechn') && !_v2ByPdf[dok.id] && _dokDoppelGebucht1312(dok)){
+        warnings.push('\u26a0 Doppelter Beleg: '+esc(dok.gutschrift_nr)+' ist schon über einen anderen Beleg gebucht. Diesen Beleg im Archiv öffnen und löschen.');   // Build 1312
+      } else if(dok.bestaetigt && (dok.typ==='abrechn'||dok.typ==='monats_abrechn') && !_v2ByPdf[dok.id]){
         warnings.push('\u26a0 dbv2: Beleg NICHT verbucht — '+esc(dok.dateiname||dok.id)+' (fehlt in USt-VA & Jahresabschluss)');
       }
     });
@@ -26048,6 +26171,7 @@ function runIntegrityCheck(silent){
       warnings.push('⚠ Tarif-Abweichung: '+esc(t.titel||t.studio||'?')+' ('+fd(t.datum)+'): '
         + 'disponiert '+fmtEur(kg)+'/'+fmtEur(rt)+' \u2014 abgerechnet '+fmtEur(ka)+'/'+fmtEur(ra)
         + ' \u2014 '+(delta>0?'offen ':'zuviel gezahlt ')+fmtEur(Math.abs(delta))
+        + (t.nachgefragt_am ? ' \u00b7 nachgefragt am '+fd(String(t.nachgefragt_am).slice(0,10)) : '')   // Build 1312
         +'\u0001T'+t.id);
     });
   })();
