@@ -465,6 +465,48 @@ body.diskret input.dsk-in:not(:focus){-webkit-text-security:disc}
 textarea.sheet-input{line-height:1.4}
 input[type=date].sheet-input{min-height:44px}
 select.sheet-input{padding-right:28px}
+/* Build 1309: Rechnungs-Sheet "iOS-Einstellungen" */
+.rs{font-family:var(--sans);color:var(--ink)}
+.rs-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 16px 6px;flex-shrink:0}
+.rs-hd-t{font-size:16.5px;font-weight:600}
+.rs-hd-btn{color:var(--accent);font-size:16px;cursor:pointer;padding:4px 2px;min-width:72px}
+.rs-hd-ok{font-weight:600;text-align:right}
+.rs-body{overflow-y:auto;overflow-x:hidden;padding:2px 16px 8px;flex:1;-webkit-overflow-scrolling:touch}
+.rs-grp{background:var(--paper2);border:1px solid var(--hair);border-radius:12px;overflow:hidden;margin-top:8px}
+.rs-gl{margin:10px 14px -3px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);font-weight:600}
+.rs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:0 14px;border-top:1px solid var(--hair);font-size:15px;position:relative}
+.rs-grp>.rs-row:first-child,.rs-grp>:first-child{border-top:0}
+.rs-k{color:var(--ink2);white-space:nowrap}
+.rs-in{flex:1;min-width:0;border:0;outline:0;background:none;text-align:right;font:inherit;font-size:16px;color:var(--ink);padding:9px 0;-webkit-appearance:none;appearance:none}
+.rs-in::placeholder,.rs-ta::placeholder{color:var(--ink4)}
+.rs-date{max-width:150px;margin-left:auto;display:block}
+.rs-date::-webkit-date-and-time-value{text-align:right}
+.rs-date::-webkit-calendar-picker-indicator{opacity:.35}
+.rs-ab{color:var(--accent);font-size:13.5px;font-weight:500;min-height:38px}
+.rs-ab select{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px}
+.rs-chev{color:var(--ink5);font-size:17px}
+.rs-ta{display:block;width:100%;box-sizing:border-box;border:0;outline:0;background:none;resize:none;font:inherit;font-size:16px;line-height:1.4;color:var(--ink);padding:8px 14px 6px;border-top:1px solid var(--hair)}
+.rs-grp>.rs-ta:first-child{border-top:0}
+.rs-ta1{padding:11px 14px}
+.rs-status{font-size:11.5px;color:var(--ink3);padding:0 14px 8px;min-height:6px}
+.rs-status:empty{padding:0}
+.rs-add{color:var(--accent);cursor:pointer;justify-content:flex-start}
+.rs-pos{cursor:pointer}
+.rs-pos .rs-k{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.rs-pos-v{white-space:nowrap}
+.rs-pos-ed{border-top:1px solid var(--hair);padding:7px 14px 8px;background:var(--paper)}
+.rs-pos-ed input{border:1px solid var(--hair);border-radius:8px;background:var(--paper2);font:inherit;font-size:16px;padding:7px 10px;color:var(--ink);outline:0;min-width:0;box-sizing:border-box;-webkit-appearance:none}
+.rs-pos-ed .z{display:flex;gap:6px;margin-top:6px;align-items:center}
+.rs-pos-ed .del{color:var(--red);font-size:13px;cursor:pointer;padding:6px 0 0}
+.rs-seg{display:flex;background:#EEEBE4;border-radius:8px;padding:2px;font-size:13px}
+.rs-seg span{padding:4px 11px;border-radius:6px;color:var(--ink2);cursor:pointer}
+.rs-seg span.on{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);color:var(--ink);font-weight:600}
+.rs-tot{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:12px 0 0;padding:0 14px}
+.rs-tot-k{font-size:12.5px;color:var(--ink3)}
+.rs-tot-v{font-size:27px;font-weight:600;letter-spacing:-.5px;white-space:nowrap}
+.rs-foot{padding:8px 16px calc(14px + env(safe-area-inset-bottom));flex-shrink:0}
+.rs-pdf{text-align:center;padding:14px 0;background:var(--accent);color:#fff;border-radius:12px;font-weight:600;font-size:15.5px;cursor:pointer}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -1122,100 +1164,58 @@ select.sheet-input{padding-right:28px}
 
 <!-- ══════ RECHNUNG SHEET ════════════════════════════════ -->
 <div class="overlay-bg" id="re-sheet-bg" onclick="closeRechnungSheetGuarded()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200"></div>
-<div id="rechnung-sheet" style="display:none;position:fixed;bottom:-100%;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;z-index:201;transition:bottom .3s ease;max-height:92vh;flex-direction:column">
-  <div style="width:36px;height:4px;background:#ddd;border-radius:2px;margin:12px auto 0"></div>
-  <div style="display:flex;align-items:center;padding:12px 16px 10px;border-bottom:1px solid #eee">
-    <div style="flex:1;font-size:17px;font-weight:800" id="re-sheet-title">Neue Rechnung</div>
-    <div onclick="closeRechnungSheet()" style="font-size:22px;color:#999;cursor:pointer;padding:4px">✕</div>
+<!-- Build 1309 (Tim, 17.11.2026): Rechnungs-Sheet im Stil "iOS-Einstellungen" (Vorschlag B). Vorher viele einzelne
+     Blasen, man musste scrollen. Jetzt gruppierte Zeilen, Beschriftung links, Wert rechts, passt ohne Scrollen.
+     Alle Feld-IDs sind dieselben wie vorher (re-nr, re-datum, re-empf*, re-leistung, re-leistdatum, re-ust, re-faellig,
+     re-prev-*, re-pdf-btn), damit Speichern, PDF und Adressbuch unveraendert laufen. -->
+<div id="rechnung-sheet" class="rs" style="display:none;position:fixed;bottom:-100%;left:0;right:0;background:var(--paper);border-radius:14px 14px 0 0;z-index:201;transition:bottom .3s ease;max-height:94vh;flex-direction:column">
+  <div style="width:36px;height:4px;background:var(--ink5);border-radius:2px;margin:7px auto 0;flex-shrink:0"></div>
+  <div class="rs-hd">
+    <div class="rs-hd-btn" onclick="closeRechnungSheetGuarded()">Abbrechen</div>
+    <div class="rs-hd-t" id="re-sheet-title">Neue Rechnung</div>
+    <div class="rs-hd-btn rs-hd-ok" onclick="saveRechnung()">Sichern</div>
   </div>
-  <div style="overflow-y:auto;overflow-x:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;flex:1;max-width:100%">
+  <div class="rs-body">
     <input type="hidden" id="re-id">
-
-    <!-- Rechnungsnummer + Datum -->
-    <div style="display:flex;gap:10px">
-      <div style="flex:1">
-        <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">RECHNUNGSNUMMER</div>
-        <input id="re-nr" class="sheet-input" placeholder="2026-001" style="font-family:monospace">
-      </div>
-      <div style="flex:1">
-        <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">DATUM</div>
-        <input id="re-datum" type="date" class="sheet-input">
-      </div>
+    <input type="hidden" id="re-termin-sel" value="">
+    <div class="rs-grp">
+      <label class="rs-row"><span class="rs-k">Nummer</span><input id="re-nr" class="rs-in" placeholder="16/2026"></label>
+      <label class="rs-row"><span class="rs-k">Datum</span><input id="re-datum" type="date" class="rs-in rs-date"></label>
     </div>
 
-    <!-- Empfänger / Studio -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">RECHNUNGSEMPFÄNGER</div>
-      <select id="re-empf-sel" class="sheet-input" style="appearance:auto;margin-bottom:6px" onchange="reEmpfSelected()">
-        <option value="">Aus dem Adressbuch wählen …</option>
-      </select>
-      <!-- Build 1308: EIN Feld. Erste Zeile = Name, Rest = Anschrift. Die alten Felder bleiben versteckt als Speicherweg. -->
-      <textarea id="re-empf-block" class="sheet-input" rows="4" placeholder="Name&#10;Straße Nr.&#10;PLZ Ort&#10;(Adresse einfach hier reinkopieren)" style="resize:none" oninput="_reEmpfBlockEingabe1308()" onpaste="setTimeout(_reEmpfBlockAufteilen1308,0)" onblur="_reEmpfBlockAufteilen1308()"></textarea>
-      <div id="re-empf-status" style="font-size:11px;color:var(--ink3);margin-top:5px;min-height:14px"></div>
+    <div class="rs-gl">Empfänger</div>
+    <div class="rs-grp">
+      <div class="rs-row rs-ab"><span>Aus dem Adressbuch</span><span class="rs-chev">›</span>
+        <select id="re-empf-sel" onchange="reEmpfSelected()" aria-label="Aus dem Adressbuch wählen"><option value="">Aus dem Adressbuch wählen …</option></select>
+      </div>
+      <textarea id="re-empf-block" class="rs-ta" rows="3" placeholder="Name&#10;Straße Nr.&#10;PLZ Ort  (einfach reinkopieren)" oninput="_reEmpfBlockEingabe1308()" onpaste="setTimeout(_reEmpfBlockAufteilen1308,0)" onblur="_reEmpfBlockAufteilen1308()"></textarea>
+      <div id="re-empf-status" class="rs-status"></div>
       <input type="hidden" id="re-empf">
       <input type="hidden" id="re-empf-adresse">
     </div>
 
-    <!-- Termin-Feld entfernt (Build 1061): Verknuepfung laeuft ueber KI/Bankabgleich. re-termin-sel bleibt als hidden fuer Speicher-Kompatibilitaet. -->
-    <input type="hidden" id="re-termin-sel" value="">
-
-    <!-- Leistungsbeschreibung -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">LEISTUNGSBESCHREIBUNG</div>
-      <textarea id="re-leistung" class="sheet-input" rows="3" placeholder="Synchronsprecher-Leistung für..." style="resize:none"></textarea>
+    <div class="rs-gl">Leistung</div>
+    <div class="rs-grp">
+      <textarea id="re-leistung" class="rs-ta rs-ta1" rows="1" placeholder="Titel oder Beschreibung"></textarea>
+      <label class="rs-row"><span class="rs-k">Leistung am</span><input id="re-leistdatum" type="date" class="rs-in rs-date"></label>
+      <div id="re-positionen"></div>
+      <div class="rs-row rs-add" onclick="reAddPosition()">+ Position</div>
     </div>
 
-    <!-- Leistungsdatum -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">LEISTUNGSDATUM</div>
-      <input id="re-leistdatum" type="date" class="sheet-input" style="appearance:auto">
+    <div class="rs-grp" style="margin-top:12px">
+      <div class="rs-row"><span class="rs-k">USt</span>
+        <span class="rs-seg" id="re-ust-seg"><span data-v="0" onclick="_reUstWahl1309(this)">0 %</span><span data-v="0.07" onclick="_reUstWahl1309(this)">7 %</span><span data-v="0.19" onclick="_reUstWahl1309(this)">19 %</span></span>
+        <select id="re-ust" onchange="reCalcTotal()" style="display:none"><option value="0.07">7%</option><option value="0.19">19%</option><option value="0">0%</option></select>
+      </div>
+      <label class="rs-row"><span class="rs-k">Fällig</span><input id="re-faellig" type="date" class="rs-in rs-date"></label>
     </div>
 
-    <!-- Positionen -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">POSITIONEN</div>
-      <div id="re-positionen" style="display:flex;flex-direction:column;gap:8px"></div>
-      <div onclick="reAddPosition()" style="margin-top:8px;padding:10px;border:1.5px dashed #ccc;border-radius:8px;text-align:center;font-size:13px;color:#999;cursor:pointer">+ Position hinzufügen</div>
-    </div>
-
-    <!-- USt -->
-    <div style="display:flex;gap:10px;align-items:center">
-      <div style="flex:1">
-        <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">UMSATZSTEUER</div>
-        <select id="re-ust" class="sheet-input" style="appearance:auto" onchange="reCalcTotal()">
-          <option value="0.07">7% (Synchron)</option>
-          <option value="0.19">19% (Werbung)</option>
-          <option value="0">0% (Kleinunternehmer)</option>
-        </select>
-      </div>
-      <div style="flex:1">
-        <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:5px">FÄLLIG BIS</div>
-        <input id="re-faellig" type="date" class="sheet-input">
-      </div>
-    </div>
-
-    <!-- Summe Preview -->
-    <div id="re-summe-box" style="background:#FDFCFA;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;color:#666">
-        <span>Netto</span><span id="re-prev-netto">€ 0,00</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;color:#666">
-        <span id="re-prev-ust-label">USt. (7%)</span><span id="re-prev-ust">€ 0,00</span>
-      </div>
-      <div style="height:1px;background:#FDFCFA;margin:4px 0"></div>
-      <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:900;color:var(--blue)">
-        <span>Brutto</span><span id="re-prev-brutto">€ 0,00</span>
-      </div>
-    </div>
-
-    <!-- Status: Build 1058 entfernt — Status kommt automatisch aus KI-Analyse/Bankabgleich, nicht manuell. -->
-
-    <!-- Buttons -->
-    <div style="display:flex;gap:10px;padding-bottom:24px">
-      <div id="re-pdf-btn" onclick="generateRechnungPDF()" style="flex:1;padding:14px;background:#FDFCFA;border-radius:10px;text-align:center;font-weight:700;font-size:14px;color:var(--blue);cursor:pointer">PDF erstellen</div>
-      <div onclick="saveRechnung()" style="flex:1;padding:14px;background:var(--blue);border-radius:10px;text-align:center;font-weight:700;font-size:14px;color:#fff;cursor:pointer">Speichern</div>
+    <div class="rs-tot" id="re-summe-box">
+      <span class="rs-tot-k">Netto <span id="re-prev-netto">0,00 €</span> · <span id="re-prev-ust-label">USt</span> <span id="re-prev-ust">0,00 €</span></span>
+      <span class="rs-tot-v" id="re-prev-brutto">0,00 €</span>
     </div>
   </div>
+  <div class="rs-foot"><div id="re-pdf-btn" class="rs-pdf" onclick="generateRechnungPDF()">PDF erstellen</div></div>
 </div>
 
 <!-- ══════ RECHNUNG PDF PREVIEW ══════════════════════════ -->
@@ -5601,7 +5601,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1308';
+  if(elH) elH.textContent = '1310';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -20085,11 +20085,13 @@ function dokOpenDetail(id, _keepEdit){
         body+='<div style="font-size:10px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">'+_pageLabel+'</div>';
         body+='<div id="pdf-wrap-'+d.id+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--hair);background:#e8e8e8;touch-action:pan-y" ontouchstart="_previewTouchStart(event)" ontouchmove="_previewTouchMove(event)" ontouchend="_previewTouchEnd(event,\'__pdf__'+d.id+'\')">';
         body+='<canvas id="pdf-canvas-'+d.id+'" style="width:100%;display:block;transform-origin:center center"></canvas>';
-        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">Vollbild</div>';
+        body+=_pdfNeuLesenKreis1310(d.id);   // Build 1310
+        body+='<div onclick="dokOpenPDF(\''+d.id+'\')" style="position:absolute;bottom:8px;right:50px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;cursor:pointer;touch-action:manipulation">Vollbild</div>';
         body+='</div>';
         body+='</div>';
       } else {
         body+='<div style="background:var(--cream2);border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;color:#555;text-align:center">'+esc(d.dateiname||'PDF-Dokument')+'</div>';
+        body+=_pdfNeuLesenKnopf1310(d.id, 'PDF ist nicht mehr im Speicher. Zum neu Auslesen die Datei nochmal wählen.');   // Build 1310
       }
     }
     // Analyse-Button: beim ersten Mal "KI Analyse", danach "Nochmal analysieren"
@@ -20913,6 +20915,7 @@ body+='<div style="background:var(--green2);border:2px solid var(--accent2);bord
       + '<div style="font-size:12px;color:var(--accent);font-weight:700">Bestätigt'
       + (d.bestaetigt_am ? ' am ' + (String(d.bestaetigt_am).slice(0,10).split('-').reverse().join('.')) : '')
       + '</div></div>';
+    try{ var _fehlt1310=_pdfFehlendeTeile1310(d); if(_fehlt1310) body+=_pdfNeuLesenKnopf1310(d.id, _fehlt1310+' von '+_pdfGruppe1310(d).total+' Gutschriften dieser PDF fehlen in der Liste (gelöscht?). Neu auslesen legt sie wieder an; bestätigte Teile bleiben unberührt.'); }catch(e){}   // Build 1310
 
     // Vorschau (Thumb oder PDF-Canvas)
     if(d.thumb){
@@ -23785,6 +23788,114 @@ function dokAnalyseOne(){
   });
 }
 
+// ── Build 1310 (Tim, 17.11.2026): PDF-Belege neu auslesen ───────────────────────────
+// Anlass: Cinephon 1384/202610. Teil 1 bestaetigt, Teile 2/3 mit altem Stand; einen Neu-Auslesen-Kreis gab es
+// nur bei Fotos. Ausserdem traegt bei aufgeteilten PDFs nur Teil 1 die Datei (_splitFromPdf), und unbestaetigte
+// PDFs liegen nur im Arbeitsspeicher (save() schreibt sie nicht), nach Neustart also weg.
+// Ablauf: PDF aus dem Speicher nehmen (eigene oder die von Teil 1), sonst Datei waehlen lassen. Dann die ganze
+// PDF frisch lesen (normaler Weg dokAnalyseOne) und abgleichen je Gutschrift-Nr.: schon bestaetigt -> neuer Teil
+// faellt weg; unbestaetigt vorhanden -> alter Teil wird ersetzt; fehlt -> neuer Teil bleibt (wieder angelegt).
+function _pdfGruppe1310(d){
+  var key = d._splitFromPdf || d._splitGroup || d.id;
+  var teile = (db.dokumente||[]).filter(function(x){ return x.id===key || x._splitFromPdf===key || x._splitGroup===key; });
+  var total = 0; teile.forEach(function(x){ if((x._splitTotal||0) > total) total = x._splitTotal; });
+  return { key:key, teile:teile, total:total };
+}
+function _pdfFehlendeTeile1310(d){
+  if(!d || (d.mime||'')!=='application/pdf' || !(d._splitTotal > 1 || d._splitGroup || d._splitFromPdf)) return 0;
+  var g = _pdfGruppe1310(d);
+  return (g.total > g.teile.length) ? (g.total - g.teile.length) : 0;
+}
+function _pdfNeuLesenKreis1310(id){
+  return '<div onclick="event.stopPropagation();_pdfNeuLesen1310(\''+id+'\')" title="Neu auslesen" '
+    +'style="position:absolute;bottom:8px;right:8px;width:34px;height:34px;border-radius:50%;background:rgba(28,27,25,.62);'
+    +'display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;z-index:2">'
+    +'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+    +'<path d="M20 11.5a8 8 0 1 1-2.3-5.4"/><path d="M20 3.5v4.2h-4.2"/></svg></div>';
+}
+function _pdfNeuLesenKnopf1310(id, text){
+  return '<div style="margin:0 0 12px">'
+    +(text?'<div style="font-size:12px;color:var(--ink3);line-height:1.45;margin-bottom:6px">'+esc(text)+'</div>':'')
+    +'<button type="button" onclick="_pdfNeuLesen1310(\''+id+'\')" style="width:100%;background:var(--paper2);color:var(--accent);border:1.5px solid var(--hair);border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;touch-action:manipulation">↻ Neu auslesen</button></div>';
+}
+function _pdfNeuLesen1310(id){
+  var d = (db.dokumente||[]).find(function(x){ return x.id===id; }); if(!d) return;
+  var g = _pdfGruppe1310(d);
+  var master = (db.dokumente||[]).find(function(x){ return x.id===g.key; }) || d;
+  var name = d.dateiname || master.dateiname || '';
+  var data = (master.dataURL && /^data:application\/pdf/.test(master.dataURL)) ? master.dataURL
+           : ((d.dataURL && /^data:application\/pdf/.test(d.dataURL)) ? d.dataURL : null);
+  if(data){ _pdfNeuLesenStart1310(data, name); return; }
+  // PDF nicht mehr im Speicher: Datei waehlen (muss synchron im Tipp passieren, sonst blockt iOS)
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'application/pdf,.pdf'; inp.style.display = 'none';
+  inp.onchange = function(){
+    var f = inp.files && inp.files[0]; if(!f){ inp.remove(); return; }
+    if(name && f.name !== name && !confirm('Gewählt: '+f.name+'\nBeleg: '+name+'\n\nTrotzdem diese Datei neu auslesen?')){ inp.remove(); return; }
+    var r = new FileReader();
+    r.onload = function(e){ inp.remove(); _pdfNeuLesenStart1310(e.target.result, name || f.name); };
+    r.readAsDataURL(f);
+  };
+  document.body.appendChild(inp);
+  inp.click();
+}
+function _pdfNeuLesenStart1310(dataURL, name){
+  var vorher = {}; (db.dokumente||[]).forEach(function(x){ vorher[x.id] = true; });
+  var tmp = { id: uid(), dateiname: name, mime: 'application/pdf', dataURL: dataURL, typ: null, addedAt: new Date().toISOString() };
+  db.dokumente.push(tmp);
+  try{ dokDetailClose(); }catch(e){}
+  _dokCurrentId = tmp.id;
+  dokAnalyseOne();
+  var t0 = Date.now(), gesehen = false;
+  var iv = setInterval(function(){
+    var ov = !!document.getElementById('_analyse-overlay'); if(ov) gesehen = true;
+    var t = (db.dokumente||[]).find(function(x){ return x.id===tmp.id; });
+    var fertig = (!t || t.typ !== null) && !ov;
+    if(!fertig && !gesehen && Date.now()-t0 > 2500){   // Analyse gar nicht gestartet (z. B. kein Schluessel)
+      clearInterval(iv); db.dokumente = db.dokumente.filter(function(x){ return x.id!==tmp.id; }); rDokumente(); return;
+    }
+    if(!fertig && Date.now()-t0 < 245000) return;
+    clearInterval(iv);
+    if(fertig) setTimeout(function(){ _pdfNeuLesenAbgleich1310(name, vorher); }, 300);
+  }, 400);
+}
+function _pdfNeuLesenAbgleich1310(name, vorher){
+  var gnr = function(x){ return String(x.gutschrift_nr||x.beleg_nr||'').trim(); };
+  var neu = (db.dokumente||[]).filter(function(x){ return !vorher[x.id]; });
+  var alt = (db.dokumente||[]).filter(function(x){ return vorher[x.id] && x.dateiname===name; });
+  var weg = {}, gebucht = 0, ersetzt = 0, wieder = 0;
+  neu.forEach(function(n){
+    var g = gnr(n);
+    var gleich = alt.filter(function(x){ return gnr(x) === g; });
+    if(gleich.some(function(x){ return x.bestaetigt; })){
+      weg[n.id] = true; gebucht++;
+      // faellt ein neuer Teil 1 weg, der die PDF fuer neue Geschwister traegt: PDF an den bestaetigten Alt-Teil haengen
+      var kinder = neu.filter(function(k){ return k._splitFromPdf === n.id; });
+      if(kinder.length){
+        var ziel = gleich.filter(function(x){ return x.bestaetigt; })[0];
+        if(!ziel.dataURL) ziel.dataURL = n.dataURL;
+        kinder.forEach(function(k){ k._splitFromPdf = ziel.id; });
+      }
+      return;
+    }
+    var offen = gleich.filter(function(x){ return !x.bestaetigt; });
+    if(offen.length){
+      // Termin vom alten Teil uebernehmen: beim Lesen war er noch vom alten Teil belegt und wurde deshalb nicht gefunden
+      if(!n.terminId){ var mitT = offen.filter(function(x){ return x.terminId; })[0]; if(mitT) n.terminId = mitT.terminId; }
+      offen.forEach(function(x){ weg[x.id] = true; }); ersetzt++;
+    } else wieder++;
+  });
+  db.dokumente = db.dokumente.filter(function(x){ return !weg[x.id]; });
+  save(db); rDokumente();
+  var teile = [];
+  if(ersetzt) teile.push(ersetzt+' ersetzt');
+  if(wieder) teile.push(wieder+' wieder angelegt');
+  if(gebucht) teile.push(gebucht+' schon gebucht');
+  showToast('↻ Neu ausgelesen'+(teile.length?': '+teile.join(' · '):''));
+  var erstes = (db.dokumente||[]).find(function(x){ return !vorher[x.id] && !x.bestaetigt; });
+  if(erstes){ try{ dokOpenDetail(erstes.id); }catch(e){} }
+}
+
 function dokReuploadFile(inp, dokId){
   var file = inp.files[0];
   if(!file) return;
@@ -26585,6 +26696,7 @@ function openRechnungSheet(id){
   }
 
   _reEmpfBlockAusFeldern1308();   // Build 1308
+  _reOffenePos1309=-1;             // Build 1309
   reSetStatus(_reStatus);
   reRenderPositionen();
   reCalcTotal();
@@ -26637,12 +26749,14 @@ function reTerminSelected(){
 
 function reAddPosition(){
   _rePositionen.push({beschr:'',menge:1,einheit:'Pau.',preis:0});
+  _reOffenePos1309=_rePositionen.length-1;   // Build 1309
   reRenderPositionen();
   reCalcTotal();
 }
 
 function reRemovePosition(i){
   _rePositionen.splice(i,1);
+  _reOffenePos1309=-1;   // Build 1309
   reRenderPositionen();
   reCalcTotal();
 }
@@ -26652,23 +26766,42 @@ function rePosChange(i,field,val){
   reCalcTotal();
 }
 
+// Build 1309: Positionen als Zeilen; Antippen klappt die Bearbeitung auf (eine offene Position zur Zeit).
+var _reOffenePos1309 = -1;
+function _reZahl1309(v){ var n=parseFloat(v)||0; return String(Math.round(n*100)/100).replace('.',','); }
 function reRenderPositionen(){
   var el=document.getElementById('re-positionen');
   if(!el) return;
+  // neue Rechnung mit leerer Position: gleich offen
+  if(_reOffenePos1309<0 && _rePositionen.length===1 && !(parseFloat(_rePositionen[0].preis)>0)) _reOffenePos1309=0;
   el.innerHTML=_rePositionen.map(function(p,i){
-    return '<div style="background:#FDFCFA;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center">'
-      +'<div style="font-size:11px;font-weight:700;color:#666">POSITION '+(i+1)+'</div>'
-      +(_rePositionen.length>1?'<span onclick="reRemovePosition('+i+')" style="color:var(--red);font-size:18px;cursor:pointer">✕</span>':'')
-      +'</div>'
-      +'<input class="sheet-input" style="font-size:13px" placeholder="Beschreibung" value="'+esc(p.beschr)+'" oninput="rePosChange('+i+',\'beschr\',this.value)">'
-      +'<div style="display:flex;gap:6px">'
-      +'<input class="sheet-input" style="width:60px;font-size:13px" type="number" placeholder="Menge" value="'+(p.menge||'')+'" oninput="rePosChange('+i+',\'menge\',this.value)">'
-      +'<input class="sheet-input" style="width:60px;font-size:13px" placeholder="Einh." value="'+esc(p.einheit||'')+'" oninput="rePosChange('+i+',\'einheit\',this.value)">'
-      +'<input class="sheet-input" style="flex:1;font-size:13px" type="number" placeholder="Preis €" step="0.01" value="'+(p.preis||'')+'" oninput="rePosChange('+i+',\'preis\',this.value)">'
-      +'<div style="min-width:70px;text-align:right;font-size:13px;font-weight:700;padding:10px 0 0;color:var(--blue)">'+fmtEur((p.menge||1)*(p.preis||0))+'</div>'
-      +'</div></div>';
+    var sum=(p.menge||1)*(p.preis||0);
+    var info=esc(p.beschr||'Position')+(p.preis?' <span style="color:var(--ink3)">· '+_reZahl1309(p.menge||1)+' '+esc(p.einheit||'')+' × '+_reZahl1309(p.preis)+' €</span>':'');
+    var offen=(i===_reOffenePos1309);
+    var h='<div class="rs-row rs-pos" onclick="_rePosToggle1309('+i+')">'
+      +(offen?'<input class="rs-in" style="text-align:left" placeholder="Beschreibung" value="'+esc(p.beschr||'')+'" onclick="event.stopPropagation()" oninput="rePosChange('+i+',\'beschr\',this.value)">':'<span class="rs-k">'+info+'</span>')
+      +'<span class="rs-pos-v"><span id="re-pos-sum-'+i+'">'+fmtEur(sum)+'</span> <span class="rs-chev">'+(offen?'⌄':'›')+'</span></span></div>';
+    if(offen){
+      h+='<div class="rs-pos-ed" onclick="event.stopPropagation()">'
+        +'<div class="z" style="margin-top:0">'
+        +'<input style="width:64px" type="number" inputmode="decimal" placeholder="Menge" value="'+(p.menge||'')+'" oninput="rePosChange('+i+',\'menge\',this.value)">'
+        +'<input style="width:64px" placeholder="Einh." value="'+esc(p.einheit||'')+'" oninput="rePosChange('+i+',\'einheit\',this.value)">'
+        +'<input style="flex:1" type="number" inputmode="decimal" step="0.01" placeholder="Preis €" value="'+(p.preis||'')+'" oninput="rePosChange('+i+',\'preis\',this.value)">'
+        +'</div>'
+        +(_rePositionen.length>1?'<div class="del" onclick="reRemovePosition('+i+')">Position löschen</div>':'')
+        +'</div>';
+    }
+    return h;
   }).join('');
+}
+function _rePosToggle1309(i){
+  _reOffenePos1309 = (_reOffenePos1309===i) ? -1 : i;
+  reRenderPositionen();
+}
+function _reUstWahl1309(el){
+  var sel=document.getElementById('re-ust'); if(!sel||!el) return;
+  sel.value=el.getAttribute('data-v');
+  reCalcTotal();
 }
 
 function reCalcTotal(){
@@ -26678,7 +26811,9 @@ function reCalcTotal(){
   var ustBetrag=netto*ur;
   var brutto=netto+ustBetrag;
   var ustLabel=document.getElementById('re-prev-ust-label');
-  if(ustLabel) ustLabel.textContent='USt. ('+Math.round(ur*100)+'%)';
+  if(ustLabel) ustLabel.textContent='USt';
+  try{ document.querySelectorAll('#re-ust-seg span').forEach(function(x){ x.classList.toggle('on', Math.abs(parseFloat(x.getAttribute('data-v'))-ur)<0.001); }); }catch(e){}
+  try{ _rePositionen.forEach(function(p,i){ var z=document.getElementById('re-pos-sum-'+i); if(z) z.textContent=fmtEur((p.menge||1)*(p.preis||0)); }); }catch(e){}
   var n=document.getElementById('re-prev-netto');
   var u=document.getElementById('re-prev-ust');
   var b=document.getElementById('re-prev-brutto');
