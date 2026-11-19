@@ -487,7 +487,7 @@ select.sheet-input{padding-right:28px}
 .rs-chev{color:var(--ink5);font-size:17px}
 .rs-ta{display:block;width:100%;box-sizing:border-box;border:0;outline:0;background:none;resize:none;font:inherit;font-size:16px;line-height:1.4;color:var(--ink);padding:8px 14px 6px;border-top:1px solid var(--hair)}
 .rs-grp>.rs-ta:first-child{border-top:0}
-.rs-ta1{padding:11px 14px}
+.rs-ta1{padding:11px 14px;overflow-y:auto}
 .rs-status{font-size:11.5px;color:var(--ink3);padding:0 14px 8px;min-height:6px}
 .rs-status:empty{padding:0}
 .rs-add{color:var(--accent);cursor:pointer;justify-content:flex-start}
@@ -1188,7 +1188,7 @@ select.sheet-input{padding-right:28px}
       <div class="rs-row rs-ab"><span>Aus dem Adressbuch</span><span class="rs-chev">›</span>
         <select id="re-empf-sel" onchange="reEmpfSelected()" aria-label="Aus dem Adressbuch wählen"><option value="">Aus dem Adressbuch wählen …</option></select>
       </div>
-      <textarea id="re-empf-block" class="rs-ta" rows="3" placeholder="Name&#10;Straße Nr.&#10;PLZ Ort  (einfach reinkopieren)" oninput="_reEmpfBlockEingabe1308()" onpaste="setTimeout(_reEmpfBlockAufteilen1308,0)" onblur="_reEmpfBlockAufteilen1308()"></textarea>
+      <textarea id="re-empf-block" class="rs-ta" rows="3" placeholder="Name&#10;Straße Nr.&#10;PLZ Ort  (einfach reinkopieren)" oninput="_reEmpfBlockEingabe1308();_reAutoHoehe1313(this)" onpaste="setTimeout(_reEmpfBlockAufteilen1308,0)" onblur="_reEmpfBlockAufteilen1308();_reAutoHoehe1313(this)"></textarea>
       <div id="re-empf-status" class="rs-status"></div>
       <input type="hidden" id="re-empf">
       <input type="hidden" id="re-empf-adresse">
@@ -1196,7 +1196,7 @@ select.sheet-input{padding-right:28px}
 
     <div class="rs-gl">Leistung</div>
     <div class="rs-grp">
-      <textarea id="re-leistung" class="rs-ta rs-ta1" rows="1" placeholder="Titel oder Beschreibung"></textarea>
+      <textarea id="re-leistung" class="rs-ta rs-ta1" rows="1" placeholder="Titel oder Beschreibung" oninput="_reAutoHoehe1313(this)"></textarea>
       <label class="rs-row"><span class="rs-k">Leistung am</span><input id="re-leistdatum" type="date" class="rs-in rs-date"></label>
       <div id="re-positionen"></div>
       <div class="rs-row rs-add" onclick="reAddPosition()">+ Position</div>
@@ -5622,7 +5622,7 @@ window._BETA_TESTER = (function(){
   // Build 1105: Entwurfs-Hinweise ausgeduennt. Impressum: beide grauen Hinweise raus.
   //     Datenschutz: oberer "Entwurf"-Vermerk raus, unterer Hinweis (juristische Pruefung
   //     wegen US-API) BEWUSST behalten — echte Warnung, kein Deko-Text.
-  if(elH) elH.textContent = '1312';
+  if(elH) elH.textContent = '1314';
   // Build 1214: Beta-Kennung. In der Hauptfassung null; Tester-Fassungen setzen
   // hier den Vornamen, damit jede Kopie ihrer Herkunft zuzuordnen ist.
   if(elH && window._BETA_TESTER) elH.textContent += ' · Beta ' + window._BETA_TESTER;
@@ -26664,7 +26664,22 @@ function rRechnungen(){
     el.innerHTML='<div class="empty-state" style="padding:34px 20px;text-align:center"><svg viewBox="0 0 300 150" style="width:min(220px,60%);height:auto;display:block;margin:0 auto 14px" aria-hidden="true"><defs><filter id="sumiRe" filterUnits="userSpaceOnUse" x="-30" y="-30" width="380" height="240"><feTurbulence type="fractalNoise" baseFrequency=".045 .16" numOctaves="4" seed="3" result="warp"/><feDisplacementMap in="SourceGraphic" in2="warp" scale="3.4" result="disp"/><feTurbulence type="fractalNoise" baseFrequency=".28 .5" numOctaves="3" seed="11" result="dry1"/><feComponentTransfer in="dry1" result="dryA"><feFuncA type="discrete" tableValues="0 1 1 1 1 1 1 1"/></feComponentTransfer><feComposite in="disp" in2="dryA" operator="in" result="torn"/><feGaussianBlur in="disp" stdDeviation=".5" result="bleedRaw"/><feComponentTransfer in="bleedRaw" result="bleed"><feFuncA type="linear" slope="0.22"/></feComponentTransfer><feMerge><feMergeNode in="bleed"/><feMergeNode in="torn"/></feMerge></filter></defs><g filter="url(#sumiRe)"><path d="M56 44c62-5 128-5 190 0 5 0 8 3 8 8v46c0 5-3 8-8 8-62 5-128 5-190 0-5 0-8-3-8-8V52c0-5 3-8 8-8z" fill="none" stroke="#201e1a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M52 50l96 42c2 1 4 1 6 0l96-42" fill="none" stroke="#3a362f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/><path d="M188 74c22-2 42-2 44 0M188 84l40 .3" fill="none" stroke="#3a362f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".45" stroke-dasharray="5 3 2 4"/><path d="M74 66c10-2 20-2 24 0 2 0 2 18 0 19-8 2-18 2-26 0-2-1-2-17 0-18z" fill="#B14A3F" opacity=".68"/></g></svg><div class="empty-title" style="font-family:var(--serif);font-weight:500">Noch keine Rechnung.</div><div class="empty-sub">Tippe auf +, um die erste zu schreiben.</div></div>';
     return;
   }
-  var sorted=rechnungen.slice().sort(function(a,b){return(b.datum||'')>(a.datum||'')?1:-1;});
+  // Build 1314 (Tim, 19.11.2026): nach Rechnungsnummer absteigend statt nach Datum. Eine nachtraeglich
+  // korrigierte Rechnung (14/2026 mit neuem Datum) rutschte sonst vor 15/2026, und Luecken in der
+  // Nummernfolge fielen nicht auf. Schluessel: Jahr, dann laufende Nummer; ohne erkennbare Nummer nach Datum.
+  function _reSortKey1314(r){
+    var str=String(r.nr||''), m;
+    if((m=str.match(/(\d{1,4})\s*[\/_\-]\s*(\d{4})/))) return [parseInt(m[2],10), parseInt(m[1],10), r.datum||''];
+    if((m=str.match(/(\d{4})\s*-\s*(\d{1,4})/))) return [parseInt(m[1],10), parseInt(m[2],10), r.datum||''];
+    var j=parseInt(String(r.datum||'').slice(0,4),10)||0;
+    return [j, -1, r.datum||''];
+  }
+  var sorted=rechnungen.slice().sort(function(a,b){
+    var ka=_reSortKey1314(a), kb=_reSortKey1314(b);
+    if(ka[0]!==kb[0]) return kb[0]-ka[0];
+    if(ka[1]!==kb[1]) return kb[1]-ka[1];
+    return (kb[2]>ka[2])?1:((kb[2]<ka[2])?-1:0);
+  });
   // Build 1031: KEIN "offen" mehr. Der Zahlungsstatus einer Eigenrechnung entsteht
   // erst beim Einscannen des Belegs (dbv2) — das Statusfeld hier ist nie aktuell und
   // behauptete faelschlich "offen", obwohl laengst ueberwiesen (z.B. AkibaDreams).
@@ -26824,6 +26839,12 @@ function openRechnungSheet(id){
   reSetStatus(_reStatus);
   reRenderPositionen();
   reCalcTotal();
+  // Build 1313: verstecktes Termin-Feld mit dem gespeicherten Termin fuellen (sonst loescht Sichern die Verknuepfung)
+  try{ var _ts1313=document.getElementById('re-termin-sel'); if(_ts1313 && _ts1313.tagName!=='SELECT') _ts1313.value=(r&&r.terminId)||''; }catch(e){}
+  try{ _reAutoHoehe1313(document.getElementById('re-leistung')); _reAutoHoehe1313(document.getElementById('re-empf-block')); }catch(e){}
+  setTimeout(function(){ try{ _reAutoHoehe1313(document.getElementById('re-leistung')); _reAutoHoehe1313(document.getElementById('re-empf-block')); }catch(e){} }, 60);    // erst sichtbar messbar
+  setTimeout(function(){ try{ _reAutoHoehe1313(document.getElementById('re-leistung')); _reAutoHoehe1313(document.getElementById('re-empf-block')); }catch(e){} }, 360);
+  _reSnapshot1313 = _reZustand1313();
 
   var sheet=document.getElementById('rechnung-sheet');
   var bg=document.getElementById('re-sheet-bg');
@@ -26834,7 +26855,30 @@ function openRechnungSheet(id){
 // Build 1059: Schutz vor versehentlichem Schliessen (z.B. beim Rauszoomen mit zwei
 // Fingern verrutscht der Touch auf den Hintergrund). Wenn Felder ausgefuellt sind,
 // erst nachfragen — sonst gehen alle Eingaben verloren.
+// Build 1313 (Tim, 19.11.2026): Abbrechen fragte auch, wenn man eine Rechnung nur geoeffnet und nichts geaendert
+// hatte (Pruefung war "Feld nicht leer"). Jetzt Vergleich mit dem Stand beim Oeffnen.
+var _reSnapshot1313 = null;
+function _reZustand1313(){
+  var v=function(id){ var e=document.getElementById(id); return e?String(e.value||'').trim():''; };
+  var pos=(Array.isArray(_rePositionen)?_rePositionen:[]).map(function(p){
+    return [String(p.beschr||'').trim(), parseFloat(p.menge)||0, String(p.einheit||'').trim(), parseFloat(p.preis)||0];
+  });
+  return JSON.stringify([v('re-nr'),v('re-datum'),v('re-faellig'),v('re-empf'),v('re-empf-adresse'),v('re-leistung'),v('re-leistdatum'),v('re-ust'),pos,_reStatus]);
+}
+function _reAutoHoehe1313(el){
+  if(!el) return;
+  el.style.height='auto';
+  var max = (el.id==='re-empf-block' ? 6 : 4)*22 + 22;   // Empfaenger bis 6, Leistung bis 4 Zeilen, danach scrollt das Feld
+  el.style.height = Math.min(el.scrollHeight + 2, max) + 'px';
+  el.style.overflowY = (el.scrollHeight + 2 > max) ? 'auto' : 'hidden';
+}
 function closeRechnungSheetGuarded(){
+  if(_reSnapshot1313 !== null){
+    if(_reZustand1313() === _reSnapshot1313){ closeRechnungSheet(); return; }
+    var _neu1313 = !String((document.getElementById('re-id')||{}).value||'');
+    if(!confirm(_neu1313 ? 'Rechnung verwerfen? Die eingegebenen Daten gehen verloren.' : 'Änderungen verwerfen?')) return;
+    closeRechnungSheet(); return;
+  }
   var hatInhalt=false;
   try{
     ['re-empf','re-leistung','re-leistdatum'].forEach(function(fid){
